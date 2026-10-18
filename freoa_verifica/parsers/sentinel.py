@@ -95,6 +95,17 @@ def _duplicate_current(provisions: list[Provision]) -> list[Issue]:
         currents = [r for r in prov.redactions if _is_active_current(r)]
         if len(currents) < 2:
             continue
+        # Texto de outro escopo (ex.: ADCT) nunca substitui o permanente na cadeia editorial.
+        if len({r.scope for r in currents}) > 1:
+            out.append(
+                Issue(
+                    "SCOPE_COLLISION",
+                    prov.path,
+                    "redações vigentes de escopos distintos no mesmo caminho",
+                    blocking_scope="provision",
+                )
+            )
+            continue
         if _apply_editorial_chain(currents):
             continue
         out.append(

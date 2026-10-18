@@ -327,7 +327,7 @@ def article_sort_key(path: str) -> tuple[int, str] | None:
 def is_article_path(path: str) -> bool:
     return bool(
         re.fullmatch(
-            r"(?:(?:anexo|suplemento)-[^/]+/)*art\d+(?:-[A-Z])?",
+            r"(?:(?:anexo|suplemento)-[^/]+/|adct/)*art\d+(?:-[A-Z])?",
             path,
         )
     )
@@ -356,6 +356,15 @@ def annex_scope_from_heading(text: str) -> str | None:
     if not m:
         return None
     return f"anexo-{_heading_token(m.group(1))}"
+
+
+def adct_scope_from_heading(text: str) -> str | None:
+    """Cabeçalho do ADCT (linha inteira) → escopo "adct"; menção em frase não abre."""
+    t = " ".join(text.split())
+    t = re.sub(r"(?<=\D)\d{1,4}\s*$", "", t).strip()
+    if re.fullmatch(r"ATO DAS DISPOSI[CÇ][OÕ]ES CONSTITUCIONAIS TRANSIT[OÓ]RIAS", t, re.I):
+        return "adct"
+    return None
 
 
 def supplement_scope_from_heading(text: str) -> str | None:

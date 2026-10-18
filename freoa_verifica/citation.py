@@ -584,6 +584,7 @@ _ALIAS_RE = re.compile(
     + r")(?!\w)",
     re.I,
 )
+_ADCT_ALIASES = frozenset({"adct", "ato das disposicoes constitucionais transitorias"})
 _ALIAS_SURFACE_MAP: dict[str, WorkKey] = {
     fold_alias(surface): work for surface, work in ALIAS_SURFACES
 }
@@ -1182,7 +1183,7 @@ def extract(texto: str) -> list[Citation]:
                 span=(m.start(), alias_end),
                 work=work,
                 confidence="exata",
-                flags=["apelido"],
+                flags=["apelido", "adct"] if folded in _ADCT_ALIASES else ["apelido"],
             )
         )
         _mark(m.start(), alias_end)
@@ -1197,6 +1198,10 @@ def extract(texto: str) -> list[Citation]:
     # Anexar dispositivos às normas
     work_cites = _attach_devices(text, work_cites)
     for cite in work_cites:
+        if "adct" in cite.flags:
+            cite.flags.remove("adct")
+            if cite.path:
+                cite.path = f"adct/{cite.path}"
         if cite.path is None and _unattached_device_nearby(text, cite, work_cites):
             cite.confidence = "provavel"
         if "apelido" in cite.flags:

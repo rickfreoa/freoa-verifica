@@ -54,6 +54,8 @@ ALIASES: dict[str, WorkKey] = {
     "constituicao": _CF,
     "cf": _CF,
     "cf/88": _CF,
+    "adct": _CF,
+    "ato das disposicoes constitucionais transitorias": _CF,
     "constituicao federal": _CF,
 }
 
@@ -93,6 +95,9 @@ ALIAS_SURFACES: list[tuple[str, WorkKey]] = [
     ("Constituicao Federal", _CF),
     ("Constituição", _CF),
     ("Constituicao", _CF),
+    ("Ato das Disposições Constitucionais Transitórias", _CF),
+    ("Ato das Disposicoes Constitucionais Transitorias", _CF),
+    ("ADCT", _CF),
     ("CF/88", _CF),
     ("CF", _CF),
 ]
