@@ -42,7 +42,7 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
         def op(operador, args, cm, _tm, imgs=imgs, page=page):
             if operador == b"Do" and args and _e_imagem(page, args[0]) or operador in (b"BI", b"INLINE IMAGE"):
                 base, alto = float(cm[5]), float(cm[3])
-                nome = str(args[0]) if operador == b"Do" and args else None
+                nome = _digest_imagem(page, args[0]) if operador == b"Do" and args else None
                 imgs.append((min(base, base + alto), max(base, base + alto), nome))
             elif operador == b"Do" and args:
                 faixa = _faixa_de_formulario_com_imagem(page, args[0], cm)
@@ -81,7 +81,7 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
     marcar = _manter_cortes_ambiguos(frags, fora_por_pagina)
     # Imagem no corpo pode conter texto normativo que o pypdf não extrai (auditoria 1.1.0, rodada 9):
     # as linhas mantidas imediatamente acima e abaixo dela ficam marcadas.
-    # Timbre: a mesma imagem (mesmo XObject), na mesma posição, em ao menos metade das páginas (mín. 3),
+    # Timbre: a mesma imagem (mesmo conteúdo, sha256), na mesma posição, em ao menos metade das páginas (mín. 3),
     # inteira na faixa de margem e sem texto mantido na mesma altura nem do lado de fora da faixa.
     timbres = Counter((nome, round(b), round(t)) for imgs in imagens for b, t, nome in imgs if nome)
     for p, (parts, fora, imgs, h) in enumerate(zip(frags, fora_por_pagina, imagens, alturas)):
@@ -195,6 +195,15 @@ def _faixa_de_formulario_com_imagem(page, nome, cm) -> tuple[float, float] | Non
         xf, yf = m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]  # matriz do formulário
         ys.append(float(cm[1]) * xf + float(cm[3]) * yf + float(cm[5]))  # CTM externa
     return min(ys), max(ys)
+
+
+def _digest_imagem(page, nome) -> str | None:
+    """Identidade da imagem pelo conteúdo (o nome do XObject é local aos recursos da página)."""
+    import hashlib
+    try:
+        return hashlib.sha256(page["/Resources"]["/XObject"][nome].get_object().get_data()).hexdigest()
+    except (KeyError, TypeError, AttributeError, ValueError):
+        return None
 
 
 def _e_imagem(page, nome) -> bool:

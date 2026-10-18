@@ -160,3 +160,42 @@ def test_imagem_inline_em_formulario_bloqueia(sep):
     assert _tem_imagem(F({"/Resources": sem_xobject}))
     conteudo = b"BT /F1 11 Tf (OBITUARIO) Tj ET"  # "BI" dentro de palavra não é operador
     assert not _tem_imagem(F({"/Resources": sem_xobject}))
+
+
+def _pdf_paginas_com_imagem(paginas: list[tuple[list[tuple[int, str]], int, int, bytes]]) -> bytes:
+    """Várias páginas, cada uma com seu próprio /Im0 (nome igual, conteúdo dado)."""
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", None, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    kids = []
+    for linhas, y, alto, dado in paginas:
+        objs.append(f"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length {len(dado)} >>\nstream\n" + dado.decode("latin-1") + "\nendstream")
+        img = len(objs)
+        corpo = "".join(f"BT /F1 11 Tf 72 {yy} Td ({t}) Tj ET\n" for yy, t in linhas) + f"q 300 0 0 {alto} 72 {y} cm /Im0 Do Q\n"
+        objs.append(f"<< /Length {len(corpo)} >>\nstream\n{corpo}endstream")
+        objs.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> /XObject << /Im0 {img} 0 R >> >> /Contents {len(objs)} 0 R >>")
+        kids.append(len(objs))
+    objs[1] = f"<< /Type /Pages /Kids [{' '.join(f'{k} 0 R' for k in kids)}] /Count {len(kids)} >>"
+    out, offs = b"%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += f"{i} 0 obj\n{o}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode() + "".join(f"{o:010} 00000 n \n" for o in offs).encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return out
+
+
+def test_imagens_distintas_com_mesmo_nome_nao_sao_timbre():
+    # Auditor, rodada 14: /Im0 em cada página, conteúdos diferentes, no rodapé.
+    pags = [([(700, "RESOLUCAO CVM 999/2026")] if n == 1 else []) + [(300, f"Art. {n}o A divulgacao e obrigatoria.")]
+            for n in (1, 2, 3)]
+    doc = parse_pdf_direto(_pdf_paginas_com_imagem([(l, 60, 20, bytes([n])) for n, l in enumerate(pags, 1)]))
+    res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", "A divulgacao e obrigatoria.")
+    assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
+
+
+def test_timbre_identico_repetido_nao_bloqueia():
+    pags = [([(700, "RESOLUCAO CVM 999/2026")] if n == 1 else []) + [(300, f"Art. {n}o A divulgacao e obrigatoria.")]
+            for n in (1, 2, 3)]
+    doc = parse_pdf_direto(_pdf_paginas_com_imagem([(l, 790, 40, b"\x07") for l in pags]))
+    res = _verificar(doc, "art. 2 da Resolução CVM 999/2026", "A divulgacao e obrigatoria.")
+    assert res.text.status == "verified"
