@@ -151,22 +151,35 @@ def _validar(origem: dict[str, int], novo: sqlite3.Connection) -> None:
         raise RuntimeError("extrações perdidas")
 
 
-def reclassificar_monocraticas(conn: sqlite3.Connection) -> int:
-    """Monocrática gravada com rótulo de colegiado volta a E (decisão 0038). Só toca essa espécie."""
+_ESPECIES_GRAVADAS = frozenset({"sumula", "sumula_vinculante", "repetitivo", "irdr_iac",
+                                 "repercussao_geral", "controle_concentrado"})
+
+
+def reclassificar_autoridade(conn: sqlite3.Connection) -> int:
+    """Recalcula o rótulo A–E gravado com as regras atuais (decisão 0038). Rótulos de versões anteriores
+    ficavam congelados no banco (p. ex. Colegiado da CVM em D) enquanto a busca recalculava. A espécie de
+    precedente qualificado gravada pela ingestão é preservada; monocrática declarada prevalece."""
     from freoa_verifica.authority import as_dict, classify_authority
+    from freoa_verifica.service import _species_from_meta
 
     n = 0
-    for row in conn.execute("SELECT id, court, class, organ, authority_attrs_json, authority_label FROM decision "
-                            "WHERE kind='decisao_monocratica' AND COALESCE(authority_label,'') != 'E'").fetchall():
-        auth = classify_authority(species="monocratica", court=row[1] or "", class_name=row[2], organ=row[3])
+    for did, court, cls, organ, kind, attrs_json, label in conn.execute(
+            "SELECT id, court, class, organ, kind, authority_attrs_json, authority_label FROM decision").fetchall():
         try:
-            old = json.loads(row[4]) if row[4] else {}
+            old = json.loads(attrs_json) if attrs_json else {}
         except ValueError:
             old = {}
+        gravada = ((old.get("attributes") or {}).get("species") if isinstance(old.get("attributes"), dict)
+                   else old.get("species"))
+        species = _species_from_meta(court or "", cls, organ, kind)
+        if species != "monocratica" and gravada in _ESPECIES_GRAVADAS:
+            species = gravada
+        auth = classify_authority(species=species, court=court or "", class_name=cls, organ=organ)
         attrs = {**old, **as_dict(auth)}
-        conn.execute("UPDATE decision SET authority_label=?, authority_attrs_json=? WHERE id=?",
-                     (auth.label, json.dumps(attrs, ensure_ascii=False), row[0]))
-        n += 1
+        if auth.label != label or attrs != old:
+            conn.execute("UPDATE decision SET authority_label=?, authority_attrs_json=? WHERE id=?",
+                         (auth.label, json.dumps(attrs, ensure_ascii=False), did))
+            n += 1
     return n
 
 
@@ -215,7 +228,7 @@ def reprocessar_pasta(pasta: Path, *, com_situacao: bool = False) -> dict[str, A
         relatorio.update(reprocessados=rep["reprocessados"], divergentes=rep["divergentes"])
         with novo.conn:
             relatorio["fts"] = reindexar_fts(novo.conn)
-            relatorio["decisoes_reclassificadas"] = reclassificar_monocraticas(novo.conn)
+            relatorio["decisoes_reclassificadas"] = reclassificar_autoridade(novo.conn)
             relatorio["sumulas_sem_inteiro_teor"] = corrigir_inteiro_teor_sumulas(novo.conn)
         if com_situacao:
             if novo._offline():

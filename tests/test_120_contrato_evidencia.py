@@ -95,3 +95,20 @@ def test_migracao_sumula_gravada_como_inteiro_teor(svc):
     kinds = [r[0] for r in svc.conn.execute("SELECT kind FROM decision_document WHERE decision_id=?", (did,))]
     assert kinds == ["ementa"]
     assert derivados.corrigir_inteiro_teor_sumulas(svc.conn) == 0  # idempotente
+
+
+def test_migracao_recalcula_autoridade_congelada_e_preserva_precedente(svc):
+    cvm = _indexar(svc, "CVM", "PAS-1", text="", ementa="decisão do colegiado", cls="PAS", organ="Colegiado",
+                   kind="decisao_colegiado_cvm")
+    sv = _indexar(svc, "STF", "SV-13", text="", ementa="enunciado", cls="Súmula Vinculante", organ="Plenário")
+    mono = _indexar(svc, "STJ", "M-1", text="", ementa="decisão individual", kind="monocratica", organ="Corte Especial")
+    # Estado herdado de versão anterior: rótulos congelados errados.
+    svc.conn.execute("UPDATE decision SET authority_label='D' WHERE id IN (?, ?)", (cvm, mono))
+    svc.conn.execute("UPDATE decision SET authority_attrs_json=json_set(authority_attrs_json, '$.attributes.species', "
+                     "'repetitivo') WHERE id=?", (sv,))
+    assert derivados.reclassificar_autoridade(svc.conn) >= 2
+    lab = dict(svc.conn.execute("SELECT id, authority_label FROM decision").fetchall())
+    assert lab[cvm] == "E" and lab[mono] == "E"
+    assert lab[sv] == "B"  # espécie de precedente gravada pela ingestão é preservada
+    assert svc.obter_decisao(cvm)["autoridade_label"] == "E"
+    assert derivados.reclassificar_autoridade(svc.conn) == 0  # idempotente
