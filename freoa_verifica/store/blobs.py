@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -22,6 +23,21 @@ def blobs_root(home: Path | None = None) -> Path:
     root = (home or data_home()) / "blobs"
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def espelhar(origem: Path, destino: Path) -> None:
+    """Espelha a árvore de blobs sem privilégio: hardlink por arquivo (sem custo de espaço),
+    cópia se o hardlink falhar (outro volume, FS sem suporte). Nunca usa symlink (WinError 1314)."""
+    for f in origem.rglob("*"):
+        alvo = destino / f.relative_to(origem)
+        if f.is_dir():
+            alvo.mkdir(parents=True, exist_ok=True)
+            continue
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(f, alvo)
+        except OSError:
+            shutil.copy2(f, alvo)
 
 
 def blob_path(sha256: str, home: Path | None = None) -> Path:

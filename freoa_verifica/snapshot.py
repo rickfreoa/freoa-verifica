@@ -962,11 +962,12 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             rebuild = staging / "rebuild"
             rebuild.mkdir()
             os.replace(merged_db, rebuild / "verifica.sqlite3")
-            (rebuild / "blobs").symlink_to(merged_blobs, target_is_directory=True)
+            os.replace(merged_blobs, rebuild / "blobs")  # troca de diretório, sem symlink
             try:
                 derivados.reprocessar_pasta(rebuild)
             finally:
                 os.replace(rebuild / "verifica.sqlite3", merged_db)
+                os.replace(rebuild / "blobs", merged_blobs)
         check = sqlite3.connect(str(merged_db))
         try:
             if check.execute("PRAGMA integrity_check").fetchone()[0] != "ok":

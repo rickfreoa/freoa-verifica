@@ -167,9 +167,10 @@ def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
                 shutil.rmtree(velha, ignore_errors=True)
             svc.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             pasta.mkdir()
-            # Sem copiar blobs: o serviço da cópia lê os mesmos bytes por ligação simbólica.
+            # Blobs espelhados por hardlink (sem symlink: exige privilégio no Windows).
             if (home / "blobs").exists():
-                (pasta / "blobs").symlink_to((home / "blobs").resolve(), target_is_directory=True)
+                from freoa_verifica.store.blobs import espelhar
+                espelhar(home / "blobs", pasta / "blobs")
             copia = pasta / "verifica.sqlite3"
             dst = sqlite3.connect(str(copia))
             try:

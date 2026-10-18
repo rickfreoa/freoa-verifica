@@ -291,3 +291,56 @@ def test_reconstruir_sem_nenhuma_captura_reprocessada_recusa(tmp_path, monkeypat
         assert derivados.versao(svc.conn) is None
     finally:
         svc.close()
+
+
+# ---------------------------------------------------------------------------
+# Windows sem privilégio de symlink (WinError 1314)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sem_symlink(monkeypatch):
+    import os
+    from pathlib import Path
+
+    def negar(*a, **k):
+        raise OSError(1314, "O cliente não tem o privilégio necessário")
+
+    monkeypatch.setattr(os, "symlink", negar)
+    monkeypatch.setattr(Path, "symlink_to", negar)
+
+
+def test_sem_privilegio_de_symlink_snapshot_v102_reinstala_e_reconstroi(tmp_path, novo, sem_symlink):
+    esperado = _respostas(novo)
+    legado = _home_legado(tmp_path)
+    try:
+        dest, _ = _snapshot_v102(tmp_path, legado)
+    finally:
+        legado.close()
+    with Verifica(home=tmp_path / "alvo") as alvo:
+        assert alvo.snapshot_install(dest)["status"] == "ok"
+        assert alvo.snapshot_install(dest)["status"] == "ok"
+        assert _respostas(alvo) == esperado
+        out = alvo.reconstruir_acervo()
+        assert out["status"] == "ok", out
+        assert _respostas(alvo) == esperado
+
+
+def test_erro_no_meio_da_instalacao_faz_rollback_e_preserva_o_home(tmp_path, novo, monkeypatch, sem_symlink):
+    from freoa_verifica import acervo
+    esperado = _respostas(novo)
+    dest = tmp_path / "snap"
+    novo.snapshot_export(dest)
+    with Verifica(home=tmp_path / "alvo") as alvo:
+        _carregar(alvo, legado=False)
+        antes = alvo.conn.execute("SELECT COUNT(*) FROM capture").fetchone()[0]
+        blobs_antes = sorted(p.name for p in (alvo.home / "blobs").rglob("*") if p.is_file())
+
+        def falha(*a, **k):
+            raise OSError("falha injetada após a troca")
+
+        monkeypatch.setattr(acervo, "save_installed", falha)
+        out = alvo.snapshot_install(dest)
+        assert out["status"] == "erro" and out["rollback"] is True, out
+        assert alvo.conn.execute("SELECT COUNT(*) FROM capture").fetchone()[0] == antes
+        assert sorted(p.name for p in (alvo.home / "blobs").rglob("*") if p.is_file()) == blobs_antes
+        assert _respostas(alvo) == esperado
