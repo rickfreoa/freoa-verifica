@@ -36,16 +36,9 @@ def test_mcp_listar_e_verificar(verifica_populada, monkeypatch):
     svc, rw, doc = verifica_populada
     monkeypatch.setenv("FV_HOME", str(svc.home))
 
-    if ms._svc is not None:
-        try:
-            ms._svc.close()
-        except Exception:  # noqa: BLE001
-            pass
-        ms._svc = None
-
+    # Injeta a instância já populada do fixture como o serviço deste home
+    monkeypatch.setitem(ms._servicos, str(svc.home), svc)
     mcp = create_mcp(home=str(svc.home))
-    # Força o singleton a ser a mesma instância já populada do fixture
-    ms._svc = svc
     mcp_svc = svc
 
     trecho = "A alienação, direta ou indireta, do controle de companhia aberta"

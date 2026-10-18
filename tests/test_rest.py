@@ -18,7 +18,7 @@ def client(verifica_populada, monkeypatch):
     app = create_app(home=str(svc.home), token=None)
     for cached in svc._resolver.works.values():
         app.state.verifica.registrar(cached)
-    with TestClient(app) as c:
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
         c.doc_ref = doc  # type: ignore[attr-defined]
         yield c
 

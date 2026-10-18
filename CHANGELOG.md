@@ -21,6 +21,14 @@
 - Filtro `fonte` da busca local de legislação é aplicado antes do limite.
 - Ranking: MATCH de decisões restrito a ementa e inteiro teor, bm25 ponderado (ementa 5, inteiro teor 1), `pertinencia` e `correspondencia` em cada item, corte de dois terços dos termos e OR completando AND escasso (substitui "OR só com AND vazio" da 0010).
 - Tesauro jurídico `tesauro-1` (20 pares determinísticos, `freoa_verifica/data/tesauro-1.json`) expande a consulta por OR; a versão e as expansões saem na resposta.
+- Fronteiras remotas (decisão 0026): modo local/remoto explícito na API REST e no MCP HTTP; token obrigatório fora de loopback, verificado em toda requisição, inclusive ao carregar a fábrica ASGI diretamente.
+- Validação de entrada compartilhada na fachada (tipos e tetos), corpo HTTP limitado antes da leitura integral, semáforo para operações caras; entrada inválida devolve 422, excesso de corpo 413, sobrecarga 503.
+- Âncora textual: o intervalo devolvido é validado contra o trecho casado; sem prova, a âncora é recusada em vez de apontar caracteres errados (NFC, múltiplas composições).
+- Conexões SQLite com dono registrado, fechamento coordenado e falhas registradas em log; a instalação de snapshot e a purga esperam as operações ativas.
+- MCP: um serviço por home no mesmo processo.
+- Política de registro `sem_conteudo` (`--sem-registro`) e `fv runs purgar --antes DATA` (decisão 0030).
+- Snapshot publica identificadores das obras e das decisões e `derived_version`; `fv doctor`, o MCP e a API avisam `acervo_incompleto` quando o home está abaixo do manifesto instalado ou do mínimo embutido.
+- Release só publica após a suíte completa no mesmo commit, sem substituição de assets, com `requirements-lock.txt` anexado. Pendente: fixar Actions por SHA.
 
 ## 1.0.2
 

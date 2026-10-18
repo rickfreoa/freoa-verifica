@@ -643,11 +643,33 @@ def _persist(
 
 
 def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any]) -> str:
-    """Grava o recibo (C4): chamado só depois da finalização, com a conclusão devolvida."""
-    request_json = json.dumps({"citacao": citacao, "trecho": trecho, "data": data, "modo": modo},
-                              ensure_ascii=False, sort_keys=True)
+    """Grava o recibo (C4): chamado só depois da finalização, com a conclusão devolvida.
+
+    Política `sem_conteudo` (C5): só hashes, política e dimensões; sem citação, trecho nem evidência.
+    """
+    from freoa_verifica.registro import politica_atual
+
+    request = {"citacao": citacao, "trecho": trecho, "data": data, "modo": modo}
+    request_json = json.dumps(request, ensure_ascii=False, sort_keys=True)
     request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
-    result_json = json.dumps(resultado, ensure_ascii=False, sort_keys=True)
+    if politica_atual.get() == "sem_conteudo":
+        h = lambda v: None if v is None else hashlib.sha256(str(v).encode("utf-8")).hexdigest()  # noqa: E731
+        request_json = json.dumps(
+            {"registro": "sem_conteudo", **{f"{k}_sha256": h(v) for k, v in request.items()}},
+            sort_keys=True,
+        )
+        result_json = json.dumps(
+            {
+                "registro": "sem_conteudo",
+                **{d: {"status": (resultado.get(d) or {}).get("status"),
+                       "reason_code": (resultado.get(d) or {}).get("reason_code")}
+                   for d in ("identity", "text", "temporal", "support")},
+                "algo_versions": resultado.get("algo_versions"),
+            },
+            ensure_ascii=False, sort_keys=True,
+        )
+    else:
+        result_json = json.dumps(resultado, ensure_ascii=False, sort_keys=True)
     run_id = new_ulid()
     conn.execute(
         "INSERT INTO run(id, request_hash, request_json, policy_version, result_json) "

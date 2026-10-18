@@ -103,7 +103,7 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
         conn.isolation_level = previous
 
 
-def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000) -> sqlite3.Connection:
+def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000, check_same_thread: bool = True) -> sqlite3.Connection:
     """Abre SQLite com foreign_keys, WAL e migrações aplicadas."""
     if path is None:
         home = data_home()
@@ -112,7 +112,7 @@ def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000) ->
     else:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=busy_timeout_ms / 1000)
+    conn = sqlite3.connect(str(path), timeout=busy_timeout_ms / 1000, check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
     conn.execute("PRAGMA foreign_keys=ON")

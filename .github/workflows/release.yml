@@ -10,7 +10,12 @@ permissions:
   attestations: write
 
 jobs:
+  # Suíte completa (matriz do ci.yml) sobre o mesmo commit da tag, antes de qualquer publicação.
+  testes:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: testes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +32,11 @@ jobs:
           python -m venv /tmp/v && /tmp/v/bin/pip install dist/*.whl
           /tmp/v/bin/fv --version
           /tmp/v/bin/fv doctor --offline
+      - name: Registrar dependências resolvidas
+        run: |
+          /tmp/v/bin/pip install "$(ls dist/*.whl)[server]"
+          /tmp/v/bin/pip freeze --exclude freoa-verifica > dist/requirements-lock.txt
+          (cd dist && sha256sum requirements-lock.txt >> SHA256SUMS)
       - uses: actions/attest-build-provenance@v1
         with:
           subject-path: |
@@ -36,5 +46,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file CHANGELOG.md --verify-tag || \
-          gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          # Sem substituição de assets: se a release ou um asset já existir, o job falha.
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file CHANGELOG.md --verify-tag

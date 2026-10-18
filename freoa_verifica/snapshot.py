@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from freoa_verifica import acervo
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.store import blobs
@@ -439,6 +440,7 @@ def export_snapshot(
         "capturas": len(blob_digests),
         "obras": conn.execute("SELECT COUNT(*) FROM work").fetchone()[0],
         "decisoes": conn.execute("SELECT COUNT(*) FROM decision").fetchone()[0],
+        **{k: v for k, v in acervo.manifest_fields(conn).items() if k not in ("obras", "decisoes", "db_sha256")},
         "hashes_blobs": sorted(blob_digests.keys()),
         "blob_sha256": blob_digests,
         "blobs_completos": blobs_completos,
@@ -611,6 +613,20 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
 
 
 def install_snapshot(
+    svc: Any,
+    origem: str | Path | None = None,
+    *,
+    url: str | None = None,
+) -> dict[str, Any]:
+    """Instala o snapshot com acesso exclusivo: espera as operações ativas terminarem."""
+    try:
+        with svc.exclusivo():
+            return _install_snapshot(svc, origem, url=url)
+    except TimeoutError as exc:
+        return {"status": "erro", "motivo": str(exc)}
+
+
+def _install_snapshot(
     svc: Any,
     origem: str | Path | None = None,
     *,
@@ -897,7 +913,7 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             check.close()
 
         # So agora fechar e guardar os originais completos antes de publicar.
-        svc._close_all_conns()
+        svc._close_all_conns(strict=True)
         closed = True
         if db_dst.exists():
             os.replace(db_dst, backup_db)
@@ -913,6 +929,7 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
         svc._db_path = db_dst
         svc._clear_caches()
         svc.conn = connect(db_dst)
+        acervo.save_installed(svc.home, manifest)
         return {
             "status": "ok",
             "backup": str(backup_db) if backup_db.exists() else None,
