@@ -592,9 +592,12 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
                     table_map[old_id] = values["id"]
         if conn.execute("PRAGMA foreign_key_check").fetchone():
             raise ValueError("snapshot_relacoes_invalidas")
+        from freoa_verifica.rotulos import corrigir_rotulos
+        corrigir_rotulos(conn)
         conn.execute("DELETE FROM fts_redaction")
-        conn.execute("INSERT INTO fts_redaction(text, work_label, path) "
-                     "SELECT r.text, COALESCE(w.label,w.number), p.path FROM redaction r "
+        # shortcut: rubrica NULL até parser gravar Provision.rubrica (html_devices não captura hoje), indexar então (M11)
+        conn.execute("INSERT INTO fts_redaction(text, rubrica, work_label, path) "
+                     "SELECT r.text, NULL, COALESCE(w.label,w.number), p.path FROM redaction r "
                      "JOIN provision p ON p.id=r.provision_id JOIN work w ON w.id=p.work_id")
         from freoa_verifica.store.repo import rebuild_decision_index
         rebuild_decision_index(conn)

@@ -7,6 +7,9 @@
 - Histórico ausente (decisão 0024): data sem redação selecionada não confronta nem devolve a redação atual como se fosse da data (`HISTORICO_ANTERIOR_AUSENTE`; `texto=null` e `texto_atual` rotulado); `redacoes_anteriores` exclui a vigente; `redacao_anterior_ausente_na_fonte`.
 - `verificar_texto` lista remissões anafóricas como `referencia_nao_resolvida` e informa `total_detectado`, `total_processado` e `truncado` acima de 200 citações.
 - Recibo final (decisão 0027): o recibo é gravado depois de todos os rebaixamentos e coincide com a resposta; `verificar_citacao` aplica o bloqueio de confiança de extração (corrige "Lei 6.404/1976: art. 117 do contrato" verified).
+- Data do ato alterador extraída da epígrafe já capturada quando o Senado não fornece a data; só preenche a data completa, nunca inventa, e data inválida fica sem valor (M8).
+- Coluna `rubrica` no índice FTS de redações (migração 006, preserva as linhas existentes); o parser ainda não captura a rubrica de artigo, então a coluna fica vazia até essa captura existir (M11, pendente).
+- Rótulos CVM com mojibake (UTF-8 lido como latin-1) são corrigidos ao gravar e ao instalar snapshot, só quando a reversão é UTF-8 válido e reduz caracteres suspeitos (M11).
 
 ## 1.0.2
 
