@@ -2176,6 +2176,9 @@ class Verifica:
                 nivel = repo.proof_level_for_capture(
                     capture_id=capture_id, sha256=digest, kind_doc=kind_doc
                 )
+                # Nova captura da mesma decisão substitui o documento do mesmo tipo (texto e captura juntos).
+                self.conn.execute("DELETE FROM decision_document WHERE decision_id=? AND kind IN (?, 'ementa')",
+                                  (did, kind_doc))
                 self.conn.execute(
                     "INSERT INTO decision_document("
                     "id, decision_id, capture_id, kind, text, sha256, nivel_prova"

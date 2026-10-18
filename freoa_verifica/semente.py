@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -662,7 +663,11 @@ class SementeSync:
             return
         for row in rows:
             chave = f"stj:{row['key']}"
-            if self.state.done("stj_doc", chave):
+            # Checkpoint ligado à versão do conteúdo (campos do item, sem o hash do recurso): versão nova reprocessa.
+            conteudo = {k: v for k, v in json.loads(row["payload"] or "{}").items() if not k.startswith("_")}
+            versao = hashlib.sha256(json.dumps(conteudo, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+            saved = self.state.get("stj_doc", chave)
+            if self.state.done("stj_doc", chave) and json.loads(saved["payload_json"] or "{}").get("versao") == versao:
                 continue
             try:
                 from freoa_verifica.connectors.base import Candidate
@@ -684,7 +689,7 @@ class SementeSync:
                 )
                 item = self.svc._index_candidate_juris(conn_obj, cand)
                 if item and item.get("capture_id"):
-                    self.state.set("stj_doc", chave, "parseado")
+                    self.state.set("stj_doc", chave, "parseado", payload={"versao": versao})
                     self._stats("stj").parseados += 1
                 else:
                     self._mark_indisponivel("stj_doc", chave, "sem_evidencia_capturada")
