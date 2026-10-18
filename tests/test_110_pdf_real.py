@@ -89,6 +89,15 @@ def _pdf_com_imagem(linhas: list[tuple[int, str]], img_y: int, img_h: int) -> by
     return out
 
 
+def test_imagem_na_mesma_linha_bloqueia():
+    # Auditor, rodada 10: imagem à direita, na altura da própria linha do art. 1.
+    doc = parse_pdf_direto(_pdf_com_imagem(
+        [(700, "RESOLUCAO CVM 999/2026"), (642, "Art. 1o A divulgacao e obrigatoria."),
+         (560, "Art. 2o Esta Resolucao entra em vigor.")], img_y=634, img_h=24))
+    res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", "A divulgacao e obrigatoria.")
+    assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
+
+
 def test_imagem_no_corpo_bloqueia_dispositivos_vizinhos():
     # Auditor, rodada 9: ressalva rasterizada entre duas linhas do mesmo artigo.
     doc = parse_pdf_direto(_pdf_com_imagem(

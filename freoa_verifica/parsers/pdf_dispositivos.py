@@ -79,11 +79,12 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
     for p, (parts, fora, imgs, h) in enumerate(zip(frags, fora_por_pagina, imagens, alturas)):
         ys = sorted({round(y) for y, t in parts if _norm(t) and round(y) not in fora})
         for base, topo in imgs:
-            if topo <= _FAIXA_INF * h or base >= _FAIXA_SUP * h:
-                continue  # logotipo na margem
             acima = [y for y in ys if y >= topo]
             abaixo = [y for y in ys if y <= base]
-            for y in ([min(acima)] if acima else []) + ([max(abaixo)] if abaixo else []):
+            lado = [y for y in ys if base - 2 < y < topo + 2]  # linha que divide a altura com a imagem
+            if not lado and ((base >= _FAIXA_SUP * h and not acima) or (topo <= _FAIXA_INF * h and not abaixo)):
+                continue  # logotipo na margem, sem texto mantido do lado de fora nem na mesma altura
+            for y in ([min(acima)] if acima else []) + ([max(abaixo)] if abaixo else []) + lado:
                 marcar.add((p, y))
             if not acima and p > 0:  # imagem no alto do corpo: fecho do dispositivo da página anterior
                 ant = sorted({round(y) for y, t in frags[p - 1] if _norm(t) and round(y) not in fora_por_pagina[p - 1]})
