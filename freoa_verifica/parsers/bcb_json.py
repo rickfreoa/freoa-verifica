@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from freoa_verifica.parsers.html_devices import PARSER_VERSION, parse_html_devices
@@ -31,6 +32,10 @@ def parse_bcb_json(data: bytes | str | dict[str, Any]) -> ParsedDocument:
     cancelado = bool(item.get("Cancelado"))
     assunto = item.get("Assunto")
     html_body = str(item.get("Texto") or "")
+    # Antes de 2020 o BCB publica as resoluções do CMN como tipo "Resolução"; só vale como CMN
+    # quando o próprio preâmbulo declara o Conselho Monetário Nacional (gold independente 1.1.0).
+    if tipo == "Resolução" and re.search(r"Conselho\s+Monet[áa]rio\s+Nacional", html_body[:3000]):
+        tipo = "Resolução CMN"
 
     # Envolve em html mínimo para sentinela de fecho
     wrapped = f"<html><body>{html_body}</body></html>"

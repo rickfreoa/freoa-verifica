@@ -486,13 +486,13 @@ def _compile_work_patterns() -> None:
             "resolucao_bcb",
         ),
         (
-            rf"\bCircular\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
+            rf"\bCircular(?:\s+(?:BCB|Bacen|do\s+BCB|do\s+Banco\s+Central(?:\s+do\s+Brasil)?))?\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "bcb",
             "circular",
         ),
         (
-            rf"\bCarta-Circular\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
+            rf"\bCarta-Circular(?:\s+(?:BCB|Bacen|do\s+BCB|do\s+Banco\s+Central(?:\s+do\s+Brasil)?))?\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "bcb",
             "carta_circular",
