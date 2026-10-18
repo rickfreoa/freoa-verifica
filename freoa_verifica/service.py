@@ -50,8 +50,11 @@ from freoa_verifica.verify import (
     ResolvedWork,
     SourceUnavailable,
     _current_redaction,
+    _find_provision,
     _redaction_by_id,
     _result_to_json,
+    persistir_resultado,
+    pode_negar,
     populate_from_parsed,
     verificar,
 )
@@ -77,6 +80,21 @@ def _authenticated_output(method):
             return {"status": "unavailable", "motivo": exc.reason,
                     "reason_code": exc.reason}
     return checked
+
+
+_ANAFORA = re.compile(
+    r"\b(?:art(?:igo)?s?\.?|§+|par[áa]grafos?|incisos?|inc\.|al[íi]neas?)[^.;\n]{0,60}?"
+    r"\b(?:d|n)[oa]\s+(?:mesm[oa]|referid[oa]|citad[oa]|supracitad[oa]|aludid[oa]|dit[oa]|anterior)\s+"
+    r"(?:lei|norma|resolu[çc][ãa]o|decreto|c[óo]digo|diploma|instru[çc][ãa]o|ato|regulamento|estatuto)\b",
+    re.IGNORECASE,
+)
+
+
+def _remissoes_anaforicas(texto: str) -> list[dict[str, Any]]:
+    """A5 (decisão 0012 mantida): a remissão sem obra explícita é listada, nunca herda obra."""
+    return [{"citacao": m.group(0), "span": [m.start(), m.end()],
+             "status": "referencia_nao_resolvida", "motivo": "REMISSAO_ANAFORICA"}
+            for m in _ANAFORA.finditer(texto)]
 
 
 def _now_iso() -> str:
@@ -553,7 +571,8 @@ class Verifica:
             raise SourceUnavailable(";".join(errors[:3]))
         return None
 
-    def _resolve(self, work: WorkKey, requested_work_date=None) -> ResolvedWork | list[ResolvedWork] | None:
+    def _resolve(self, work: WorkKey, requested_work_date=None, *, strict: bool = False) -> ResolvedWork | list[ResolvedWork] | None:
+        """strict: obra ausente do acervo sem poder consultar a fonte é lacuna de cobertura, não negativa (A2)."""
         hit = self._resolver.resolve(work)
         if isinstance(hit, ResolvedWork):
             declared = validate_identity(work, hit.document, requested_work_date or hit.work_date)
@@ -568,7 +587,21 @@ class Verifica:
             validate_identity(work, rebuilt.document, requested_work_date)
             self._resolver.add(rebuilt)
             return rebuilt
-        return self._capture_work(work, requested_work_date)
+        got = self._capture_work(work, requested_work_date)
+        if got is None and strict and self._offline():
+            raise SourceUnavailable("COBERTURA")
+        return got
+
+    @staticmethod
+    def _sem_dispositivo(rw: ResolvedWork, path: str, **extra) -> dict[str, Any]:
+        """C1: dispositivo ausente só vira inexistente se pode_negar autoriza."""
+        motivo = pode_negar(rw, path)
+        if motivo is None:
+            return {"status": "inexistente", "work_id": rw.work_id, "caminho": path, **extra}
+        if motivo == "COBERTURA":
+            return {"status": "indisponivel", "motivo": motivo, "reason_code": motivo, **extra}
+        return {"status": "unknown", "motivo": motivo, "reason_code": motivo,
+                "work_id": rw.work_id, "caminho": path, **extra}
 
     # ------------------------------------------------------------------
     # Busca legislação
@@ -793,7 +826,7 @@ class Verifica:
             out["status"] = "formato_invalido" if cite.kind == "norma" else "encontrada"
             return out
         try:
-            resolved = self._resolve(cite.work)
+            resolved = self._resolve(cite.work, strict=True)
         except SourceUnavailable as exc:
             out["status"] = "indisponivel"
             out["motivo"] = exc.reason
@@ -806,13 +839,18 @@ class Verifica:
             out["candidatos"] = [r.work_id for r in resolved]
             return out
         if cite.path:
-            provision = resolved.document.provision(cite.path)
-            if provision is None and cite.path.endswith(".caput"):
-                provision = resolved.document.provision(cite.path[:-len(".caput")])
+            provision = _find_provision(resolved.document, cite.path)
             if provision is None:
-                out.update(status="inexistente", caminho=cite.path,
-                           motivo="DISPOSITIVO_INEXISTENTE",
-                           identity={"status": "not_found", "reason_code": "DISPOSITIVO_INEXISTENTE"})
+                neg = self._sem_dispositivo(resolved, cite.path)
+                if neg["status"] == "inexistente":
+                    out.update(status="inexistente", caminho=cite.path,
+                               motivo="DISPOSITIVO_INEXISTENTE",
+                               identity={"status": "not_found", "reason_code": "DISPOSITIVO_INEXISTENTE"})
+                else:
+                    out.update(status="indisponivel" if neg["status"] == "indisponivel" else "unknown",
+                               caminho=cite.path, motivo=neg["motivo"],
+                               identity={"status": "unavailable" if neg["status"] == "indisponivel" else "unknown",
+                                         "reason_code": neg["motivo"]})
                 return out
         out["status"] = "encontrada"
         out["work_id"] = resolved.work_id
@@ -836,7 +874,7 @@ class Verifica:
             if cite and cite.work:
                 path = path or cite.path
                 try:
-                    resolved = self._resolve(cite.work)
+                    resolved = self._resolve(cite.work, strict=True)
                 except SourceUnavailable as exc:
                     return {"status": "indisponivel", "motivo": exc.reason}
                 if isinstance(resolved, list):
@@ -881,18 +919,28 @@ class Verifica:
             }
         if rw.persisted_incomplete:
             return {"status": "unknown", "reason_code": "DADOS_PERSISTIDOS_INCOMPLETOS"}
-        prov = rw.document.provision(path)
+        prov = _find_provision(rw.document, path)
         if prov is None:
-            return {"status": "inexistente", "work_id": rw.work_id, "caminho": path}
+            return self._sem_dispositivo(rw, path)
 
         tr = temporal_select(prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts, fetched_at=rw.fetched_at, quarantined=rw.quarantined)
         red = _redaction_by_id(prov, tr.redaction_id) if tr.redaction_id else None
-        if red is None and tr.reason not in {"INICIO_SUCESSOR_DESCONHECIDO", "CAPTURA_DATA_INVALIDA"}:
+        # C3: com data pedida e sem redação selecionada, a atual não substitui a resposta.
+        if red is None and data is None and tr.reason not in {"INICIO_SUCESSOR_DESCONHECIDO", "CAPTURA_DATA_INVALIDA"}:
             red = _current_redaction(prov)
-        texto = red.text if red else ""
+        texto = red.text if red else None
+        vigente = _current_redaction(prov)
+        texto_atual = None
+        if red is None and vigente is not None and not vigente.struck:
+            texto_atual = {
+                "rotulo": "redação atual da fonte; não é a redação da data pedida",
+                "texto": _truncate(vigente.text, _DEFAULT_TEXT_LIMIT)[0],
+            }
 
         anteriores = []
         for i, red in enumerate(prov.redactions):
+            if red is vigente and not red.struck and not red.superseded_without_strike:
+                continue  # M1: a vigente não é redação anterior
             anteriores.append(
                 {
                     "rotulo": f"redação {i + 1}",
@@ -912,13 +960,15 @@ class Verifica:
                         "act_date": ann.act_date,
                     }
                 )
-        text_out, trunc = _truncate(texto, _DEFAULT_TEXT_LIMIT)
+        text_out, trunc = _truncate(texto, _DEFAULT_TEXT_LIMIT) if texto is not None else (None, False)
         return {
             "status": "encontrada",
             "work_id": rw.work_id,
             "caminho": path,
             "texto": text_out,
+            "texto_atual": texto_atual,
             "truncado": trunc,
+            "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov),
             "vigencia": {
                 "status": tr.status,
                 "reason_code": tr.reason,
@@ -946,16 +996,16 @@ class Verifica:
         if cite is None or cite.work is None or not cite.path:
             return {"status": "formato_invalido", "citacao": citacao}
         try:
-            resolved = self._resolve(cite.work)
+            resolved = self._resolve(cite.work, strict=True)
         except SourceUnavailable as exc:
             return {"status": "indisponivel", "motivo": exc.reason}
         if resolved is None:
             return {"status": "inexistente"}
         if isinstance(resolved, list):
             return {"status": "ambigua"}
-        prov = resolved.document.provision(cite.path)
+        prov = _find_provision(resolved.document, cite.path)
         if prov is None:
-            return {"status": "inexistente", "caminho": cite.path}
+            return self._sem_dispositivo(resolved, cite.path)
         from freoa_verifica.temporal import build_intervals
 
         dated, rules, needs_judgment, gflags = build_intervals(
@@ -997,7 +1047,16 @@ class Verifica:
             "regras": rules,
             "flags": gflags,
             "needs_judgment": needs_judgment,
+            "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov),
         }
+
+    @staticmethod
+    def _anterior_ausente(prov: Provision) -> bool:
+        """A primeira redação conhecida já é 'Redação dada': a anterior não consta da fonte."""
+        if not prov.redactions:
+            return False
+        first = min(prov.redactions, key=lambda r: r.order)
+        return any(a.kind == "redacao_dada" for a in first.annotations)
 
     # ------------------------------------------------------------------
     # Verificação
@@ -1012,20 +1071,21 @@ class Verifica:
         proposicao: str | None = None,
         *,
         _path: str | None = None,
+        _cite: Citation | None = None,
     ) -> dict[str, Any]:
         cite = parse_one(citacao)
         if _path is not None:
             cite = next((c for c in extract(citacao) if c.path == _path), None)
         if cite and cite.work is not None:
             try:
-                resolved = self._resolve(cite.work, requested_date(cite.raw))
+                resolved = self._resolve(cite.work, requested_date(cite.raw), strict=True)
                 if isinstance(resolved, ResolvedWork):
                     validate_identity(cite.work, resolved.document, requested_date(cite.raw))
                     if resolved.capture_id:
                         self._authenticate_capture(resolved.capture_id)
             except (SourceUnavailable, IdentityMismatch) as exc:
                 mismatch = isinstance(exc, IdentityMismatch)
-                return {
+                return self._finalizar({
                     "identity": {
                         "status": "not_found" if mismatch else "unavailable",
                         "reason_code": "IDENTIDADE_DIVERGENTE" if mismatch else exc.reason,
@@ -1049,9 +1109,9 @@ class Verifica:
                     "proposicao": proposicao,
                     "run_id": None,
                     "citation": _citation_to_dict(cite),
-                }
+                }, _cite or cite, citacao, trecho, data, modo, gravar=False, em_texto=_cite is not None)
             if isinstance(resolved, ResolvedWork) and not resolved.capture_id:
-                return {
+                return self._finalizar({
                     "identity": {
                         "status": "unknown",
                         "reason_code": "SEM_EVIDENCIA_CAPTURADA",
@@ -1075,20 +1135,59 @@ class Verifica:
                     "proposicao": proposicao,
                     "run_id": None,
                     "citation": _citation_to_dict(cite),
-                }
+                }, _cite or cite, citacao, trecho, data, modo, gravar=False, em_texto=_cite is not None)
 
         result = verificar(
             citacao,
             trecho=trecho,
             data=data,
             modo=modo,
-            repo=None if self._read_only else self.conn,
+            repo=None,
             resolver=self._resolver_adapter(),
             _path=_path,
+            persistir=False,  # C4: só _finalizar grava o recibo
         )
         out = _result_to_json(result)
         out["proposicao"] = proposicao
-        out["run_id"] = result.run_id
+        out["run_id"] = None
+        return self._finalizar(out, _cite or cite, citacao, trecho, data, modo, em_texto=_cite is not None)
+
+    def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
+                   trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
+        """C4 (decisão 0027): todos os rebaixamentos, nesta ordem, e só então o recibo."""
+        # C1: negativa de dispositivo só com pode_negar.
+        ident = out["identity"]
+        if (ident.get("status") == "not_found" and ident.get("reason_code") == "DISPOSITIVO_INEXISTENTE"
+                and cite is not None and cite.work is not None and cite.path):
+            try:
+                rw = self._resolve(cite.work, strict=True)
+            except SourceUnavailable:
+                rw = None
+            motivo = pode_negar(rw if isinstance(rw, ResolvedWork) else None, cite.path)
+            if motivo:
+                ident.update(status="unavailable" if motivo == "COBERTURA" else "unknown", reason_code=motivo)
+                if out["text"].get("status") == "not_found":
+                    out["text"].update(status="unknown", reason_code=motivo)
+        # C2: aplicar_situacao
+        # Confiança de extração (decisão 0016): provável ou referente alternativo nunca é definitivo.
+        if (cite is not None and (cite.confidence == "provavel" or "preferir_outro_referente" in cite.flags)
+                # citação avulsa de formato inválido mantém o veredito; em texto, provável sempre pede conferência
+                and (em_texto or out["identity"].get("reason_code") not in {"formato_invalido", "CITACAO_NAO_RECONHECIDA"})):
+            confronto = json.loads(json.dumps({k: out.get(k) for k in ("identity", "text", "temporal")}))
+            evidencia = (confronto["identity"].get("evidence") or [None])[0]
+            out["conferencia"] = {
+                "interpretacao_proposta": _citation_to_dict(cite),
+                "interpretacao_preferida": (
+                    "dispositivo de outro referente" if "preferir_outro_referente" in cite.flags
+                    else "norma+dispositivo" if cite.path else "norma sem dispositivo"
+                ),
+                "alternativas": ["norma sem dispositivo", "dispositivo de outro referente"],
+                "evidencia_disponivel": evidencia,
+                "confronto_proposto": confronto,
+            }
+            out["identity"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
+            out["text"] = {"status": "not_assessed", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
+            out["temporal"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
         # Nunca verified sem capture_id correspondente.
         for dim_name in ("identity", "text", "temporal"):
             dim = out.get(dim_name) or {}
@@ -1099,6 +1198,7 @@ class Verifica:
                 dim["status"] = "unknown"
                 dim["reason_code"] = "SEM_EVIDENCIA_CAPTURADA"
                 out[dim_name] = dim
+        # Autenticação da evidência.
         for dim_name in ("identity", "text", "temporal"):
             dim = out.get(dim_name) or {}
             if dim.get("status") == "verified":
@@ -1117,6 +1217,9 @@ class Verifica:
             "reason_code": out.get("support", {}).get("reason_code") or "SUPPORT_NOT_ASSESSED",
             "evidence": out.get("support", {}).get("evidence") or [],
         }
+        if gravar and not self._read_only:
+            recibo = {k: v for k, v in out.items() if k not in ("run_id", "proposicao")}
+            out["run_id"] = persistir_resultado(self.conn, citacao, trecho, data, modo, recibo)
         return out
 
     def _authenticate_capture(self, capture_id):
@@ -1157,7 +1260,7 @@ class Verifica:
 
         class _Adapter:
             def resolve(self, work: WorkKey):
-                resolved = outer._resolve(work)
+                resolved = outer._resolve(work, strict=True)
                 for item in resolved if isinstance(resolved, list) else [resolved]:
                     if isinstance(item, ResolvedWork) and item.capture_id:
                         outer._authenticate_capture(item.capture_id)
@@ -1178,7 +1281,9 @@ class Verifica:
                 "data": data,
             }
         cites = extract(texto)
-        if len(cites) > 200:
+        total_detectado = len(cites)
+        truncado = total_detectado > 200  # A8: nunca cortar calado
+        if truncado:
             cites = cites[:200]
         resultados: list[dict[str, Any]] = []
         for cite in cites:
@@ -1195,7 +1300,7 @@ class Verifica:
                 # Reconhecimento só sintático — nunca "encontrada".
                 status, evidencia = self._confirm_decision(cite.decision, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
             else:
-                verif = self.verificar_citacao(cite.raw, trecho=trecho, data=data, modo="literal", _path=cite.path)
+                verif = self.verificar_citacao(cite.raw, trecho=trecho, data=data, modo="literal", _path=cite.path, _cite=cite)
                 identity = verif.get("identity", {})
                 status = {"verified":"encontrada", "ambiguous":"ambigua", "unavailable":"indisponivel", "unknown":"indisponivel"}.get(identity.get("status"), "indisponivel")
                 if identity.get("reason_code") in {"formato_invalido", "CITACAO_NAO_RECONHECIDA"}:
@@ -1220,24 +1325,8 @@ class Verifica:
                 evidence = identity.get("evidence") or []
                 evidencia = evidence[0] if evidence else None
             if cite.confidence == "provavel":
-                status = "requer_conferencia"
-                # O confronto é evidência da interpretação proposta, não da pertença.
-                proposta = _citation_to_dict(cite)
-                conferencia = {
-                    "interpretacao_proposta": proposta,
-                    "interpretacao_preferida": (
-                        "dispositivo de outro referente" if "preferir_outro_referente" in cite.flags
-                        else "norma+dispositivo" if cite.path else "norma sem dispositivo"
-                    ),
-                    "alternativas": ["norma sem dispositivo", "dispositivo de outro referente"],
-                    "evidencia_disponivel": evidencia,
-                    "confronto_proposto": verif,
-                }
-                verif = {
-                    "identity": {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
-                    "text": {"status": "not_assessed", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
-                    "conferencia": conferencia,
-                }
+                status = "requer_conferencia"  # verif já foi rebaixada em _finalizar
+                evidencia = (verif or {}).get("conferencia", {}).get("evidencia_disponivel")
             resultados.append(
                 {
                     "citacao": cite.raw,
@@ -1260,6 +1349,10 @@ class Verifica:
             "texto_tamanho": len(texto),
             "citacoes": resultados,
             "total": len(resultados),
+            "total_detectado": total_detectado,
+            "total_processado": len(cites),
+            "truncado": truncado,
+            "referencias_nao_resolvidas": _remissoes_anaforicas(texto),
             "data": data,
         }
 
