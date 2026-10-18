@@ -565,35 +565,82 @@ def persist_parsed_document(
          json.dumps(amending_act_texts or {}, ensure_ascii=False),
          json.dumps(events, ensure_ascii=False), capture_id),
     )
-    for prov in document.provisions:
-        prow = conn.execute(
-            "SELECT id FROM provision WHERE work_id=? AND scope=? AND path=?",
-            (work_id, prov.scope, prov.path),
-        ).fetchone()
-        if prow is None:
-            continue
-        reds = conn.execute(
-            "SELECT id, text_sha256 FROM redaction WHERE provision_id=? ORDER BY rowid",
-            (prow["id"],),
-        ).fetchall()
-        captured_hashes = {hashlib.sha256(r.text.encode("utf-8")).hexdigest() for r in prov.redactions}
-        for red in reds:
-            if red["text_sha256"] not in captured_hashes:
-                continue
-            existing = conn.execute(
-                "SELECT id FROM occurrence WHERE redaction_id=? AND extract_id=?",
-                (red["id"], extract_id),
-            ).fetchone()
-            if existing:
-                continue
-            conn.execute(
-                "INSERT INTO occurrence("
-                "id, redaction_id, extract_id, anchor_json, editorial_json"
-                ") VALUES (?,?,?,?,?)",
-                (new_ulid(), red["id"], extract_id, None, None),
-            )
+    sincronizar_derivados(conn, capture_id=capture_id, work_id=work_id, document=document, extract_id=extract_id)
     conn.commit()
     return extract_id
+
+
+def sincronizar_derivados(
+    conn: sqlite3.Connection, *, capture_id: str, work_id: str, document: Any, extract_id: str | None,
+) -> None:
+    """Regrava provisions, redações e ocorrências da captura a partir do modelo (C6).
+
+    Remove antes os derivados antigos da captura: ocorrências de suas extrações e as redações e
+    dispositivos que só elas sustentavam e que o modelo atual não tem mais. Caminhos novos são criados.
+    """
+    antigas = conn.execute(
+        "SELECT o.id AS oid, o.redaction_id AS rid, r.provision_id AS pid FROM occurrence o "
+        "JOIN extract e ON e.id=o.extract_id JOIN redaction r ON r.id=o.redaction_id "
+        "WHERE e.capture_id=?", (capture_id,)).fetchall()
+    # Ocorrências antigas dão lugar às da extração atual; as de outras capturas não se tocam.
+    for r in antigas:
+        conn.execute("UPDATE relation SET evidence_occurrence_id=NULL WHERE evidence_occurrence_id=?", (r["oid"],))
+        conn.execute("UPDATE event SET evidence_occurrence_id=NULL WHERE evidence_occurrence_id=?", (r["oid"],))
+        conn.execute("DELETE FROM occurrence WHERE id=?", (r["oid"],))
+    atuais: dict[tuple[str, str], set[str]] = {}
+    for prov in document.provisions:
+        atuais[(prov.scope, prov.path)] = {
+            hashlib.sha256(r.text.encode("utf-8")).hexdigest() for r in prov.redactions}
+    for prov in document.provisions:
+        conn.execute(
+            "INSERT INTO provision(id, work_id, scope, path) VALUES (?,?,?,?) "
+            "ON CONFLICT(work_id, scope, path) DO NOTHING", (new_ulid(), work_id, prov.scope, prov.path))
+        pid = conn.execute("SELECT id FROM provision WHERE work_id=? AND scope=? AND path=?",
+                           (work_id, prov.scope, prov.path)).fetchone()["id"]
+        for red in prov.redactions:
+            h = hashlib.sha256(red.text.encode("utf-8")).hexdigest()
+            row = conn.execute("SELECT id FROM redaction WHERE provision_id=? AND text_sha256=?",
+                               (pid, h)).fetchone()
+            rid = row["id"] if row else new_ulid()
+            if not row:
+                conn.execute("INSERT INTO redaction(id, provision_id, text, text_sha256) VALUES (?,?,?,?)",
+                             (rid, pid, red.text, h))
+            if extract_id and not conn.execute(
+                    "SELECT 1 FROM occurrence WHERE redaction_id=? AND extract_id=?", (rid, extract_id)).fetchone():
+                conn.execute("INSERT INTO occurrence(id, redaction_id, extract_id, anchor_json, editorial_json) "
+                             "VALUES (?,?,?,?,?)", (new_ulid(), rid, extract_id, None, None))
+    # Órfãs: redações antigas ausentes do modelo e sem ocorrência em outra captura; depois os dispositivos vazios.
+    triggers = [(n, q) for n, q in conn.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='redaction'").fetchall()]
+    orfas = []
+    for r in antigas:
+        prov = conn.execute("SELECT scope, path FROM provision WHERE id=?", (r["pid"],)).fetchone()
+        sha = conn.execute("SELECT text_sha256 FROM redaction WHERE id=?", (r["rid"],)).fetchone()
+        if prov is None or sha is None:
+            continue
+        if sha[0] in atuais.get((prov["scope"], prov["path"]), set()):
+            continue
+        if conn.execute("SELECT 1 FROM occurrence WHERE redaction_id=?", (r["rid"],)).fetchone():
+            continue
+        orfas.append((r["rid"], r["pid"]))
+    if orfas:
+        conn.commit()
+        for n, _ in triggers:
+            conn.execute(f'DROP TRIGGER "{n}"')
+        try:
+            for rid, _ in orfas:
+                conn.execute("DELETE FROM event WHERE redaction_id=?", (rid,))
+                conn.execute("DELETE FROM redaction WHERE id=?", (rid,))
+            for pid in {p for _, p in orfas}:
+                if not conn.execute("SELECT 1 FROM redaction WHERE provision_id=?", (pid,)).fetchone():
+                    conn.execute("DELETE FROM event WHERE provision_id=?", (pid,))
+                    conn.execute("UPDATE provision SET parent_id=NULL WHERE parent_id=?", (pid,))
+                    conn.execute("DELETE FROM provision WHERE id=?", (pid,))
+            conn.commit()
+        finally:
+            for _, q in triggers:
+                conn.execute(q)
+            conn.commit()
 
 
 def get_parsed_document(

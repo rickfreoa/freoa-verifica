@@ -66,6 +66,7 @@ from freoa_verifica.verify import (
 from freoa_verifica import acervo as _acervo
 from freoa_verifica.limites import EntradaInvalida, Sobrecarga, validar as _validar
 from freoa_verifica.registro import normalizar as normalizar_registro
+from freoa_verifica import derivados as _derivados
 from freoa_verifica.registro import politica_atual as _politica_atual
 
 _log = logging.getLogger("freoa_verifica.service")
@@ -2364,6 +2365,10 @@ class Verifica:
             self._acervo_cache = (True, _acervo.status(self.conn, self.home))
         return self._acervo_cache[1]
 
+    def reconstruir_acervo(self, com_situacao: bool = False) -> dict[str, Any]:
+        """Reconstrói os derivados do home numa cópia e troca o banco só se tudo validar (C6)."""
+        return _derivados.reconstruir(self, com_situacao=com_situacao)
+
     def purgar_execucoes(self, antes: str) -> dict[str, Any]:
         """Reconstrói o banco sem as execuções anteriores a `antes` (AAAA-MM-DD)."""
         from freoa_verifica import registro as reg
@@ -2430,6 +2435,8 @@ def _guardar(fn):
         token = _politica_atual.set(self.registro)
         try:
             with self._operacao(caro):
+                if fn.__name__ in _DEPENDENTES and not _derivados.compativel(self.conn):
+                    return _derivados.indisponivel(self.acervo_status())
                 out = fn(self, *args, **kwargs)
                 if externa and self.exigir_acervo and isinstance(out, dict):
                     aviso = self.acervo_status()
@@ -2441,6 +2448,12 @@ def _guardar(fn):
 
     return guardado
 
+
+# Consultas que leem derivados (modelo, dispositivos, FTS): recusadas em home de DERIVED_VERSION antiga.
+_DEPENDENTES = frozenset({
+    "buscar_legislacao", "resolver_citacao", "obter_dispositivo", "historico_dispositivo",
+    "verificar_citacao", "verificar_texto",
+})
 
 for _nome in _CONTADAS:
     setattr(Verifica, _nome, _guardar(getattr(Verifica, _nome)))

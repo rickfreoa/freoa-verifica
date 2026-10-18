@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from freoa_verifica import acervo
+from freoa_verifica import acervo, derivados
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.store import blobs
@@ -313,6 +313,8 @@ def export_snapshot(
     legacy_db = destino / "verifica.sqlite3"
 
     out_conn = connect(export_db)
+    derivados.definir(out_conn, derivados.versao(conn))  # o banco exportado herda a versão da origem
+    out_conn.commit()
     for t in SNAPSHOT_TABLE_COLUMNS:
         try:
             out_conn.execute(f"DELETE FROM {t}")
@@ -556,6 +558,31 @@ def _verify_sums(origem: Path, manifest: dict[str, Any]) -> str | None:
         return "inventario_invalido"
 
 
+def _versao_derivados(conn: sqlite3.Connection, schema: str) -> int | None:
+    try:
+        row = conn.execute(f"SELECT value FROM {schema}.meta WHERE key='derived_version'").fetchone()
+        return int(row[0]) if row else None
+    except (sqlite3.Error, ValueError):
+        return None
+
+
+def _reconstruir_derivados_substituidos(conn: sqlite3.Connection, capturas: list[str]) -> None:
+    """Regrava provisions, redações e ocorrências dos documentos cujo modelo o snapshot substituiu."""
+    from freoa_verifica.parsers.model import document_from_dict
+    from freoa_verifica.store.repo import sincronizar_derivados
+
+    for cid in capturas:
+        row = conn.execute("SELECT model_json, work_id FROM main.parsed_document WHERE capture_id=?",
+                           (cid,)).fetchone()
+        if not row or not row["model_json"] or not row["work_id"]:
+            continue
+        ext = conn.execute("SELECT id FROM main.extract WHERE capture_id=? ORDER BY created_at DESC, id DESC LIMIT 1",
+                           (cid,)).fetchone()
+        sincronizar_derivados(conn, capture_id=cid, work_id=row["work_id"],
+                              document=document_from_dict(json.loads(row["model_json"])),
+                              extract_id=ext["id"] if ext else None)
+
+
 def _merge_attach(live_db: Path, snap_db: Path) -> None:
     """Anexa dados publicos, remapeando identidades naturais ja existentes."""
     conn = sqlite3.connect(str(live_db))
@@ -569,6 +596,11 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
     mappings = {}
     try:
         conn.execute("ATTACH DATABASE ? AS snap", (str(snap_db),))
+        local_dv = derivados.versao(conn)
+        snap_dv = _versao_derivados(conn, "snap")
+        # C6: snapshot de derivados mais novos substitui os modelos locais.
+        substituir = (snap_dv or 0) > (local_dv or 0)
+        substituidas: list[str] = []
         for table, columns in SNAPSHOT_TABLE_COLUMNS.items():
             fks = conn.execute(f"PRAGMA foreign_key_list({table})").fetchall()
             rows = conn.execute(f"SELECT {', '.join(columns)} FROM snap.{table}").fetchall()
@@ -592,19 +624,33 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
                     continue
                 col_list = ", ".join(columns)
                 placeholders = ",".join("?" for _ in columns)
-                conn.execute(f"INSERT OR IGNORE INTO main.{table}({col_list}) VALUES ({placeholders})",
+                modo = "OR REPLACE" if table == "parsed_document" and substituir else "OR IGNORE"
+                conn.execute(f"INSERT {modo} INTO main.{table}({col_list}) VALUES ({placeholders})",
                              [values[c] for c in columns])
+                if table == "parsed_document":
+                    substituidas.append(values["capture_id"])
                 if old_id:
                     table_map[old_id] = values["id"]
         if conn.execute("PRAGMA foreign_key_check").fetchone():
             raise ValueError("snapshot_relacoes_invalidas")
         from freoa_verifica.rotulos import corrigir_rotulos
         corrigir_rotulos(conn)
-        conn.execute("DELETE FROM fts_redaction")
-        # shortcut: rubrica NULL até parser gravar Provision.rubrica (html_devices não captura hoje), indexar então (M11)
-        conn.execute("INSERT INTO fts_redaction(text, rubrica, work_label, path) "
-                     "SELECT r.text, NULL, COALESCE(w.label,w.number), p.path FROM redaction r "
-                     "JOIN provision p ON p.id=r.provision_id JOIN work w ON w.id=p.work_id")
+        if substituir:
+            _reconstruir_derivados_substituidos(conn, substituidas)
+        # C6: o FTS só leva as redações do modelo atual (nunca as de modelos substituídos).
+        derivados.reindexar_fts(conn)
+        # Versão do home: a do snapshot só vale se nenhum modelo local ficou para trás.
+        if substituir:
+            chaves = {tuple(r) for r in conn.execute(
+                "SELECT sha256, url, fetched_at FROM snap.capture WHERE id IN "
+                "(SELECT capture_id FROM snap.parsed_document)")}
+            fora = any(tuple(r) not in chaves for r in conn.execute(
+                "SELECT c.sha256, c.url, c.fetched_at FROM main.parsed_document pd "
+                "JOIN main.capture c ON c.id=pd.capture_id WHERE pd.model_json IS NOT NULL"))
+            if not fora:
+                derivados.definir(conn, snap_dv)
+        elif (snap_dv or 0) < (local_dv or 0):
+            derivados.definir(conn, snap_dv)  # dados de derivados antigos entraram: home volta a incompatível
         from freoa_verifica.store.repo import rebuild_decision_index
         rebuild_decision_index(conn)
         conn.commit()

@@ -193,9 +193,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json_flag(pf)
 
     p = sub.add_parser("acervo", help="manutenção do acervo local")
-    ac = p.add_subparsers(dest="acervo_cmd", required=True)  # `reconstruir` (C6) entra aqui
+    ac = p.add_subparsers(dest="acervo_cmd", required=True)
     ps = ac.add_parser("ressincronizar-situacao", help="relê a situação cadastral dos atos CVM/BCB/CMN (C2)")
     _add_json_flag(ps)
+    pr = ac.add_parser("reconstruir", help="reconstrói os derivados do home numa cópia e troca o banco (C6)")
+    pr.add_argument("--com-situacao", action="store_true", help="relê também a situação das obras (exige rede)")
+    _add_json_flag(pr)
 
     p = sub.add_parser("runs", help="gerenciar execuções registradas")
     runs = p.add_subparsers(dest="runs_cmd", required=True)
@@ -367,6 +370,10 @@ def main(argv: list[str] | None = None) -> None:
             if args.acervo_cmd == "ressincronizar-situacao":
                 data = svc.ressincronizar_situacao()
                 raise SystemExit(_print_result(data, as_json=as_json, titulo="Situação das obras"))
+            if args.acervo_cmd == "reconstruir":
+                data = svc.reconstruir_acervo(com_situacao=args.com_situacao)
+                _print_result(data, as_json=as_json, titulo="Reconstrução do acervo")
+                raise SystemExit(0 if data.get("status") == "ok" else 1)
 
     parser.error(f"comando desconhecido: {args.cmd}")
 

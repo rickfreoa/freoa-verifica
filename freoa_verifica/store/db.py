@@ -118,4 +118,19 @@ def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000, ch
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=WAL")
     apply_migrations(conn)
+    _carimbar_derivados(conn)
     return conn
+
+
+def _carimbar_derivados(conn: sqlite3.Connection) -> None:
+    """Home vazio nasce com o DERIVED_VERSION atual; home com obras e sem versão fica incompatível (C6)."""
+    from freoa_verifica.derivados import DERIVED_VERSION
+
+    try:
+        if conn.execute("SELECT 1 FROM work LIMIT 1").fetchone():
+            return
+        conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('derived_version', ?)",
+                     (str(DERIVED_VERSION),))
+        conn.commit()
+    except sqlite3.OperationalError:  # esquema parcial (testes de migração)
+        pass

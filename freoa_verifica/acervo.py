@@ -86,6 +86,10 @@ def status(conn: sqlite3.Connection, home: Path) -> dict[str, Any] | None:
     dv = ref.get("derived_version")
     if dv is not None and derived_version(conn) != str(dv):
         motivos.append("derived_version_divergente")
+    from freoa_verifica.derivados import compativel
+
+    if not compativel(conn):
+        motivos.append("derivados_desatualizados")
     if not motivos:
         return None
     return {

@@ -30,6 +30,8 @@
 - Snapshot publica identificadores das obras e das decisões e `derived_version`; `fv doctor`, o MCP e a API avisam `acervo_incompleto` quando o home está abaixo do manifesto instalado ou do mínimo embutido.
 - Release só publica após a suíte completa no mesmo commit, sem substituição de assets, com `requirements-lock.txt` anexado. Actions fixadas por SHA de commit (tag em comentário).
 
+- Derivados versionados (C6, decisão 0028): `DERIVED_VERSION` em `meta` (migração 009); home de versão anterior responde `indisponivel/ACERVO_DESATUALIZADO`; `fv acervo reconstruir [--com-situacao]` refaz modelo, dispositivos, redações e FTS numa cópia e troca o banco atomicamente; a instalação de snapshot com derivados mais novos substitui os modelos locais; o manifesto leva a `derived_version` real. Dispositivos novos de um modelo reprocessado passam a ser gravados e os antigos removidos.
+
 ## 1.0.2
 
 - Extração de citações em duas camadas: regras estruturais (numeração decimal de cláusulas, siglas coladas a números, pertença a instrumentos particulares, fronteiras de arquivo e de campo técnico) e confiança explícita `exata`/`provavel`. Em `verificar_texto`, citações `provavel` recebem `requer_conferencia`; só `exata` recebe `encontrada` ou `inexistente`. Nos oito corpora adversariais independentes (779 frases), falsos definitivos caíram de 250 para 0 e o recall subiu de 70,9% para 93,7%.

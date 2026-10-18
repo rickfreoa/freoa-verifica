@@ -95,12 +95,12 @@ def test_reopen_idempotent(db_path):
     row = c2.execute("SELECT id FROM source WHERE id='s1'").fetchone()
     assert row is not None
     versions = {row[0] for row in c2.execute("SELECT version FROM schema_version")}
-    assert versions == {1, 2, 3, 4, 5, 6, 7, 8}
+    assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9}
     c2.close()
 
 
 def test_banco_v102_migra_para_v103(tmp_path, monkeypatch):
-    """Banco v1.0.2 (versões 1..5) recebe 006, 007 e 008 sem perder dados."""
+    """Banco v1.0.2 (versões 1..5) recebe 006 a 009 sem perder dados."""
     from freoa_verifica.store import db as dbmod
 
     todas = dbmod._migration_files()
@@ -112,7 +112,7 @@ def test_banco_v102_migra_para_v103(tmp_path, monkeypatch):
     c.close()
     monkeypatch.undo()
     c = dbmod.connect(tmp_path / "v102.sqlite3")
-    assert {r[0] for r in c.execute("SELECT version FROM schema_version")} == set(range(1, 9))
+    assert {r[0] for r in c.execute("SELECT version FROM schema_version")} == set(range(1, 10))
     assert c.execute("SELECT id FROM source").fetchone()[0] == "s1"
     for tabela in ("work_status", "fts_staging"):
         c.execute(f"SELECT * FROM {tabela} LIMIT 1")
