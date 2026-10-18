@@ -507,6 +507,31 @@ def _parse_pdf(body: bytes, *, source: str) -> ParsedDocument:
     raise Unavailable(f"pdf_nao_processado: {detalhe}")
 
 
+def _limpar_marca(obj: Any, marca: str) -> bool:
+    """Remove a marca de corte de toda string do objeto (dataclasses, listas); diz se havia."""
+    import dataclasses
+
+    achou = False
+    if isinstance(obj, list):
+        for i, v in enumerate(obj):
+            if isinstance(v, str):
+                if marca.strip() in v:
+                    obj[i] = v.replace(marca, "").replace(marca.strip(), "").rstrip()
+                    achou = True
+            else:
+                achou |= _limpar_marca(v, marca)
+    elif dataclasses.is_dataclass(obj):
+        for f in dataclasses.fields(obj):
+            v = getattr(obj, f.name)
+            if isinstance(v, str):
+                if marca.strip() in v:
+                    setattr(obj, f.name, v.replace(marca, "").replace(marca.strip(), "").rstrip())
+                    achou = True
+            elif isinstance(v, (list, tuple)) or dataclasses.is_dataclass(v):
+                achou |= _limpar_marca(list(v) if isinstance(v, tuple) else v, marca)
+    return achou
+
+
 def parse_pdf_direto(body: bytes) -> ParsedDocument:
     """Corpo do filho isolado: aplica limites de páginas e texto."""
     if PdfReader is None:
@@ -534,13 +559,23 @@ def parse_pdf_direto(body: bytes) -> ParsedDocument:
         )
     ]
     from freoa_verifica.parsers.html_devices import parse_html_devices
-    from freoa_verifica.parsers.pdf_dispositivos import como_html, textos_de_corpo
+    from freoa_verifica.parsers.pdf_dispositivos import MARCA_CORTE, como_html, textos_de_corpo
     from freoa_verifica.parsers.sentinel import run_sentinels
 
     descartadas: set[str] = set()
     pagina_html = como_html(textos_de_corpo(reader.pages, descartadas))
     _t, _e, _txt, provisions, local_issues, amendments, editorial = parse_html_devices(
         pagina_html, base_url="https://conteudo.cvm.gov.br/")
+    for extra in (amendments, editorial):
+        _limpar_marca(extra, MARCA_CORTE)
+    for prov in provisions:
+        # Só a redação do próprio dispositivo decide; anotações e textos derivados apenas são limpos.
+        proprio = any(MARCA_CORTE.strip() in r.text for r in prov.redactions)
+        _limpar_marca(prov, MARCA_CORTE)
+        if proprio:
+            issues.append(Issue(code="MARGEM_ADJACENTE", path=prov.path, blocking_scope="provision",
+                                detail="dispositivo termina junto a margem descartada; fecho não confirmável no PDF"))
+    pagina_html = pagina_html.replace(MARCA_CORTE, "")
     if provisions:
         issues.append(Issue(
             code="ESTRUTURA_INFERIDA_PDF", path=None,

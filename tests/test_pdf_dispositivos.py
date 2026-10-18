@@ -3,9 +3,18 @@ import pytest
 
 from freoa_verifica.parsers.html_devices import parse_html_devices
 from freoa_verifica.parsers.model import ParsedDocument, RevokedProvision
-from freoa_verifica.parsers.pdf_dispositivos import como_html, paragrafos, textos_de_corpo
+from freoa_verifica.parsers.pdf_dispositivos import MARCA_CORTE, como_html, paragrafos, textos_de_corpo
 
 CAB = "COMISSÃO DE VALORES MOBILIÁRIOS"
+
+
+def _limpo(textos):
+    """Parágrafos sem a marca de corte (cujo efeito é testado em test_110_pdf_real)."""
+    return [p.replace(MARCA_CORTE, "") for p in paragrafos(textos)]
+
+
+def _textos(pags):
+    return [t.replace(MARCA_CORTE, "") for t in textos_de_corpo(pags)]
 
 
 class _Pagina:
@@ -33,15 +42,15 @@ def _paginas(corpo_por_pagina, cabecalho=True, numero=True):
 
 
 def test_cabecalho_e_numero_saem_por_posicao_e_repeticao():
-    textos = textos_de_corpo(_paginas([["Art. 1º Texto um."], ["Art. 2º Texto dois."], ["Art. 3º Texto três."]]))
+    textos = _textos(_paginas([["Art. 1º Texto um."], ["Art. 2º Texto dois."], ["Art. 3º Texto três."]]))
     assert all(CAB not in t and "Sete de Setembro" not in t for t in textos)
-    assert paragrafos(textos) == ["Art. 1º Texto um.", "Art. 2º Texto dois.", "Art. 3º Texto três."]
+    assert _limpo(textos) == ["Art. 1º Texto um.", "Art. 2º Texto dois.", "Art. 3º Texto três."]
 
 
 def test_repeticao_no_corpo_nunca_e_descartada():
     # Reproduções do auditor: linha repetida em todas as páginas e número igual ao da página, no corpo.
     corpo = [[f"Art. {n}º O prazo fica limitado a", "cem dias corridos.", str(n), "dias."] for n in (1, 2, 3)]
-    ps = paragrafos(textos_de_corpo(_paginas(corpo)))
+    ps = _limpo(textos_de_corpo(_paginas(corpo)))
     assert ps == [f"Art. {n}º O prazo fica limitado a cem dias corridos. {n} dias." for n in (1, 2, 3)]
 
 
@@ -49,7 +58,7 @@ def test_repetida_na_faixa_mas_abaixo_de_texto_mantido_fica():
     # Auditor, rodada 3: corpo repetido no quarto superior, sob o artigo, não é cabeçalho.
     pags = [_Pagina([(800, CAB), (720, f"Art. {n}º O prazo fica limitado a"), (700, "cem dias corridos.")])
             for n in (1, 2, 3)]
-    ps = paragrafos(textos_de_corpo(pags))
+    ps = _limpo(textos_de_corpo(pags))
     assert ps == [f"Art. {n}º O prazo fica limitado a cem dias corridos." for n in (1, 2, 3)]
 
 
@@ -57,7 +66,7 @@ def test_rodape_que_corta_paragrafo_antes_de_novo_artigo_fica():
     # Auditor, rodada 4: corpo repetido na faixa inferior, última linha da página.
     pags = [_Pagina([(800, CAB), (120, f"Art. {n}º O prazo fica limitado a"), (80, "cem dias corridos.")])
             for n in (1, 2, 3)]
-    ps = paragrafos(textos_de_corpo(pags))
+    ps = _limpo(textos_de_corpo(pags))
     assert ps == [f"Art. {n}º O prazo fica limitado a cem dias corridos." for n in (1, 2, 3)]
 
 
@@ -73,7 +82,7 @@ def test_cabecalho_entre_partes_do_mesmo_paragrafo_sai():
     pags = [_Pagina([(800, CAB), (600, "Art. 1º O prazo fica"), (40, "1")]),
             _Pagina([(800, CAB), (600, "limitado a cem dias."), (586, "Art. 2º Outro."), (40, "2")]),
             _Pagina([(800, CAB), (600, "Art. 3º Fim."), (40, "3")])]
-    assert paragrafos(textos_de_corpo(pags)) == ["Art. 1º O prazo fica limitado a cem dias.", "Art. 2º Outro.", "Art. 3º Fim."]
+    assert _limpo(textos_de_corpo(pags)) == ["Art. 1º O prazo fica limitado a cem dias.", "Art. 2º Outro.", "Art. 3º Fim."]
 
 
 def test_sem_cabecalho_repetido_nada_sai():

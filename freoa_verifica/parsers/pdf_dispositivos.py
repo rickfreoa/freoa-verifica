@@ -20,6 +20,7 @@ _FAIXA_SUP, _FAIXA_INF = 0.75, 0.12  # fração da altura; o cabeçalho da CVM d
 _SUMARIO = re.compile(r"^(CAP[IÍ]TULO|T[IÍ]TULO|SE[CÇ][AÃ]O|SUBSE[CÇ][AÃ]O|ANEXO)\b.*\.{5,}\s*\d{0,4}$", re.I)
 _TITULO = re.compile(r"^(CAP[IÍ]TULO|T[IÍ]TULO|LIVRO|SE[CÇ][AÃ]O|SUBSE[CÇ][AÃ]O|ANEXO)\b", re.I)
 _MARCA_NOTA = ("•", "\uf0b7", "\u25aa")
+MARCA_CORTE = " \u27e6margem\u27e7"  # fim de linha seguido de margem descartada em fronteira limpa
 
 
 def _norm(t: str) -> str:
@@ -64,10 +65,16 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
                     break
                 fora.add(y)
         fora_por_pagina.append(fora)
-    _manter_cortes_ambiguos(frags, fora_por_pagina)
+    marcar = _manter_cortes_ambiguos(frags, fora_por_pagina)
     if descartadas is not None:
         descartadas.update(t for ls, fora in zip(linhas_por_pagina, fora_por_pagina) for y, t in ls.items() if y in fora)
-    return ["".join(t for y, t in parts if round(y) not in fora) for parts, fora in zip(frags, fora_por_pagina)]
+    out = []
+    for p, (parts, fora) in enumerate(zip(frags, fora_por_pagina)):
+        ultimo = {round(y): i for i, (y, t) in enumerate(parts) if _norm(t)}
+        alvo = {ultimo[y] for (pp, y) in marcar if pp == p and y in ultimo}
+        out.append("".join(t.rstrip("\n") + MARCA_CORTE + "\n" if i in alvo else t
+                           for i, (y, t) in enumerate(parts) if round(y) not in fora))
+    return out
 
 
 _FECHO = re.compile(r"[.;:!?)\]”\"»]$|[;,]\s+(e|ou)$")  # "...; e" fecha inciso
@@ -87,7 +94,7 @@ def _abre_paragrafo(linha: str) -> bool:
     return _classify_line(linha) is not None or bool(_TITULO.match(linha)) or linha.startswith(_MARCA_NOTA)
 
 
-def _manter_cortes_ambiguos(frags, fora_por_pagina) -> None:
+def _manter_cortes_ambiguos(frags, fora_por_pagina) -> set[tuple[int, int]]:
     """Corte que separa um parágrafo aberto (sem pontuação final) de um novo dispositivo
     (ou do fim do documento) não se distingue de texto normativo: o bloco é mantido.
     Cabeçalho legítimo cai entre o fim e a continuação do mesmo parágrafo, ou após fecho."""
@@ -100,6 +107,7 @@ def _manter_cortes_ambiguos(frags, fora_por_pagina) -> None:
     def fora(k):
         return seq[k][1] in fora_por_pagina[seq[k][0]]
 
+    marcar: set[tuple[int, int]] = set()
     i = 0
     while i < len(seq):
         if not fora(i):
@@ -110,10 +118,17 @@ def _manter_cortes_ambiguos(frags, fora_por_pagina) -> None:
             j += 1
         antes = next((seq[k][2] for k in range(i - 1, -1, -1) if not fora(k)), None)
         depois = next((seq[k][2] for k in range(j, len(seq)) if not fora(k)), None)
-        if antes is not None and not _FECHO.search(antes) and (depois is None or _abre_paragrafo(depois)):
+        k_antes = next((k for k in range(i - 1, -1, -1) if not fora(k)), None)
+        aberto = antes is not None and not _FECHO.search(antes)
+        if aberto and (depois is None or _abre_paragrafo(depois)):
             for p, y, _ in seq[i:j]:
                 fora_por_pagina[p].discard(y)
+        elif not aberto and k_antes is not None:
+            # Fronteira limpa: o descartado poderia ser o fecho do dispositivo anterior,
+            # que fica impedido de verificação (auditoria 1.1.0, rodada 6).
+            marcar.add((seq[k_antes][0], seq[k_antes][1]))
         i = j
+    return marcar
 
 
 def _numero_da_pagina(linha: str, n: int, total: int) -> bool:

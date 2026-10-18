@@ -1,0 +1,40 @@
+"""1.1.0, auditoria rodada 6: PDF real gerado em memória; descarte em fronteira limpa bloqueia o dispositivo."""
+from freoa_verifica.connectors.cvm_normas import parse_pdf_direto
+
+
+def _pdf(paginas: list[list[tuple[int, str]]]) -> bytes:
+    """PDF mínimo (Helvetica, ASCII) com cada linha na altura dada."""
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", None, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    kids = []
+    for linhas in paginas:
+        corpo = "".join(f"BT /F1 11 Tf 72 {y} Td ({t}) Tj ET\n" for y, t in linhas).encode("latin-1")
+        objs.append(f"<< /Length {len(corpo)} >>\nstream\n" + corpo.decode("latin-1") + "endstream")
+        objs.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents {len(objs)} 0 R >>")
+        kids.append(len(objs))
+    objs[1] = f"<< /Type /Pages /Kids [{' '.join(f'{k} 0 R' for k in kids)}] /Count {len(kids)} >>"
+    out, offs = b"%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += f"{i} 0 obj\n{o}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode() + "".join(f"{o:010} 00000 n \n" for o in offs).encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return out
+
+
+def _codigos(doc, path):
+    return {i.code for i in doc.issues if i.path == path}
+
+
+def test_ressalva_em_caixa_alta_na_borda_bloqueia_o_artigo():
+    pags = [[(800, "COMISSAO DE VALORES MOBILIARIOS")] + ([(600, "RESOLUCAO CVM 999/2026")] if n == 1 else [])
+            + [(120, f"Art. {n}o A divulgacao e obrigatoria."), (80, "SALVO AUTORIZACAO PREVIA DA CVM.")] for n in (1, 2, 3)]
+    doc = parse_pdf_direto(_pdf(pags))
+    assert "MARGEM_ADJACENTE" in _codigos(doc, "art1") and "MARGEM_ADJACENTE" in _codigos(doc, "art3")
+
+
+def test_inciso_na_borda_e_mantido():
+    pags = [[(800, "COMISSAO DE VALORES MOBILIARIOS")] + ([(600, "RESOLUCAO CVM 999/2026")] if n == 1 else [])
+            + [(120, f"Art. {n}o O emissor deve:"), (80, "I - divulgar o relatorio.")] for n in (1, 2, 3)]
+    doc = parse_pdf_direto(_pdf(pags))
+    assert doc.current_text("art1.inc1") == "divulgar o relatorio."
