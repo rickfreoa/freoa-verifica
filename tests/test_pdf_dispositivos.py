@@ -45,6 +45,14 @@ def test_repeticao_no_corpo_nunca_e_descartada():
     assert ps == [f"Art. {n}º O prazo fica limitado a cem dias corridos. {n} dias." for n in (1, 2, 3)]
 
 
+def test_repetida_na_faixa_mas_abaixo_de_texto_mantido_fica():
+    # Auditor, rodada 3: corpo repetido no quarto superior, sob o artigo, não é cabeçalho.
+    pags = [_Pagina([(800, CAB), (720, f"Art. {n}º O prazo fica limitado a"), (700, "cem dias corridos.")])
+            for n in (1, 2, 3)]
+    ps = paragrafos(textos_de_corpo(pags))
+    assert ps == [f"Art. {n}º O prazo fica limitado a cem dias corridos." for n in (1, 2, 3)]
+
+
 def test_sem_cabecalho_repetido_nada_sai():
     corpo = [["Art. 1º Um."], ["Art. 2º Dois."], ["Art. 3º Três."]]
     pags = _paginas(corpo, cabecalho=False, numero=False)

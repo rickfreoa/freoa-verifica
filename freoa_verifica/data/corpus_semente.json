@@ -55,13 +55,8 @@
   },
   "jurisprudencia": {
     "stj_espelhos": {
-      "orgaos": [
-        "espelhos-de-acordaos-corte-especial",
-        "espelhos-de-acordaos-segunda-secao",
-        "espelhos-de-acordaos-terceira-turma",
-        "espelhos-de-acordaos-quarta-turma"
-      ],
-      "meses_recentes": 12
+      "orgaos": ["espelhos-de-acordaos-corte-especial", "espelhos-de-acordaos-primeira-secao", "espelhos-de-acordaos-segunda-secao", "espelhos-de-acordaos-primeira-turma", "espelhos-de-acordaos-segunda-turma", "espelhos-de-acordaos-terceira-turma", "espelhos-de-acordaos-quarta-turma"],
+      "meses_recentes": 24
     },
     "stj_precedentes_qualificados": true,
     "cvm_colegiado_desde": 2023,

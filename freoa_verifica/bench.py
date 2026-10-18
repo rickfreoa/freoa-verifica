@@ -137,20 +137,21 @@ def run_bench(svc: Any, gold_path: str | Path) -> dict[str, Any]:
                         "trecho_oficial": str(oficial)[:500],
                         "trecho_gold": str(trecho)[:500],
                     }
-        else:  # mutante
-            if trecho is None:
-                # mutante só de identidade: identity não pode ser verified se number/path errado
-                ok = identity not in {"verified", "unavailable"}
-            else:
-                ok = text != "verified" and "unavailable" not in (identity, text)
-        # Expectativa explícita: toda dimensão declarada é confrontada; indisponibilidade só vale
-        # quando esperada na própria dimensão (1.1.0, auditoria rodada 2).
-        declaradas = {k: expectativa[k] for k in ("identity", "text", "temporal") if expectativa.get(k)}
-        if declaradas:
-            obtidas = {"identity": identity, "text": text, "temporal": temporal}
-            ok = all(obtidas[k] == v for k, v in declaradas.items())
-            if tipo == "mutante" and "text" not in declaradas and trecho is not None:
-                ok = ok and text != "verified" and text != "unavailable"
+        # Obrigação de base por dimensão; a expectativa declarada substitui só a da própria
+        # dimensão e nunca apaga as demais (auditoria 1.1.0, rodadas 2 e 3).
+        if tipo == "positivo":
+            base = {"identity": lambda v: v == "verified"}
+            if trecho is not None:
+                base["text"] = lambda v: v == "verified"
+        elif trecho is None:
+            base = {"identity": lambda v: v not in {"verified", "unavailable"}}
+        else:
+            base = {"identity": lambda v: v != "unavailable", "text": lambda v: v not in {"verified", "unavailable"}}
+        for k in ("identity", "text", "temporal"):
+            if expectativa.get(k):
+                base[k] = (lambda esperado: (lambda v: v == esperado))(expectativa[k])
+        obtidas = {"identity": identity, "text": text, "temporal": temporal}
+        ok = all(pred(obtidas[k]) for k, pred in base.items())
 
         resultados.append(
             CasoResultado(

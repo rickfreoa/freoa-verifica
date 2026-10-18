@@ -49,8 +49,19 @@ def textos_de_corpo(pages) -> list[str]:
     cont = Counter((y, t) for ls in linhas_por_pagina for y, t in ls.items())
     minimo = max(3, (len(frags) + 1) // 2)
     out = []
-    for n, (parts, ls) in enumerate(zip(frags, linhas_por_pagina), 1):
-        fora = {y for y, t in ls.items() if cont[(y, t)] >= minimo or _numero_da_pagina(t, n, len(frags))}
+    for n, (parts, ls, h) in enumerate(zip(frags, linhas_por_pagina, alturas), 1):
+        def repetida(y, ls=ls, n=n):
+            return cont[(y, ls[y])] >= minimo or _numero_da_pagina(ls[y], n, len(frags))
+        # Só sai o bloco contíguo a partir da borda: linha repetida com texto mantido acima
+        # (ou abaixo, no rodapé) é corpo, não cabeçalho (auditoria 1.1.0, rodada 3).
+        linhas_pag = sorted({round(y) for y, t in parts if _norm(t)}, reverse=True)
+        fora: set[int] = set()
+        for ordem, na_faixa in ((linhas_pag, lambda y: y >= _FAIXA_SUP * h),
+                                (linhas_pag[::-1], lambda y: y <= _FAIXA_INF * h)):
+            for y in ordem:
+                if not na_faixa(y) or y not in ls or not repetida(y):
+                    break
+                fora.add(y)
         out.append("".join(t for y, t in parts if round(y) not in fora))
     return out
 

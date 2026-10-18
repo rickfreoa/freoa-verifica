@@ -25,6 +25,11 @@ class _Svc:
     (("verified", "divergent"), {"tipo": "mutante", "trecho": "x", "expectativa": {"motivo": "troca"}}, True),
     (("unavailable", None), {"tipo": "mutante"}, False),
     (("verified", "verified", "unknown"), {"tipo": "positivo", "trecho": "x", "expectativa": {"temporal": "divergent"}}, False),
+    # Auditor, rodada 3: expectativa só temporal não apaga a obrigação de rejeitar a identidade mutante.
+    (("verified", None, "unknown"), {"tipo": "mutante", "expectativa": {"temporal": "unknown"}}, False),
+    (("unavailable", None, "unknown"), {"tipo": "mutante", "expectativa": {"temporal": "unknown"}}, False),
+    (("not_found", None, "unknown"), {"tipo": "mutante", "expectativa": {"temporal": "unknown"}}, True),
+    (("verified", "verified"), {"tipo": "positivo", "trecho": "x"}, True),
 ])
 def test_avaliacao(tmp_path, resp, caso, ok):
     caso = {"id": "c", "citacao": "Lei 1/2000, art. 1", **caso}
