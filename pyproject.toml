@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freoa-verifica"
-version = "1.0.2"
+version = "1.0.3"
 description = "Verificação de citações jurídicas contra fontes oficiais"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }

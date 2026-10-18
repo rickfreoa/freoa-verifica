@@ -24,9 +24,9 @@ Em `verificar_texto`, associações com confiança `provavel` recebem `requer_co
 Requer Python 3.11 ou superior.
 
 ```bash
-pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.2/freoa_verifica-1.0.2-py3-none-any.whl"
+pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.3/freoa_verifica-1.0.3-py3-none-any.whl"
 # ou a partir do código-fonte:
-pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.2"
+pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.3"
 fv doctor
 fv snapshot install                   # corpus semente (opcional, recomendado)
 ```
@@ -44,7 +44,7 @@ fv snapshot install                   # corpus semente (opcional, recomendado)
 Alternativa sem instalação permanente:
 
 ```bash
-uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.2 freoa-verifica-mcp
+uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.3 freoa-verifica-mcp
 ```
 
 O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release que contenha o snapshot, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.
@@ -81,6 +81,23 @@ A apuração de 18/10/2026 está em [docs/FONTES.md](docs/FONTES.md). O acervo �
 - Suporte da fonte a uma proposição jurídica não é avaliado. Não há tratamento sistemático demonstrado de precedentes superados. Busca local vazia não prova inexistência.
 
 `fv fontes` informa a cobertura declarada e o estado de acesso dos conectores. Falha, WAF ou CAPTCHA produzem indisponibilidade com motivo.
+
+## Versão 1.0.3: correções da auditoria de 18/10/2026
+
+A v1.0.2 emitia `verified` e `vigente_na_fonte` em dois casos de alcance sistêmico: o ADCT gravado nos caminhos da Constituição e atos CVM/BCB/CMN revogados tratados como vigentes. A v1.0.3 corrige ambos e os demais defeitos dos relatórios em [docs/auditoria/](docs/auditoria/), sob o plano [docs/PLANO-1.0.3.md](docs/PLANO-1.0.3.md), aprovado pelo auditor independente após três rodadas, e com quatro rodadas de auditoria do código integrado.
+
+- O ADCT tem escopo próprio (`adct/artN`) e é citável.
+- A situação cadastral oficial dos atos infralegais é capturada como evidência própria; revogação ou cancelamento bloqueiam vigência; situação ilegível nunca vira vigente.
+- "Inexistente" exige obra capturada, íntegra e estruturada; obra fora do acervo é lacuna de cobertura; PDF sem estrutura é `DOCUMENTO_SEM_ESTRUTURA`.
+- Data sem redação histórica não confronta a redação atual.
+- Associação provável nunca produz conclusão definitiva, em nenhuma entrada.
+- O recibo é gravado depois de todos os rebaixamentos e coincide com a resposta.
+- Respostas parciais se declaram (truncamento, fontes não consultadas, remissões não resolvidas, candidatos não indexados).
+- Modo remoto exige token em REST e MCP; limites de entrada na fachada; PDF e DOCX da CVM em processo isolado.
+- `fv --sem-registro` não persiste o conteúdo consultado; `fv runs purgar` descarta execuções antigas.
+- `fv acervo reconstruir` atualiza homes antigos; a instalação de snapshot de versão anterior reconstrói os derivados.
+
+Limites que permanecem: a cobertura de jurisprudência continua concentrada em 2025 e 2026 (STJ) e sem STF; artigos de normas CVM publicadas só em PDF não são estruturados; a data de efeito das revogações não é informada pelas fontes, de modo que consultas a datas passadas de atos revogados respondem `unknown`; o conjunto de aceite das 34 consultas foi montado pelo mantenedor e não é independente.
 
 ## Resultados de avaliação
 
