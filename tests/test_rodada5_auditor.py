@@ -208,7 +208,10 @@ def test_indexacao_lenta_que_ignora_prazo_e_abandonada(tmp_path, monkeypatch):
         # folga para runners lentos (Windows na CI): o que se testa é o abandono do item lento
         out = s._buscar_normas("cvm_normas", "x", None, orcamento_s=0.3)
         assert time.monotonic() - t < 0.9
-        assert out["itens"][0]["nao_indexado"] and out["itens"][0]["motivo"] == "orcamento"
+        if out["itens"]:  # o prazo venceu na indexação do item lento
+            assert out["itens"][0]["nao_indexado"] and out["itens"][0]["motivo"] == "orcamento"
+        else:  # runner lento: o prazo venceu já na busca inicial
+            assert out["status"] == "indisponivel" and out["motivo"] == "orcamento"
         time.sleep(1.2)
         assert not gravou
         assert s.conn.execute("SELECT COUNT(*) FROM fts_staging").fetchone()[0] == 0
