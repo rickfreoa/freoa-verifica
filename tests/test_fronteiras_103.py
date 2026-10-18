@@ -396,8 +396,8 @@ def test_c7_servidor_avisa_em_toda_resposta(tmp_path, monkeypatch):
 # ---------------------------------------------------------------- F10
 
 def test_f10_release_depende_da_suite_e_nao_substitui_assets():
-    if not (ROOT / ".github/workflows/release.yml").exists():
-        pytest.skip("workflows não acompanham o pacote instalado (teste roda no checkout)")
+    if not (ROOT / "pyproject.toml").exists():
+        pytest.skip("pacote instalado fora do checkout: os workflows não o acompanham")
     rel = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "workflow_call" in ci
@@ -464,3 +464,11 @@ def test_limite_de_concorrencia_so_nas_entradas_de_servidor(tmp_path, monkeypatc
     from freoa_verifica.limites import servidor_max_concorrencia
     monkeypatch.delenv("FV_MAX_CONCORRENCIA", raising=False)
     assert servidor_max_concorrencia() == 4
+
+
+def test_concorrencia_zero_equivale_a_um(tmp_path, monkeypatch):
+    monkeypatch.setenv("FV_MAX_CONCORRENCIA", "0")
+    with Verifica(home=tmp_path) as svc:
+        assert svc._caro is not None and svc._caro.acquire(blocking=False)
+        assert not svc._caro.acquire(blocking=False)
+        svc._caro.release()

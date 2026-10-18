@@ -190,12 +190,14 @@ def test_indexacao_lenta_que_ignora_prazo_e_abandonada(tmp_path, monkeypatch):
             return [Candidate(source_id="cvm_normas", key="1", title="Lei 1", url="u", snippet="s", metadata={})]
     with Verifica(tmp_path) as s:
         monkeypatch.setattr(s, "_get", lambda _id: C())
-        gravou = []
+        gravou, iniciou, tentou = [], [], []
 
         def lento(connector, cand):
-            time.sleep(1.0)  # ignora PRAZO
+            iniciou.append(1)
+            time.sleep(3.0)  # ignora PRAZO
             from freoa_verifica.aliases import WorkKey
             from freoa_verifica.parsers.model import ParsedDocument, Provision, Redaction
+            tentou.append(1)
             try:
                 s.indexar_obra(source_id="s", work_key=WorkKey("federal", "lei", "1", 2000),
                                document=ParsedDocument(profile="x", parser_version="t", title="t", ementa=None, text="t", provisions=[Provision(path="art. 1", label="Art. 1", scope="main", redactions=[Redaction(text="zzz", struck=False, order=0)])]),
@@ -206,13 +208,12 @@ def test_indexacao_lenta_que_ignora_prazo_e_abandonada(tmp_path, monkeypatch):
             return {"capture_id": "x", "trecho": ""}
         monkeypatch.setattr(s, "_index_candidate_legis", lento)
         t = time.monotonic()
-        # folga para runners lentos (Windows na CI): o que se testa é o abandono do item lento
-        out = s._buscar_normas("cvm_normas", "x", None, orcamento_s=0.3)
-        assert time.monotonic() - t < 0.9
-        # O prazo pode vencer na indexação do item lento ou, em runner lento, já na busca inicial;
-        # em qualquer caso a resposta não é "ok", declara o orçamento e nenhum item fica indexado.
-        assert out["status"] != "ok" and "orcamento" in json.dumps(out, ensure_ascii=False)
-        assert all(i.get("nao_indexado") for i in out.get("itens") or [])
-        time.sleep(1.2)
+        # orçamento folgado para a busca inicial em runner lento; o item lento dorme 3 s e é abandonado
+        out = s._buscar_normas("cvm_normas", "x", None, orcamento_s=1.0)
+        assert time.monotonic() - t < 2.5
+        assert iniciou, "a indexação do item lento precisa ter começado"
+        assert out["itens"][0]["nao_indexado"] and out["itens"][0]["motivo"] == "orcamento"
+        time.sleep(3.5)  # a thread abandonada tenta gravar depois do prazo
+        assert tentou, "a gravação tardia precisa ter sido tentada"
         assert not gravou
         assert s.conn.execute("SELECT COUNT(*) FROM fts_staging").fetchone()[0] == 0

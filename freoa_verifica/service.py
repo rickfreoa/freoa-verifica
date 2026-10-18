@@ -289,8 +289,8 @@ class Verifica:
         # F02: o limite protege servidores expostos (REST/MCP passam max_concorrencia);
         # uso em processo pela biblioteca ou pela CLI só é limitado se FV_MAX_CONCORRENCIA for definido.
         env_n = os.environ.get("FV_MAX_CONCORRENCIA")
-        n = max_concorrencia or (int(env_n) if env_n else None)
-        self._caro = threading.BoundedSemaphore(max(1, n)) if n else None
+        n = max_concorrencia if max_concorrencia is not None else (int(env_n) if env_n else None)
+        self._caro = threading.BoundedSemaphore(max(1, n)) if n is not None else None
         self._resolver = MemoryResolver()
         self._connectors: dict[str, Any] = {}
         self._last_health: dict[str, dict[str, Any]] = {}
