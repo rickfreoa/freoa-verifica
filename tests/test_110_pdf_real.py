@@ -38,3 +38,22 @@ def test_inciso_na_borda_e_mantido():
             + [(120, f"Art. {n}o O emissor deve:"), (80, "I - divulgar o relatorio.")] for n in (1, 2, 3)]
     doc = parse_pdf_direto(_pdf(pags))
     assert doc.current_text("art1.inc1") == "divulgar o relatorio."
+
+
+def _verificar(doc, citacao, trecho):
+    from freoa_verifica.aliases import WorkKey
+    from freoa_verifica.verify import MemoryResolver, ResolvedWork, verificar
+    r = MemoryResolver()
+    r.add(ResolvedWork("w", WorkKey("cvm", "resolucao", "999", 2026), doc, "2026-01-01", "c", "0" * 64,
+                       "https://conteudo.cvm.gov.br/x.pdf", "2026-10-18T00:00:00+00:00", False))
+    return verificar(citacao, trecho=trecho, resolver=r, persistir=False)
+
+
+def test_margem_adjacente_impede_verified_pelo_verificador_real():
+    # Auditor, rodada 7: a issue precisa impedir o positivo no confronto, não só existir.
+    pags = [[(800, "COMISSAO DE VALORES MOBILIARIOS")] + ([(600, "RESOLUCAO CVM 999/2026")] if n == 1 else [])
+            + [(120, f"Art. {n}o A divulgacao e obrigatoria."), (80, "EXCETO PARA EMISSORES DISPENSADOS.")] for n in (1, 2, 3)]
+    doc = parse_pdf_direto(_pdf(pags))
+    for trecho in ("A divulgacao e obrigatoria.", "A divulgacao e obrigatoria. EXCETO PARA EMISSORES DISPENSADOS."):
+        res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", trecho)
+        assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
