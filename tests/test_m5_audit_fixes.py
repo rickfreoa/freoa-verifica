@@ -325,13 +325,32 @@ def test_mcp_deps_e_stdio_lista_ferramentas(tmp_path, monkeypatch):
         {"jsonrpc": "2.0", "method": "notifications/initialized"},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
     ]
-    result = subprocess.run(
+    # Mantém stdin aberto até receber as respostas: fechar cedo faz o servidor encerrar antes de responder.
+    proc = subprocess.Popen(
         [sys.executable, "-m", "freoa_verifica.mcp_server", "--home", str(home)],
-        input="".join(json.dumps(m) + "\n" for m in messages),
-        capture_output=True, text=True, timeout=30,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
-    assert result.returncode == 0, result.stderr
-    replies = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    replies = []
+    try:
+        for m in messages:
+            proc.stdin.write(json.dumps(m) + "\n")
+            proc.stdin.flush()
+            if "id" not in m:
+                continue
+            while True:
+                line = proc.stdout.readline()
+                assert line, proc.stderr.read()
+                if line.strip():
+                    reply = json.loads(line)
+                    replies.append(reply)
+                    if reply.get("id") == m["id"]:
+                        break
+    finally:
+        proc.stdin.close()
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
     initialized = next(r for r in replies if r.get("id") == 1)
     assert "result" in initialized, initialized
     tools = next(r for r in replies if r.get("id") == 2)
