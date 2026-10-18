@@ -505,6 +505,7 @@ def persist_parsed_document(
     work_id: str,
     work_date: str | None = None,
     amending_act_texts: dict[str, str] | None = None,
+    candidato_ao_vivo: bool | None = None,
 ) -> str:
     """Persiste parsed_document, extract e occurrences (redaction → extract/capture)."""
     text_sha = hashlib.sha256((document.text or "").encode("utf-8")).hexdigest()
@@ -565,6 +566,9 @@ def persist_parsed_document(
          json.dumps(amending_act_texts or {}, ensure_ascii=False),
          json.dumps(events, ensure_ascii=False), capture_id),
     )
+    if candidato_ao_vivo is not None:  # None preserva a marca existente (reprocessamento)
+        conn.execute("UPDATE parsed_document SET candidato_ao_vivo=? WHERE capture_id=?",
+                     (1 if candidato_ao_vivo else 0, capture_id))
     sincronizar_derivados(conn, capture_id=capture_id, work_id=work_id, document=document, extract_id=extract_id)
     conn.commit()
     return extract_id

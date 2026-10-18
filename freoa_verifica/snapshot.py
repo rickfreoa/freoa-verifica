@@ -107,6 +107,7 @@ SNAPSHOT_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "capture_id", "profile", "parser_version", "quarantined",
         "issues_json", "ambiguous_paths_json", "editorial_json",
         "model_json", "work_id", "work_date", "amending_texts_json", "events_json",
+        "candidato_ao_vivo",
     ),
     "work_year_issue": ("work_id", "reason", "capture_id"),
     "work_status": (

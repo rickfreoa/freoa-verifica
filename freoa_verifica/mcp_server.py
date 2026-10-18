@@ -76,11 +76,11 @@ def _service(home: str | None = None, registro: str | None = None) -> Verifica:
         svc = _servicos.get(chave)
         if svc is None:
             svc = _servicos[chave] = Verifica(home=chave, registro=registro, exigir_acervo=True)
-        elif registro is not None and normalizar_registro(registro) != svc.registro:
+        elif normalizar_registro(registro) != svc.registro:
             # C5: nunca gravar mais (nem aceitar em silêncio uma promessa de gravar menos) do que o serviço faz
             raise ValueError(
                 f"conflito de política de registro: serviço do home já usa {svc.registro!r}, "
-                f"pedido {normalizar_registro(registro)!r}")
+                f"pedido {normalizar_registro(registro)!r} (argumento > FV_REGISTRO > padrão)")
     return svc
 
 
@@ -106,6 +106,8 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         name="freoa-verifica",
         instructions=_INSTRUCTIONS,
     )
+    registro = normalizar_registro(registro)  # política efetiva fixada na criação (argumento > ambiente > padrão)
+
     def svc_() -> Verifica:
         return _service(home, registro)
 

@@ -435,6 +435,7 @@ class Verifica:
                 work_id=rw.work_id,
                 work_date=work_date,
                 amending_act_texts=rw.amending_act_texts,
+                candidato_ao_vivo=(True if fts_alvo == "fts_staging" else None),
             )
         situacao.registrar_do_corpo(self.conn, rw, source_id, body)  # C2
         self._resolver.add(rw)

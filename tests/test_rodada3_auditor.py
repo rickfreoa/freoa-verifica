@@ -49,11 +49,22 @@ def test_mcp_reuso_com_politica_diferente_e_recusado_e_nada_vaza(tmp_path):
         _fechar_mcp(tmp_path)
 
 
+def test_mcp_ambiente_diferente_do_servico_e_conflito(tmp_path, monkeypatch):
+    monkeypatch.delenv("FV_REGISTRO", raising=False)
+    m.create_mcp(home=str(tmp_path))
+    try:
+        monkeypatch.setenv("FV_REGISTRO", "sem_conteudo")
+        with pytest.raises(ValueError, match="conflito de política"):
+            m.create_mcp(home=str(tmp_path))
+    finally:
+        _fechar_mcp(tmp_path)
+
+
 def test_mcp_sem_conteudo_nao_persiste_marcador(tmp_path):
     marker = "ZXPRIVATECITATION761995"
     server = m.create_mcp(home=str(tmp_path), registro="sem_conteudo")
     try:
-        s = m._service(str(tmp_path))
+        s = m._service(str(tmp_path), "sem_conteudo")
         _indexar(s, _doc([_prov("art1")]))
         asyncio.run(server.call_tool("verificar_citacao",
                                      {"citacao": "art. 1 da Lei 6.404/1976 " + marker, "trecho": marker}))
@@ -211,19 +222,25 @@ repo.sincronizar_derivados(c, capture_id=row[0], work_id=row[1], document=_doc([
 def test_fsync_arquivo_abre_gravavel_e_pasta_ignorada_no_windows(tmp_path, monkeypatch):
     f = tmp_path / "x.bin"
     f.write_bytes(b"abc")
-    modos = []
+    abertos = []  # (modo, fd) — portável: o modo de abertura vem do open() de registro, sem fcntl
+    real_open = open
     real_fsync = os.fsync
 
+    def open_rastreado(caminho, modo="r", *a, **k):
+        fh = real_open(caminho, modo, *a, **k)
+        abertos.append((modo, fh.fileno()))
+        return fh
+
     def fsync_win(fd):  # Windows: EBADF em descritor somente leitura
-        import fcntl
-        if (fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_ACCMODE) == os.O_RDONLY:
+        modo = next(m for m, d in abertos if d == fd)
+        if "+" not in modo and "w" not in modo and "a" not in modo:
             raise OSError(9, "Bad file descriptor")
-        modos.append(fd)
         real_fsync(fd)
 
+    monkeypatch.setattr(registro, "open", open_rastreado, raising=False)
     monkeypatch.setattr(os, "fsync", fsync_win)
     registro._fsync_arquivo(f)
-    assert modos
+    assert abertos and "+" in abertos[0][0]
 
     def sem_open_de_pasta(*a, **k):
         raise AssertionError("diretório não pode ser aberto no Windows")
@@ -233,6 +250,7 @@ def test_fsync_arquivo_abre_gravavel_e_pasta_ignorada_no_windows(tmp_path, monke
     registro._fsync_pasta(tmp_path)
 
 
+@pytest.mark.skipif(not hasattr(os, "O_ACCMODE") or os.name == "nt", reason="inspeção de descritor via fcntl é POSIX")
 def test_purga_funciona_com_fsync_estrito(tmp_path, monkeypatch):
     real_fsync = os.fsync
 
@@ -269,6 +287,25 @@ def test_candidato_ao_vivo_grava_direto_no_staging_sem_resíduo_canônico(tmp_pa
         s._index_candidate_legis(c, c.search("zebrafish")[0])
         assert vistos[0] == 0 and vistos[1] >= 1
         assert s.conn.execute("select count(*) from fts_redaction").fetchone()[0] == 0
+
+
+def test_candidato_ao_vivo_sobrevive_a_reconstrucao_e_snapshot(tmp_path):
+    from tests.test_fd_busca import _Cvm
+
+    with Verifica(tmp_path / "a") as s:
+        c = _Cvm()
+        s._index_candidate_legis(c, c.search("zebrafish")[0])
+        assert s.conn.execute("select candidato_ao_vivo from parsed_document").fetchone()[0] == 1
+        with s.conn:
+            derivados.reindexar_fts(s.conn)
+        assert s.conn.execute("select count(*) from fts_redaction").fetchone()[0] == 0
+        assert s.conn.execute("select count(*) from fts_staging").fetchone()[0] >= 1
+        assert s.snapshot_export(tmp_path / "snap")["status"] == "ok"
+    with Verifica(tmp_path / "b") as s:
+        _indexar(s, _doc())
+        assert s.snapshot_install(tmp_path / "snap")["status"] == "ok"
+        assert s.conn.execute("select count(*) from fts_redaction where text like '%zebrafish%'").fetchone()[0] == 0
+        assert s.conn.execute("select count(*) from fts_staging").fetchone()[0] >= 1
 
 
 # ---- 6. snapshot de derivados antigos nunca rebaixa a versão

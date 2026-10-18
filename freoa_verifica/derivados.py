@@ -60,24 +60,36 @@ def indisponivel(aviso: dict | None = None) -> dict[str, Any]:
 
 
 def reindexar_fts(conn: sqlite3.Connection) -> int:
-    """Recompõe fts_redaction só com as redações do modelo atual de cada obra (captura mais recente)."""
+    """Recompõe fts_redaction só com as redações do modelo atual de cada obra (captura mais recente).
+
+    A7: capturas marcadas `candidato_ao_vivo` nunca entram no canônico; recompõem o fts_staging
+    (só para obras sem captura confirmada). Homes antigos não têm marca: contam como canônicos.
+    """
     conn.execute("DELETE FROM fts_redaction")
+    conn.execute("DELETE FROM fts_staging")
     n = 0
     rows = conn.execute(
-        "SELECT pd.work_id, pd.model_json, COALESCE(w.label, w.number) AS rotulo FROM parsed_document pd "
+        "SELECT pd.work_id, pd.model_json, pd.candidato_ao_vivo AS cand, COALESCE(w.label, w.number) AS rotulo "
+        "FROM parsed_document pd "
         "JOIN capture c ON c.id=pd.capture_id JOIN work w ON w.id=pd.work_id "
         "WHERE pd.model_json IS NOT NULL AND w.authority NOT LIKE 'invalidated:%' "
         "ORDER BY pd.work_id, c.fetched_at DESC, c.id DESC").fetchall()
-    vistos: set[str] = set()
+    canonicas = {r["work_id"] for r in rows if not r["cand"]}
+    vistos: set[tuple[str, int]] = set()
     for row in rows:
-        if row["work_id"] in vistos:
+        cand = bool(row["cand"])
+        if (row["work_id"], cand) in vistos or (cand and row["work_id"] in canonicas):
             continue
-        vistos.add(row["work_id"])
+        vistos.add((row["work_id"], cand))
         doc = document_from_dict(json.loads(row["model_json"]))
         for prov in doc.provisions:
             rubrica = getattr(prov, "rubrica", None)
             for red in prov.redactions:
                 if red.struck:
+                    continue
+                if cand:
+                    conn.execute("INSERT INTO fts_staging(text, work_label, path) VALUES (?,?,?)",
+                                 (red.text, row["rotulo"], prov.path))
                     continue
                 conn.execute("INSERT INTO fts_redaction(text, rubrica, work_label, path) VALUES (?,?,?,?)",
                              (red.text, rubrica, row["rotulo"], prov.path))
