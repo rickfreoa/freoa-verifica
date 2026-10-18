@@ -63,7 +63,7 @@
       ],
       "meses_recentes": 12
     },
-    "stj_precedentes_qualificados": false,
+    "stj_precedentes_qualificados": true,
     "cvm_colegiado_desde": 2023,
     "tcu_acordaos": 2000,
     "stf_temas_rg": {"de": 1, "ate": 1400},

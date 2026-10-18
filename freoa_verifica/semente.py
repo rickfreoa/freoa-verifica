@@ -16,6 +16,7 @@ from typing import Any, Callable
 from freoa_verifica.aliases import WorkKey
 from freoa_verifica.citation import _MONTHS
 from freoa_verifica.connectors.base import Unavailable
+from freoa_verifica.connectors.stf import SUMULA_BASES
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.parsers.model import ParsedDocument
 
@@ -620,14 +621,15 @@ class SementeSync:
         conn_obj = self.svc._get("stj")
         conn_obj.sync_state = self.state
         conn_obj.resource_dir = self.svc.home / "stj-resources"
-        collections = [(f"espelhos:recentes12:{datetime.now(timezone.utc):%Y-%m}:{max_items}", orgaos, desde)]
+        prec = bool(self.corpus.get("jurisprudencia", {}).get("stj_precedentes_qualificados"))
+        collections = [(f"espelhos:recentes12:{datetime.now(timezone.utc):%Y-%m}:{max_items}" + (":prec" if prec else ""), orgaos, desde)]
         for chave, packages, start in collections:
             if self.state.done("stj", chave):
                 self._stats("stj").pulados += 1
                 continue
             try:
                 self._sleep()
-                n = conn_obj.sync(desde=start, orgaos=packages, max_itens=max_items)
+                n = conn_obj.sync(desde=start, orgaos=packages, max_itens=max_items, precedentes=prec)
                 self._stats("stj").capturados += int(n or 0)
                 self._index_stj_from_fts(conn_obj, max_items=None)
                 failures = getattr(conn_obj, "last_failures", [])
@@ -840,21 +842,29 @@ class SementeSync:
                 self._mark_indisponivel("stf", chave, str(exc)[:200])
 
         if self.corpus.get("jurisprudencia", {}).get("stf_sumulas"):
-            skey = "sumulas"
-            if self.state.done("stf", skey):
-                self._stats("stf").pulados += 1
-            else:
-                self.progress("stf súmulas (metadados se acessíveis)")
+            for base in SUMULA_BASES:
+                lista = f"sumulas:{base}"
                 try:
-                    cands = conn_obj.search("", tipo="sumula", limite=min(self.max_itens or 20, 20))
-                    for cand in cands:
-                        self.svc._index_candidate_juris(conn_obj, cand)
-                    self.state.set("stf", skey, "parseado", payload={"n": len(cands)})
-                    self._stats("stf").parseados += len(cands)
-                except Unavailable as exc:
-                    self._mark_indisponivel("stf", skey, exc.reason[:200])
+                    self._sleep()
+                    cands = conn_obj.list_sumulas(base)
                 except Exception as exc:  # noqa: BLE001
-                    self._mark_indisponivel("stf", skey, str(exc)[:200])
+                    self._mark_indisponivel("stf", lista, getattr(exc, "reason", str(exc))[:200])
+                    continue
+                for cand in cands[: self.max_itens]:
+                    if self.state.done("stf", cand.key):
+                        self._stats("stf").pulados += 1
+                        continue
+                    try:
+                        self._sleep()
+                        item = self.svc._index_candidate_juris(conn_obj, cand)
+                        if item and item.get("capture_id"):
+                            self.state.set("stf", cand.key, "parseado")
+                            self._stats("stf").parseados += 1
+                            self._stats("stf").capturados += 1
+                        else:
+                            self._mark_indisponivel("stf", cand.key, "sem_evidencia_capturada")
+                    except Exception as exc:  # noqa: BLE001
+                        self._mark_indisponivel("stf", cand.key, str(exc)[:200])
 
     def run(self) -> dict[str, Any]:
         self.progress("início sync semente")

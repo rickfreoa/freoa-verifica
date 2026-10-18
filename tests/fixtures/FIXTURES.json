@@ -319,5 +319,66 @@
   "fetched_at": "2026-10-18T01:01:14.914531+00:00",
   "seconds": 0.8166286000050604,
   "file": "cvm_index_recaptcha_real.html"
+ },
+ "stf_sumula_3_detalhe": {
+  "bytes": 529,
+  "content_type": "text/html",
+  "fetched_at": "2026-10-18T19:12:00+00:00",
+  "file": "stf_sumula_3_detalhe.html",
+  "final_url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30&sumula=1306",
+  "nota": "recorte do HTML oficial até o enunciado; sha256 é do recorte",
+  "sha256": "3fd6e985f86466c6566b38e661b535a63205efe4ea9b1f8e0132d345219014fc",
+  "status": 200,
+  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30&sumula=1306"
+ }, "stf_sumula_vinculante_9_detalhe": {
+  "bytes": 666,
+  "content_type": "text/html",
+  "fetched_at": "2026-10-18T19:12:00+00:00",
+  "file": "stf_sumula_vinculante_9_detalhe.html",
+  "final_url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26&sumula=1212",
+  "nota": "recorte do HTML oficial até o enunciado; sha256 é do recorte",
+  "sha256": "4144735955d49a229477e56898fa94aa06dd0e186c790d7afa44b99eda0149b5",
+  "status": 200,
+  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26&sumula=1212"
+ }, "stf_sumulas_sumario": {
+  "bytes": 1025,
+  "content_type": "text/html",
+  "fetched_at": "2026-10-18T19:12:00+00:00",
+  "file": "stf_sumulas_sumario.html",
+  "final_url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30",
+  "nota": "recorte do HTML oficial (cinco primeiras súmulas); sha256 é do recorte",
+  "sha256": "73a91a79437eb028da8eb778a8b2127cb263d2497248841c05ccdb8a707fe6ef",
+  "status": 200,
+  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30"
+ }, "stf_sumulas_vinculantes_sumario": {
+  "bytes": 1605,
+  "content_type": "text/html",
+  "fetched_at": "2026-10-18T19:12:00+00:00",
+  "file": "stf_sumulas_vinculantes_sumario.html",
+  "final_url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26",
+  "nota": "recorte do HTML oficial (nove primeiras súmulas vinculantes); sha256 é do recorte",
+  "sha256": "af0eac240c2183573085d191ef68678901a0b855ce123f83cb2e6f982ae05a97",
+  "status": 200,
+  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26"
+ }, "stj_precedentes_processos": {
+  "bytes": 1627,
+  "content_type": "text/csv",
+  "fetched_at": "2026-10-18T19:12:00+00:00",
+  "file": "stj_precedentes_processos.csv",
+  "final_url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/7ed21202-0049-4fcb-aa7c-48d810d3c499/download/processos.csv",
+  "nota": "linhas reais de Processos.csv correspondentes; recorte, sha256 é do recorte",
+  "sha256": "80424122a8b12759a6c67130db174758931b21924abb1f5646eaa1157d68a565",
+  "status": 200,
+  "url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/7ed21202-0049-4fcb-aa7c-48d810d3c499/download/processos.csv"
+ }, "stj_precedentes_temas": {
+  "bytes": 6885,
+  "content_type": "text/csv",
+  "fetched_at": "2026-10-18T19:12:00+00:00",
+  "file": "stj_precedentes_temas.csv",
+  "final_url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/df29da13-7d6b-41ba-ad96-cd1a5bbd191c/download/temas.csv",
+  "nota": "5 linhas reais de Temas.csv (CKAN precedentes-qualificados); recorte, sha256 é do recorte",
+  "sha256": "2d359343ddcb5cb9d390a21c8090a33071b1ceff3753e0488b1c7a252ef3b777",
+  "status": 200,
+  "url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/df29da13-7d6b-41ba-ad96-cd1a5bbd191c/download/temas.csv"
  }
 }

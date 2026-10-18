@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import hashlib
 import re
@@ -289,12 +291,13 @@ class StjConnector(Connector):
                 raise Unavailable("stj_hash_recurso_invalido")
             if self._last_resource is not None and self._last_resource.sha256 == digest:
                 return self._last_resource
-            body = (self.resource_dir / (digest + ".json")).read_bytes()
+            mime = "text/csv" if meta.get("_resource_kind") == "csv" else "application/json"
+            body = (self.resource_dir / (digest + (".csv" if mime == "text/csv" else ".json"))).read_bytes()
             if hashlib.sha256(body).hexdigest() != digest:
                 raise Unavailable("stj_hash_recurso_diverge")
             url = meta["_resource_url"]
-            self._last_resource = Response(url, url, 200, {"content-type": "application/json"}, body,
-                            digest, meta["_resource_fetched_at"], [], "application/json")
+            self._last_resource = Response(url, url, 200, {"content-type": mime}, body,
+                            digest, meta["_resource_fetched_at"], [], mime)
             return self._last_resource
         url = candidate.metadata.get("resource_url") or candidate.url
         if not url:
@@ -322,6 +325,13 @@ class StjConnector(Connector):
         )
 
     def parse_candidate(self, resp: Response, candidate: Candidate) -> ParsedDecision:
+        if resp.mime == "text/csv":
+            para = candidate.metadata.get("processosParadigma") or []
+            for row in _csv_rows(resp.body):
+                item = _precedente_item(row, para)
+                if item and item["id"] == candidate.key:
+                    return self._decision(item)
+            raise Unavailable("stj_documento_ausente_no_recurso")
         return self.parse(resp, key=candidate.key)
 
     def parse(self, resp: Response, *, key: str | None = None) -> ParsedDecision:
@@ -348,6 +358,9 @@ class StjConnector(Connector):
             item = data
         else:
             item = {}
+        return self._decision(item)
+
+    def _decision(self, item: dict[str, Any]) -> ParsedDecision:
         # Identidade = id do documento/julgamento; processo/registro = proceeding.
         official = str(item.get("id") or item.get("numeroDocumento") or "")
         if not official:
@@ -379,7 +392,8 @@ class StjConnector(Connector):
             },
         )
 
-    def sync(self, *, desde: str | None = None, orgaos: list[str] | None = None, max_itens: int | None = None) -> int:
+    def sync(self, *, desde: str | None = None, orgaos: list[str] | None = None, max_itens: int | None = None,
+             precedentes: bool | None = None) -> int:
         """JSONs mensais recentes; max_itens por recurso; desde explícito amplia o recorte."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(self.db_path))
@@ -398,7 +412,9 @@ class StjConnector(Connector):
                 rows_by_key.setdefault(str(existing_key), []).append(rowid)
             inserted = 0
             self.last_failures = []
-            packages = orgaos or list(_ESPELHOS)
+            packages = [p for p in (orgaos or _ESPELHOS) if p != _PRECEDENTES]
+            if precedentes is None:
+                precedentes = not orgaos or _PRECEDENTES in orgaos
             ymin = int(desde.replace("-", "")[:6]) if desde else 0
             for pkg in packages:
                 try:
@@ -479,26 +495,7 @@ class StjConnector(Connector):
                                 continue
                             item = {**item, "_resource_sha256": resp.sha256,
                                     "_resource_url": resp.final_url, "_resource_fetched_at": resp.fetched_at}
-                            for rowid in rows_by_key.get(key, []):
-                                conn.execute("DELETE FROM fts_stj WHERE rowid = ?", (rowid,))
-                            cursor = conn.execute(
-                                """
-                                INSERT INTO fts_stj
-                                (key, title, ementa, organ, rapporteur, decision_date, class_name, payload)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                (
-                                    key,
-                                    f"{item.get('siglaClasse') or ''} {item.get('numeroProcesso') or ''}".strip(),
-                                    item.get("ementa") or "",
-                                    item.get("nomeOrgaoJulgador") or "",
-                                    item.get("ministroRelator") or "",
-                                    str(item.get("dataDecisao") or ""),
-                                    item.get("siglaClasse") or "",
-                                    json.dumps(item, ensure_ascii=False),
-                                ),
-                            )
-                            rows_by_key[key] = [cursor.lastrowid]
+                            self._put(conn, rows_by_key, key, item)
                             inserted += 1
                             resource_count += 1
                         conn.commit()
@@ -512,10 +509,79 @@ class StjConnector(Connector):
                         self.sync_state.set("stj_resource", checkpoint, "indisponivel", motivo=str(exc)[:200])
                         self.last_failures.append((checkpoint, str(exc)[:200]))
                         continue
+            if precedentes:
+                try:
+                    inserted += self._sync_precedentes(conn, rows_by_key, max_itens)
+                except Exception as exc:
+                    if self.sync_state is None:
+                        raise
+                    self.sync_state.set("stj_resource", f"package:{_PRECEDENTES}", "indisponivel", motivo=str(exc)[:200])
+                    self.last_failures.append((f"package:{_PRECEDENTES}", str(exc)[:200]))
             conn.commit()
             return inserted
         finally:
             conn.close()
+
+    @staticmethod
+    def _put(conn: sqlite3.Connection, rows_by_key: dict, key: str, item: dict[str, Any]) -> None:
+        for rowid in rows_by_key.get(key, []):
+            conn.execute("DELETE FROM fts_stj WHERE rowid = ?", (rowid,))
+        cursor = conn.execute(
+            """
+            INSERT INTO fts_stj
+            (key, title, ementa, organ, rapporteur, decision_date, class_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                key,
+                f"{item.get('siglaClasse') or ''} {item.get('numeroProcesso') or ''}".strip(),
+                item.get("ementa") or "",
+                item.get("nomeOrgaoJulgador") or "",
+                item.get("ministroRelator") or "",
+                str(item.get("dataDecisao") or ""),
+                item.get("siglaClasse") or "",
+                json.dumps(item, ensure_ascii=False),
+            ),
+        )
+        rows_by_key[key] = [cursor.lastrowid]
+
+    def _sync_precedentes(self, conn: sqlite3.Connection, rows_by_key: dict, max_itens: int | None) -> int:
+        """Temas.csv + Processos.csv (CKAN) -> mesmo FTS dos espelhos; paradigmas = leadingCase 'S'."""
+        res = {r.get("name"): r.get("url") for r in self.package_show(_PRECEDENTES).get("resources", [])}
+        got = {}
+        for name in ("Temas.csv", "Processos.csv"):
+            if not res.get(name):
+                raise Unavailable("stj_precedentes_recurso_ausente")
+            got[name] = connector_fetch(
+                res[name], hosts=self.hosts, path_prefixes=self.path_prefixes, mimes=self.mimes,
+                user_agent=self.user_agent, timeout=120.0, max_bytes=40 * 1024 * 1024)
+        self.resource_dir.mkdir(parents=True, exist_ok=True)
+        for r in got.values():
+            (self.resource_dir / (r.sha256 + ".csv")).write_bytes(r.body)
+        para: dict[str, list[str]] = {}
+        for row in _csv_rows(got["Processos.csv"].body):
+            if (row.get("leadingCase") or "").strip() == "S" and (row.get("Processo") or "").strip():
+                para.setdefault(row["sequencialPrecedente"].strip(), []).append(row["Processo"].strip())
+        temas = got["Temas.csv"]
+        items: dict[str, dict[str, Any]] = {}
+        for row in _csv_rows(temas.body):
+            item = _precedente_item(row, para.get((row.get("sequencialPrecedente") or "").strip(), []))
+            if item:
+                items[item["id"]] = item  # shortcut: linhas repetidas no CSV -> a última vale
+        n = 0
+        for key, item in items.items():
+            if max_itens is not None and n >= max_itens:
+                break
+            self._put(conn, rows_by_key, key, {
+                **item, "_resource_sha256": temas.sha256, "_resource_url": temas.final_url,
+                "_resource_fetched_at": temas.fetched_at, "_resource_kind": "csv",
+                "_processos_sha256": got["Processos.csv"].sha256})
+            n += 1
+        conn.commit()
+        if self.sync_state:
+            self.sync_state.set("stj_resource", f"package:{_PRECEDENTES}", "capturado",
+                                payload={"sha256": temas.sha256, "url": temas.final_url, "n": n})
+        return n
 
     def _count(self) -> int:
         conn = sqlite3.connect(str(self.db_path))
@@ -525,6 +591,44 @@ class StjConnector(Connector):
             return 0
         finally:
             conn.close()
+
+
+# tipoPrecedente do CSV -> (classe, espécie). Só Tema (repetitivo) e IAC; Controvérsia/SIRDR/PUIL ficam fora.
+_TIPOS_PRECEDENTE = {"Tema": ("Tema Repetitivo", "repetitivo"), "IAC": ("IAC", "irdr_iac")}
+
+
+def _csv_rows(body: bytes) -> list[dict[str, str]]:
+    return list(csv.DictReader(io.StringIO(body.decode("utf-8-sig"), newline="")))
+
+
+def _precedente_item(row: dict[str, str], paradigmas: list[str]) -> dict[str, Any] | None:
+    tipo = _TIPOS_PRECEDENTE.get((row.get("tipoPrecedente") or "").strip())
+    numero = (row.get("numeroPrecedente") or "").strip()
+    if not tipo or not numero:
+        return None
+    classe, species = tipo
+
+    def f(name: str) -> str:
+        return " ".join((row.get(name) or "").split())
+
+    partes = [f"{classe} {numero}. Situação: {f('situacao') or 'não informada'}."]
+    for rotulo, campo in (("Questão submetida a julgamento", "questaoSubmetidaAJulgamento"),
+                          ("Tese firmada", "teseFirmada"), ("Súmula originada", "sumulaOriginada")):
+        if f(campo):
+            partes.append(f"{rotulo}: {f(campo)}")
+    if paradigmas:
+        partes.append("Processos paradigma: " + "; ".join(paradigmas))
+    return {
+        "id": f"{'tema' if species == 'repetitivo' else 'iac'}:{numero}",
+        "tipoDeDecisao": species,
+        "siglaClasse": classe,
+        "numeroProcesso": numero,
+        "ementa": "\n".join(partes),
+        "nomeOrgaoJulgador": f("orgaoJulgador"),
+        "dataDecisao": f("dataJulgamento") or None,
+        "situacao": f("situacao"),
+        "processosParadigma": paradigmas,
+    }
 
 
 def _fts_query(q: str) -> str:
