@@ -765,10 +765,14 @@ class Verifica:
                 "SELECT DISTINCT e.capture_id FROM redaction r JOIN provision p ON p.id=r.provision_id "
                 "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
                 "WHERE r.text=? AND p.path=?", (row["text"], row["path"])).fetchall()
-            if not receipts:
-                raise SourceUnavailable("EVIDENCIA_AUSENTE")
-            for receipt in receipts:
-                self._authenticate_capture(receipt[0])
+            rebaixo = None
+            try:
+                if not receipts:
+                    raise SourceUnavailable("EVIDENCIA_AUSENTE")
+                for receipt in receipts:
+                    self._authenticate_capture(receipt[0])
+            except SourceUnavailable as exc:
+                rebaixo = exc.reason
             work_row = self.conn.execute(
                 "SELECT id, label, authority, kind, number, year FROM work WHERE label=? LIMIT 1",
                 (row["work_label"],),
@@ -779,7 +783,7 @@ class Verifica:
                     (row["work_label"],),
                 ).fetchone()
             vigencia = None
-            if work_row and data:
+            if work_row and data and not rebaixo:
                 wk = WorkKey(
                     work_row["authority"],
                     work_row["kind"],
@@ -808,10 +812,11 @@ class Verifica:
                     "url_oficial": None,
                     "capture_id": None,
                     "vigencia": vigencia,
-                    "work_id": work_row["id"] if work_row else None,
+                    "work_id": work_row["id"] if work_row and not rebaixo else None,
                     "pertinencia": row["pertinencia"],
                     "correspondencia": row["correspondencia"],
                     "candidato_ao_vivo": bool(row.get("_staging")),
+                    **({"nao_indexado": True, "motivo": rebaixo} if rebaixo else {}),
                 }
             )
 
@@ -845,7 +850,10 @@ class Verifica:
                 cands = conn_obj.search(q, **filtros)
                 got = 0
                 for cand in cands[: max(0, limite - len(items))]:
-                    items.append(self._index_candidate_legis(conn_obj, cand))
+                    it = self._index_candidate_legis(conn_obj, cand)
+                    if not it.get("capture_id"):
+                        it["nao_indexado"] = True
+                    items.append(self._rebaixar_busca(it))
                     got += 1
                 fontes_status[cid] = {
                     "status": "ok",
@@ -866,8 +874,9 @@ class Verifica:
 
         page = items[offset:offset + limite]
         truncado = len(items) > offset + limite or any(v.get("truncado") for v in fontes_status.values())
+        parcial = truncado or any(i.get("nao_indexado") for i in page)
         return {
-            "status": "parcial" if truncado else "ok",  # decisão 0024
+            "status": "parcial" if parcial else "ok",  # decisão 0024
             "itens": page,
             "resultados": page,
             "fontes": fontes_status,
@@ -1453,11 +1462,26 @@ class Verifica:
         except (blobs.BlobCorruption, ValueError, OSError):
             raise SourceUnavailable("EVIDENCIA_CORROMPIDA")
 
+    def _rebaixar_busca(self, item: dict[str, Any]) -> dict[str, Any]:
+        """Item indexado com evidência inválida vira candidato de metadados; a busca não cai por ele."""
+        if item.get("nao_indexado"):
+            return item
+        try:
+            self._authenticate_output(item)
+            return item
+        except SourceUnavailable as exc:
+            for k in ("vigencia", "work_id", "identity", "text", "temporal"):
+                item.pop(k, None)
+            item.update(capture_id=None, nao_indexado=True, motivo=exc.reason)
+            return item
+
     def _authenticate_output(self, value):
         if isinstance(value, list):
             for item in value:
                 self._authenticate_output(item)
         elif isinstance(value, dict):
+            if value.get("nao_indexado"):  # candidato de metadados: não afirma identidade/texto/vigência
+                return
             capture = value.get("capture_id")
             if capture:
                 self._authenticate_capture(capture)
@@ -2170,11 +2194,19 @@ class Verifica:
 
     @_authenticated_output
     def buscar_normas_cvm(self, q: str, tipo: str | None = None) -> dict[str, Any]:
-        return self._buscar_normas("cvm_normas", q, tipo)
+        return self._rebaixar_resultado(self._buscar_normas("cvm_normas", q, tipo))
 
     @_authenticated_output
     def buscar_normas_bcb(self, q: str, tipo: str | None = None) -> dict[str, Any]:
-        return self._buscar_normas("bcb", q, tipo)
+        return self._rebaixar_resultado(self._buscar_normas("bcb", q, tipo))
+
+    def _rebaixar_resultado(self, res: dict[str, Any]) -> dict[str, Any]:
+        itens = [self._rebaixar_busca(i) for i in res.get("itens") or []]
+        ni = sum(1 for i in itens if i.get("nao_indexado"))
+        if itens and ni > res.get("nao_indexados", 0):
+            res.update(itens=itens, nao_indexados=ni, indexados=len(itens) - ni,
+                       status="parcial" if res.get("status") == "ok" else res.get("status"))
+        return res
 
     def _buscar_normas(self, source: str, q: str, tipo: str | None, *,
                        max_indexar: int = 5, orcamento_s: float = 20.0) -> dict[str, Any]:
