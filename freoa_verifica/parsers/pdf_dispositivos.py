@@ -26,7 +26,7 @@ def _norm(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
-def textos_de_corpo(pages) -> list[str]:
+def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
     """Texto de cada página sem cabeçalho/rodapé, decidido por posição e repetição."""
     frags: list[list[tuple[float, str]]] = []
     alturas: list[float] = []
@@ -51,7 +51,8 @@ def textos_de_corpo(pages) -> list[str]:
     fora_por_pagina = []
     for n, (parts, ls, h) in enumerate(zip(frags, linhas_por_pagina, alturas), 1):
         def repetida(y, ls=ls, n=n):
-            return cont[(y, ls[y])] >= minimo or _numero_da_pagina(ls[y], n, len(frags))
+            t = ls[y]
+            return _numero_da_pagina(t, n, len(frags)) or (cont[(y, t)] >= minimo and _forma_de_margem(t))
         # Só sai o bloco contíguo a partir da borda: linha repetida com texto mantido acima
         # (ou abaixo, no rodapé) é corpo, não cabeçalho (auditoria 1.1.0, rodada 3).
         linhas_pag = sorted({round(y) for y, t in parts if _norm(t)}, reverse=True)
@@ -64,10 +65,22 @@ def textos_de_corpo(pages) -> list[str]:
                 fora.add(y)
         fora_por_pagina.append(fora)
     _manter_cortes_ambiguos(frags, fora_por_pagina)
+    if descartadas is not None:
+        descartadas.update(t for ls, fora in zip(linhas_por_pagina, fora_por_pagina) for y, t in ls.items() if y in fora)
     return ["".join(t for y, t in parts if round(y) not in fora) for parts, fora in zip(frags, fora_por_pagina)]
 
 
 _FECHO = re.compile(r"[.;:!?)\]”\"»]$|[;,]\s+(e|ou)$")  # "...; e" fecha inciso
+
+
+def _forma_de_margem(linha: str) -> bool:
+    """Cabeçalho/rodapé tem forma de rótulo (órgão, endereço, sítio, epígrafe em caixa alta),
+    não de texto normativo: nunca dispositivo, nunca frase em caixa mista terminada em ponto."""
+    if _abre_paragrafo(linha):
+        return False
+    letras = [c for c in linha if c.isalpha()]
+    caixa_alta = bool(letras) and sum(c.isupper() for c in letras) >= 0.8 * len(letras)
+    return caixa_alta or not re.search(r"[.;]$", linha)
 
 
 def _abre_paragrafo(linha: str) -> bool:

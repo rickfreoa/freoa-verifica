@@ -61,6 +61,14 @@ def test_rodape_que_corta_paragrafo_antes_de_novo_artigo_fica():
     assert ps == [f"Art. {n}º O prazo fica limitado a cem dias corridos." for n in (1, 2, 3)]
 
 
+@pytest.mark.parametrize("ultima", ["I - divulgar o relatorio.", "Salvo autorizacao previa da CVM."])
+def test_rodape_com_forma_de_texto_normativo_fica(ultima):
+    # Auditor, rodada 5: inciso ou frase repetidos na borda inferior, após dispositivo fechado.
+    pags = [_Pagina([(800, CAB), (120, f"Art. {n}º O emissor deve:" if ultima.startswith("I") else f"Art. {n}º A divulgacao e obrigatoria."),
+                     (80, ultima)]) for n in (1, 2, 3)]
+    assert sum(ultima in t for t in textos_de_corpo(pags)) == 3
+
+
 def test_cabecalho_entre_partes_do_mesmo_paragrafo_sai():
     pags = [_Pagina([(800, CAB), (600, "Art. 1º O prazo fica"), (40, "1")]),
             _Pagina([(800, CAB), (600, "limitado a cem dias."), (586, "Art. 2º Outro."), (40, "2")]),

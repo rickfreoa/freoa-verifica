@@ -537,7 +537,8 @@ def parse_pdf_direto(body: bytes) -> ParsedDocument:
     from freoa_verifica.parsers.pdf_dispositivos import como_html, textos_de_corpo
     from freoa_verifica.parsers.sentinel import run_sentinels
 
-    pagina_html = como_html(textos_de_corpo(reader.pages))
+    descartadas: set[str] = set()
+    pagina_html = como_html(textos_de_corpo(reader.pages, descartadas))
     _t, _e, _txt, provisions, local_issues, amendments, editorial = parse_html_devices(
         pagina_html, base_url="https://conteudo.cvm.gov.br/")
     if provisions:
@@ -546,6 +547,9 @@ def parse_pdf_direto(body: bytes) -> ParsedDocument:
             detail="dispositivos inferidos de PDF sem marcação estrutural; conferir no original",
             blocking_scope=None))
         issues.extend(local_issues)
+        if descartadas:  # transparência: o que saiu como cabeçalho/rodapé (decisão 0037)
+            issues.append(Issue(code="MARGEM_DESCARTADA", path=None, blocking_scope=None,
+                                detail="; ".join(sorted(t for t in descartadas if not t.isdigit()))[:500]))
     from freoa_verifica.citation import extract
     epigraph = re.split(r"\bArt\.?\s*1[ºo°]?[.\s]",text[:4000],maxsplit=1,flags=re.I)[0]
     epigraph = re.sub(r"\bN\s+o\s+(?=\d)", "Nº ", epigraph, flags=re.I)
