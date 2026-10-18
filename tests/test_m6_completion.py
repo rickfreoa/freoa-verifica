@@ -65,7 +65,7 @@ def test_offline_sync_never_calls_connector(tmp_path, monkeypatch):
             pytest.fail("rede em modo offline")
         monkeypatch.setattr(svc, "_get", forbidden)
         result = svc.sincronizar(semente=True, max_itens=1)
-        assert len(result["fontes"]) == 7
+        assert len(result["fontes"]) == 8
         assert all(f["motivos"] == {"offline": 1} for f in result["fontes"])
 
 

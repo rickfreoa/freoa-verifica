@@ -61,6 +61,10 @@
     "stj_precedentes_qualificados": true,
     "cvm_colegiado_desde": 2023,
     "tcu_acordaos": 2000,
+    "tjdft": {
+      "por_consulta": 20,
+      "consultas": ["acordo de acionistas", "dissolução parcial de sociedade", "apuração de haveres", "desconsideração da personalidade jurídica", "recuperação judicial", "sociedade limitada exclusão de sócio"]
+    },
     "stf_temas_rg": {"de": 1, "ate": 1400},
     "stf_sumulas": true
   },
