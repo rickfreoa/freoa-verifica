@@ -86,9 +86,9 @@ A apuração de 18/10/2026 está em [docs/FONTES.md](docs/FONTES.md). O acervo �
 
 ## Versão 1.1.0: lacunas fechadas e saída protegida
 
-A 1.1.0 ataca as lacunas que impediam o uso no lugar do JusRatio, sob dez rodadas de auditoria independente do código e um conjunto-ouro montado sem acesso ao código:
+A 1.1.0 ataca as lacunas que impediam o uso no lugar do JusRatio, sob doze rodadas de auditoria independente do código e um conjunto-ouro montado sem acesso ao código:
 
-- **Normas da CVM em PDF** passam a ter artigos, parágrafos, incisos e alíneas endereçáveis, com histórico extraído das notas da própria CVM ([decisão 0037](docs/decisoes/0037-estrutura-inferida-de-pdf-da-cvm.md)). Onde o parser detecta conteúdo que não consegue ler ou separar com segurança (margem descartada, imagem no corpo, redações antigas sem rasura), a resposta é `unknown` ou `ambiguous`, não `verified`; texto rasterizado sem sinal no PDF, OCR e PDFs escaneados não são tratados.
+- **Normas da CVM em PDF** passam a ter artigos, parágrafos, incisos e alíneas endereçáveis, com histórico extraído das notas da própria CVM ([decisão 0037](docs/decisoes/0037-estrutura-inferida-de-pdf-da-cvm.md)). Onde o parser detecta conteúdo que não consegue ler ou separar com segurança (margem descartada, imagem no corpo, redações antigas sem rasura), a resposta é `unknown` ou `ambiguous`, não `verified`; PDFs escaneados, OCR, recortes e camadas ocultas não são tratados ([limites](docs/decisoes/0037-estrutura-inferida-de-pdf-da-cvm.md)).
 - **Precedentes qualificados do STJ e súmulas do STF**, com situação estruturada (vigente, cancelada, superada, revisada, desconhecida) e alerta quando o precedente não está vigente na fonte ([decisão 0036](docs/decisoes/0036-precedentes-e-sumulas.md)).
 - **Data de efeito de revogações declarada pelo BCB** ([decisão 0035](docs/decisoes/0035-data-de-efeito-declarada-pelo-bcb.md)); resoluções do CMN anteriores a 2020 e circulares do BCB passam a ser reconhecidas.
 - **Texto coletado é dado, nunca instrução**: envelope que o texto coletado não consegue fechar, triagem de padrões de injeção e de caracteres invisíveis em toda resposta MCP e REST (`alertas_conteudo`), PDFs de decisões lidos em processo isolado.

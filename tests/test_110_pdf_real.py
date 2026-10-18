@@ -114,3 +114,28 @@ def test_imagem_no_corpo_bloqueia_dispositivos_vizinhos():
          (542, "Art. 2o Esta Resolucao entra em vigor.")], img_y=612, img_h=20))
     res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", "O emissor deve divulgar o relatorio.")
     assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
+
+
+def test_imagem_dentro_de_formulario_transladado_bloqueia():
+    # Auditor, rodada 12: imagem em Form XObject (coordenadas locais 0–20) transladado para y=612.
+    corpo = ("BT /F1 11 Tf 72 700 Td (RESOLUCAO CVM 999/2026) Tj ET\n"
+             "BT /F1 11 Tf 72 642 Td (Art. 1o A divulgacao e obrigatoria.) Tj ET\n"
+             "BT /F1 11 Tf 72 542 Td (Art. 2o Esta Resolucao entra em vigor.) Tj ET\n"
+             "q 1 0 0 1 72 612 cm /Fm1 Do Q\n")
+    form = "q 300 0 0 20 0 0 cm /Im1 Do Q\n"
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [5 0 R] /Count 1 >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 1 >>\nstream\n\x00\nendstream",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> /XObject << /Fm1 7 0 R >> >> /Contents 6 0 R >>",
+            f"<< /Length {len(corpo)} >>\nstream\n{corpo}endstream",
+            f"<< /Type /XObject /Subtype /Form /BBox [0 0 300 20] /Resources << /XObject << /Im1 4 0 R >> >> /Length {len(form)} >>\nstream\n{form}endstream"]
+    out, offs = b"%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += f"{i} 0 obj\n{o}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode() + "".join(f"{o:010} 00000 n \n" for o in offs).encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    doc = parse_pdf_direto(out)
+    res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", "A divulgacao e obrigatoria.")
+    assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")

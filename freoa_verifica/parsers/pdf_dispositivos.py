@@ -43,6 +43,10 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
             if operador == b"Do" and args and _e_imagem(page, args[0]) or operador in (b"BI", b"INLINE IMAGE"):
                 base, alto = float(cm[5]), float(cm[3])
                 imgs.append((min(base, base + alto), max(base, base + alto)))
+            elif operador == b"Do" and args:
+                faixa = _faixa_de_formulario_com_imagem(page, args[0], cm)
+                if faixa:  # imagem dentro de Form XObject: vale a caixa do formulário na página (rodada 12)
+                    imgs.append(faixa)
 
         page.extract_text(visitor_text=vis, visitor_operand_before=op)
         frags.append(parts)
@@ -153,6 +157,37 @@ def _manter_cortes_ambiguos(frags, fora_por_pagina) -> set[tuple[int, int]]:
             marcar.add((seq[k_antes][0], seq[k_antes][1]))
         i = j
     return marcar
+
+
+def _tem_imagem(xobj, profundidade: int = 0) -> bool:
+    if profundidade > 5:
+        return True  # aninhamento além do suportado: lado seguro
+    try:
+        filhos = xobj.get("/Resources", {}).get_object().get("/XObject", {}).get_object()
+        for nome in filhos:
+            f = filhos[nome].get_object()
+            if f.get("/Subtype") == "/Image" or (f.get("/Subtype") == "/Form" and _tem_imagem(f, profundidade + 1)):
+                return True
+        conteudo = xobj.get_data() if hasattr(xobj, "get_data") else b""
+        return b" BI" in conteudo or conteudo.startswith(b"BI")
+    except (KeyError, TypeError, AttributeError, ValueError):
+        return True
+
+
+def _faixa_de_formulario_com_imagem(page, nome, cm) -> tuple[float, float] | None:
+    try:
+        obj = page["/Resources"]["/XObject"][nome].get_object()
+        if obj.get("/Subtype") != "/Form" or not _tem_imagem(obj):
+            return None
+        x0, y0, x1, y1 = (float(v) for v in obj.get("/BBox", [0, 0, 0, 0]))
+        m = [float(v) for v in obj.get("/Matrix", [1, 0, 0, 1, 0, 0])]
+    except (KeyError, TypeError, AttributeError, ValueError):
+        return None
+    ys = []
+    for x, y in ((x0, y0), (x0, y1), (x1, y0), (x1, y1)):
+        xf, yf = m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]  # matriz do formulário
+        ys.append(float(cm[1]) * xf + float(cm[3]) * yf + float(cm[5]))  # CTM externa
+    return min(ys), max(ys)
 
 
 def _e_imagem(page, nome) -> bool:

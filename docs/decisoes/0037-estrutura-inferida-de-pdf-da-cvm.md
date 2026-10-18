@@ -1,6 +1,6 @@
 # 0037 — Estrutura inferida de PDF da CVM
 
-Data: 18/10/2026. Versão: 1.1.0 (`cvm-pdf-2`). Revisada em onze rodadas de auditoria.
+Data: 18/10/2026. Versão: 1.1.0 (`cvm-pdf-2`). Revisada em doze rodadas de auditoria.
 
 ## Problema
 
@@ -14,9 +14,11 @@ Atos da CVM disponíveis só em PDF não tinham dispositivos: toda citação de 
 4. Notas da CVM ("• Inciso VI com redação dada pela Resolução CVM nº 187, de ...", "incluído", "revogado") viram a anotação do dispositivo que as antecede, com a mesma semântica do Planalto: redação anterior superada, redação vigente anotada, dispositivo revogado.
 5. O texto que outra norma "passa a vigorar com a seguinte redação:" até "(N.R.)", em até 60 parágrafos, é citação (blockquote), não dispositivo desta norma. Sem fecho, nada é tratado como citação.
 6. Todo bloco descartado que contenha texto (e não só o número da própria página) marca o dispositivo que o antecede com `MARGEM_ADJACENTE` (bloqueio por dispositivo, que alcança seus filhos): o verificador responde `unknown/MARGEM_ADJACENTE` para qualquer confronto textual, nem `verified` nem `divergent`. Vale na fronteira limpa e no meio do parágrafo. Na Resolução CVM 175: 67 de 801 dispositivos.
-7. Imagem desenhada em qualquer posição da página pode conter texto que o pypdf não extrai: as linhas mantidas imediatamente acima e abaixo dela (ou, no alto da página, a última linha da página anterior) recebem a mesma marca `MARGEM_ADJACENTE`. Linha na mesma altura da imagem também é marcada. Não há exceção para logotipo: nenhuma posição prova que a imagem não contém texto.
+7. Imagem desenhada em qualquer posição da página pode conter texto que o pypdf não extrai: as linhas mantidas imediatamente acima e abaixo dela (ou, no alto da página, a última linha da página anterior) recebem a mesma marca `MARGEM_ADJACENTE`. Linha na mesma altura da imagem também é marcada. Não há exceção para logotipo: nenhuma posição prova que a imagem não contém texto. Imagem dentro de Form XObject vale pela caixa do formulário na página (matriz do formulário e CTM externa); formulário cujo conteúdo não se consegue inspecionar é tratado como se tivesse imagem.
 8. Duplicidades remanescentes (redações antigas sem marca de rasura no PDF) ficam `DUPLICATE_CURRENT`, portanto ambíguas e sem `verified`.
 
 ## Limite residual declarado
 
 Bloco formado apenas pelo número da própria página (na faixa da margem, sozinho na linha, igual ao índice da página) sai sem marcar o dispositivo anterior. Um número normativo idêntico ao da página, isolado nessa posição, seria perdido; não há caso real conhecido.
+
+Outros limites: PDF escaneado ou sem camada de texto, OCR, texto em anotações ou camadas opcionais, recortes (clip) e transformações que escondam texto não são tratados; o resultado nesses casos depende do que o pypdf extrai e continua sujeito a `ESTRUTURA_INFERIDA_PDF` e `PDF_SEM_RASURAS`.
