@@ -108,6 +108,10 @@ SNAPSHOT_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "model_json", "work_id", "work_date", "amending_texts_json", "events_json",
     ),
     "work_year_issue": ("work_id", "reason", "capture_id"),
+    "work_status": (
+        "work_id", "situacao", "texto_oficial", "ato_revogador", "data_efeito",
+        "captura_id", "sha256", "lido_em",
+    ),
 }
 
 # Tabelas/colunas excluídas do snapshot público

@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.0.3 (em preparação)
+
+- Situação da obra (C2, decisão 0021): tabela `work_status` alimentada pela página do ato CVM (sempre capturada) e pelos campos `Revogado`/`Cancelado` do BCB/CMN. Ato revogado ou cancelado deixa de sair `vigente_na_fonte` (`OBRA_REVOGADA_NA_FONTE`, inclusive em citação só da obra); data passada sem `data_efeito` é `unknown REVOGACAO_DATA_DESCONHECIDA`; revogação futura preserva a análise e marca `REVOGACAO_POSTERIOR`; situação ilegível ou com mais de 30 dias nunca é vigente. A página do ato CVM deixou de presumir vigência. `Verifica.ressincronizar_situacao()` relê o acervo.
+- Busca CVM: decodificação UTF-8 correta (consultas acentuadas), sem exigir a frase literal, `unavailable` quando a fonte informa total > 0 e nada é lido, um item por ato (anexos duplicados descartados) e espécie acompanhando o número ("Instrução CVM 358"). Busca CVM/BCB informa `truncado` pelo total da fonte.
+- BCB/CMN: "Resolução CMN 4.966" na consulta aciona o lookup exato por número.
+- PDF da CVM roda em processo isolado com limites de tempo, memória, páginas e texto (decisão 0026).
+
 ## 1.0.2
 
 - Extração de citações em duas camadas: regras estruturais (numeração decimal de cláusulas, siglas coladas a números, pertença a instrumentos particulares, fronteiras de arquivo e de campo técnico) e confiança explícita `exata`/`provavel`. Em `verificar_texto`, citações `provavel` recebem `requer_conferencia`; só `exata` recebe `encontrada` ou `inexistente`. Nos oito corpora adversariais independentes (779 frases), falsos definitivos caíram de 250 para 0 e o recall subiu de 70,9% para 93,7%.

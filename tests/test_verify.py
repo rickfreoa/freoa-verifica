@@ -216,6 +216,11 @@ def test_rcvm160_temporal_causal(env):
     prov = doc_160.provision("art2.inc16")
     struck = next(r for r in prov.redactions if r.struck)
     current = next(r for r in prov.redactions if not r.struck)
+    # C2: obra CVM sem situação lida seria `ilegivel`; aqui a página do ato declara vigente.
+    from freoa_verifica import situacao
+    from freoa_verifica.aliases import WorkKey
+    rw160 = resolver.resolve(WorkKey("cvm", "resolucao", "160", 2022))
+    situacao.gravar(conn, situacao.WorkStatus(rw160.work_id, "vigente_declarada"))
 
     r1 = verificar(
         "art. 2º, XVI da RCVM 160",

@@ -18,6 +18,7 @@ from freoa_verifica.parsers.model import (
     Provision,
     RevokedProvision,
 )
+from freoa_verifica import situacao as _sit  # C2
 from freoa_verifica.store import repo as store_repo
 from freoa_verifica.temporal import select as temporal_select
 from freoa_verifica.textcmp import ALGO_VERSION as TEXTCMP_VERSION
@@ -226,6 +227,7 @@ def verificar(
     resolver: Resolver | None = None,
     *,
     _path: str | None = None,
+    _conn_situacao: sqlite3.Connection | None = None,  # C2
 ) -> VerificationResult:
     """Verifica citação nas dimensões identity/text/temporal/support."""
     if resolver is None:
@@ -415,6 +417,7 @@ def verificar(
                 fetched_at=rw.fetched_at,
             )
             temporal_dim = _map_temporal(temporal_res, rw, path)
+            temporal_dim = _sit.aplicar_situacao(temporal_dim, _sit.carregar(_conn_situacao or repo, rw), data)  # C2
             text_dim = (
                 Dimension("unknown", "DISPOSITIVO_REVOGADO")
                 if trecho is not None
@@ -452,6 +455,8 @@ def verificar(
     # --- temporal ---
     if prov is None:
         temporal_dim = Dimension("not_assessed", "SEM_DISPOSITIVO")
+        if path is None:  # C2: citação só da obra reflete revogação
+            temporal_dim = _sit.aplicar_situacao(temporal_dim, _sit.carregar(_conn_situacao or repo, rw), data)
         temporal_res = None
     else:
         temporal_res = temporal_select(
@@ -462,6 +467,7 @@ def verificar(
             fetched_at=rw.fetched_at,
         )
         temporal_dim = _map_temporal(temporal_res, rw, path)
+        temporal_dim = _sit.aplicar_situacao(temporal_dim, _sit.carregar(_conn_situacao or repo, rw), data)  # C2
 
     # --- text ---
     uncertain = any(i.code == "UNCERTAIN_CONTINUATION" for i in blocking)

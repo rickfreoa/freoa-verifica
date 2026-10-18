@@ -45,6 +45,7 @@ from freoa_verifica.store import blobs, repo
 from freoa_verifica.store.db import connect, data_home
 from freoa_verifica.temporal import select as temporal_select
 from freoa_verifica.transport import _CIRCUIT_BREAKERS
+from freoa_verifica import situacao  # C2
 from freoa_verifica.verify import (
     MemoryResolver,
     ResolvedWork,
@@ -303,6 +304,7 @@ class Verifica:
                 work_date=work_date,
                 amending_act_texts=rw.amending_act_texts,
             )
+        situacao.registrar_do_corpo(self.conn, rw, source_id, body)  # C2
         self._resolver.add(rw)
         if work_key.year <= 0:
             with self.conn:
@@ -414,6 +416,10 @@ class Verifica:
             pending.append({"work_id": row["id"], "reason": reason})
         self._resolver = MemoryResolver()
         return {"reparados": repaired, "pendentes": pending}
+
+    def ressincronizar_situacao(self, **kw) -> dict:  # C2
+        """Relê a situação dos atos CVM/BCB/CMN do acervo (antes de gerar snapshot)."""
+        return situacao.ressincronizar(self, **kw)
 
     def reprocessar_capturas(self) -> dict:
         """Recalcula modelos derivados dos mesmos bytes, preservando recibos de captura."""
@@ -534,7 +540,7 @@ class Verifica:
                 if validate_identity(work, parsed, requested_work_date) is None:
                     raise Unavailable("IDENTIDADE_NAO_DECLARADA")
                 label = cand.title or f"{work.kind} {work.number}/{work.year}"
-                return self.indexar_obra(
+                rw_novo = self.indexar_obra(
                     source_id=cid,
                     work_key=work,
                     document=parsed,
@@ -543,6 +549,9 @@ class Verifica:
                     fetched_at=resp.fetched_at,
                     label=label,
                 )
+                if cid == "cvm_normas":  # C2: página do ato sempre capturada como evidência de situação
+                    situacao.registrar_cvm(self.conn, self.home, conn_obj, cand, rw_novo)
+                return rw_novo
             except IdentityMismatch:
                 raise
             except Unavailable as exc:
@@ -751,6 +760,8 @@ class Verifica:
                     label=cand.title,
                 )
                 capture_id = rw.capture_id
+                if connector.id == "cvm_normas":  # C2
+                    situacao.registrar_cvm(self.conn, self.home, connector, cand, rw)
                 if parsed.provisions:
                     path = parsed.provisions[0].path
                     trecho = parsed.provisions[0].redactions[0].text if parsed.provisions[0].redactions else trecho
@@ -865,10 +876,12 @@ class Verifica:
                         return {"status": "indisponivel", "motivo": exc.reason}
         if rw is None:
             return {"status": "inexistente"}
+        sit = situacao.carregar(self.conn, rw)  # C2
         if not path:
             return {
                 "status": "encontrada",
                 "work_id": rw.work_id,
+                "situacao_obra": situacao.resumo(sit),  # C2
                 "caminho": None,
                 "texto": None,
                 "aviso": "informe caminho ou citação com dispositivo",
@@ -886,6 +899,7 @@ class Verifica:
             return {"status": "inexistente", "work_id": rw.work_id, "caminho": path}
 
         tr = temporal_select(prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts, fetched_at=rw.fetched_at, quarantined=rw.quarantined)
+        tr = situacao.aplicar_situacao_tr(tr, sit, data)  # C2
         red = _redaction_by_id(prov, tr.redaction_id) if tr.redaction_id else None
         if red is None and tr.reason not in {"INICIO_SUCESSOR_DESCONHECIDO", "CAPTURA_DATA_INVALIDA"}:
             red = _current_redaction(prov)
@@ -916,6 +930,7 @@ class Verifica:
         return {
             "status": "encontrada",
             "work_id": rw.work_id,
+            "situacao_obra": situacao.resumo(sit),  # C2
             "caminho": path,
             "texto": text_out,
             "truncado": trunc,
@@ -997,6 +1012,7 @@ class Verifica:
             "regras": rules,
             "flags": gflags,
             "needs_judgment": needs_judgment,
+            "situacao_obra": situacao.resumo(situacao.carregar(self.conn, resolved)),  # C2
         }
 
     # ------------------------------------------------------------------
@@ -1083,6 +1099,7 @@ class Verifica:
             data=data,
             modo=modo,
             repo=None if self._read_only else self.conn,
+            _conn_situacao=self.conn,  # C2: leitura vale também em modo somente leitura
             resolver=self._resolver_adapter(),
             _path=_path,
         )
@@ -1844,7 +1861,8 @@ class Verifica:
             })
         status = ("parcial" if itens else "indisponivel") if falhas else "ok"
         return {"status": status, "itens": itens, "total": len(itens),
-                "falhas": falhas, "truncado": False}
+                "falhas": falhas,
+                "truncado": any(((c.metadata or {}).get("total_fonte") or 0) > len(cands) for c in cands)}  # A9
 
     # ------------------------------------------------------------------
     # Evidência / fontes / sync
