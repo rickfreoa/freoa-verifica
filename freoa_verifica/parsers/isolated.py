@@ -7,10 +7,10 @@ import sys
 from freoa_verifica.limites import restante
 from freoa_verifica.parsers.model import Issue, ParsedDocument, document_from_dict
 
-_PROFILES = ("planalto", "cvm_docx", "bcb_json", "cvm_pdf")
+_PROFILES = ("planalto", "cvm_docx", "bcb_json", "cvm_pdf", "pdf_texto")
 # F03: limites efetivos do filho por perfil (memória em MiB, CPU em s). Só POSIX;
 # no Windows valem o timeout do pai e os limites de páginas/texto do próprio parser.
-_LIMITES = {"cvm_pdf": (1024, 60)}
+_LIMITES = {"cvm_pdf": (1024, 60), "pdf_texto": (1024, 60)}
 
 def _failure(profile: str, detail: str) -> ParsedDocument:
     return ParsedDocument(profile, "0", "", None, "", issues=[
@@ -54,12 +54,35 @@ def _aplicar_limites(profile: str) -> None:
     if cpu_s:
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s + 5))
 
+def pdf_texto(body: bytes) -> ParsedDocument:
+    """Texto de PDF de decisao (STF, TJSP) no filho: o pai nunca abre PDF de terceiro."""
+    import io
+    from pypdf import PdfReader
+    from freoa_verifica.connectors.cvm_normas import PDF_MAX_PAGINAS, PDF_MAX_TEXTO
+    reader = PdfReader(io.BytesIO(body))
+    if len(reader.pages) > PDF_MAX_PAGINAS:
+        raise ValueError("pdf_paginas_excedidas")
+    parts, total = [], 0
+    for page in reader.pages:
+        t = page.extract_text() or ""
+        total += len(t)
+        if total > PDF_MAX_TEXTO:
+            raise ValueError("pdf_texto_excedido")
+        parts.append(t)
+    return ParsedDocument("pdf_texto", "pdf-texto-1", "", None, "\n".join(parts))
+
+
+def texto_pdf_isolado(body: bytes, timeout: float = 60.0) -> str:
+    doc = parse_isolated("pdf_texto", body, timeout)
+    return "" if doc.quarantined else doc.text
+
+
 def _main() -> None:
     from freoa_verifica.parsers.planalto import parse_planalto
     from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
     from freoa_verifica.parsers.bcb_json import parse_bcb_json
     from freoa_verifica.connectors.cvm_normas import parse_pdf_direto
-    parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto)))
+    parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto)))
     _aplicar_limites(sys.argv[1])
     try:
         document = parsers[sys.argv[1]](sys.stdin.buffer.read())

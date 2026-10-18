@@ -339,12 +339,6 @@ def _value(td) -> str:
 
 
 def _pdf_text(body: bytes) -> str:
-    try:
-        import io
+    from freoa_verifica.parsers.isolated import texto_pdf_isolado
 
-        from pypdf import PdfReader
-
-        reader = PdfReader(io.BytesIO(body))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
-    except Exception:
-        return ""
+    return texto_pdf_isolado(body)

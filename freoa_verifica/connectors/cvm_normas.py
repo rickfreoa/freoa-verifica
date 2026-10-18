@@ -533,20 +533,38 @@ def parse_pdf_direto(body: bytes) -> ParsedDocument:
             blocking_scope=None,
         )
     ]
+    from freoa_verifica.parsers.html_devices import parse_html_devices
+    from freoa_verifica.parsers.pdf_dispositivos import como_html
+    from freoa_verifica.parsers.sentinel import run_sentinels
+
+    pagina_html = como_html(parts)
+    _t, _e, _txt, provisions, local_issues, amendments, editorial = parse_html_devices(
+        pagina_html, base_url="https://conteudo.cvm.gov.br/")
+    if provisions:
+        issues.append(Issue(
+            code="ESTRUTURA_INFERIDA_PDF", path=None,
+            detail="dispositivos inferidos de PDF sem marcação estrutural; conferir no original",
+            blocking_scope=None))
+        issues.extend(local_issues)
     from freoa_verifica.citation import extract
     epigraph = re.split(r"\bArt\.?\s*1[ºo°]?[.\s]",text[:4000],maxsplit=1,flags=re.I)[0]
     epigraph = re.sub(r"\bN\s+o\s+(?=\d)", "Nº ", epigraph, flags=re.I)
     candidates = [c for c in extract(epigraph) if c.work and c.work.authority == "cvm"]
     title = epigraph[candidates[0].span[0]:candidates[0].span[1]+200] if candidates else ""
-    return ParsedDocument(
+    doc = ParsedDocument(
         profile="cvm_pdf",
-        parser_version="cvm-pdf-1",
+        parser_version="cvm-pdf-2",
         title=title,
         ementa=None,
         text=text,
-        provisions=[],
+        provisions=provisions,
         issues=issues,
+        amendments=amendments if provisions else [],
+        editorial_blocks=editorial if provisions else [],
     )
+    if provisions:
+        doc.issues.extend(run_sentinels(doc, raw=pagina_html))
+    return doc
 
 
 def _parse_key(key: Any) -> tuple[str | None, int | None]:

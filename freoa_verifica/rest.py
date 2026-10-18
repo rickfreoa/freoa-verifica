@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, StrictStr
 
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP, EntradaInvalida, Sobrecarga
+from freoa_verifica.sanitizacao import Protegido
 from freoa_verifica.service import Verifica
 
 try:
@@ -119,7 +120,8 @@ def create_app(
     if modo == "remoto" and not expected:
         raise RuntimeError("recusado: modo remoto exige token (--token ou FV_API_TOKEN)")
 
-    svc = Verifica(home=home, registro=registro, exigir_acervo=True, max_concorrencia=servidor_max_concorrencia())
+    motor = Verifica(home=home, registro=registro, exigir_acervo=True, max_concorrencia=servidor_max_concorrencia())
+    svc = Protegido(motor)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -132,7 +134,7 @@ def create_app(
         description="Verificação de citações jurídicas contra fontes oficiais",
         lifespan=lifespan,
     )
-    app.state.verifica = svc
+    app.state.verifica = motor
     bearer = HTTPBearer(auto_error=False)
 
     def require_auth(
@@ -140,7 +142,7 @@ def create_app(
     ) -> None:
         if not expected:
             return
-        if creds is None or creds.scheme.lower() != "bearer" or creds.credentials != expected:
+        if creds is None or creds.scheme.lower() != "bearer" or not hmac.compare_digest(creds.credentials.encode(), expected.encode()):
             raise HTTPException(status_code=401, detail="token inválido ou ausente")
 
     @app.middleware("http")

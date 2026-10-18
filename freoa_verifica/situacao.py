@@ -148,7 +148,19 @@ def registrar_cvm(conn: sqlite3.Connection, home: Any, connector: Any, cand: Any
             ws = WorkStatus(rw.work_id, lida["situacao"], lida["texto_oficial"], lida["ato_revogador"],
                             None, captura, resp.sha256, resp.fetched_at)
     except Exception as exc:  # noqa: BLE001 — qualquer falha é ilegivel, nunca vigente
-        ws = WorkStatus(rw.work_id, "ilegivel", f"pagina_do_ato_indisponivel: {getattr(exc, 'reason', type(exc).__name__)}"[:200])
+        return _falha_de_leitura(conn, WorkStatus(rw.work_id, "ilegivel", f"pagina_do_ato_indisponivel: {getattr(exc, 'reason', type(exc).__name__)}"[:200]), home)
+    gravar(conn, ws)
+    return ws
+
+
+def _falha_de_leitura(conn: sqlite3.Connection, ws: WorkStatus, home: Any) -> WorkStatus:
+    """Falha de transporte não apaga leitura autêntica anterior: ela envelhece sozinha (MAX_IDADE_DIAS)."""
+    row = conn.execute("SELECT * FROM work_status WHERE work_id=?", (ws.work_id,)).fetchone()
+    if row is not None and row["situacao"] != "ilegivel":
+        anterior = WorkStatus(row["work_id"], row["situacao"], row["texto_oficial"], row["ato_revogador"],
+                              row["data_efeito"], row["captura_id"], row["sha256"], row["lido_em"])
+        if _autentico(conn, anterior, home):
+            return anterior
     gravar(conn, ws)
     return ws
 
@@ -215,7 +227,7 @@ def _reler_bcb(svc: Any, row: Any, caps: list, rw: Any) -> WorkStatus:
         ws = WorkStatus(row["id"], lida["situacao"], lida.get("texto_oficial"), None, None,
                         captura, resp.sha256, resp.fetched_at)
     except Exception as exc:  # noqa: BLE001
-        ws = WorkStatus(row["id"], "ilegivel", f"bcb_indisponivel: {getattr(exc, 'reason', type(exc).__name__)}"[:200])
+        return _falha_de_leitura(svc.conn, WorkStatus(row["id"], "ilegivel", f"bcb_indisponivel: {getattr(exc, 'reason', type(exc).__name__)}"[:200]), svc.home)
     gravar(svc.conn, ws)
     return ws
 

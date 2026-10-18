@@ -522,12 +522,15 @@ _RATE_LIMITERS: dict[str, TokenBucket] = {}
 _CIRCUIT_BREAKERS: dict[str, CircuitBreaker] = {}
 _GUARD_LOCK = threading.Lock()
 _DEFAULT_RATE = float(os.environ.get("FV_RATE_LIMIT", "1.0"))
+# O BCB passou a recusar (HTTP 400) o notebook após três leituras completas a 1 req/s.
+_HOST_RATES = {"www.bcb.gov.br": float(os.environ.get("FV_RATE_LIMIT_BCB", "0.2"))}
 
 
 def _rate_limiter(host: str) -> TokenBucket:
     with _GUARD_LOCK:
         if host not in _RATE_LIMITERS:
-            _RATE_LIMITERS[host] = TokenBucket(rate=_DEFAULT_RATE, capacity=max(1.0, _DEFAULT_RATE))
+            rate = _HOST_RATES.get(host, _DEFAULT_RATE)
+            _RATE_LIMITERS[host] = TokenBucket(rate=rate, capacity=max(1.0, rate))
         return _RATE_LIMITERS[host]
 
 
