@@ -31,7 +31,7 @@ where = ["."]
 include = ["freoa_verifica*"]
 
 [tool.setuptools.package-data]
-freoa_verifica = ["store/migrations/*.sql", "connectors/*.json", "data/*.json"]
+freoa_verifica = ["store/migrations/*.sql", "store/migrations/*.py", "connectors/*.json", "data/*.json"]
 
 [tool.pytest.ini_options]
 markers = [

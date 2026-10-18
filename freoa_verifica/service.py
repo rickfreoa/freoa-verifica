@@ -210,6 +210,48 @@ def _authority_min_ok(label: str, minimo: str | None) -> bool:
     return order.index(lab) <= order.index(m)
 
 
+def _com_prazo(prazo: float, fn, *args, **kwargs):
+    """Executa a busca inicial do conector sob o orçamento: PRAZO propagado e espera limitada.
+    shortcut: conector bloqueante não é interrompido, só abandonado (thread daemon); sem cancelamento real."""
+    import contextvars
+    import threading
+
+    restam = prazo - time.monotonic()
+    if restam <= 0:
+        raise Unavailable("orcamento")
+    ctx, box = contextvars.copy_context(), {}
+
+    def corpo():
+        PRAZO.set(prazo)
+        try:
+            box["v"] = fn(*args, **kwargs)
+        except BaseException as exc:  # noqa: BLE001
+            box["e"] = exc
+    t = threading.Thread(target=ctx.run, args=(corpo,), daemon=True)
+    t.start()
+    t.join(restam)
+    if t.is_alive():
+        raise Unavailable("orcamento")
+    if "e" in box:
+        raise box["e"]
+    return box["v"]
+
+
+def _falhas_de_fonte(fontes_status: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """Fontes consultadas que falharam (regra 2): nunca viram `ok` com zero itens."""
+    return {c: v.get("motivo") or "indisponivel" for c, v in fontes_status.items()
+            if v.get("status") == "unavailable" and v.get("motivo") != "offline"}
+
+
+def _status_com_falhas(status: str, falhas: dict[str, str], n_itens: int) -> dict[str, Any]:
+    if not falhas:
+        return {"status": status}
+    if n_itens:
+        return {"status": "parcial", "fontes_indisponiveis": falhas}
+    motivo = next(iter(falhas.values()))
+    return {"status": "indisponivel", "motivo": motivo, "reason_code": motivo, "fontes_indisponiveis": falhas}
+
+
 class Verifica:
     """Fachada de serviço: store + conectores + verificação."""
 
@@ -876,7 +918,7 @@ class Verifica:
         truncado = len(items) > offset + limite or any(v.get("truncado") for v in fontes_status.values())
         parcial = truncado or any(i.get("nao_indexado") for i in page)
         return {
-            "status": "parcial" if parcial else "ok",  # decisão 0024
+            **_status_com_falhas("parcial" if parcial else "ok", _falhas_de_fonte(fontes_status), len(page)),  # 0024
             "itens": page,
             "resultados": page,
             "fontes": fontes_status,
@@ -1946,6 +1988,7 @@ class Verifica:
         page = items[:limite]
         truncado = len(items) > limite
         return {
+            **_status_com_falhas("parcial" if truncado else "ok", _falhas_de_fonte(fontes_status), len(page)),
             "itens": page,
             "resultados": page,
             "fontes": fontes_status,
@@ -2212,16 +2255,19 @@ class Verifica:
                        max_indexar: int = 5, orcamento_s: float = 20.0) -> dict[str, Any]:
         if self._offline():
             return {"status": "indisponivel", "motivo": "offline", "itens": [], "total": 0, "truncado": False, "offline": True}
+        prazo = time.monotonic() + orcamento_s
         try:
             filtros = {"tipo": tipo} if tipo else {}
             connector = self._get(source)
-            cands = connector.search(q, **filtros)
+            cands = _com_prazo(prazo, connector.search, q, **filtros)
         except Unavailable as exc:
-            return {"status": "indisponivel", "motivo": exc.reason, "itens": []}
+            return {"status": "indisponivel", "motivo": exc.reason, "reason_code": exc.reason, "itens": []}
+        except Exception as exc:  # noqa: BLE001
+            motivo = f"{type(exc).__name__}:{exc}"[:200]
+            return {"status": "indisponivel", "motivo": motivo, "reason_code": motivo, "itens": []}
         itens = []
         falhas = []
         nao_indexados = 0
-        prazo = time.monotonic() + orcamento_s
         for n, c in enumerate(cands):
             if n >= max_indexar or time.monotonic() >= prazo:  # decisão 0024: parcial declarada
                 nao_indexados += 1

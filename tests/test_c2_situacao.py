@@ -464,8 +464,8 @@ def test_busca_indexa_no_maximo_n_e_declara_o_resto(svc, monkeypatch):
     assert len(visto) == 5 and (out["indexados"], out["nao_indexados"], out["status"]) == (5, 7, "parcial")
     assert sum(1 for i in out["itens"] if i.get("nao_indexado")) == 7
     visto.clear()
-    out = svc._buscar_normas("cvm_normas", "x", None, orcamento_s=0)  # orçamento esgotado: nada indexado
-    assert not visto and out["nao_indexados"] == 12
+    out = svc._buscar_normas("cvm_normas", "x", None, orcamento_s=0)  # esgotado já na busca inicial (rodada 5)
+    assert not visto and out["status"] == "indisponivel" and out["motivo"] == "orcamento"
 
 
 def test_obra_revogada_com_documento_sem_estrutura_aparece_revogada(svc):

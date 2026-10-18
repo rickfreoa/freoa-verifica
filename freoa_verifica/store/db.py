@@ -27,12 +27,13 @@ def _migration_files() -> list[tuple[int, str]]:
     items: list[tuple[int, str]] = []
     for entry in root.iterdir():
         name = entry.name
-        if not name.endswith(".sql"):
+        if not name.endswith((".sql", ".py")) or name == "__init__.py":
             continue
         prefix = name.split("_", 1)[0]
         if not prefix.isdigit():
             continue
-        items.append((int(prefix), entry.read_text(encoding="utf-8")))
+        # migração Python: texto sentinela "#py:<módulo>", demais consumidores só leem as .sql
+        items.append((int(prefix), entry.read_text(encoding="utf-8") if name.endswith(".sql") else f"#py:{name[:-3]}"))
     items.sort(key=lambda item: item[0])
     return items
 
@@ -90,8 +91,13 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             for version, sql in _migration_files():
                 if version in current:
                     continue
-                for statement in split_sql_statements(sql):
-                    conn.execute(statement)
+                if sql.startswith("#py:"):  # módulo com migrar(conn), na mesma transação
+                    import importlib
+
+                    importlib.import_module(f"freoa_verifica.store.migrations.{sql[4:]}").migrar(conn)
+                else:
+                    for statement in split_sql_statements(sql):
+                        conn.execute(statement)
                 conn.execute(
                     "INSERT INTO schema_version(version) VALUES (?)", (version,)
                 )
