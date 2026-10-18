@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## 1.2.0 (em desenvolvimento)
+
+- Atualização sem limpar checkpoint (decisão 0039): recursos mensais do STJ são revalidados (dois meses mais recentes e capturas com mais de 30 dias; metadado CKAN alterado invalida o checkpoint), `fv doctor` informa `stj_atualizacao`; súmulas e SV do STF são recapturadas após 30 dias.
+- REST e MCP HTTP sem token validam `Host` (127.0.0.1, localhost, [::1]) e `Origin` com parsing estrito; `Origin` externo é recusado também com token, salvo `FV_API_ORIGENS` (decisão 0040). Cliente local que envie outro `Host` (proxy, túnel) precisa usar token.
+
 ## 1.1.0 (18/10/2026)
 
 - Texto coletado é dado, nunca instrução (sanitização de saída): o envelope `DOCUMENTO OFICIAL` é sempre aplicado e os delimitadores que apareçam dentro do próprio documento são neutralizados (antes, um documento que contivesse o delimitador de abertura saía sem envelope e podia "fechá-lo"); toda resposta MCP e REST passa por triagem de padrões de prompt injection (portados do `freoa-document-sanitizer` do FREOA) e de caracteres invisíveis/bidi, sinalizados em `alertas_conteudo` sem alterar o texto oficial. Token REST comparado em tempo constante.

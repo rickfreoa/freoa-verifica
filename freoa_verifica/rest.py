@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, StrictStr
 
+from freoa_verifica.fronteira import origens_permitidas, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP, EntradaInvalida, Sobrecarga
 from freoa_verifica.sanitizacao import Protegido
@@ -107,6 +108,7 @@ def create_app(
     *,
     modo: str = "local",
     registro: str | None = None,
+    origens: str | None = None,
 ) -> Any:
     """Fábrica ASGI. `modo`: "local" (sem token só aceita origem loopback) ou
     "remoto" (token obrigatório). Sem token em modo remoto, a fábrica recusa subir."""
@@ -122,6 +124,7 @@ def create_app(
 
     motor = Verifica(home=home, registro=registro, exigir_acervo=True, max_concorrencia=servidor_max_concorrencia())
     svc = Protegido(motor)
+    extras = origens_permitidas(origens)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -149,6 +152,8 @@ def create_app(
     async def fronteira(request: Request, call_next):
         # Vale para toda rota (inclusive as desconhecidas), não só as com Depends.
         if expected:
+            if (motivo := validar(request.scope["headers"], com_token=True, extras=extras)):
+                return _problem(403, "erro", motivo)
             auth = request.headers.get("authorization", "")
             scheme, _, cred = auth.partition(" ")
             if scheme.lower() != "bearer" or not hmac.compare_digest(cred.strip(), expected):
@@ -158,6 +163,8 @@ def create_app(
             proxied = "x-forwarded-for" in request.headers or "forwarded" in request.headers
             if host not in _LOCAL_HOSTS or proxied:
                 return _problem(401, "erro", "sem token, apenas origem local direta é aceita")
+            if (motivo := validar(request.scope["headers"], com_token=False)):
+                return _problem(403, "erro", motivo)
         return await call_next(request)
 
     @app.exception_handler(EntradaInvalida)

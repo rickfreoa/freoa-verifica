@@ -24,6 +24,7 @@ def _client(app, **kw):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
+    kw.setdefault("base_url", "http://127.0.0.1")  # Host local (decisão 0040)
     return TestClient(app, **kw)
 
 

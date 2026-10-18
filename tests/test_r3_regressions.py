@@ -251,7 +251,7 @@ def test_paridade_json_adversarial(case, tmp_path, monkeypatch, capsys):
                 result = asyncio.run(mcp.call_tool("verificar_citacao", arguments))
                 assert not result.is_error
                 assert clean(result.structured_content) == expected
-                with TestClient(app, client=("127.0.0.1", 50000)) as client:
+                with TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as client:
                     response = client.post("/v1/verificacoes", json=arguments)
                     assert response.status_code == 200
                     assert clean(response.json()) == expected
@@ -267,7 +267,7 @@ def test_paridade_json_adversarial(case, tmp_path, monkeypatch, capsys):
             result = asyncio.run(mcp.call_tool("verificar_texto", {"texto": text}))
             assert not result.is_error
             assert clean(result.structured_content) == expected_text
-            with TestClient(app, client=("127.0.0.1", 50000)) as client:
+            with TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as client:
                 response = client.post("/v1/verificacoes/texto", json={"texto": text})
                 assert response.status_code == 200
                 assert clean(response.json()) == expected_text
