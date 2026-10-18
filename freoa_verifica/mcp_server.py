@@ -229,14 +229,17 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         parte: Parte = "ementa",
         max_chars: MaxChars = 8000,
         offset: Offset = 0,
+        tribunal: Identificador | None = None,
     ) -> dict[str, Any]:
         """Obtém ementa ou inteiro teor de uma decisão (texto oficial delimitado).
 
         max_chars máximo: 50.000. parte: ementa|inteiro_teor|voto|certidao.
+        Identificador oficial repetido em tribunais distintos exige `tribunal` (senão: ambiguous).
+        Parte não capturada devolve parte_indisponivel; nunca outro documento no lugar.
         """
         max_chars = max(1, min(int(max_chars), 50_000))
         data_out = svc_().obter_decisao(
-            id, parte=parte, max_chars=max_chars, offset=offset
+            id, parte=parte, max_chars=max_chars, offset=offset, tribunal=tribunal
         )
         return _wrap_result_text(data_out, ("texto",))
 

@@ -28,7 +28,8 @@ def corpus(tmp_path, monkeypatch):
                                     "2026-10-18T00:00:00Z", [], "text/plain")
                 parsed = ParsedDecision("fixture", "acordao", court, f"{court}-{n}",
                     ementa="acordo de acionistas", text=text, class_name=cls,
-                    judgment_date=date, organ="Turma", rapporteur="Relator")
+                    judgment_date=date, organ="Turma", rapporteur="Relator",
+                    metadata={"documento": "inteiro_teor"})  # 1.2.0: integral só por declaração
                 connector = SimpleNamespace(id=court.lower(), authority=court, hosts={"example.org"},
                     fetch=lambda _, r=response: r, parse=lambda _, p=parsed: p)
                 svc._index_candidate_juris(connector, Candidate(court.lower(), f"{court}-{n}", "Acórdão"))

@@ -227,13 +227,14 @@ def test_colegiado_seed_captures_each_item(tmp_path, monkeypatch):
         engine = SementeSync(svc, rate_delay=0)
         engine.corpus["jurisprudencia"]["cvm_colegiado_desde"] = year
         engine.sync_cvm_colegiado()
-        assert svc.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 2
+        # 1.2.0: deliberação integral da ata (inteiro_teor) + assunto (ementa), por item.
+        assert svc.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 4
 
         for n, word in ((1, "primeiro"), (2, "segundo")):
-            result = svc.obter_decisao(f"reuniao={year}1014-R1#{n}")
-            assert word in result["texto"]
+            result = svc.obter_decisao(f"reuniao={year}1014-R1#{n}", parte="inteiro_teor")
+            assert word in result["texto"] and result["parte_entregue"] == "inteiro_teor"
         engine.sync_cvm_colegiado()
-        assert svc.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 2
+        assert svc.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 4  # sem duplicar
 
 
 @pytest.mark.parametrize("kind,number,year,tipo", [("lei_complementar", "182", 2021, "LCP"),

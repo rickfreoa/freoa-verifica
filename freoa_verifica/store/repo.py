@@ -384,7 +384,7 @@ def search_decisions(
 def decisions_by_number(conn: sqlite3.Connection, court: str, number: str) -> list[dict[str, Any]]:
     """Decisões confirmadas do tribunal com o número (sem pontos), no formato de search_local_decisions."""
     rows = conn.execute("""
-        SELECT d.court, d.class, d.official_id, d.id AS decision_id, d.organ, d.rapporteur,
+        SELECT d.court, d.class, d.official_id, d.id AS decision_id, d.organ, d.rapporteur, d.kind,
                d.number, d.judgment_date, d.publication_date, dd.capture_id, dd.sha256,
                dd.nivel_prova, c.url AS url_oficial,
                (SELECT text FROM decision_document WHERE decision_id=d.id AND kind='ementa'
@@ -444,7 +444,7 @@ def search_local_decisions(
         clauses.append("fv_court(fts_decision.court) IN (" + ",".join("?" for _ in courts) + ")")
         params.extend(courts)
     date = "COALESCE(NULLIF(d.judgment_date,''), d.publication_date)"
-    authority = "fv_authority(fts_decision.court, fts_decision.class, d.organ)"
+    authority = "fv_authority(fts_decision.court, fts_decision.class, d.organ, d.kind)"
     for bound, op in [(desde, ">="), (ate, "<=")]:
         if bound:
             clauses.append(f"{date} {op} ?")
@@ -459,7 +459,7 @@ def search_local_decisions(
                fts_decision.court, fts_decision.class, fts_decision.official_id,
                bm25(fts_decision, 5.0, 1.0, 0.0, 0.0, 0.0) AS score, d.id AS decision_id,
                d.organ, d.rapporteur, d.number, d.judgment_date, d.publication_date,
-               d.authority_attrs_json, dd.capture_id, dd.sha256, dd.nivel_prova, c.url AS url_oficial,
+               d.authority_attrs_json, d.kind, dd.capture_id, dd.sha256, dd.nivel_prova, c.url AS url_oficial,
                (SELECT capture_id FROM decision_document
                 WHERE decision_id=d.id AND kind='inteiro_teor'
                 ORDER BY created_at DESC, id DESC LIMIT 1) AS full_capture_id

@@ -127,6 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--parte", default="ementa")
     p.add_argument("--max-chars", type=int, default=8000)
     p.add_argument("--offset", type=int, default=0)
+    p.add_argument("--tribunal", default=None, help="tribunal do identificador oficial (desfaz colisões)")
     _add_json_flag(p)
 
     p = sub.add_parser("cvm", help="buscar normas CVM")
@@ -291,7 +292,8 @@ def main(argv: list[str] | None = None) -> None:
 
         if args.cmd == "decisao":
             data = svc.obter_decisao(
-                args.id, parte=args.parte, max_chars=args.max_chars, offset=args.offset
+                args.id, parte=args.parte, max_chars=args.max_chars, offset=args.offset,
+                tribunal=args.tribunal,
             )
             raise SystemExit(_print_result(data, as_json=as_json, titulo="Decisão"))
 

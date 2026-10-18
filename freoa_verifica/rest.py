@@ -266,9 +266,10 @@ def create_app(
         parte: str = "ementa",
         max_chars: int = 8000,
         offset: int = 0,
+        tribunal: str | None = None,
         _: None = Depends(require_auth),
     ):
-        return svc.obter_decisao(id, parte=parte, max_chars=max_chars, offset=offset)
+        return svc.obter_decisao(id, parte=parte, max_chars=max_chars, offset=offset, tribunal=tribunal)
 
     @app.get("/v1/normas/cvm")
     def get_cvm(q: str, tipo: str | None = None, _: None = Depends(require_auth)):

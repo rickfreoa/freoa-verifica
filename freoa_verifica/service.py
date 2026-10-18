@@ -179,7 +179,16 @@ def _decode_cursor(cursor: str | None) -> int:
         return 0
 
 
-def _species_from_meta(court: str, class_name: str | None, organ: str | None) -> str:
+_KIND_ESPECIE = {"decisao_monocratica": "monocratica", "monocratica": "monocratica",
+                 "repercussao_geral": "repercussao_geral"}
+# Perfis cujo `text` é o documento integral declarado pela fonte (decisão 0037); comprimento não decide.
+_PERFIS_INTEIRO_TEOR = frozenset({"stf_pdf", "tjsp_pdf", "cvm_colegiado", "tjdft_inteiro_teor"})
+
+
+def _species_from_meta(court: str, class_name: str | None, organ: str | None, kind: str | None = None) -> str:
+    # Espécie declarada pela fonte prevalece sobre a inferência por classe/órgão (decisão 0037).
+    if kind in _KIND_ESPECIE:
+        return _KIND_ESPECIE[kind]
     cls = (class_name or "").lower()
     if "súmula vinculante" in cls or "sumula vinculante" in cls or cls == "sv":
         return "sumula_vinculante"
@@ -1943,9 +1952,9 @@ class Verifica:
         tribunais_norm = (list(_JURIS_CONNECTORS) if tribunais is None else
                           list(dict.fromkeys(normalize_court(t) for t in tribunais)))
         self.conn.create_function(
-            "fv_authority", 3,
-            lambda court, cls, organ: classify_authority(
-                species=_species_from_meta(court, cls, organ), court=court,
+            "fv_authority", 4,
+            lambda court, cls, organ, kind: classify_authority(
+                species=_species_from_meta(court, cls, organ, kind), court=court,
                 class_name=cls, organ=organ).label,
             deterministic=True,
         )
@@ -2064,7 +2073,7 @@ class Verifica:
         court = row.get("court") or ""
         class_name = row.get("class") or ""
         auth = classify_authority(
-            species=_species_from_meta(court, class_name, row.get("organ")),
+            species=_species_from_meta(court, class_name, row.get("organ"), row.get("kind")),
             court=court, class_name=class_name or None, organ=row.get("organ"),
         )
         if text:
@@ -2110,7 +2119,7 @@ class Verifica:
         rapporteur = meta.get("relator") or meta.get("rapporteur")
         ementa = cand.snippet or meta.get("ementa") or ""
         auth = classify_authority(
-            species=_species_from_meta(court, class_name, organ),
+            species=_species_from_meta(court, class_name, organ, meta.get("kind")),
             court=court,
             organ=organ,
             class_name=class_name,
@@ -2137,7 +2146,7 @@ class Verifica:
                 organ = parsed.organ or organ
                 rapporteur = parsed.rapporteur or rapporteur
                 auth = classify_authority(
-                    species=_species_from_meta(court, class_name, organ),
+                    species=_species_from_meta(court, class_name, organ, parsed.kind),
                     court=court, class_name=class_name, organ=organ,
                 )
                 attrs = authority_as_dict(auth)
@@ -2147,9 +2156,9 @@ class Verifica:
                 did = repo.upsert_decision(
                     self.conn,
                     court=court,
-                    kind=parsed.kind if parsed.kind in {
-                        "acordao", "decisao_monocratica", "sumula", "tema", "voto",
-                        "decisao_colegiado_cvm", "acordao_tcu",
+                    kind=("decisao_monocratica" if parsed.kind == "monocratica" else parsed.kind) if parsed.kind in {
+                        "acordao", "decisao_monocratica", "monocratica", "sumula", "tema", "voto",
+                        "decisao_colegiado_cvm", "acordao_tcu", "repercussao_geral",
                     } else "acordao",
                     class_=class_name,
                     number=str(parsed.metadata.get("processo") or parsed.metadata.get("numeroProcesso") or parsed.metadata.get("numeroAcordao") or meta.get("numero") or meta.get("number") or parsed.official_id),
@@ -2166,10 +2175,9 @@ class Verifica:
                 # upsert não atualiza linha existente: a situação do precedente muda na fonte.
                 self.conn.execute("UPDATE decision SET authority_attrs_json=?, authority_label=? WHERE id=?",
                                   (json.dumps(attrs, ensure_ascii=False), auth.label, did))
-                kind_doc = "inteiro_teor" if inteiro and len(inteiro) > 500 else "ementa"
-                if parsed.profile in {"stj_espelho", "tcu_acordao"}:
-                    kind_doc = "ementa"
-                text_doc = (ementa or inteiro) if parsed.profile == "stj_espelho" else (inteiro or ementa)
+                integral = parsed.profile in _PERFIS_INTEIRO_TEOR or parsed.metadata.get("documento") == "inteiro_teor"
+                kind_doc = "inteiro_teor" if inteiro and integral else "ementa"
+                text_doc = inteiro if kind_doc == "inteiro_teor" else (ementa or inteiro)
                 digest = (
                     hashlib.sha256(text_doc.encode("utf-8")).hexdigest() if text_doc else None
                 )
@@ -2255,35 +2263,40 @@ class Verifica:
         parte: str = "ementa",
         max_chars: int = 8000,
         offset: int = 0,
+        tribunal: str | None = None,
     ) -> dict[str, Any]:
-        parte = parte if parte in {"ementa", "inteiro_teor", "voto", "certidao"} else "ementa"
+        if parte not in {"ementa", "inteiro_teor", "voto", "certidao"}:
+            raise EntradaInvalida(f"parte inválida: {parte!r} (ementa|inteiro_teor|voto|certidao)")
         max_chars = max(1, min(int(max_chars), 50_000))
         offset = max(0, int(offset))
-        row = self.conn.execute("SELECT * FROM decision WHERE id=?", (id,)).fetchone()
-        if row is None:
-            # tentar official_id
-            row = self.conn.execute(
-                "SELECT * FROM decision WHERE official_id=?", (id,)
-            ).fetchone()
-        if row is None:
-            return {"status": "inexistente", "id": id}
+        court = normalize_court(tribunal).upper() if tribunal else None
+        rows = self.conn.execute("SELECT * FROM decision WHERE id=?", (id,)).fetchall()
+        if court:
+            rows = [r for r in rows if r["court"] == court]
+        if not rows:
+            # Identidade = tribunal + identificador oficial (decisão 0037): sem tribunal, colisão é ambiguidade.
+            sql, args = "SELECT * FROM decision WHERE official_id=?", [id]
+            if court:
+                sql, args = sql + " AND court=?", [id, court]
+            rows = self.conn.execute(sql + " ORDER BY court, id", args).fetchall()
+        if not rows:
+            # Ausência no banco local não é inexistência do julgado (decisão 0037).
+            return {"status": "nao_encontrado_no_acervo", "escopo": "acervo_local", "id": id,
+                    **({"tribunal": court} if court else {})}
+        if len(rows) > 1:
+            return {"status": "ambiguous", "motivo": "IDENTIFICADOR_EM_MAIS_DE_UM_REGISTRO", "id": id,
+                    "candidatos": [{"id": r["id"], "tribunal": r["court"], "classe": r["class"],
+                                    "numero": r["number"]} for r in rows]}
+        row = rows[0]
+        disponiveis = [r[0] for r in self.conn.execute(
+            "SELECT DISTINCT kind FROM decision_document WHERE decision_id=? AND COALESCE(text,'')!='' ORDER BY kind",
+            (row["id"],))]
         doc = self.conn.execute(
             "SELECT * FROM decision_document WHERE decision_id=? AND kind=? "
             "ORDER BY created_at DESC LIMIT 1",
             (row["id"], parte),
         ).fetchone()
-        if doc is None:
-            doc = self.conn.execute(
-                "SELECT * FROM decision_document WHERE decision_id=? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (row["id"],),
-            ).fetchone()
-        text = (doc["text"] if doc else "") or ""
-        self._authenticate_capture(doc["capture_id"] if doc else None)
-        slice_ = text[offset : offset + max_chars]
-        truncado = offset + max_chars < len(text)
-        return {
-            "status": "encontrada",
+        base = {
             "id": row["id"],
             "tribunal": row["court"],
             "classe": row["class"],
@@ -2291,14 +2304,29 @@ class Verifica:
             "orgao": row["organ"],
             "relator": row["rapporteur"],
             "parte": parte,
+            "parte_solicitada": parte,
+            "partes_disponiveis": disponiveis,
+            "autoridade_label": row["authority_label"],
+            **_situacao_precedente(row["authority_attrs_json"], _especie_gravada(row["authority_attrs_json"])),
+        }
+        if doc is None or not (doc["text"] or ""):
+            # Parte ausente nunca é substituída por outro documento sob o rótulo pedido (decisão 0037, A1).
+            return {**base, "status": "parte_indisponivel", "motivo": "PARTE_NAO_CAPTURADA",
+                    "parte_entregue": None, "texto": None, "capture_id": None}
+        text = doc["text"]
+        self._authenticate_capture(doc["capture_id"])
+        slice_ = text[offset : offset + max_chars]
+        truncado = offset + max_chars < len(text)
+        return {
+            **base,
+            "status": "encontrada",
+            "parte_entregue": doc["kind"],
             "texto": slice_,
             "truncado": truncado,
             "offset": offset,
             "max_chars": max_chars,
             "cursor": str(offset + max_chars) if truncado else None,
-            "capture_id": doc["capture_id"] if doc else None,
-            "autoridade_label": row["authority_label"],
-            **_situacao_precedente(row["authority_attrs_json"], _especie_gravada(row["authority_attrs_json"])),
+            "capture_id": doc["capture_id"],
         }
 
     # ------------------------------------------------------------------

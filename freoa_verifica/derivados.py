@@ -19,7 +19,8 @@ _log = logging.getLogger(__name__)
 # 2 = 1.0.3 (ADCT com escopo próprio, rubrica, FTS só com redações do modelo atual).
 # 3 = 1.1.0 (cvm-pdf-2 com dispositivos inferidos, tipo "Resolução" do BCB como CMN pelo preâmbulo,
 #     data de efeito declarada no BCB, situação estruturada de precedentes).
-DERIVED_VERSION = 3
+# 4 = 1.2.0 (espécie declarada pela fonte prevalece: monocrática nunca rotulada como acórdão; decisão 0037).
+DERIVED_VERSION = 4
 
 REASON = "ACERVO_DESATUALIZADO"
 REASON_NAO_PUBLICADA = "ACERVO_DE_VERSAO_NAO_PUBLICADA"
@@ -150,6 +151,43 @@ def _validar(origem: dict[str, int], novo: sqlite3.Connection) -> None:
         raise RuntimeError("extrações perdidas")
 
 
+def reclassificar_monocraticas(conn: sqlite3.Connection) -> int:
+    """Monocrática gravada com rótulo de colegiado volta a E (decisão 0037). Só toca essa espécie."""
+    from freoa_verifica.authority import as_dict, classify_authority
+
+    n = 0
+    for row in conn.execute("SELECT id, court, class, organ, authority_attrs_json, authority_label FROM decision "
+                            "WHERE kind='decisao_monocratica' AND COALESCE(authority_label,'') != 'E'").fetchall():
+        auth = classify_authority(species="monocratica", court=row[1] or "", class_name=row[2], organ=row[3])
+        try:
+            old = json.loads(row[4]) if row[4] else {}
+        except ValueError:
+            old = {}
+        attrs = {**old, **as_dict(auth)}
+        conn.execute("UPDATE decision SET authority_label=?, authority_attrs_json=? WHERE id=?",
+                     (auth.label, json.dumps(attrs, ensure_ascii=False), row[0]))
+        n += 1
+    return n
+
+
+def corrigir_inteiro_teor_sumulas(conn: sqlite3.Connection) -> int:
+    """Até a 1.1.0, enunciado de súmula com mais de 500 caracteres era gravado como inteiro_teor (A12).
+    Súmula não tem inteiro teor: o documento volta a ementa (ou sai, se a ementa já existe) e o FTS acompanha."""
+    alvo = conn.execute(
+        "SELECT dd.id, dd.decision_id, d.court, d.official_id, "
+        "EXISTS(SELECT 1 FROM decision_document e WHERE e.decision_id=dd.decision_id AND e.kind='ementa') "
+        "FROM decision_document dd JOIN decision d ON d.id=dd.decision_id "
+        "WHERE dd.kind='inteiro_teor' AND (d.kind='sumula' OR LOWER(COALESCE(d.class,'')) LIKE '%mula%')").fetchall()
+    for doc_id, did, court, official_id, tem_ementa in alvo:
+        if tem_ementa:
+            conn.execute("DELETE FROM decision_document WHERE id=?", (doc_id,))
+        else:
+            conn.execute("UPDATE decision_document SET kind='ementa', nivel_prova='ementa_capturada' WHERE id=?", (doc_id,))
+        conn.execute("UPDATE decision SET nivel_prova='ementa_capturada' WHERE id=?", (did,))
+        conn.execute("UPDATE fts_decision SET inteiro_teor='' WHERE court=? AND official_id=?", (court, official_id))
+    return len(alvo)
+
+
 def reprocessar_pasta(pasta: Path, *, com_situacao: bool = False) -> dict[str, Any]:
     """Reprocessa com os parsers atuais o banco `pasta/verifica.sqlite3` (+ blobs), reindexa o FTS,
     carimba DERIVED_VERSION e valida contagens. Levanta RuntimeError se algo não fechar."""
@@ -177,6 +215,8 @@ def reprocessar_pasta(pasta: Path, *, com_situacao: bool = False) -> dict[str, A
         relatorio.update(reprocessados=rep["reprocessados"], divergentes=rep["divergentes"])
         with novo.conn:
             relatorio["fts"] = reindexar_fts(novo.conn)
+            relatorio["decisoes_reclassificadas"] = reclassificar_monocraticas(novo.conn)
+            relatorio["sumulas_sem_inteiro_teor"] = corrigir_inteiro_teor_sumulas(novo.conn)
         if com_situacao:
             if novo._offline():
                 relatorio["situacao"] = "ignorada_offline"
