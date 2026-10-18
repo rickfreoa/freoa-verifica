@@ -66,6 +66,7 @@ class TcuConnector(Connector):
         "colecoes": ["acordaos"],
         "periodo": "acervo API recupera-acordaos",
         "busca_textual": True,
+        "busca_textual_ao_vivo": False,
         "ementa": True,
         "inteiro_teor": True,
         "atualizacao": "sincronização incremental por inicio",
@@ -127,7 +128,7 @@ class TcuConnector(Connector):
             )
             pages += 1
             if not batch:
-                break
+                return out
             for it in batch:
                 blob = " ".join(
                     str(it.get(k) or "")
@@ -141,7 +142,7 @@ class TcuConnector(Connector):
             cursor += len(batch)
             if len(batch) < 1:
                 break
-        return out
+        raise Unavailable("tcu_busca_incompleta_limite_de_varredura")
 
     def resolve(self, key: Any) -> Candidate | None:
         if isinstance(key, dict):

@@ -33,9 +33,7 @@ AUTHENTICITY_NOTE = (
 
 GITHUB_HOSTS = frozenset({"github.com", "objects.githubusercontent.com", "api.github.com", "release-assets.githubusercontent.com"})
 GITHUB_PREFIXES = {
-    "release-assets.githubusercontent.com": ("/",),
     "github.com": ("/rickfreoa/freoa-verifica/", "/repos/rickfreoa/freoa-verifica/"),
-    "objects.githubusercontent.com": ("/",),
     "api.github.com": ("/repos/rickfreoa/freoa-verifica/",),
 }
 GITHUB_MIMES = frozenset(
@@ -198,6 +196,57 @@ def _decompress_to(src: Path, dest: Path) -> None:
         shutil.copy2(src, dest)
 
 
+def _restore_stj_ementas(conn: sqlite3.Connection, home: Path) -> None:
+    """Recupera ementas antigas substituídas pelo dispositivo na extração."""
+    captures = conn.execute("""
+        SELECT DISTINCT c.id, c.sha256 FROM capture c
+        JOIN decision_document dd ON dd.capture_id=c.id
+        JOIN decision d ON d.id=dd.decision_id
+        WHERE d.court='STJ' AND c.source_id='stj' AND c.mime LIKE '%json%'
+    """).fetchall()
+    for cap in captures:
+        try:
+            raw = blobs.get_blob(cap["sha256"], home=home)
+        except FileNotFoundError:
+            # Snapshots declaradamente sem blobs conservam somente as extrações.
+            continue
+        data = json.loads(raw)
+        records = data if isinstance(data, list) else [data]
+        by_key = {}
+        for item in records:
+            if not isinstance(item, dict):
+                raise ValueError("stj_recurso_invalido")
+            key = str(item.get("id") or item.get("numeroDocumento") or "")
+            if key in by_key:
+                raise ValueError("stj_identidade_ambigua")
+            by_key[key] = item
+        rows = conn.execute("""
+            SELECT DISTINCT d.id, d.official_id FROM decision d
+            JOIN decision_document dd ON dd.decision_id=d.id
+            WHERE dd.capture_id=? AND d.court='STJ'
+        """, (cap["id"],)).fetchall()
+        for decision in rows:
+            item = by_key.get(decision["official_id"])
+            if item is None:
+                raise ValueError("stj_documento_ausente_no_recurso")
+            text = item.get("ementa")
+            if not text:
+                continue
+            if not isinstance(text, str):
+                raise ValueError("stj_ementa_invalida")
+            if conn.execute("""
+                SELECT 1 FROM decision_document
+                WHERE decision_id=? AND capture_id=? AND kind='ementa' AND text=?
+            """, (decision["id"], cap["id"], text)).fetchone():
+                continue
+            conn.execute("""
+                INSERT INTO decision_document
+                    (id, decision_id, capture_id, kind, text, sha256, nivel_prova)
+                VALUES (?,?,?,'ementa',?,?,'ementa_capturada')
+            """, (new_ulid(), decision["id"], cap["id"], text,
+                  hashlib.sha256(text.encode("utf-8")).hexdigest()))
+
+
 def export_snapshot(
     conn: sqlite3.Connection,
     home: Path,
@@ -259,6 +308,10 @@ def export_snapshot(
             f"INSERT OR IGNORE INTO {t}({col_list}) VALUES ({placeholders})",
             [tuple(row) for row in rows],
         )
+    from freoa_verifica.store.repo import rebuild_decision_index
+
+    _restore_stj_ementas(out_conn, home)
+    rebuild_decision_index(out_conn)
     out_conn.commit()
 
     # Blobs: se total > 1,5 GB, só texto extraído + hash + URL
@@ -517,10 +570,8 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
         conn.execute("INSERT INTO fts_redaction(text, work_label, path) "
                      "SELECT r.text, COALESCE(w.label,w.number), p.path FROM redaction r "
                      "JOIN provision p ON p.id=r.provision_id JOIN work w ON w.id=p.work_id")
-        conn.execute("DELETE FROM fts_decision")
-        conn.execute("INSERT INTO fts_decision(ementa, inteiro_teor, court, class, official_id) "
-                     "SELECT dd.text, '', d.court, d.class, d.official_id FROM decision d "
-                     "JOIN decision_document dd ON dd.decision_id=d.id")
+        from freoa_verifica.store.repo import rebuild_decision_index
+        rebuild_decision_index(conn)
         conn.commit()
     finally:
         conn.close()
@@ -577,17 +628,38 @@ def _download_latest_release() -> Path:
         max_bytes=5 * 1024 * 1024,
     )
     data = json.loads(resp.body.decode("utf-8"))
-    assets = data.get("assets") or []
-    # Preferir pacote com MANIFEST / corpus
-    chosen = None
-    for a in assets:
-        name = str(a.get("name") or "")
-        if re.fullmatch(r"freoa-verifica-snapshot-[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz", name):
-            chosen = a
-            break
-    if chosen is None:
-        raise RuntimeError("release_sem_assets")
-    return _download_release(chosen["browser_download_url"])
+    def choose(release):
+        if release.get("draft") or release.get("prerelease"):
+            return None
+        assets = release.get("assets") or []
+        for asset in assets:
+            name = str(asset.get("name") or "")
+            if re.fullmatch(r"freoa-verifica-snapshot-[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz", name):
+                return asset["browser_download_url"]
+        return None
+
+    chosen = choose(data)
+    if chosen:
+        return _download_release(chosen)
+    # A API lista as releases da mais recente para a mais antiga.
+    page = 1
+    while True:
+        resp = connector_fetch(
+            api.removesuffix("/latest") + f"?per_page=100&page={page}",
+            hosts=GITHUB_HOSTS, path_prefixes=GITHUB_PREFIXES,
+            mimes=GITHUB_MIMES, user_agent="identified", timeout=60.0,
+            max_bytes=5 * 1024 * 1024,
+        )
+        releases = json.loads(resp.body.decode("utf-8"))
+        if not isinstance(releases, list):
+            raise RuntimeError("releases_resposta_inesperada")
+        for release in releases:
+            chosen = choose(release)
+            if chosen:
+                return _download_release(chosen)
+        if len(releases) < 100:
+            raise RuntimeError("release_sem_assets")
+        page += 1
 
 
 def _download_release(url: str) -> Path:
@@ -597,25 +669,21 @@ def _download_release(url: str) -> Path:
     host = parsed.hostname or ""
     if host not in GITHUB_HOSTS:
         raise RuntimeError(f"host_nao_permitido:{host}")
-    resp = connector_fetch(
-        url,
-        hosts=GITHUB_HOSTS,
-        path_prefixes=GITHUB_PREFIXES,
-        mimes=GITHUB_MIMES,
-        user_agent="identified",
-        timeout=300.0,
-        max_bytes=2 * 1024 * 1024 * 1024,
-    )
-    checksum = connector_fetch(
-        url + ".sha256", hosts=GITHUB_HOSTS, path_prefixes=GITHUB_PREFIXES,
-        mimes=GITHUB_MIMES, user_agent="identified", timeout=60, max_bytes=4096,
-    ).body.decode("utf-8").split()
-    if not checksum or checksum[0] != hashlib.sha256(resp.body).hexdigest():
-        raise ValueError("asset_integridade")
     staging = Path(tempfile.mkdtemp(prefix="fv-snap-dl-"))
     try:
         raw = staging / "asset.tar.gz"
-        raw.write_bytes(resp.body)
+        resp = connector_fetch(
+            url, hosts=GITHUB_HOSTS, path_prefixes=GITHUB_PREFIXES,
+            mimes=frozenset({"application/octet-stream", "application/gzip"}),
+            user_agent="identified", timeout=1800.0,
+            max_bytes=4 * 1024**3, sink=raw,
+        )
+        checksum = connector_fetch(
+            url + ".sha256", hosts=GITHUB_HOSTS, path_prefixes=GITHUB_PREFIXES,
+            mimes=GITHUB_MIMES, user_agent="identified", timeout=60, max_bytes=4096,
+        ).body.decode("utf-8").split()
+        if not checksum or not re.fullmatch(r"[0-9a-fA-F]{64}", checksum[0]) or checksum[0].lower() != resp.sha256:
+            raise ValueError("asset_integridade")
         out = staging / "snap"
         out.mkdir()
         _extract_archive(raw, out)
@@ -719,7 +787,8 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
     if expected_db and db_sha != expected_db:
         return {"status": "erro", "motivo": "db_integridade"}
 
-    staging = Path(tempfile.mkdtemp(prefix="fv-snap-"))
+    # Mesmo volume do destino para que cada troca use rename atomico.
+    staging = Path(tempfile.mkdtemp(prefix="fv-snap-", dir=svc.home.parent))
     staging_db = staging / "verifica.sqlite3"
     staging_blobs = staging / "blobs"
     backup_db = svc.home / f"verifica.sqlite3.bak-{new_ulid()}"
@@ -727,6 +796,8 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
     db_dst = svc.home / "verifica.sqlite3"
     live_blobs = svc.home / "blobs"
 
+    db_saved = blobs_saved = db_installed = blobs_installed = False
+    closed = False
     try:
         shutil.copy2(db_src, staging_db)
 
@@ -749,55 +820,62 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
                 dest.mkdir(parents=True, exist_ok=True)
                 (dest / f.name).write_bytes(data)
 
-        # Backup
-        svc._close_all_conns()
-        if db_dst.exists():
-            src_conn = sqlite3.connect(str(db_dst))
-            try:
-                bak_conn = sqlite3.connect(str(backup_db))
-                try:
-                    src_conn.backup(bak_conn)
-                finally:
-                    bak_conn.close()
-            finally:
-                src_conn.close()
+        # Também recupera snapshots antigos cujo índice derivado veio vazio.
+        from freoa_verifica.store.repo import rebuild_decision_index
+        staged_conn = connect(staging_db)
+        try:
+            _restore_stj_ementas(staged_conn, staging)
+            rebuild_decision_index(staged_conn)
+            staged_conn.commit()
+        finally:
+            staged_conn.close()
+
+        # Preparar a anexacao e todas as evidencias sem escrever no destino.
+        merged_db = staging / "merged.sqlite3"
+        merged_conn = sqlite3.connect(str(merged_db))
+        try:
+            svc.conn.backup(merged_conn)
+        finally:
+            merged_conn.close()
+        _merge_attach(merged_db, staging_db)
+        merged_blobs = staging / "merged-blobs"
         if live_blobs.is_dir():
-            shutil.copytree(live_blobs, backup_blobs)
-
-        # Mesclar por ATTACH (anexação; não sobrescreve capturas locais)
-        if not db_dst.exists():
-            # home limpo: copiar snapshot como base
-            tmp_live = svc.home / f"verifica.sqlite3.new-{new_ulid()}"
-            src_new = sqlite3.connect(str(staging_db))
-            try:
-                dst_new = sqlite3.connect(str(tmp_live))
-                try:
-                    src_new.backup(dst_new)
-                finally:
-                    dst_new.close()
-            finally:
-                src_new.close()
-            os.replace(tmp_live, db_dst)
+            shutil.copytree(live_blobs, merged_blobs, copy_function=shutil.copy2)
         else:
-            tmp_live = svc.home / f"verifica.sqlite3.new-{new_ulid()}"
-            shutil.copy2(backup_db, tmp_live)
-            try:
-                _merge_attach(tmp_live, staging_db)
-                os.replace(tmp_live, db_dst)
-            finally:
-                tmp_live.unlink(missing_ok=True)
-
-        # Blobs: copiar só os que não existem
+            merged_blobs.mkdir()
         if staging_blobs.is_dir():
-            live_blobs.mkdir(parents=True, exist_ok=True)
             for f in staging_blobs.rglob("*"):
-                if not f.is_file() or len(f.name) != 64:
+                if not f.is_file():
                     continue
-                dest = live_blobs / f.name[:2] / f.name[2:4] / f.name
+                dest = merged_blobs / f.relative_to(staging_blobs)
                 if dest.exists():
+                    if _sha256_file(dest) != f.name:
+                        raise ValueError(f"blob_local_integridade:{f.name}")
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(f, dest)
+        check = sqlite3.connect(str(merged_db))
+        try:
+            if check.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise ValueError("snapshot_banco_invalido")
+            if check.execute("PRAGMA foreign_key_check").fetchone():
+                raise ValueError("snapshot_relacoes_invalidas")
+        finally:
+            check.close()
+
+        # So agora fechar e guardar os originais completos antes de publicar.
+        svc._close_all_conns()
+        closed = True
+        if db_dst.exists():
+            os.replace(db_dst, backup_db)
+            db_saved = True
+        if live_blobs.exists():
+            os.replace(live_blobs, backup_blobs)
+            blobs_saved = True
+        os.replace(merged_db, db_dst)
+        db_installed = True
+        os.replace(merged_blobs, live_blobs)
+        blobs_installed = True
 
         svc._db_path = db_dst
         svc._clear_caches()
@@ -805,30 +883,42 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
         return {
             "status": "ok",
             "backup": str(backup_db) if backup_db.exists() else None,
+            "backup_blobs": str(backup_blobs) if blobs_saved else None,
             "obras": manifest.get("obras"),
             "capturas": manifest.get("capturas"),
             "modo": "anexacao",
             "autenticidade": AUTHENTICITY_NOTE,
         }
     except Exception as exc:  # noqa: BLE001
+        mutated = db_saved or blobs_saved or db_installed or blobs_installed
+        result = {"status": "erro", "motivo": str(exc)[:200], "rollback": False}
+        if not closed:
+            return result
         svc._close_all_conns()
         try:
-            if backup_db.exists():
-                os.replace(backup_db, db_dst)
-            if backup_blobs.exists():
-                if live_blobs.exists():
-                    shutil.rmtree(live_blobs, ignore_errors=True)
-                backup_blobs.rename(live_blobs)
-            elif live_blobs.is_dir():
+            # Remover apenas componentes novos efetivamente publicados.
+            if db_installed:
+                db_dst.unlink(missing_ok=True)
+                for suffix in ("-wal", "-shm"):
+                    Path(str(db_dst) + suffix).unlink(missing_ok=True)
+            if blobs_installed:
                 shutil.rmtree(live_blobs)
-        except Exception:  # noqa: BLE001
-            pass
+            if db_saved:
+                os.replace(backup_db, db_dst)
+            if blobs_saved:
+                os.replace(backup_blobs, live_blobs)
+            result["rollback"] = mutated
+        except Exception as rollback_exc:  # noqa: BLE001
+            # Nao anunciar restauracao se ela falhou; preservar os backups.
+            result["rollback_error"] = str(rollback_exc)[:200]
+            result["backup"] = str(backup_db)
+            result["backup_blobs"] = str(backup_blobs)
         svc._clear_caches()
         try:
             svc.conn = connect(db_dst)
-        except Exception:  # noqa: BLE001
-            pass
-        return {"status": "erro", "motivo": str(exc)[:200], "rollback": True}
+        except Exception as reopen_exc:  # noqa: BLE001
+            result["reopen_error"] = str(reopen_exc)[:200]
+        return result
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 

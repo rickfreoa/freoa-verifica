@@ -22,9 +22,9 @@ Estados possíveis em cada dimensão: `verified`, `divergent`, `not_found`, `amb
 Requer Python 3.11 ou superior.
 
 ```bash
-pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.0/freoa_verifica-1.0.0-py3-none-any.whl"
+pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.1/freoa_verifica-1.0.1-py3-none-any.whl"
 # ou a partir do código-fonte:
-pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.0"
+pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.1"
 fv doctor
 fv snapshot install                   # corpus semente (opcional, recomendado)
 ```
@@ -42,7 +42,7 @@ fv snapshot install                   # corpus semente (opcional, recomendado)
 Alternativa sem instalação permanente:
 
 ```bash
-uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.0 freoa-verifica-mcp
+uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.1 freoa-verifica-mcp
 ```
 
 O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.
@@ -99,3 +99,4 @@ Código sob **AGPL-3.0-or-later**, com licença comercial disponível. Dados der
 O FREOA Verifica confere fontes; não emite parecer. A interpretação jurídica permanece com quem a assina.
 
 Autor: Ricardo Peres Freoa.
+`fv busca` e `fv juris`: busca local com flexão mínima por prefixos (mínimo de quatro letras), frases entre aspas exatas e ampliação AND→OR sinalizada por `modo_busca: "ampliada"` (ver seção Busca de `docs/ARQUITETURA.md`).

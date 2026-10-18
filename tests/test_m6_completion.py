@@ -123,12 +123,12 @@ def test_snapshot_rollback_on_blob_copy_failure(verifica_populada, tmp_path, mon
     home = tmp_path / "new-home"
     with Verifica(home) as local:
         def fail(src, dst, *args, **kwargs):
-            if Path(dst).is_relative_to(home / "blobs"):
+            if "merged-blobs" in Path(dst).parts:
                 raise OSError("simulated failure")
             return original(src, dst, *args, **kwargs)
         monkeypatch.setattr(snapshot.shutil, "copy2", fail)
         result = local.snapshot_install(dest)
-        assert result["status"] == "erro" and result["rollback"]
+        assert result["status"] == "erro" and not result["rollback"]
         assert local.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0] == 0
         assert local.conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 

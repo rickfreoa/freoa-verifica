@@ -1,4 +1,5 @@
 """Regressões gerais de identidade, lacunas históricas e integridade de consultas."""
+import hashlib
 import asyncio
 import json
 import subprocess
@@ -246,7 +247,8 @@ def test_install_latest_snapshot_without_arguments(populated,tmp_path,monkeypatc
         if request.endswith('.sha256'):
             return SimpleNamespace(body=Path(str(archive)+'.sha256').read_bytes())
         assert request==url
-        return SimpleNamespace(body=archive.read_bytes())
+        Path(kwargs["sink"]).write_bytes(archive.read_bytes())
+        return SimpleNamespace(body=b"", sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
     monkeypatch.setattr(httputil,'connector_fetch',fetch)
     with Verifica(tmp_path/'latest') as target:
         assert target.snapshot_install()['status']=='ok'

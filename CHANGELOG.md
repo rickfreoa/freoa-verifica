@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.0.1
+
+- Pesquisa primeiro no acervo instalado de decisões de todos os tribunais, com FTS reconstruído na exportação/instalação, ranking bm25, desempate por autoridade/data e filtros SQL antes da paginação.
+
+- Instalação de snapshots com download em fluxo, publicação atômica do arquivo e conferência de SHA-256 antes da extração; seleção da release mais recente com snapshot.
+- `verificar_texto` preserva `formato_invalido` e exige evidência de negativa oficial para informar `inexistente`.
+
 ## 1.0.0
 
 Primeira versão pública.

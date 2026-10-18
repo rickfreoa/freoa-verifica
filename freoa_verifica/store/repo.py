@@ -318,6 +318,9 @@ def index_decision(
     class_: str = "",
     official_id: str | None = None,
 ) -> None:
+    if official_id is not None:
+        conn.execute("DELETE FROM fts_decision WHERE court=? AND official_id=?",
+                     (court, official_id))
     conn.execute(
         "INSERT INTO fts_decision(ementa, inteiro_teor, court, class, official_id) VALUES (?,?,?,?,?)",
         (ementa, inteiro_teor, court, class_, official_id),
@@ -340,10 +343,17 @@ def search_decisions(
     q: str,
     filtros: dict[str, str] | None = None,
     limit: int = 10,
+    courts: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     filtros = filtros or {}
     clauses = ["fts_decision MATCH ?"]
     params: list[Any] = [q]
+    if courts is not None:
+        from freoa_verifica.courts import normalize_court
+
+        conn.create_function("fv_court", 1, normalize_court, deterministic=True)
+        clauses.append("fv_court(court) IN (" + ",".join("?" for _ in courts) + ")")
+        params.extend(normalize_court(court) for court in courts)
     if court := filtros.get("court"):
         clauses.append("court = ?")
         params.append(court)
@@ -357,6 +367,78 @@ def search_decisions(
         "ORDER BY score LIMIT ?"
     )
     rows = conn.execute(sql, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def rebuild_decision_index(conn: sqlite3.Connection) -> None:
+    """Reconstitui o índice derivado dos documentos, uma entrada por decisão."""
+    conn.execute("DELETE FROM fts_decision")
+    conn.execute("""
+        WITH latest AS (
+            SELECT dd.*, ROW_NUMBER() OVER (
+                PARTITION BY decision_id, kind ORDER BY created_at DESC, id DESC
+            ) AS rn FROM decision_document dd
+        ), texts AS (
+            SELECT decision_id,
+                MAX(CASE WHEN kind='ementa' THEN text END) AS ementa,
+                MAX(CASE WHEN kind='inteiro_teor' THEN text END) AS inteiro_teor
+            FROM latest WHERE rn=1 GROUP BY decision_id
+        )
+        INSERT INTO fts_decision(ementa, inteiro_teor, court, class, official_id)
+        SELECT COALESCE(t.ementa,''), COALESCE(t.inteiro_teor,''),
+               d.court, COALESCE(d.class,''), d.official_id
+        FROM decision d JOIN texts t ON t.decision_id=d.id
+        WHERE COALESCE(NULLIF(t.ementa,''),t.inteiro_teor,'') != ''
+    """)
+
+
+def search_local_decisions(
+    conn: sqlite3.Connection, q: str, *, courts: list[str] | None,
+    desde: str | None, ate: str | None, autoridade_min: str | None,
+    limit: int, offset: int,
+) -> list[dict[str, Any]]:
+    from freoa_verifica.courts import normalize_court
+
+    conn.create_function("fv_court", 1, normalize_court, deterministic=True)
+    clauses = ["fts_decision MATCH ?"]
+    params: list[Any] = [q]
+    if courts is not None:
+        clauses.append("fv_court(fts_decision.court) IN (" + ",".join("?" for _ in courts) + ")")
+        params.extend(courts)
+    date = "COALESCE(NULLIF(d.judgment_date,''), d.publication_date)"
+    authority = "fv_authority(fts_decision.court, fts_decision.class, d.organ)"
+    for bound, op in [(desde, ">="), (ate, "<=")]:
+        if bound:
+            clauses.append(f"{date} {op} ?")
+            params.append(bound)
+    minimum = (autoridade_min or "").strip().upper()[:1]
+    if minimum in "ABCDE" and minimum:
+        clauses.append(f"{authority} <= ?")
+        params.append(minimum)
+    params.extend([limit, offset])
+    rows = conn.execute(f"""
+        SELECT fts_decision.ementa, fts_decision.inteiro_teor,
+               fts_decision.court, fts_decision.class, fts_decision.official_id,
+               bm25(fts_decision) AS score, d.id AS decision_id,
+               d.organ, d.rapporteur, d.number, d.judgment_date, d.publication_date,
+               dd.capture_id, dd.sha256, dd.nivel_prova, c.url AS url_oficial,
+               (SELECT capture_id FROM decision_document
+                WHERE decision_id=d.id AND kind='inteiro_teor'
+                ORDER BY created_at DESC, id DESC LIMIT 1) AS full_capture_id
+        FROM fts_decision
+        LEFT JOIN decision d ON d.court=fts_decision.court
+                            AND d.official_id=fts_decision.official_id
+        LEFT JOIN decision_document dd ON dd.id=(
+            SELECT id FROM decision_document
+            WHERE decision_id=d.id
+              AND (kind='inteiro_teor' OR (kind='ementa' AND COALESCE(text,'')!=''))
+            ORDER BY CASE WHEN kind='ementa' THEN 0 ELSE 1 END,
+                     created_at DESC, id DESC LIMIT 1)
+        LEFT JOIN capture c ON c.id=dd.capture_id
+        WHERE {' AND '.join(clauses)}
+        ORDER BY score, {authority}, {date} DESC, d.id, fts_decision.rowid
+        LIMIT ? OFFSET ?
+    """, params).fetchall()
     return [dict(row) for row in rows]
 
 

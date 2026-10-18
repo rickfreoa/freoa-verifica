@@ -1,4 +1,5 @@
 """Regressões sintéticas de evidência, escopo e distribuição."""
+from pathlib import Path
 import hashlib
 import io
 import json
@@ -191,13 +192,18 @@ def test_latest_download_authenticates_checksum(tmp_path,monkeypatch):
             data=json.dumps({'assets':[{'name':name,'browser_download_url':'https://github.com/rickfreoa/freoa-verifica/releases/download/v1/'+name}]}).encode()
         elif url.endswith('.sha256'): data=(hashlib.sha256(body).hexdigest()+'  '+name).encode()
         else: data=body
-        return SimpleNamespace(body=data)
+        if kwargs.get("sink") is not None:
+            Path(kwargs["sink"]).write_bytes(data)
+        return SimpleNamespace(body=b"" if kwargs.get("sink") else data, sha256=hashlib.sha256(data).hexdigest())
     monkeypatch.setattr(httputil,'connector_fetch',fetch)
     monkeypatch.setattr(snapshot.tempfile,'mkdtemp',lambda **kw: str(tmp_path/'staging'))
     (tmp_path/'staging').mkdir()
     assert (snapshot._download_latest_release()/'MANIFEST.json').is_file()
     assert any(url.endswith('.sha256') for url in calls)
-    def bad(url,**kwargs): return SimpleNamespace(body=b'0'*64 if url.endswith('.sha256') else body)
+    def bad(url,**kwargs):
+        if kwargs.get("sink") is not None:
+            Path(kwargs["sink"]).write_bytes(body)
+        return SimpleNamespace(body=b'0'*64 if url.endswith('.sha256') else b'', sha256=hashlib.sha256(body).hexdigest())
     monkeypatch.setattr(httputil,'connector_fetch',bad)
     with pytest.raises(ValueError,match='asset_integridade'):
         snapshot._download_release('https://github.com/rickfreoa/freoa-verifica/releases/download/v1/'+name)

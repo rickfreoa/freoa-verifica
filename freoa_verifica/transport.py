@@ -13,6 +13,9 @@ import re
 import socket
 import ssl
 import threading
+import tempfile
+from pathlib import Path
+from typing import BinaryIO
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -144,6 +147,7 @@ class Response:
     redirects: list[str]
     mime: str
     http: HTTPMetadata | None = None
+    size: int = 0
 
 
 # portado de freoa-verifica/http_receipts.py:_valid_header
@@ -571,6 +575,7 @@ def _fetch_once(
     deadline: float,
     min_bytes_per_second: float | None = None,
     session: Session | None = None,
+    sink: BinaryIO | None = None,
 ) -> Response:
     original = url
     redirects: list[str] = []
@@ -712,6 +717,7 @@ def _fetch_once(
                         http=_failure_http(response),
                     )
             chunks: list[bytes] = []
+            digest = hashlib.sha256()
             size = 0
             window_start = time.monotonic()
             window_size = 0
@@ -752,7 +758,11 @@ def _fetch_once(
                         "Corpo baixado acima do limite",
                         http=_failure_http(response),
                     )
-                chunks.append(chunk)
+                digest.update(chunk)
+                if sink is None:
+                    chunks.append(chunk)
+                else:
+                    sink.write(chunk)
             if slow.is_set():
                 raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response))
             if timed_out.is_set() or time.monotonic() >= deadline:
@@ -765,7 +775,7 @@ def _fetch_once(
                     http=_failure_http(response),
                 )
             payload = b"".join(chunks)
-            if current_method == "GET" and not payload:
+            if current_method == "GET" and not size:
                 raise EmptyBody("GET com corpo vazio", http=_failure_http(response))
             http_meta = observe_http_response(response)
             return Response(
@@ -774,7 +784,8 @@ def _fetch_once(
                 status=response.status,
                 headers=dict(http_meta.headers),
                 body=payload,
-                sha256=hashlib.sha256(payload).hexdigest(),
+                sha256=digest.hexdigest(),
+                size=size,
                 fetched_at=datetime.now(timezone.utc).isoformat(),
                 redirects=list(redirects),
                 mime=mime,
@@ -816,12 +827,14 @@ def fetch(
     min_bytes_per_second: float | None = None,
     max_redirects: int = MAX_REDIRECTS,
     session: Session | None = None,
+    sink: str | os.PathLike | None = None,
 ) -> Response:
     """Baixa URL HTTPS com IP fixado, validando cada redirecionamento.
 
+    `sink` grava atomicamente em arquivo; body vazio, size e sha256 preenchidos.
     `session` opcional: CookieJar efêmero por consulta (cookies fora dos recibos).
     """
-    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or not 1 <= max_bytes <= 50 * 1024 * 1024:
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or not 1 <= max_bytes <= (4 * 1024**3 if sink is not None else 50 * 1024 * 1024):
         raise ValueError("max_bytes inválido")
     if not isinstance(max_redirects, int) or max_redirects < 0:
         raise ValueError("max_redirects inválido")
@@ -844,6 +857,9 @@ def fetch(
     if not slots.acquire(blocking=False):
         raise Timeout("Limite de concorrência de captura atingido")
     outcome: Queue = Queue(maxsize=1)
+    cancelled = threading.Event()
+    worker_done = threading.Event()
+    temporary: list[Path] = []
 
     def worker() -> None:
         try:
@@ -858,20 +874,31 @@ def fetch(
             breaker.before_call()
             try:
                 limiter.acquire(timeout=max(0.0, deadline - time.monotonic()))
-                result = _fetch_once(
-                    url,
-                    method=method,
-                    body=body,
-                    caller_headers=caller_headers,
-                    allowed_hosts=allowed_hosts,
-                    allowed_path_prefixes=allowed_path_prefixes,
-                    allowed_mimes=mimes,
-                    max_bytes=max_bytes,
-                    max_redirects=max_redirects,
-                    deadline=deadline,
-                    **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
-                    session=session,
-                )
+                output = None
+                if sink is not None:
+                    output = tempfile.NamedTemporaryFile(
+                        dir=Path(sink).parent, prefix=".fv-download-", delete=False
+                    )
+                    temporary.append(Path(output.name))
+                try:
+                    result = _fetch_once(
+                        url,
+                        method=method,
+                        body=body,
+                        caller_headers=caller_headers,
+                        allowed_hosts=allowed_hosts,
+                        allowed_path_prefixes=allowed_path_prefixes,
+                        allowed_mimes=mimes,
+                        max_bytes=max_bytes,
+                        max_redirects=max_redirects,
+                        deadline=deadline,
+                        **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
+                        session=session,
+                        **({"sink": output} if output is not None else {}),
+                    )
+                finally:
+                    if output is not None:
+                        output.close()
                 breaker.record_success()
                 outcome.put((result, None))
             except Exception as exc:
@@ -883,6 +910,9 @@ def fetch(
         except Exception as exc:
             outcome.put((None, exc))
         finally:
+            worker_done.set()
+            if cancelled.is_set() and temporary:
+                temporary[0].unlink(missing_ok=True)
             slots.release()
 
     try:
@@ -894,11 +924,22 @@ def fetch(
 
     thread.join(timeout=max(0.0, deadline - time.monotonic()))
     if thread.is_alive():
+        cancelled.set()
+        if worker_done.is_set() and temporary:
+            temporary[0].unlink(missing_ok=True)
         raise Timeout("Prazo de captura esgotado")
     try:
         result, error = outcome.get_nowait()
     except Empty as exc:
         raise Timeout("Prazo de captura esgotado") from exc
-    if error is not None:
-        raise error
-    return result
+    try:
+        if error is not None:
+            raise error
+        if sink is not None:
+            if time.monotonic() >= deadline:
+                raise Timeout("Prazo de captura esgotado")
+            os.replace(temporary[0], sink)
+        return result
+    finally:
+        if temporary:
+            temporary[0].unlink(missing_ok=True)

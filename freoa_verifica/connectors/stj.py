@@ -78,6 +78,7 @@ class StjConnector(Connector):
         "colecoes": ["espelhos", "integras", "precedentes_qualificados"],
         "periodo": "espelhos desde 2022; íntegras diárias",
         "busca_textual": True,
+        "busca_textual_ao_vivo": False,
         "ementa": True,
         "inteiro_teor": True,
         "atualizacao": "fv sync stj --desde AAAA-MM",

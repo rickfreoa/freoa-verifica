@@ -37,7 +37,7 @@ _svc: Verifica | None = None
 
 Modo = Literal["literal", "normalizado"]
 Parte = Literal["ementa", "inteiro_teor", "voto", "certidao"]
-Tribunal = Literal["stj", "tcu", "tjsp", "cvm", "cvm_colegiado"]
+Tribunal = str
 Fonte = Literal[
     "planalto", "cvm_normas", "bcb", "senado", "__somente_local__"
 ]
@@ -54,7 +54,7 @@ Offset = Annotated[int, Field(ge=0, le=10_000_000)]
 Modo = Annotated[Modo, Field(max_length=32)]
 Parte = Annotated[Parte, Field(max_length=32)]
 Fonte = Annotated[Fonte, Field(max_length=32)]
-Tribunal = Annotated[Tribunal, Field(max_length=32)]
+Tribunal = Annotated[Tribunal, Field(max_length=256)]
 Tribunais = Annotated[list[Tribunal], Field(max_length=5)]
 
 
@@ -181,14 +181,14 @@ def create_mcp(home: str | None = None) -> FastMCP:
         limite: Limite = 10,
         cursor: Cursor | None = None,
     ) -> dict[str, Any]:
-        """Pesquisa jurisprudência (STJ, TCU, TJSP, CVM Colegiado).
+        """Pesquisa jurisprudência (STJ, STF, TCU, TJSP, CVM Colegiado).
 
-        Pode gravar cache local. limite máximo: 50. tribunais: stj|tcu|tjsp|cvm|cvm_colegiado.
+        Pode gravar cache local. limite máximo: 50. Aceita siglas e nomes dos tribunais.
         """
         limite = max(1, min(int(limite), 50))
         data_out = _service().pesquisar_jurisprudencia(
             q,
-            tribunais=list(tribunais) if tribunais else None,
+            tribunais=list(tribunais) if tribunais is not None else None,
             desde=desde,
             ate=ate,
             autoridade_min=autoridade_min,

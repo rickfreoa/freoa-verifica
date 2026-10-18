@@ -127,8 +127,6 @@ class TjspConnector(Connector):
             },
             timeout=60.0,
             session=session,
-            # reCAPTCHA v3 no formulário e-SAJ é esperado; WAF/F5 ainda bloqueiam.
-            ignore_challenge_kinds=frozenset({"captcha"}),
         )
         if not session.has_cookie("JSESSIONID"):
             raise Unavailable("sessao_ausente")
