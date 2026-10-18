@@ -123,9 +123,10 @@ def _manter_cortes_ambiguos(frags, fora_por_pagina) -> set[tuple[int, int]]:
         if aberto and (depois is None or _abre_paragrafo(depois)):
             for p, y, _ in seq[i:j]:
                 fora_por_pagina[p].discard(y)
-        elif not aberto and k_antes is not None:
-            # Fronteira limpa: o descartado poderia ser o fecho do dispositivo anterior,
-            # que fica impedido de verificação (auditoria 1.1.0, rodada 6).
+        elif k_antes is not None and not all(_numero_da_pagina(t, p + 1, len(frags)) for p, _, t in seq[i:j]):
+            # Todo descarte de texto (não só número da página) pode ter levado parte do dispositivo
+            # que o antecede, na fronteira limpa ou no meio do parágrafo: ele fica impedido de
+            # conclusão textual (auditoria 1.1.0, rodadas 6 e 8).
             marcar.add((seq[k_antes][0], seq[k_antes][1]))
         i = j
     return marcar

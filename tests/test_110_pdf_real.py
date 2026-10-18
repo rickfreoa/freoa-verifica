@@ -49,6 +49,17 @@ def _verificar(doc, citacao, trecho):
     return verificar(citacao, trecho=trecho, resolver=r, persistir=False)
 
 
+def test_margem_no_meio_do_paragrafo_tambem_bloqueia():
+    # Auditor, rodada 8: ressalva repetida na borda, entre partes do mesmo parágrafo.
+    linhas = {1: [(600, "RESOLUCAO CVM 999/2026"), (120, "Art. 1o O emissor deve"), (80, "SALVO DISPENSA EXPRESSA,")],
+              2: [(600, "divulgar o relatorio."), (120, "Art. 2o O administrador deve"), (80, "SALVO DISPENSA EXPRESSA,")],
+              3: [(600, "publicar o balanco."), (120, "Art. 3o O auditor deve"), (80, "SALVO DISPENSA EXPRESSA,")],
+              4: [(600, "emitir o parecer.")]}
+    doc = parse_pdf_direto(_pdf([linhas[n] for n in (1, 2, 3, 4)]))
+    res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", "O emissor deve divulgar o relatorio.")
+    assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
+
+
 def test_margem_adjacente_impede_verified_pelo_verificador_real():
     # Auditor, rodada 7: a issue precisa impedir o positivo no confronto, não só existir.
     pags = [[(800, "COMISSAO DE VALORES MOBILIARIOS")] + ([(600, "RESOLUCAO CVM 999/2026")] if n == 1 else [])
