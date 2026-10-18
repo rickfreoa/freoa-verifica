@@ -68,3 +68,31 @@ def test_margem_adjacente_impede_verified_pelo_verificador_real():
     for trecho in ("A divulgacao e obrigatoria.", "A divulgacao e obrigatoria. EXCETO PARA EMISSORES DISPENSADOS."):
         res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", trecho)
         assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
+
+
+def _pdf_com_imagem(linhas: list[tuple[int, str]], img_y: int, img_h: int) -> bytes:
+    """Uma página com texto e uma imagem 1x1 esticada no corpo (texto rasterizado não extraível)."""
+    corpo = ("".join(f"BT /F1 11 Tf 72 {y} Td ({t}) Tj ET\n" for y, t in linhas)
+             + f"q 300 0 0 {img_h} 72 {img_y} cm /Im1 Do Q\n")
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [5 0 R] /Count 1 >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 1 >>\nstream\n\x00\nendstream",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> /XObject << /Im1 4 0 R >> >> /Contents 6 0 R >>",
+            f"<< /Length {len(corpo)} >>\nstream\n{corpo}endstream"]
+    out, offs = b"%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += f"{i} 0 obj\n{o}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode() + "".join(f"{o:010} 00000 n \n" for o in offs).encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return out
+
+
+def test_imagem_no_corpo_bloqueia_dispositivos_vizinhos():
+    # Auditor, rodada 9: ressalva rasterizada entre duas linhas do mesmo artigo.
+    doc = parse_pdf_direto(_pdf_com_imagem(
+        [(700, "RESOLUCAO CVM 999/2026"), (642, "Art. 1o O emissor deve"), (592, "divulgar o relatorio."),
+         (542, "Art. 2o Esta Resolucao entra em vigor.")], img_y=612, img_h=20))
+    res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", "O emissor deve divulgar o relatorio.")
+    assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")

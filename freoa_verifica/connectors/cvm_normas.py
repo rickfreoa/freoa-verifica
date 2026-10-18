@@ -574,7 +574,7 @@ def parse_pdf_direto(body: bytes) -> ParsedDocument:
         _limpar_marca(prov, MARCA_CORTE)
         if proprio:
             issues.append(Issue(code="MARGEM_ADJACENTE", path=prov.path, blocking_scope="provision",
-                                detail="dispositivo termina junto a margem descartada; fecho não confirmável no PDF"))
+                                detail="conteúdo não extraído do PDF (margem descartada ou imagem) é vizinho do dispositivo; texto não confirmável"))
     pagina_html = pagina_html.replace(MARCA_CORTE, "")
     if provisions:
         issues.append(Issue(

@@ -31,14 +31,22 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
     """Texto de cada página sem cabeçalho/rodapé, decidido por posição e repetição."""
     frags: list[list[tuple[float, str]]] = []
     alturas: list[float] = []
+    imagens: list[list[tuple[float, float]]] = []  # (base, topo) de cada imagem desenhada na página
     for page in pages:
         parts: list[tuple[float, str]] = []
+        imgs: list[tuple[float, float]] = []
 
         def vis(text, cm, tm, _font, _size, parts=parts):
             parts.append((float(tm[5]) * float(cm[3]) + float(cm[5]), text))
 
-        page.extract_text(visitor_text=vis)
+        def op(operador, args, cm, _tm, imgs=imgs, page=page):
+            if operador == b"Do" and args and _e_imagem(page, args[0]) or operador in (b"BI", b"INLINE IMAGE"):
+                base, alto = float(cm[5]), float(cm[3])
+                imgs.append((min(base, base + alto), max(base, base + alto)))
+
+        page.extract_text(visitor_text=vis, visitor_operand_before=op)
         frags.append(parts)
+        imagens.append(imgs)
         alturas.append(float(page.mediabox.height) or 1.0)
     linhas_por_pagina = []
     for parts, h in zip(frags, alturas):
@@ -66,6 +74,21 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
                 fora.add(y)
         fora_por_pagina.append(fora)
     marcar = _manter_cortes_ambiguos(frags, fora_por_pagina)
+    # Imagem no corpo pode conter texto normativo que o pypdf não extrai (auditoria 1.1.0, rodada 9):
+    # as linhas mantidas imediatamente acima e abaixo dela ficam marcadas.
+    for p, (parts, fora, imgs, h) in enumerate(zip(frags, fora_por_pagina, imagens, alturas)):
+        ys = sorted({round(y) for y, t in parts if _norm(t) and round(y) not in fora})
+        for base, topo in imgs:
+            if topo <= _FAIXA_INF * h or base >= _FAIXA_SUP * h:
+                continue  # logotipo na margem
+            acima = [y for y in ys if y >= topo]
+            abaixo = [y for y in ys if y <= base]
+            for y in ([min(acima)] if acima else []) + ([max(abaixo)] if abaixo else []):
+                marcar.add((p, y))
+            if not acima and p > 0:  # imagem no alto do corpo: fecho do dispositivo da página anterior
+                ant = sorted({round(y) for y, t in frags[p - 1] if _norm(t) and round(y) not in fora_por_pagina[p - 1]})
+                if ant:
+                    marcar.add((p - 1, ant[0]))
     if descartadas is not None:
         descartadas.update(t for ls, fora in zip(linhas_por_pagina, fora_por_pagina) for y, t in ls.items() if y in fora)
     out = []
@@ -130,6 +153,15 @@ def _manter_cortes_ambiguos(frags, fora_por_pagina) -> set[tuple[int, int]]:
             marcar.add((seq[k_antes][0], seq[k_antes][1]))
         i = j
     return marcar
+
+
+def _e_imagem(page, nome) -> bool:
+    try:
+        xo = page["/Resources"]["/XObject"]
+        obj = xo[nome].get_object()
+        return obj.get("/Subtype") == "/Image"
+    except (KeyError, TypeError, AttributeError):
+        return True  # sem como saber: tratar como imagem é o lado seguro
 
 
 def _numero_da_pagina(linha: str, n: int, total: int) -> bool:

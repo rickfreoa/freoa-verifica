@@ -24,7 +24,7 @@ class _Pagina:
         self.linhas = linhas
         self.mediabox = type("MB", (), {"height": altura})()
 
-    def extract_text(self, visitor_text=None):
+    def extract_text(self, visitor_text=None, visitor_operand_before=None):
         for y, t in self.linhas:
             visitor_text(t + "\n", [1, 0, 0, 1, 0, 0], [1, 0, 0, 1, 72, y], None, 12)
         return "".join(t + "\n" for _, t in self.linhas)
