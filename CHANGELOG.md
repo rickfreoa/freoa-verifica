@@ -28,7 +28,7 @@
 - MCP: um serviço por home no mesmo processo.
 - Política de registro `sem_conteudo` (`--sem-registro`) e `fv runs purgar --antes DATA` (decisão 0030).
 - Snapshot publica identificadores das obras e das decisões e `derived_version`; `fv doctor`, o MCP e a API avisam `acervo_incompleto` quando o home está abaixo do manifesto instalado ou do mínimo embutido.
-- Release só publica após a suíte completa no mesmo commit, sem substituição de assets, com `requirements-lock.txt` anexado. Pendente: fixar Actions por SHA.
+- Release só publica após a suíte completa no mesmo commit, sem substituição de assets, com `requirements-lock.txt` anexado. Actions fixadas por SHA de commit (tag em comentário).
 
 ## 1.0.2
 

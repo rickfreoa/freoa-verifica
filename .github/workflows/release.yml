@@ -18,8 +18,8 @@ jobs:
     needs: testes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Build
@@ -37,7 +37,7 @@ jobs:
           /tmp/v/bin/pip install "$(ls dist/*.whl)[server]"
           /tmp/v/bin/pip freeze --exclude freoa-verifica > dist/requirements-lock.txt
           (cd dist && sha256sum requirements-lock.txt >> SHA256SUMS)
-      - uses: actions/attest-build-provenance@v1
+      - uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
         with:
           subject-path: |
             dist/*.whl
