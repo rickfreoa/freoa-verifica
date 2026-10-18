@@ -225,3 +225,51 @@ def test_situacao_ausente_e_desconhecida_nunca_vigente():
     assert p.metadata["situacao_precedente"] == {"valor": "desconhecida", "texto_oficial": None}
     assert stj_mod._situacao_estruturada("Afetado")["valor"] == "desconhecida"
     assert stj_mod._situacao_estruturada("Revisado")["valor"] == "revisada"
+
+
+def _csv_tema14(tese: str, situacao: str) -> bytes:
+    import csv
+    import io
+    rows = list(csv.DictReader(io.StringIO(load_fixture("stj_precedentes_temas").decode("utf-8"), newline="")))
+    rows[0] = {**rows[0], "teseFirmada": tese, "situacao": situacao}
+    buf = io.StringIO(newline="")
+    w = csv.DictWriter(buf, fieldnames=list(rows[0]), lineterminator="\n")
+    w.writeheader()
+    w.writerows(rows)
+    return buf.getvalue().encode("utf-8")
+
+
+def test_nova_versao_do_tema_reprocessa_texto_captura_situacao_e_fts(tmp_path, monkeypatch):
+    versao = {"csv": _csv_tema14("TESE ANTIGA", "Trânsito em Julgado")}
+    monkeypatch.setattr(stj_mod, "connector_fetch", lambda url, **kw: _resp(
+        url, versao["csv"] if url.endswith("temas.csv") else load_fixture("stj_precedentes_processos"), "text/csv"))
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+    with Verifica(tmp_path) as svc:
+        conn = svc._get("stj")
+        monkeypatch.setattr(conn, "package_show", lambda pkg: _PKG)
+        engine = SementeSync(svc, rate_delay=0, fontes=["stj"])
+        engine.sync_stj()
+        antes = svc.conn.execute("SELECT id FROM decision WHERE official_id='tema:14'").fetchone()["id"]
+        cap_antiga = svc.conn.execute("SELECT capture_id FROM decision_document WHERE decision_id=?", (antes,)).fetchone()[0]
+        # versão inalterada: nada é reindexado
+        chamadas = []
+        orig = svc._index_candidate_juris
+        monkeypatch.setattr(svc, "_index_candidate_juris", lambda *a, **k: chamadas.append(a) or orig(*a, **k))
+        engine._index_stj_from_fts(conn, max_items=None)
+        assert chamadas == []
+        # o recurso muda na fonte: troca a linha de fts_stj por outro CSV/hash
+        versao["csv"] = _csv_tema14("TESE NOVA", "Cancelado")
+        conn.sync(orgaos=["precedentes-qualificados"], precedentes=True)
+        engine._index_stj_from_fts(conn, max_items=None)
+        assert [c[1].key for c in chamadas] == ["tema:14"]  # só o tema alterado
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    with Verifica(tmp_path) as svc:  # banco reaberto
+        docs = svc.conn.execute("SELECT text, capture_id FROM decision_document WHERE decision_id=?", (antes,)).fetchall()
+        assert len(docs) == 1 and "TESE NOVA" in docs[0]["text"] and "TESE ANTIGA" not in docs[0]["text"]
+        assert docs[0]["capture_id"] != cap_antiga
+        item = svc.pesquisar_jurisprudencia("TESE NOVA", tribunais=["stj"])["itens"][0]
+        assert item["situacao_precedente"]["valor"] == "cancelada"
+        assert "PRECEDENTE_NAO_VIGENTE_NA_FONTE" in item["alertas"]
+        assert svc.obter_decisao(antes)["situacao_precedente"]["valor"] == "cancelada"
+        assert not [i for i in svc.pesquisar_jurisprudencia("TESE ANTIGA", tribunais=["stj"])["itens"]
+                    if "TESE ANTIGA" in (i["ementa"] or "")]
