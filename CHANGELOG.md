@@ -14,7 +14,7 @@
 - Busca CVM: decodificação UTF-8 correta (consultas acentuadas), sem exigir a frase literal, `unavailable` quando a fonte informa total > 0 e nada é lido, um item por ato (anexos duplicados descartados) e espécie acompanhando o número ("Instrução CVM 358"). Busca CVM/BCB informa `truncado` pelo total da fonte.
 - BCB/CMN: "Resolução CMN 4.966" na consulta aciona o lookup exato por número.
 - `fv acervo ressincronizar-situacao` relê a situação dos atos CVM/BCB/CMN. Conectores devolvem `CandidateList` com `total` e `truncado` reais (A9); `buscar_normas_*` e `buscar_legislacao` os repassam. Migrações em sequência: 006 rubrica, 007 `work_status`, 008 `fts_staging`.
-- PDF da CVM roda em processo isolado com limites de tempo, memória, páginas e texto (decisão 0026).
+- PDF da CVM roda em processo isolado com limites de tempo, memória, páginas e texto (decisão 0029).
 - Busca (frente F-D, decisão 0025): consulta que é só classe e número (`REsp 2.210.785`, `Recurso Especial nº ...`) faz lookup exato no acervo; achado traz evidência, incidentes do mesmo processo vão em `relacionados` e ausência devolve `nao_confirmado_no_acervo` com a cobertura (tribunais, órgãos, período), sem outros processos.
 - Candidatos de legislação indexados ao vivo ficam em `fts_staging` (migração 008), fora do FTS canônico; só a busca que consulta fontes ao vivo os vê, marcados `candidato_ao_vivo`.
 - Fontes não consultadas (offline, limite atingido, sem busca textual como o Planalto) aparecem como `nao_consultada`; `truncado` e `total` por fonte são propagados quando o conector os informa.
