@@ -229,7 +229,7 @@ class CvmNormasConnector(Connector):
     def parse(self, resp: Response) -> ParsedDocument:
         kind = _kind_from_url(resp.final_url)
         if kind == "docx" or resp.body[:2] == b"PK":
-            return parse_cvm_docx(resp.body)
+            return _parse_docx(resp.body)
         if kind == "pdf" or resp.body[:4] == b"%PDF":
             return _parse_pdf(resp.body, source=resp.final_url)
         # HTML da página do ato — ementa/situação
@@ -482,6 +482,19 @@ def _parse_ato_html(body: bytes, *, base_url: str) -> ParsedDocument:
 PDF_MAX_PAGINAS = 600
 PDF_MAX_TEXTO = 8 * 1024 * 1024
 PDF_TIMEOUT_S = 90.0
+
+
+DOCX_TIMEOUT_S = 60.0
+
+
+def _parse_docx(body: bytes) -> ParsedDocument:
+    from freoa_verifica.parsers.isolated import parse_isolated
+
+    doc = parse_isolated("cvm_docx", body, DOCX_TIMEOUT_S)
+    if doc.profile == "cvm_docx" and not doc.quarantined:
+        return doc
+    detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "docx_isolado_falhou")
+    raise Unavailable(f"docx_nao_processado: {detalhe}")
 
 
 def _parse_pdf(body: bytes, *, source: str) -> ParsedDocument:

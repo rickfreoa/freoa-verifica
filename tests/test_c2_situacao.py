@@ -397,3 +397,95 @@ def test_f03_pdf_que_excede_o_tempo_e_unavailable(monkeypatch):
 def test_f03_pdf_corrompido_nao_derruba_o_processo():
     with pytest.raises(Unavailable):
         cvm_normas._parse_pdf(b"%PDF-1.4\n" + b"\x00" * 200, source="x")
+
+
+# --- rodada de ensaio real: DOCX isolado, equivalência, desempenho, busca limitada, obra revogada sem estrutura ---
+
+
+def _docx_sintetico(n: int) -> bytes:
+    import io
+    import zipfile
+
+    xml = ('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+           '<w:p><w:r><w:t>Art. 1. Abertura.</w:t></w:r></w:p>'
+           + "".join(f"<w:p><w:r><w:t>continuação {i} do   texto</w:t></w:r></w:p>" for i in range(n))
+           + "</w:body></w:document>")
+    s = io.BytesIO()
+    with zipfile.ZipFile(s, "w") as z:
+        z.writestr("word/document.xml", xml)
+    return s.getvalue()
+
+
+def test_continuacao_docx_linear():
+    import time
+
+    t = time.monotonic()
+    d = parse_cvm_docx(_docx_sintetico(20000))  # antes: minutos (renormalizava o acumulado a cada parágrafo)
+    assert time.monotonic() - t < 15
+    texto = d.provisions[0].redactions[0].text
+    assert texto.endswith("continuação 19999 do texto") and "  " not in texto
+
+
+@pytest.mark.parametrize("nome", ["044", "080", "160", "175"])
+def test_continuacao_docx_texto_ja_normalizado(nome):
+    from freoa_verifica.parsers.html_devices import _normalize_ws
+
+    d = parse_cvm_docx(load_fixture(f"cvm_resol_{nome}_consolid_docx"))
+    for p in d.provisions:
+        for r in p.redactions:
+            assert r.text == _normalize_ws(r.text)
+    assert d.provisions
+
+
+def test_docx_da_cvm_passa_por_processo_isolado(monkeypatch):
+    chamados = []
+    from freoa_verifica.parsers import isolated
+
+    real = isolated.parse_isolated
+    monkeypatch.setattr(isolated, "parse_isolated", lambda *a: chamados.append(a[0]) or real(*a))
+    d = cvm_normas._parse_docx(_docx_sintetico(3))
+    assert chamados == ["cvm_docx"] and d.provisions
+
+
+def test_busca_indexa_no_maximo_n_e_declara_o_resto(svc, monkeypatch):
+    monkeypatch.delenv("FV_OFFLINE")
+    cands = [Candidate("cvm_normas", f"cvm:resolucoes:{n}", f"Resolução CVM {n}", f"https://x/{n}") for n in range(12)]
+
+    class C:
+        id = "cvm_normas"
+
+        def search(self, q, **f):
+            return cands
+
+    visto = []
+    monkeypatch.setattr(svc, "_get", lambda _id: C())
+    monkeypatch.setattr(svc, "_index_candidate_legis", lambda c, cand: visto.append(cand) or {"capture_id": "x", "trecho": ""})
+    out = svc._buscar_normas("cvm_normas", "fato relevante", None)
+    assert len(visto) == 5 and (out["indexados"], out["nao_indexados"], out["status"]) == (5, 7, "parcial")
+    assert sum(1 for i in out["itens"] if i.get("nao_indexado")) == 7
+    visto.clear()
+    out = svc._buscar_normas("cvm_normas", "x", None, orcamento_s=0)  # orçamento esgotado: nada indexado
+    assert not visto and out["nao_indexados"] == 12
+
+
+def test_obra_revogada_com_documento_sem_estrutura_aparece_revogada(svc):
+    import io
+    import zipfile
+
+    s = io.BytesIO()
+    with zipfile.ZipFile(s, "w") as z:
+        z.writestr("word/document.xml", '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                   "<w:body><w:p><w:r><w:t>Resolução CVM nº 85, de 29 de março de 2022</w:t></w:r></w:p><w:p><w:r><w:t>Texto corrido sem artigos.</w:t></w:r></w:p></w:body></w:document>")
+    body = s.getvalue()
+    rw = svc.indexar_obra(
+        source_id="cvm_normas", work_key=WorkKey("cvm", "resolucao", "85", 2022), document=parse_cvm_docx(body), body=body,
+        url="https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol085.pdf",
+        fetched_at=_agora(), work_date="2022-03-29", label="Resolução CVM 85")
+    cand = Candidate("cvm_normas", "cvm:resolucoes:85", "Resolução CVM 85",
+                     "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol085.html")
+    pagina = _PAGINA.format(titulo="Resolução CVM 85",
+                            extra="<p>REVOGADA pela Resolução CVM 175, de 23 de dezembro de 2022.</p>")
+    situacao.registrar_cvm(svc.conn, svc.home, _CvmFake(pagina.encode()), cand, rw)
+    out = svc.verificar_citacao("art. 1º da Resolução CVM 85/2022")
+    assert out["temporal"]["status"] == "divergent"
+    assert out["temporal"]["reason_code"] == "OBRA_REVOGADA_NA_FONTE"

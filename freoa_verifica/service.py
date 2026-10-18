@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import time
 import threading
 from dataclasses import asdict
 from contextlib import contextmanager
@@ -1386,10 +1387,12 @@ class Verifica:
                 if out["text"].get("status") == "not_found":
                     out["text"].update(status="unknown", reason_code=motivo)
         # C2: aplicar_situacao (única aplicação para verificar_citacao e verificar_texto)
-        if cite is not None and cite.work is not None and (cite.path is None or out["temporal"].get("status") != "not_assessed"):
+        # só com a identidade da obra confirmada: divergente/indisponível não é mascarado pela situação
+        if (cite is not None and cite.work is not None
+                and out["identity"].get("status") not in ("not_found", "unavailable")):
             try:
                 rw = self._resolve(cite.work, strict=True)
-            except SourceUnavailable:
+            except (SourceUnavailable, IdentityMismatch):
                 rw = None
             if isinstance(rw, ResolvedWork):
                 out["temporal"] = situacao.aplicar_situacao_dict(
@@ -2172,7 +2175,8 @@ class Verifica:
     def buscar_normas_bcb(self, q: str, tipo: str | None = None) -> dict[str, Any]:
         return self._buscar_normas("bcb", q, tipo)
 
-    def _buscar_normas(self, source: str, q: str, tipo: str | None) -> dict[str, Any]:
+    def _buscar_normas(self, source: str, q: str, tipo: str | None, *,
+                       max_indexar: int = 5, orcamento_s: float = 20.0) -> dict[str, Any]:
         if self._offline():
             return {"status": "indisponivel", "motivo": "offline", "itens": [], "total": 0, "truncado": False, "offline": True}
         try:
@@ -2183,7 +2187,14 @@ class Verifica:
             return {"status": "indisponivel", "motivo": exc.reason, "itens": []}
         itens = []
         falhas = []
-        for c in cands:
+        nao_indexados = 0
+        prazo = time.monotonic() + orcamento_s
+        for n, c in enumerate(cands):
+            if n >= max_indexar or time.monotonic() >= prazo:  # decisão 0024: parcial declarada
+                nao_indexados += 1
+                itens.append({"titulo": c.title, "chave": c.key, "url": c.url, "trecho": c.snippet or "",
+                              "capture_id": None, "metadados": c.metadata, "nao_indexado": True})
+                continue
             item = self._index_candidate_legis(connector, c)
             if not item.get("capture_id"):
                 falhas.append({"chave": c.key, "url": c.url, "status": "unavailable",
@@ -2198,8 +2209,10 @@ class Verifica:
                 "metadados": c.metadata,
             })
         status = ("parcial" if itens else "indisponivel") if falhas else "ok"
+        if nao_indexados and status == "ok":
+            status = "parcial"
         return {"status": status, "itens": itens, "total": getattr(cands, "total", len(cands)),
-                "falhas": falhas,
+                "falhas": falhas, "indexados": len(itens) - nao_indexados, "nao_indexados": nao_indexados,
                 "truncado": bool(getattr(cands, "truncado", False))}  # A9
 
     # ------------------------------------------------------------------

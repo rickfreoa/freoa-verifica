@@ -691,7 +691,8 @@ def _append_continuation(ctx: _Ctx, text: str) -> None:
     end = start + len(text)
     extra = _normalize_ws(text)
     if extra:
-        target.text = _normalize_ws(f"{target.text} {extra}")
+        # partes já normalizadas: juntar com espaço equivale a renormalizar o acumulado (sem custo quadrático)
+        target.text = f"{target.text} {extra}" if target.text else extra
     target.span = (target.span[0], end)
 
 
