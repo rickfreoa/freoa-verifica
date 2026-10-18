@@ -707,9 +707,12 @@ def _parse_work_match(
         year = 1988
         number = "1988"
     conf = "exata"
+    flags = ["apelido"] if kind == "constituicao" else []
     if year is None:
         year = 0
-        conf = "provavel"
+        # Nasce exata com a marca; no fim de extract() vira provável, com `so_sem_ano` se o ano
+        # ausente for a única razão (decisão 0016, adendo): o serviço pode promovê-la (série única no acervo).
+        flags.append("sem_ano")
     work = WorkKey(authority, kind, number, year)
     return Citation(
         kind="norma",
@@ -717,7 +720,7 @@ def _parse_work_match(
         span=(m.start(), m.end()),
         work=work,
         confidence=conf,
-        flags=["apelido"] if kind == "constituicao" else [],
+        flags=flags,
     )
 
 
@@ -1209,6 +1212,10 @@ def extract(texto: str) -> list[Citation]:
             if cite.path is None:
                 cite.confidence = "provavel"
     raw_cites.extend(work_cites)
+    for cite in raw_cites:
+        if "sem_ano" in cite.flags and cite.confidence == "exata":
+            cite.confidence = "provavel"
+            cite.flags.append("so_sem_ano")
 
     # Ordenar por posição
     raw_cites.sort(key=lambda c: (c.span[0], -c.span[1]))

@@ -34,6 +34,8 @@
 
 - Purga de execuções em ordem segura (banco novo gravado em disco, original movido, novo instalado) com recuperação automática de troca interrompida (decisão 0030).
 
+- Normas de série única citadas sem ano ("Resolução CMN 4.966", "Resolução BCB 428", "Resolução CVM 80", "Instrução CVM 358") são tratadas como exatas quando o acervo tem exatamente uma obra com o número; com zero ou mais de uma, ou para lei sem ano, seguem exigindo conferência (decisão 0031).
+
 ## 1.0.2
 
 - Extração de citações em duas camadas: regras estruturais (numeração decimal de cláusulas, siglas coladas a números, pertença a instrumentos particulares, fronteiras de arquivo e de campo técnico) e confiança explícita `exata`/`provavel`. Em `verificar_texto`, citações `provavel` recebem `requer_conferencia`; só `exata` recebe `encontrada` ou `inexistente`. Nos oito corpora adversariais independentes (779 frases), falsos definitivos caíram de 250 para 0 e o recall subiu de 70,9% para 93,7%.

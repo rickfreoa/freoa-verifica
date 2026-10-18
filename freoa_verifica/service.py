@@ -1293,9 +1293,28 @@ class Verifica:
         out["run_id"] = None
         return self._finalizar(out, _cite or cite, citacao, trecho, data, modo, em_texto=_cite is not None)
 
+    # Séries de numeração única: o número sozinho identifica o ato (decisão 0016, adendo).
+    _SERIES_UNICAS = frozenset({("cmn", "resolucao"), ("bcb", "resolucao_bcb"), ("cvm", "resolucao"), ("cvm", "instrucao")})
+
+    def _promover_sem_ano(self, cite: Citation) -> bool:
+        """Norma de série única sem ano vira exata se o acervo tem exatamente uma obra com o número."""
+        w = cite.work
+        if "so_sem_ano" not in cite.flags or w is None or w.year or (w.authority, w.kind) not in self._SERIES_UNICAS:
+            return False
+        rows = self.conn.execute(
+            "SELECT year FROM work WHERE authority=? AND kind=? AND number=?", (w.authority, w.kind, w.number)).fetchall()
+        if len(rows) != 1 or not rows[0][0]:
+            return False
+        cite.work = WorkKey(w.authority, w.kind, w.number, int(rows[0][0]))
+        cite.confidence = "exata"
+        cite.flags = [f for f in cite.flags if f not in ("sem_ano", "so_sem_ano")] + ["numero_unico_no_acervo"]
+        return True
+
     def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
                    trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
         """C4 (decisão 0027): todos os rebaixamentos, nesta ordem, e só então o recibo."""
+        if cite is not None and self._promover_sem_ano(cite):
+            out["citation"] = _citation_to_dict(cite)
         # C1: negativa de dispositivo só com pode_negar.
         ident = out["identity"]
         if (ident.get("status") == "not_found" and ident.get("reason_code") == "DISPOSITIVO_INEXISTENTE"
