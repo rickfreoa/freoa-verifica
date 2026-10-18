@@ -9,12 +9,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from freoa_verifica.service import Service
+from freoa_verifica.service import Verifica
 from freoa_verifica.store import blobs
 from freoa_verifica.transport import Response
 
 home = Path(sys.argv[1])
-svc = Service(home=home)
+svc = Verifica(home=home)
 row = svc.conn.execute(
     "SELECT c.* FROM capture c JOIN parsed_document p ON p.capture_id=c.id "
     "JOIN work w ON w.id=p.work_id WHERE c.url LIKE '%onstituicao%' "
