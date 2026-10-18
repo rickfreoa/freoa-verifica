@@ -402,3 +402,50 @@ def test_f10_release_depende_da_suite_e_nao_substitui_assets():
     assert "uses: ./.github/workflows/ci.yml" in rel and "needs: testes" in rel
     assert "--clobber" not in rel
     assert "requirements-lock.txt" in rel
+
+
+# ---------------------------------------------------------------- purga atômica com recuperação (C5)
+
+def _home_com_execucoes(tmp_path):
+    svc = Verifica(home=tmp_path)
+    svc.conn.execute("INSERT INTO run(id, request_hash, request_json, created_at) VALUES ('velha','h','{}','2000-01-01 00:00:00')")
+    svc.conn.execute("INSERT INTO run(id, request_hash, request_json, created_at) VALUES ('nova','h','{}','2999-01-01 00:00:00')")
+    svc.conn.commit()
+    return svc
+
+
+def test_purga_falha_entre_os_renames_e_recuperada_na_abertura(tmp_path, monkeypatch):
+    import os
+    from freoa_verifica import registro
+
+    svc = _home_com_execucoes(tmp_path)
+    db = tmp_path / "verifica.sqlite3"
+    real = os.replace
+
+    def falha(src, dst, *a, **k):
+        if str(src).endswith("purga-novo"):
+            raise OSError("falha injetada entre os renames")
+        return real(src, dst, *a, **k)
+
+    monkeypatch.setattr(registro.os, "replace", falha)
+    out = svc.purgar_execucoes("2500-01-01")
+    monkeypatch.undo()
+    assert out["status"] == "erro"
+    assert not db.exists() and (tmp_path / "verifica.sqlite3.purga-novo").exists()
+    assert list((tmp_path / "purgados").rglob("verifica.sqlite3"))  # o original está guardado
+    # a próxima abertura conclui a troca em vez de criar um banco vazio
+    with Verifica(home=tmp_path) as novo:
+        ids = {r[0] for r in novo.conn.execute("SELECT id FROM run")}
+    assert ids == {"nova"} and not (tmp_path / "verifica.sqlite3.purga-novo").exists()
+
+
+def test_purga_falha_antes_da_troca_deixa_o_original(tmp_path, monkeypatch):
+    from freoa_verifica import registro
+
+    svc = _home_com_execucoes(tmp_path)
+    monkeypatch.setattr(registro, "_fsync_arquivo", lambda p: (_ for _ in ()).throw(OSError("falha injetada no fsync")))
+    assert svc.purgar_execucoes("2500-01-01")["status"] == "erro"
+    monkeypatch.undo()
+    assert not (tmp_path / "verifica.sqlite3.purga-novo").exists() and not (tmp_path / "purgados").exists()
+    assert {r[0] for r in svc.conn.execute("SELECT id FROM run")} == {"velha", "nova"}
+    svc.close()

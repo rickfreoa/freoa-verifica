@@ -228,6 +228,9 @@ class Verifica:
             self.home.mkdir(parents=True, exist_ok=True)
         self._db_path = self.home / "verifica.sqlite3"
         if not self._read_only:
+            from freoa_verifica.registro import recuperar_purga
+
+            recuperar_purga(self.home)  # purga interrompida entre os dois renames
             boot = connect(self._db_path)
             boot.close()
         self._local = threading.local()
@@ -294,6 +297,10 @@ class Verifica:
                 self._cv.notify_all()
 
     def _open_conn(self) -> sqlite3.Connection:
+        if not self._read_only and not self._db_path.exists():
+            from freoa_verifica.registro import recuperar_purga
+
+            recuperar_purga(self.home)  # nunca abrir banco vazio por cima de uma troca pela metade
         target = self._db_path.as_uri() + "?mode=ro" if self._read_only else str(self._db_path)
         # check_same_thread=False só para permitir o fechamento coordenado (lock + exclusivo).
         conn = sqlite3.connect(target, timeout=30.0, uri=self._read_only, check_same_thread=False)
