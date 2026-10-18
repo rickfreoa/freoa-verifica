@@ -60,7 +60,7 @@ def _art(path: str) -> str:
 
 
 def _cit(path: str | None = None) -> str:
-    return "Resolução CMN 4.966" + (f", {_art(path)}" if path else "")
+    return "Resolução CMN 4.966/2021" + (f", {_art(path)}" if path else "")
 
 
 # --- controle positivo ------------------------------------------------------
@@ -213,11 +213,11 @@ def test_cvm_pagina_revogada_marca_obra(svc):
     ws = situacao.registrar_cvm(svc.conn, svc.home, _CvmFake(pagina.encode()), cand, rw)
     assert (ws.situacao, ws.ato_revogador, ws.data_efeito) == ("revogada", "Resolução CVM 175", None)
     assert ws.captura_id and ws.captura_id != rw.capture_id  # a íntegra segue sendo a captura normativa
-    out = svc.verificar_citacao(f"Resolução CVM 80, {_art(path)}")
+    out = svc.verificar_citacao(f"Resolução CVM 80/2022, {_art(path)}")
     assert out["temporal"]["reason_code"] == "OBRA_REVOGADA_NA_FONTE"
     assert any("REVOGADA pela" in (e["trecho_oficial"] or "") for e in out["temporal"]["evidence"])
     # a data do ato revogador nunca vira data de efeito
-    passado = svc.verificar_citacao(f"Resolução CVM 80, {_art(path)}", data="2022-06-01")
+    passado = svc.verificar_citacao(f"Resolução CVM 80/2022, {_art(path)}", data="2022-06-01")
     assert passado["temporal"]["reason_code"] == "REVOGACAO_DATA_DESCONHECIDA"
 
 
@@ -226,7 +226,7 @@ def test_cvm_vigente_declarada_controle_positivo(svc):
     pagina = _PAGINA.format(titulo="Resolução CVM 80", extra="").encode()
     ws = situacao.registrar_cvm(svc.conn, svc.home, _CvmFake(pagina), cand, rw)
     assert ws.situacao == "vigente_declarada"
-    out = svc.verificar_citacao(f"Resolução CVM 80, {_art(path)}")
+    out = svc.verificar_citacao(f"Resolução CVM 80/2022, {_art(path)}")
     assert out["temporal"]["status"] == "vigente_na_fonte"
 
 
@@ -235,7 +235,7 @@ def test_cvm_situacao_indisponivel_nao_vigente(svc, fonte):
     rw, cand, path = _indexar_cvm(svc)
     ws = situacao.registrar_cvm(svc.conn, svc.home, _CvmFake(fonte), cand, rw)
     assert ws.situacao == "ilegivel"
-    out = svc.verificar_citacao(f"Resolução CVM 80, {_art(path)}")
+    out = svc.verificar_citacao(f"Resolução CVM 80/2022, {_art(path)}")
     assert out["temporal"]["status"] == "unknown"
     assert out["temporal"]["reason_code"] == "SITUACAO_INDISPONIVEL"
 
