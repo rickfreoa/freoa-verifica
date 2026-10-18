@@ -72,10 +72,10 @@ def test_margem_adjacente_impede_verified_pelo_verificador_real():
         assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
 
 
-def _pdf_com_imagem(linhas: list[tuple[int, str]], img_y: int, img_h: int) -> bytes:
+def _pdf_com_imagem(linhas: list[tuple[int, str]], img_y: int, img_h: int, matriz: str | None = None) -> bytes:
     """Uma página com texto e uma imagem 1x1 esticada no corpo (texto rasterizado não extraível)."""
     corpo = ("".join(f"BT /F1 11 Tf 72 {y} Td ({t}) Tj ET\n" for y, t in linhas)
-             + f"q 300 0 0 {img_h} 72 {img_y} cm /Im1 Do Q\n")
+             + f"q {matriz or f'300 0 0 {img_h} 72 {img_y}'} cm /Im1 Do Q\n")
     objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [5 0 R] /Count 1 >>",
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
             "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 1 >>\nstream\n\x00\nendstream",
@@ -206,3 +206,12 @@ def test_so_timbre_conhecido_nao_bloqueia(monkeypatch, conhecido, esperado):
     doc = parse_pdf_direto(_pdf_paginas_com_imagem([(l, 790, 40, dado) for l in pags]))
     res = _verificar(doc, "art. 2 da Resolução CVM 999/2026", "A divulgacao e obrigatoria.")
     assert res.text.status == esperado
+
+
+def test_imagem_rotacionada_na_lateral_bloqueia():
+    # Auditor, rodada 16: imagem girada 90° (matriz 0 150 -20 0 580 500) ocupa y=500–650, ao lado do art. 1.
+    doc = parse_pdf_direto(_pdf_com_imagem(
+        [(700, "RESOLUCAO CVM 999/2026"), (620, "Art. 1o A divulgacao e obrigatoria."),
+         (450, "Art. 2o Outro."), (300, "Art. 3o Fim.")], 0, 0, matriz="0 150 -20 0 580 500"))
+    res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", "A divulgacao e obrigatoria.")
+    assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")

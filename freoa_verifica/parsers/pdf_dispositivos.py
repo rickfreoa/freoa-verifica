@@ -41,9 +41,10 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
 
         def op(operador, args, cm, _tm, imgs=imgs, page=page):
             if operador == b"Do" and args and _e_imagem(page, args[0]) or operador in (b"BI", b"INLINE IMAGE"):
-                base, alto = float(cm[5]), float(cm[3])
+                # Extensão vertical pelos quatro cantos do quadrado unitário (rotação e cisalhamento, rodada 16).
+                ys = [float(cm[1]) * x + float(cm[3]) * y + float(cm[5]) for x in (0, 1) for y in (0, 1)]
                 nome = _digest_imagem(page, args[0]) if operador == b"Do" and args else None
-                imgs.append((min(base, base + alto), max(base, base + alto), nome))
+                imgs.append((min(ys), max(ys), nome))
             elif operador == b"Do" and args:
                 faixa = _faixa_de_formulario_com_imagem(page, args[0], cm)
                 if faixa:  # imagem dentro de Form XObject: vale a caixa do formulário na página (rodada 12)
