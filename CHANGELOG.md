@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## 1.0.3 (em preparação)
+
+- Busca (frente F-D, decisão 0025): consulta que é só classe e número (`REsp 2.210.785`, `Recurso Especial nº ...`) faz lookup exato no acervo; achado traz evidência, incidentes do mesmo processo vão em `relacionados` e ausência devolve `nao_confirmado_no_acervo` com a cobertura (tribunais, órgãos, período), sem outros processos.
+- Candidatos de legislação indexados ao vivo ficam em `fts_staging` (migração 0040), fora do FTS canônico; só a busca que consulta fontes ao vivo os vê, marcados `candidato_ao_vivo`.
+- Fontes não consultadas (offline, limite atingido, sem busca textual como o Planalto) aparecem como `nao_consultada`; `truncado` e `total` por fonte são propagados quando o conector os informa.
+- Filtro `fonte` da busca local de legislação é aplicado antes do limite.
+- Ranking: MATCH de decisões restrito a ementa e inteiro teor, bm25 ponderado (ementa 5, inteiro teor 1), `pertinencia` e `correspondencia` em cada item, corte de dois terços dos termos e OR completando AND escasso (substitui "OR só com AND vazio" da 0010).
+- Tesauro jurídico `tesauro-1` (20 pares determinísticos, `freoa_verifica/data/tesauro-1.json`) expande a consulta por OR; a versão e as expansões saem na resposta.
+
 ## 1.0.2
 
 - Extração de citações em duas camadas: regras estruturais (numeração decimal de cláusulas, siglas coladas a números, pertença a instrumentos particulares, fronteiras de arquivo e de campo técnico) e confiança explícita `exata`/`provavel`. Em `verificar_texto`, citações `provavel` recebem `requer_conferencia`; só `exata` recebe `encontrada` ou `inexistente`. Nos oito corpora adversariais independentes (779 frases), falsos definitivos caíram de 250 para 0 e o recall subiu de 70,9% para 93,7%.

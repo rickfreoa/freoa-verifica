@@ -23,7 +23,7 @@ from freoa_verifica.authority import as_dict as authority_as_dict
 from freoa_verifica.authority import classify_authority
 from freoa_verifica.citation import Citation, extract, parse_one
 from freoa_verifica.courts import normalize_court
-from freoa_verifica.search import normalize_fts_query
+from freoa_verifica.search import buscar_and_or, consulta_fts, normalize_fts_query
 from freoa_verifica.connectors.base import (
     Candidate,
     ParsedDecision,
@@ -63,6 +63,10 @@ _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
 _JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "cvm_colegiado")
 _DEFAULT_TEXT_LIMIT = 4000
 _EMENTA_MAX = 1200
+_CLASSES_POR_EXTENSO = (
+    ("agravo em recurso especial", "AREsp"), ("recurso especial", "REsp"),
+    ("agravo em recurso extraordin[aá]rio", "ARE"), ("recurso extraordin[aá]rio", "RE"),
+)
 
 
 def _authenticated_output(method):
@@ -585,14 +589,22 @@ class Verifica:
     ) -> dict[str, Any]:
         offset = _decode_cursor(cursor)
         limite = max(1, min(int(limite), 50))
-        fts_query = normalize_fts_query(q)
-        modo_busca = "normal"
-        local = (repo.search_redactions(self.conn, fts_query, limit=limite + offset + 5)
-                 if fts_query else [])
-        if fts_query and not local:
-            modo_busca = "ampliada"
-            local = repo.search_redactions(
-                self.conn, normalize_fts_query(q, expanded=True), limit=limite + offset + 5)
+        offline = os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
+        ao_vivo = fonte != "__somente_local__" and not offline
+        filtro_fonte = fonte if fonte and fonte != "__somente_local__" else None
+        total = limite + offset + 5
+
+        def buscar_em(tabela):
+            return lambda fts, n: repo.search_redactions(
+                self.conn, fts, n, source_id=filtro_fonte, table=tabela)
+        args = (lambda r: r["text"], lambda r: (r["work_label"], r["path"], r["text"]), total, limite + offset)
+        res = buscar_and_or(q, buscar_em("fts_redaction"), *args)
+        local = res["linhas"]
+        modo_busca = "ampliada" if res["fts"] and not res["and"] else "normal"
+        if ao_vivo:  # staging só é consultado quando a busca pede candidatos ao vivo (A7)
+            for r in buscar_and_or(q, buscar_em("fts_staging"), *args)["linhas"]:
+                r["_staging"] = True
+                local.append(r)
         items: list[dict[str, Any]] = []
         for row in local:
             receipts = self.conn.execute(
@@ -643,75 +655,74 @@ class Verifica:
                     "capture_id": None,
                     "vigencia": vigencia,
                     "work_id": work_row["id"] if work_row else None,
+                    "pertinencia": row["pertinencia"],
+                    "correspondencia": row["correspondencia"],
+                    "candidato_ao_vivo": bool(row.get("_staging")),
                 }
             )
 
-        offline = os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
-        fontes = [fonte] if fonte else list(_LEGIS_CONNECTORS)
+        fontes = [fonte] if fonte and fonte != "__somente_local__" else list(_LEGIS_CONNECTORS)
         fontes_status: dict[str, dict[str, Any]] = {}
-        if (
-            len(items) < limite
-            and fonte != "__somente_local__"
-            and not offline
-        ):
-            cite = parse_one(q)
-            for cid in fontes:
-                if cid not in registry():
+
+        def nao_consultada(cid, motivo):
+            fontes_status[cid] = {"status": "nao_consultada", "motivo": motivo, "parcial": False}
+        cite = parse_one(q)
+        for cid in fontes:
+            if cid not in registry():
+                continue
+            if not ao_vivo:
+                nao_consultada(cid, "offline" if offline else "somente_local")
+                continue
+            if len(items) >= limite:
+                nao_consultada(cid, "limite_atingido_no_acervo_local")
+                continue
+            try:
+                conn_obj = self._get(cid)
+                lookup = bool(cite and cite.work)
+                if not lookup and not getattr(conn_obj, "coverage", {}).get("busca_textual", True):
+                    nao_consultada(cid, "busca_textual_nao_suportada")
                     continue
-                try:
-                    conn_obj = self._get(cid)
-                    filtros: dict[str, Any] = {}
-                    if cite and cite.work:
-                        filtros["numero"] = cite.work.number
-                        if cite.work.year:
-                            filtros["ano"] = cite.work.year
-                        filtros["tipo"] = cite.work.kind
-                    cands = conn_obj.search(q, **filtros)
-                    got = 0
-                    for cand in cands[: max(0, limite - len(items))]:
-                        indexed = self._index_candidate_legis(conn_obj, cand)
-                        items.append(indexed)
-                        got += 1
-                    fontes_status[cid] = {
-                        "status": "ok",
-                        "motivo": None,
-                        "parcial": got < len(cands),
-                    }
-                except Unavailable as exc:
-                    fontes_status[cid] = {
-                        "status": "unavailable",
-                        "motivo": exc.reason,
-                        "parcial": False,
-                    }
-                except Exception as exc:  # noqa: BLE001
-                    fontes_status[cid] = {
-                        "status": "unavailable",
-                        "motivo": f"{type(exc).__name__}:{exc}"[:200],
-                        "parcial": False,
-                    }
-        elif offline or fonte == "__somente_local__":
-            pass
-        else:
-            for cid in fontes:
-                if cid in registry():
-                    fontes_status[cid] = {
-                        "status": "ok",
-                        "motivo": None,
-                        "parcial": False,
-                    }
+                filtros: dict[str, Any] = {}
+                if lookup:
+                    filtros["numero"] = cite.work.number
+                    if cite.work.year:
+                        filtros["ano"] = cite.work.year
+                    filtros["tipo"] = cite.work.kind
+                cands = conn_obj.search(q, **filtros)
+                got = 0
+                for cand in cands[: max(0, limite - len(items))]:
+                    items.append(self._index_candidate_legis(conn_obj, cand))
+                    got += 1
+                fontes_status[cid] = {
+                    "status": "ok",
+                    "motivo": None,
+                    "parcial": got < len(cands),
+                    # contrato com os conectores: lista com .total/.truncado quando a fonte informa mais.
+                    "total": getattr(cands, "total", len(cands)),
+                    "truncado": bool(getattr(cands, "truncado", False)) or got < len(cands),
+                }
+            except Unavailable as exc:
+                fontes_status[cid] = {"status": "unavailable", "motivo": exc.reason, "parcial": False}
+            except Exception as exc:  # noqa: BLE001
+                fontes_status[cid] = {
+                    "status": "unavailable",
+                    "motivo": f"{type(exc).__name__}:{exc}"[:200],
+                    "parcial": False,
+                }
 
         page = items[offset:offset + limite]
-        truncado = len(items) > offset + limite
+        truncado = len(items) > offset + limite or any(v.get("truncado") for v in fontes_status.values())
         return {
             "itens": page,
             "resultados": page,
             "fontes": fontes_status,
             "total_parcial": offset + len(items),
             "truncado": truncado,
-            "cursor": _encode_cursor(offset + limite) if truncado else None,
+            "cursor": _encode_cursor(offset + limite) if len(items) > offset + limite else None,
             "consulta": q,
             "data": data,
             "modo_busca": modo_busca,
+            "tesauro": res["tesauro"],
         }
 
     def _index_candidate_legis(self, connector, cand: Candidate) -> dict[str, Any]:
@@ -741,6 +752,7 @@ class Verifica:
                         authority = candidate_cite.work.authority
                         kind = candidate_cite.work.kind
                 wk = WorkKey(authority, kind, re.sub(r"\D", "", number) or number, year)
+                marca = self.conn.execute("SELECT COALESCE(MAX(rowid),0) FROM fts_redaction").fetchone()[0]
                 rw = self.indexar_obra(
                     source_id=connector.id,
                     work_key=wk,
@@ -750,6 +762,12 @@ class Verifica:
                     fetched_at=resp.fetched_at,
                     label=cand.title,
                 )
+                # A7: candidato ao vivo não entra no FTS canônico; vai para o staging.
+                with self.conn:
+                    self.conn.execute(
+                        "INSERT INTO fts_staging(text, work_label, path) "
+                        "SELECT text, work_label, path FROM fts_redaction WHERE rowid>?", (marca,))
+                    self.conn.execute("DELETE FROM fts_redaction WHERE rowid>?", (marca,))
                 capture_id = rw.capture_id
                 if parsed.provisions:
                     path = parsed.provisions[0].path
@@ -1459,6 +1477,50 @@ class Verifica:
         limite: int = 10,
         cursor: str | None = None,
     ) -> dict[str, Any]:
+        key = self._chave_processo(q)
+        if key is not None:
+            return self._juris_por_numero(q, key)
+        return self._juris_textual(q, tribunais, desde, ate, autoridade_min, limite, cursor)
+
+    @staticmethod
+    def _chave_processo(q: str):
+        """Consulta que é só classe e número ("REsp 2.210.785", "Recurso Especial nº ...") vira chave."""
+        t = q.strip()
+        for pat, sigla in _CLASSES_POR_EXTENSO:
+            t = re.sub(r"(?<!\w)" + pat + r"(?!\w)", sigla, t, flags=re.I)
+        t = re.sub(r"(?<!\w)n(?:[º°]|\.º|\.)\s*", "", t, flags=re.I)
+        cite = parse_one(t)
+        if cite and cite.decision and cite.decision.number and len(cite.raw) >= len(t) - 3:
+            return cite.decision
+        return None
+
+    def _juris_por_numero(self, q: str, key) -> dict[str, Any]:
+        """A6: lookup exato por classe e número no acervo; nunca mistura outros processos."""
+        status, evidence = self._decision_evidence(key)
+        base = {"consulta": q, "modo_busca": "numero", "status": status,
+                "itens": [], "resultados": [], "relacionados": [], "resultados_textuais": [],
+                "truncado": False, "cursor": None, "fontes": {},
+                "rules_version": AUTHORITY_RULES_VERSION}
+        if status == "nao_confirmado_no_acervo":
+            cob = dict(evidence["cobertura"])
+            cob["tribunais"] = [r[0] for r in self.conn.execute(
+                "SELECT DISTINCT court FROM decision ORDER BY court")]
+            return {**base, "cobertura": cob,
+                    "aviso": "processo não localizado no acervo local; ausência não demonstra inexistência"}
+        rows = repo.decisions_by_number(self.conn, key.court, key.number)
+        cls = key.class_.lower()
+        exatas = [r for r in rows if (r["class"] or "").lower() == cls or r["official_id"] == key.number]
+        incidentes = [r for r in rows if r not in exatas and (r["class"] or "").lower().endswith((" no " + cls, " nos " + cls))]
+        itens = []
+        for r in exatas:
+            item = self._decisao_item(r)
+            item["evidencia"], item["relacao"] = evidence, "exato"
+            itens.append(item)
+        rel = [{**self._decisao_item(r), "relacao": "incidente_do_mesmo_processo"} for r in incidentes]
+        return {**base, "itens": itens, "resultados": itens, "relacionados": rel,
+                "total_parcial": len(itens), "evidencia": evidence}
+
+    def _juris_textual(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
         offset = _decode_cursor(cursor)
         limite = max(1, min(int(limite), 50))
         tribunais_norm = (list(_JURIS_CONNECTORS) if tribunais is None else
@@ -1471,57 +1533,26 @@ class Verifica:
             deterministic=True,
         )
         modo_busca = "normal"
+        tesauro_info: dict[str, Any] = {}
         def local_page():
-            nonlocal modo_busca
-            fts_query = normalize_fts_query(q)
-            modo_busca = "normal"
-            if not fts_query:
-                return []
-            # A existência é decidida antes de OFFSET, com os mesmos filtros.
-            probe = repo.search_local_decisions(
-                self.conn, fts_query, courts=tribunais_norm if tribunais is not None else None,
-                desde=desde, ate=ate, autoridade_min=autoridade_min, limit=1, offset=0)
-            if not probe:
-                modo_busca = "ampliada"
-                fts_query = normalize_fts_query(q, expanded=True)
-            return repo.search_local_decisions(
-                self.conn, fts_query, courts=tribunais_norm if tribunais is not None else None,
-                desde=desde, ate=ate, autoridade_min=autoridade_min,
-                limit=limite + 1, offset=offset,
-            )
+            nonlocal modo_busca, tesauro_info
+            def buscar(fts, n):
+                return repo.search_local_decisions(
+                    self.conn, fts, courts=tribunais_norm if tribunais is not None else None,
+                    desde=desde, ate=ate, autoridade_min=autoridade_min, limit=n, offset=0)
+            # AND primeiro; menos de offset+limite resultados completam com OR marcado (decisão 0025).
+            res = buscar_and_or(
+                q, buscar, lambda r: f"{r.get('ementa') or ''} {r.get('inteiro_teor') or ''}",
+                lambda r: r.get("decision_id") or r.get("official_id"),
+                offset + limite + 1, offset + limite, colunas="ementa inteiro_teor")
+            modo_busca = "ampliada" if res["fts"] and not res["and"] else "normal"
+            tesauro_info = res["tesauro"]
+            return res["linhas"][offset:]
 
         local = local_page()
         items: list[dict[str, Any]] = []
         def append_local(rows):
-            for row in rows:
-                text = row.get("ementa") or row.get("inteiro_teor") or ""
-                ementa, trunc = _truncate(text, _EMENTA_MAX)
-                court = row.get("court") or ""
-                class_name = row.get("class") or ""
-                auth = classify_authority(
-                    species=_species_from_meta(court, class_name, row.get("organ")),
-                    court=court, class_name=class_name or None, organ=row.get("organ"),
-                )
-                if text:
-                    self._authenticate_capture(row.get("capture_id"))
-                    if row.get("inteiro_teor") and row.get("full_capture_id"):
-                        self._authenticate_capture(row["full_capture_id"])
-                items.append({
-                    "id": row.get("decision_id"),
-                    "tribunal": court,
-                    "classe_numero": f"{class_name} {row.get('number') or ''}".strip(),
-                    "orgao": row.get("organ"), "relator": row.get("rapporteur"),
-                    "datas": {"julgamento": row.get("judgment_date"),
-                              "publicacao": row.get("publication_date")},
-                    "ementa": ementa,
-                    "autoridade": authority_as_dict(auth),
-                    "rotulo_autoridade": auth.label, "regra_autoridade": auth.rule,
-                    "rules_version": AUTHORITY_RULES_VERSION,
-                    "url_oficial": row.get("url_oficial"),
-                    "capture_id": row.get("capture_id"),
-                    "nivel_prova": row.get("nivel_prova") or "metadados",
-                    "truncado": trunc,
-                })
+            items.extend(self._decisao_item(row) for row in rows)
         append_local(local)
 
         id_map = {
@@ -1605,7 +1636,40 @@ class Verifica:
             "consulta": q,
             "autoridade_min": autoridade_min,
             "modo_busca": modo_busca,
+            "tesauro": tesauro_info,
             "rules_version": AUTHORITY_RULES_VERSION,
+        }
+
+    def _decisao_item(self, row: dict[str, Any]) -> dict[str, Any]:
+        text = row.get("ementa") or row.get("inteiro_teor") or ""
+        ementa, trunc = _truncate(text, _EMENTA_MAX)
+        court = row.get("court") or ""
+        class_name = row.get("class") or ""
+        auth = classify_authority(
+            species=_species_from_meta(court, class_name, row.get("organ")),
+            court=court, class_name=class_name or None, organ=row.get("organ"),
+        )
+        if text:
+            self._authenticate_capture(row.get("capture_id"))
+            if row.get("inteiro_teor") and row.get("full_capture_id"):
+                self._authenticate_capture(row["full_capture_id"])
+        return {
+            "id": row.get("decision_id"),
+            "tribunal": court,
+            "classe_numero": f"{class_name} {row.get('number') or ''}".strip(),
+            "orgao": row.get("organ"), "relator": row.get("rapporteur"),
+            "datas": {"julgamento": row.get("judgment_date"),
+                      "publicacao": row.get("publication_date")},
+            "ementa": ementa,
+            "autoridade": authority_as_dict(auth),
+            "rotulo_autoridade": auth.label, "regra_autoridade": auth.rule,
+            "rules_version": AUTHORITY_RULES_VERSION,
+            "url_oficial": row.get("url_oficial"),
+            "capture_id": row.get("capture_id"),
+            "nivel_prova": row.get("nivel_prova") or "metadados",
+            "truncado": trunc,
+            "pertinencia": row.get("pertinencia"),
+            "correspondencia": row.get("correspondencia"),
         }
 
     def _save_juris_capture(self, connector, response):

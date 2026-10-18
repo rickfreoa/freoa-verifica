@@ -328,13 +328,19 @@ def index_decision(
     conn.commit()
 
 
-def search_redactions(conn: sqlite3.Connection, q: str, limit: int = 10) -> list[dict[str, Any]]:
+def search_redactions(conn: sqlite3.Connection, q: str, limit: int = 10, *,
+                      source_id: str | None = None, table: str = "fts_redaction") -> list[dict[str, Any]]:
+    """`source_id` filtra antes do LIMIT; `table` escolhe o FTS canônico ou o staging (A7)."""
+    where, params = f"{table} MATCH ?", [q]
+    if source_id:
+        where += (" AND work_label IN (SELECT COALESCE(w.label,w.number) FROM work w "
+                  "JOIN provision p ON p.work_id=w.id JOIN redaction r ON r.provision_id=p.id "
+                  "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
+                  "JOIN capture c ON c.id=e.capture_id WHERE c.source_id=?)")
+        params.append(source_id)
     rows = conn.execute(
-        "SELECT text, work_label, path, bm25(fts_redaction) AS score "
-        "FROM fts_redaction WHERE fts_redaction MATCH ? "
-        "ORDER BY score LIMIT ?",
-        (q, limit),
-    ).fetchall()
+        f"SELECT text, work_label, path, bm25({table}) AS score FROM {table} "
+        f"WHERE {where} ORDER BY score LIMIT ?", (*params, limit)).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -367,6 +373,33 @@ def search_decisions(
         "ORDER BY score LIMIT ?"
     )
     rows = conn.execute(sql, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def decisions_by_number(conn: sqlite3.Connection, court: str, number: str) -> list[dict[str, Any]]:
+    """Decisões confirmadas do tribunal com o número (sem pontos), no formato de search_local_decisions."""
+    rows = conn.execute("""
+        SELECT d.court, d.class, d.official_id, d.id AS decision_id, d.organ, d.rapporteur,
+               d.number, d.judgment_date, d.publication_date, dd.capture_id, dd.sha256,
+               dd.nivel_prova, c.url AS url_oficial,
+               (SELECT text FROM decision_document WHERE decision_id=d.id AND kind='ementa'
+                ORDER BY created_at DESC, id DESC LIMIT 1) AS ementa,
+               (SELECT text FROM decision_document WHERE decision_id=d.id AND kind='inteiro_teor'
+                ORDER BY created_at DESC, id DESC LIMIT 1) AS inteiro_teor,
+               (SELECT capture_id FROM decision_document
+                WHERE decision_id=d.id AND kind='inteiro_teor'
+                ORDER BY created_at DESC, id DESC LIMIT 1) AS full_capture_id
+        FROM decision d
+        LEFT JOIN decision_document dd ON dd.id=(
+            SELECT id FROM decision_document
+            WHERE decision_id=d.id
+              AND (kind='inteiro_teor' OR (kind='ementa' AND COALESCE(text,'')!=''))
+            ORDER BY CASE WHEN kind='ementa' THEN 0 ELSE 1 END, created_at DESC, id DESC LIMIT 1)
+        LEFT JOIN capture c ON c.id=dd.capture_id
+        WHERE d.court=? AND d.identity_status='confirmed'
+          AND UPPER(REPLACE(REPLACE(d.number,'.',''),' ',''))=?
+        ORDER BY d.judgment_date DESC, d.id
+    """, (court.upper(), number.replace(".", "").replace(" ", "").upper())).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -419,7 +452,7 @@ def search_local_decisions(
     rows = conn.execute(f"""
         SELECT fts_decision.ementa, fts_decision.inteiro_teor,
                fts_decision.court, fts_decision.class, fts_decision.official_id,
-               bm25(fts_decision) AS score, d.id AS decision_id,
+               bm25(fts_decision, 5.0, 1.0, 0.0, 0.0, 0.0) AS score, d.id AS decision_id,
                d.organ, d.rapporteur, d.number, d.judgment_date, d.publication_date,
                dd.capture_id, dd.sha256, dd.nivel_prova, c.url AS url_oficial,
                (SELECT capture_id FROM decision_document
