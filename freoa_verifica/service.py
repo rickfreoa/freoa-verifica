@@ -461,6 +461,15 @@ class Verifica:
         if not work_key.year and declared and declared.year:
             work_key = declared
             work_date = work_date or declared_identity(document)[1]
+        demovida = False
+        if fts_alvo == "fts_redaction" and source_id in repo.FONTES_COMPILADAS:
+            existente = self.conn.execute(
+                "SELECT id FROM work WHERE authority=? AND kind=? AND number=? AND year=?",
+                (work_key.authority, work_key.kind, work_key.number, work_key.year)).fetchone()
+            if existente:  # 0034: perda de dispositivos => captura não canônica (staging + candidato)
+                vigente = repo.avaliar_monotonia(self.conn, existente["id"])[0]
+                if not vigente <= {(p.scope or "", p.path) for p in document.provisions}:
+                    fts_alvo, demovida = "fts_staging", True
         rw = populate_from_parsed(
             self.conn,
             source_id=source_id,
@@ -487,6 +496,9 @@ class Verifica:
                 candidato_ao_vivo=(True if fts_alvo == "fts_staging" else None),
             )
         situacao.registrar_do_corpo(self.conn, rw, source_id, body)  # C2
+        if demovida:  # o modelo canônico anterior permanece
+            canonica = self._rebuild_from_db(work_key, _exact=True)
+            rw = canonica if isinstance(canonica, ResolvedWork) else rw
         self._resolver.add(rw)
         if work_key.year <= 0:
             with self.conn:
@@ -514,7 +526,11 @@ class Verifica:
             return None
         work_id = row["id"]
         caps = repo.captures_for_work(self.conn, work_id)
-        cap = caps[0] if caps else None
+        _, perdas, conhecidos = repo.avaliar_monotonia(self.conn, work_id)  # 0034
+        rebaixadas = {d["capture_id"] for d in perdas}
+        # captura canônica mais recente: nem candidata ao vivo nem rebaixada por perda estrutural
+        cap = next((c for c in caps if not c.get("candidato_ao_vivo") and c["id"] not in rebaixadas),
+                   caps[0] if caps else None)
         saved = repo.get_parsed_document(self.conn, cap["id"]) if cap else None
         incomplete = False
         try:
@@ -552,6 +568,7 @@ class Verifica:
             quarantined=doc.quarantined,
             amending_act_texts=amending_texts,
             persisted_incomplete=incomplete,
+            caminhos_conhecidos=frozenset(conhecidos),
         )
         return rw
 
@@ -629,6 +646,8 @@ class Verifica:
                 counts['divergentes'].append(work['id'])
             except Exception as exc:
                 counts['falhas'].append({'capture_id':row['id'],'motivo':str(exc)})
+        with self.conn:  # 0034: capturas que perdem dispositivos deixam de ser canônicas
+            counts['divergentes'] += repo.aplicar_monotonia(self.conn)
         self._resolver = MemoryResolver()
         return counts
 

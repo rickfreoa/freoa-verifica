@@ -78,12 +78,17 @@ def indisponivel(aviso: dict | None = None) -> dict[str, Any]:
     return out
 
 
-def reindexar_fts(conn: sqlite3.Connection) -> int:
+def reindexar_fts(conn: sqlite3.Connection, divergentes: list | None = None) -> int:
     """Recompõe fts_redaction só com as redações do modelo atual de cada obra (captura mais recente).
 
     A7: capturas marcadas `candidato_ao_vivo` nunca entram no canônico; recompõem o fts_staging
     (só para obras sem captura confirmada). Homes antigos não têm marca: contam como canônicos.
     """
+    from freoa_verifica.store.repo import aplicar_monotonia
+
+    novas = aplicar_monotonia(conn)  # 0034: captura que perde estrutura não é canônica
+    if divergentes is not None:
+        divergentes += [d for d in novas if d not in divergentes]
     conn.execute("DELETE FROM fts_redaction")
     conn.execute("DELETE FROM fts_staging")
     n = 0

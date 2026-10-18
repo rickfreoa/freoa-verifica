@@ -672,7 +672,7 @@ def get_parsed_document(
 def captures_for_work(conn: sqlite3.Connection, work_id: str) -> list[dict[str, Any]]:
     """Capturas ligadas à obra via redaction → occurrence → extract."""
     rows = conn.execute(
-        "SELECT c.*, pd.profile, pd.parser_version, pd.quarantined, "
+        "SELECT c.*, pd.profile, pd.parser_version, pd.quarantined, pd.candidato_ao_vivo, "
         "pd.issues_json, pd.ambiguous_paths_json, pd.editorial_json "
         "FROM capture c LEFT JOIN parsed_document pd ON pd.capture_id=c.id "
         "WHERE pd.work_id=? OR c.id IN ("
@@ -710,3 +710,44 @@ def proof_level_for_capture(
     if kind_doc == "inteiro_teor":
         return "inteiro_teor_capturado"
     return "ementa_capturada"
+
+
+FONTES_COMPILADAS = ("planalto", "cvm_normas", "bcb")
+
+
+def avaliar_monotonia(conn: sqlite3.Connection, work_id: str, *, marcar: bool = False
+                      ) -> tuple[set[tuple[str, str]], list[dict[str, Any]], set[str]]:
+    """Decisão 0034: texto compilado não apaga dispositivos. Percorre as capturas não candidatas da obra
+    da mais antiga à mais nova; a que perde caminhos do modelo canônico vigente não é promovida.
+
+    Devolve (caminhos do canônico vigente, perdas [{capture_id, motivo}], caminhos de qualquer captura
+    canônica). `marcar=True` grava `candidato_ao_vivo=1` nas rebaixadas."""
+    rows = conn.execute(
+        "SELECT pd.capture_id, pd.model_json FROM parsed_document pd JOIN capture c ON c.id=pd.capture_id "
+        f"WHERE pd.work_id=? AND pd.model_json IS NOT NULL AND pd.candidato_ao_vivo=0 "
+        f"AND c.source_id IN ({','.join('?' * len(FONTES_COMPILADAS))}) ORDER BY c.fetched_at, c.id",
+        (work_id, *FONTES_COMPILADAS)).fetchall()
+    vigente: set[tuple[str, str]] | None = None
+    perdas: list[dict[str, Any]] = []
+    todos: set[str] = set()
+    for r in rows:
+        provs = json.loads(r["model_json"]).get("provisions") or []
+        caminhos = {(p.get("scope") or "", p["path"]) for p in provs}
+        todos |= {c[1] for c in caminhos}
+        if vigente is None or vigente <= caminhos:
+            vigente = caminhos
+            continue
+        perdas.append({"work_id": work_id, "capture_id": r["capture_id"], "motivo": "PERDA_ESTRUTURAL",
+                       "perdidos": sorted(c[1] for c in vigente - caminhos)[:20]})
+        if marcar:
+            conn.execute("UPDATE parsed_document SET candidato_ao_vivo=1 WHERE capture_id=?", (r["capture_id"],))
+    return vigente or set(), perdas, todos
+
+
+def aplicar_monotonia(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Rebaixa, em todas as obras, as capturas que perdem estrutura (idempotente)."""
+    out: list[dict[str, Any]] = []
+    for r in conn.execute("SELECT work_id FROM parsed_document WHERE work_id IS NOT NULL "
+                          "GROUP BY work_id HAVING COUNT(*)>1").fetchall():
+        out += avaliar_monotonia(conn, r[0], marcar=True)[1]
+    return out

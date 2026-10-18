@@ -80,6 +80,7 @@ class ResolvedWork:
     quarantined: bool
     amending_act_texts: dict[str, str] = field(default_factory=dict)
     persisted_incomplete: bool = False
+    caminhos_conhecidos: frozenset[str] = frozenset()  # dispositivos de qualquer captura canônica da obra (0034)
 
 
 class Resolver(Protocol):
@@ -173,6 +174,8 @@ def pode_negar(rw: ResolvedWork | None, path: str) -> str | None:
         return "DOCUMENTO_QUARENTENADO"
     if not any(_scope_of(p.path) == scope for p in doc.provisions):
         return "DOCUMENTO_SEM_ESTRUTURA"
+    if path in rw.caminhos_conhecidos or path.removesuffix(".caput") in rw.caminhos_conhecidos:
+        return "ESTRUTURA_DIVERGENTE_ENTRE_CAPTURAS"  # outra captura canônica tinha o dispositivo (0034)
     return None
 
 

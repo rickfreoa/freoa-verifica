@@ -584,7 +584,7 @@ def _reconstruir_derivados_substituidos(conn: sqlite3.Connection, capturas: list
                               extract_id=ext["id"] if ext else None)
 
 
-def _merge_attach(live_db: Path, snap_db: Path) -> None:
+def _merge_attach(live_db: Path, snap_db: Path) -> list:
     """Anexa dados publicos, remapeando identidades naturais ja existentes."""
     conn = sqlite3.connect(str(live_db))
     conn.row_factory = sqlite3.Row
@@ -595,6 +595,7 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
         "alias": ("scheme", "value"),
     }
     mappings = {}
+    divergentes: list = []
     try:
         conn.execute("ATTACH DATABASE ? AS snap", (str(snap_db),))
         local_dv = derivados.versao(conn)
@@ -639,7 +640,7 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
         if substituir:
             _reconstruir_derivados_substituidos(conn, substituidas)
         # C6: o FTS só leva as redações do modelo atual (nunca as de modelos substituídos).
-        derivados.reindexar_fts(conn)
+        derivados.reindexar_fts(conn, divergentes)
         # Versão do home: a do snapshot só vale se nenhum modelo local ficou para trás.
         if substituir:
             chaves = {tuple(r) for r in conn.execute(
@@ -655,6 +656,7 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
         from freoa_verifica.store.repo import rebuild_decision_index
         rebuild_decision_index(conn)
         conn.commit()
+        return divergentes
     finally:
         conn.close()
 
@@ -938,7 +940,7 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             svc.conn.backup(merged_conn)
         finally:
             merged_conn.close()
-        _merge_attach(merged_db, staging_db)
+        divergentes = _merge_attach(merged_db, staging_db)
         merged_blobs = staging / "merged-blobs"
         if live_blobs.is_dir():
             shutil.copytree(live_blobs, merged_blobs, copy_function=shutil.copy2)
@@ -968,7 +970,8 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             os.replace(merged_db, rebuild / "verifica.sqlite3")
             os.replace(merged_blobs, rebuild / "blobs")  # troca de diretório, sem symlink
             try:
-                derivados.reprocessar_pasta(rebuild)
+                rel = derivados.reprocessar_pasta(rebuild)
+                divergentes += [d for d in rel["divergentes"] if d not in divergentes]
             finally:
                 os.replace(rebuild / "verifica.sqlite3", merged_db)
                 os.replace(rebuild / "blobs", merged_blobs)
@@ -1009,6 +1012,7 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             "obras": manifest.get("obras"),
             "capturas": manifest.get("capturas"),
             "modo": "anexacao",
+            "divergentes": divergentes,
             "autenticidade": AUTHENTICITY_NOTE,
             **({"aviso": "derivados do snapshot em versão anterior; reconstruídos para a versão atual "
                          f"({derivados.DERIVED_VERSION}) antes de publicar"} if reconstruir else {}),

@@ -2,6 +2,7 @@
 
 ## 1.0.3 (em preparação)
 
+- Monotonia estrutural (decisão 0034): captura de texto compilado que perde dispositivos do modelo canônico não é promovida (`PERDA_ESTRUTURAL` em `divergentes` de reprocessar, reconstruir e instalar snapshot); `pode_negar` não nega caminho de captura canônica anterior (`ESTRUTURA_DIVERGENTE_ENTRE_CAPTURAS`).
 - ADCT com escopo próprio (`adct/artN`) no parser do Planalto (`parser_version` 1.2.3), sentinela `SCOPE_COLLISION` contra substituição entre escopos e extração de "art. N do ADCT" (decisão 0022).
 - Negativa de dispositivo exige estrutura (decisão 0023): `pode_negar` único em todos os consumidores; obra não capturada é `COBERTURA`, documento cortado, em quarentena ou sem dispositivos estruturados (PDF da CVM) é `unknown` com motivo, nunca `inexistente`. "caput" usa a resolução canônica.
 - Histórico ausente (decisão 0024): data sem redação selecionada não confronta nem devolve a redação atual como se fosse da data (`HISTORICO_ANTERIOR_AUSENTE`; `texto=null` e `texto_atual` rotulado); `redacoes_anteriores` exclui a vigente; `redacao_anterior_ausente_na_fonte`.
