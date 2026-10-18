@@ -26,6 +26,15 @@ def test_fv_help():
     assert "serve-mcp" in r.stdout
 
 
+def test_fv_acervo_ressincronizar_situacao_offline(verifica_populada, monkeypatch, capsys):
+    svc, *_ = verifica_populada
+    monkeypatch.setenv("FV_HOME", str(svc.home))
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    with pytest.raises(SystemExit):
+        main(["acervo", "ressincronizar-situacao", "--json"])
+    assert json.loads(capsys.readouterr().out)["status"] == "indisponivel"
+
+
 def test_fv_doctor_offline(verifica_populada, monkeypatch, capsys):
     svc, *_ = verifica_populada
     monkeypatch.setenv("FV_HOME", str(svc.home))

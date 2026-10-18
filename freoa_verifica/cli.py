@@ -186,6 +186,11 @@ def build_parser() -> argparse.ArgumentParser:
     pf.add_argument("origem", nargs="?")
     _add_json_flag(pf)
 
+    p = sub.add_parser("acervo", help="manutenção do acervo local")
+    ac = p.add_subparsers(dest="acervo_cmd", required=True)  # `reconstruir` (C6) entra aqui
+    ps = ac.add_parser("ressincronizar-situacao", help="relê a situação cadastral dos atos CVM/BCB/CMN (C2)")
+    _add_json_flag(ps)
+
     return parser
 
 
@@ -338,6 +343,11 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 data = svc.snapshot_info(args.origem)
             raise SystemExit(_print_result(data, as_json=as_json, titulo="Snapshot"))
+
+        if args.cmd == "acervo":
+            if args.acervo_cmd == "ressincronizar-situacao":
+                data = svc.ressincronizar_situacao()
+                raise SystemExit(_print_result(data, as_json=as_json, titulo="Situação das obras"))
 
     parser.error(f"comando desconhecido: {args.cmd}")
 

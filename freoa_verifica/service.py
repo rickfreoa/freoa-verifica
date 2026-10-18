@@ -759,6 +759,7 @@ class Verifica:
             "resultados": page,
             "fontes": fontes_status,
             "total_parcial": offset + len(items),
+            "total": max(len(items), sum(v.get("total") or 0 for v in fontes_status.values())),
             "truncado": truncado,
             "cursor": _encode_cursor(offset + limite) if len(items) > offset + limite else None,
             "consulta": q,
@@ -2024,9 +2025,9 @@ class Verifica:
                 "metadados": c.metadata,
             })
         status = ("parcial" if itens else "indisponivel") if falhas else "ok"
-        return {"status": status, "itens": itens, "total": len(itens),
+        return {"status": status, "itens": itens, "total": getattr(cands, "total", len(cands)),
                 "falhas": falhas,
-                "truncado": any(((c.metadata or {}).get("total_fonte") or 0) > len(cands) for c in cands)}  # A9
+                "truncado": bool(getattr(cands, "truncado", False))}  # A9
 
     # ------------------------------------------------------------------
     # Evidência / fontes / sync

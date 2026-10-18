@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 from freoa_verifica.connectors.base import (
+    CandidateList,
     Candidate,
     Connector,
     HealthProbe,
@@ -181,7 +182,7 @@ class BcbConnector(Connector):
             return []
         if total > 0 and not rows:
             raise Unavailable("resposta_invalida")
-        out: list[Candidate] = []
+        out = CandidateList()
         for row in rows:
             if not isinstance(row, dict):
                 raise Unavailable("resposta_invalida")
@@ -209,10 +210,10 @@ class BcbConnector(Connector):
                         "data": row.get("data"),
                         "revogado": row.get("RevogadoOWSBOOL") == "1",
                         "listItemId": row.get("listItemId"),
-                        "total_fonte": total,
                     },
                 )
             )
+        out.total = max(total, len(out))
         return out
 
     def resolve(self, key: Any) -> Candidate | None:

@@ -37,6 +37,18 @@ class Candidate:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+class CandidateList(list):
+    """Contrato A9: candidatos lidos + `total` informado pela fonte; `truncado` = fonte tem mais do que foi lido."""
+
+    def __init__(self, items=(), total: int | None = None):
+        super().__init__(items)
+        self.total = max(total or 0, len(self))
+
+    @property
+    def truncado(self) -> bool:
+        return self.total > len(self)
+
+
 @dataclass(frozen=True)
 class HealthProbe:
     name: str  # positivo | negativo | documento

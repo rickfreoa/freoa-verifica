@@ -86,6 +86,13 @@ def test_bcb_revogado_bloqueia_vigente(svc):
     assert out["identity"]["status"] == "verified"  # identidade documental permanece
 
 
+def test_recibo_reflete_situacao_aplicada_em_finalizar(svc):
+    rw, path = _indexar_bcb(svc, _bcb_body(Revogado=True))
+    out = svc.verificar_citacao(_cit(path))
+    gravado = json.loads(svc.conn.execute("SELECT result_json FROM run WHERE id=?", (out["run_id"],)).fetchone()[0])
+    assert gravado["temporal"]["reason_code"] == out["temporal"]["reason_code"] == "OBRA_REVOGADA_NA_FONTE"
+
+
 def test_revogacao_no_ramo_sem_dispositivo(svc):
     _indexar_bcb(svc, _bcb_body(Cancelado=True))
     out = svc.verificar_citacao(_cit())
@@ -291,7 +298,7 @@ def test_a4_total_positivo_sem_itens_legiveis_e_indisponivel():
 def test_a9_total_da_fonte_e_truncado_no_servico(svc, monkeypatch):
     body = _lista([(f"Resolução CVM {n}", f"resol{n:03d}.html") for n in (10, 11)], 175)
     cands = cvm_normas._parse_list_html(body, source_id="cvm_normas", tipo="resolucoes", limite=20, q="")
-    assert cands[0].metadata["total_fonte"] == 175
+    assert (cands.total, cands.truncado) == (175, True)
     monkeypatch.delenv("FV_OFFLINE")
 
     class C:
@@ -302,7 +309,9 @@ def test_a9_total_da_fonte_e_truncado_no_servico(svc, monkeypatch):
 
     monkeypatch.setattr(svc, "_get", lambda _id: C())
     monkeypatch.setattr(svc, "_index_candidate_legis", lambda c, cand: {"capture_id": "x", "trecho": ""})
-    assert svc._buscar_normas("cvm_normas", "x", None)["truncado"] is True
+    out = svc._buscar_normas("cvm_normas", "x", None)
+    assert (out["total"], out["truncado"]) == (175, True)
+    assert svc.buscar_legislacao("x", fonte="cvm_normas") is not None
 
 
 def test_m3_um_item_por_ato_descarta_anexo_duplicado():
@@ -341,7 +350,17 @@ def test_m4_consulta_com_numero_aciona_lookup_exato(monkeypatch):
     out = bcb.BcbConnector().search("Resolução CMN 4.966")
     q = unquote(urls[0])
     assert "NumeroOWSNMBR:4966" in q and "Resolução CMN" in q
-    assert out[0].metadata["total_fonte"] == 1
+    assert (out.total, out.truncado) == (1, False)
+
+
+def test_a9_bcb_total_da_fonte_maior_que_lido_e_truncado(monkeypatch):
+    payload = json.loads(load_fixture("bcb_busca_cmn_4966"))
+    payload["TotalRows"] = 175
+    corpo = json.dumps(payload).encode()
+    monkeypatch.setattr(bcb, "connector_fetch", lambda url, **kw: Response(
+        url, url, 200, {}, corpo, hashlib.sha256(corpo).hexdigest(), _agora(), [], "application/json"))
+    out = bcb.BcbConnector().search("Resolução CMN 4.966")
+    assert (out.total, out.truncado) == (175, True)
 
 
 # --- F03 --------------------------------------------------------------------

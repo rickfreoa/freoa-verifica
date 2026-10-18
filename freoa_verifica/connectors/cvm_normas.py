@@ -11,6 +11,7 @@ from lxml import etree as lxml_etree
 from lxml import html as lxml_html
 
 from freoa_verifica.connectors.base import (
+    CandidateList,
     Candidate,
     Connector,
     HealthProbe,
@@ -395,14 +396,13 @@ def _parse_list_html(
             url=abs_url,
             snippet=(ementa or "")[:300] or None,
             metadata={"tipo": tipo_item, "ementa": ementa, "situacao": situacao,
-                      "page_url": abs_url, "ano": int(dated_year) if dated_year else None,
-                      "total_fonte": total},
+                      "page_url": abs_url, "ano": int(dated_year) if dated_year else None},
         )
         # M3: um item por ato; anexo não normativo cede lugar à página/peça do ato.
         anterior = por_ato.get(cand.key)
         if anterior is None or (_e_anexo(anterior) and not _e_anexo(cand)):
             por_ato[cand.key] = cand
-    out = list(por_ato.values())[:limite]
+    out = CandidateList(list(por_ato.values())[:limite], total)
     if not out:
         if total is None and not articles:
             raise Unavailable("resposta_inesperada")
