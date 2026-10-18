@@ -204,7 +204,7 @@ def test_stj_seed_uses_recent_monthly_corpus_organs(tmp_path, monkeypatch):
         engine.sync_stj()
         assert len(calls) == 1
         assert calls[0]["desde"] is None
-        assert len(calls[0]["orgaos"]) == 4
+        assert len(calls[0]["orgaos"]) == 7  # 1.1.0: sete órgãos não criminais
         assert all(c["max_itens"] == 2 for c in calls)
         engine.sync_stj()
         assert len(calls) == 1
