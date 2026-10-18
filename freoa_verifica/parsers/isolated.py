@@ -73,8 +73,14 @@ def pdf_texto(body: bytes) -> ParsedDocument:
 
 
 def texto_pdf_isolado(body: bytes, timeout: float = 60.0) -> str:
+    """Falha, excesso ou timeout do filho é indisponibilidade declarada, nunca texto vazio."""
+    from freoa_verifica.connectors.base import Unavailable
+
     doc = parse_isolated("pdf_texto", body, timeout)
-    return "" if doc.quarantined else doc.text
+    if doc.quarantined:
+        detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "falha")
+        raise Unavailable(f"pdf_nao_processado: {detalhe}"[:200])
+    return doc.text
 
 
 def _main() -> None:

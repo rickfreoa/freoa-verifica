@@ -24,9 +24,9 @@ Em `verificar_texto`, associações com confiança `provavel` recebem `requer_co
 Requer Python 3.11 ou superior.
 
 ```bash
-pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.3/freoa_verifica-1.0.3-py3-none-any.whl"
+pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.1.0/freoa_verifica-1.1.0-py3-none-any.whl"
 # ou a partir do código-fonte:
-pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.3"
+pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.1.0"
 fv doctor
 fv snapshot install                   # corpus semente (opcional, recomendado)
 ```
@@ -46,7 +46,7 @@ No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verif
 Alternativa sem instalação permanente:
 
 ```bash
-uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.3 freoa-verifica-mcp
+uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.1.0 freoa-verifica-mcp
 ```
 
 O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release que contenha o snapshot, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.

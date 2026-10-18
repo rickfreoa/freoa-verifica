@@ -32,7 +32,6 @@ _PADROES: tuple[tuple[str, str, re.Pattern[str]], ...] = tuple(
 # Caracteres que escondem texto do leitor humano: largura zero, bidi e "tag".
 _INVISIVEIS = re.compile("[​-‏‪-‮⁠-⁤⁦-⁩﻿\U000e0000-\U000e007f]")
 _DELIMITADOR = re.compile(r"<<<|>>>")
-_MIN = 24  # strings curtas (ids, datas, rótulos) não carregam instrução útil
 
 
 def neutralizar(texto: str) -> str:
@@ -53,8 +52,8 @@ def examinar(texto: str, campo: str = "") -> list[dict[str, Any]]:
     for sev, cat, pat in _PADROES:
         for m in pat.finditer(texto):
             ini = max(0, m.start() - 60)
-            alertas.append({"severidade": sev, "categoria": cat, "campo": campo,
-                            "trecho": re.sub(r"\s+", " ", texto[ini:m.end() + 60]).strip()})
+            trecho = _INVISIVEIS.sub("", re.sub(r"\s+", " ", texto[ini:m.end() + 60]).strip())
+            alertas.append({"severidade": sev, "categoria": cat, "campo": campo, "trecho": neutralizar(trecho)})
             break  # um alerta por padrão e campo basta para o leitor conferir
     invis = _INVISIVEIS.findall(texto)
     if invis:
@@ -78,7 +77,7 @@ def proteger(valor: Any, _campo: str = "") -> tuple[Any, list[dict[str, Any]]]:
             out.append(nv)
             alertas += a
         return out, alertas
-    if isinstance(valor, str) and len(valor) >= _MIN:
+    if isinstance(valor, str):
         if valor.startswith(DOC_OPEN + "\n") and valor.endswith("\n" + DOC_CLOSE):
             corpo = valor[len(DOC_OPEN) + 1:-len(DOC_CLOSE) - 1]
             return envolver(corpo), examinar(corpo, _campo)

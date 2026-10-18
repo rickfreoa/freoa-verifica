@@ -130,7 +130,7 @@ def create_app(
 
     app = FastAPI(
         title="FREOA Verifica",
-        version="1.0.0.dev0",
+        version=__import__("freoa_verifica").__version__,
         description="Verificação de citações jurídicas contra fontes oficiais",
         lifespan=lifespan,
     )

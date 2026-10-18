@@ -8,6 +8,7 @@ Ausência ou falha de leitura é `ilegivel`, jamais "vigente".
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass, replace
 from datetime import date, datetime
@@ -118,7 +119,32 @@ def ler_bcb(body: bytes) -> dict[str, Any]:
     titulo = str(item.get("Titulo") or "").strip()
     texto = f"{titulo}: Revogado={str(revogado).lower()}; Cancelado={str(cancelado).lower()}"
     situacao = "revogada" if revogado else ("cancelada" if cancelado else "vigente_declarada")
-    return {"situacao": situacao, "texto_oficial": texto, "ato_revogador": None}
+    ato, efeito = (_revogacao_declarada(item.get("Atualizacoes")) if revogado else (None, None))
+    if ato:
+        texto += f"; Atualizacoes: {ato}" + (f" a partir de {efeito}" if efeito else "")
+    return {"situacao": situacao, "texto_oficial": texto, "ato_revogador": ato, "data_efeito": efeito}
+
+
+_REVOGACAO = re.compile(
+    r"^\s*(?P<ato>(?:Resolu[cç][aã]o|Circular|Carta Circular|Instru[cç][aã]o Normativa)\s+(?:CMN|BCB)?\s*n[ºo°]\s*[\d.]+/\d{4})"
+    r"\s*[-,–]\s*revoga[cç][aã]o total(?:\s*,?\s*a partir de\s+(?P<d>\d{1,2})[ºo°]?/(?P<m>\d{1,2})/(?P<a>\d{4}))?\.?\s*$",
+    re.I)
+
+
+def _revogacao_declarada(atualizacoes: Any) -> tuple[str | None, str | None]:
+    """Decisão 0035: só a entrada única e inequívoca de "Revogação total [a partir de D/M/AAAA]" vale.
+    Sem data declarada, o ato revogador é registrado e a data de efeito continua desconhecida."""
+    achados = [m for a in str(atualizacoes or "").split(";#") if (m := _REVOGACAO.match(a))]
+    if len(achados) != 1:
+        return None, None
+    m = achados[0]
+    efeito = None
+    if m["a"]:
+        try:
+            efeito = date(int(m["a"]), int(m["m"]), int(m["d"])).isoformat()
+        except ValueError:
+            efeito = None
+    return re.sub(r"\s+", " ", m["ato"]).strip(), efeito
 
 
 def registrar_do_corpo(conn: sqlite3.Connection, rw: Any, source_id: str, body: bytes) -> None:
@@ -127,7 +153,7 @@ def registrar_do_corpo(conn: sqlite3.Connection, rw: Any, source_id: str, body: 
         return
     lida = ler_bcb(body)
     gravar(conn, WorkStatus(rw.work_id, lida["situacao"], lida.get("texto_oficial"),
-                            lida.get("ato_revogador"), None, rw.capture_id, rw.sha256,
+                            lida.get("ato_revogador"), lida.get("data_efeito"), rw.capture_id, rw.sha256,
                             rw.fetched_at))
 
 
@@ -176,7 +202,8 @@ def ressincronizar(svc: Any, *, fontes: tuple[str, ...] = ("cvm_normas", "bcb"),
 
     if svc._offline():
         return {"status": "indisponivel", "motivo": "offline"}
-    out = {"lidas": 0, "ilegiveis": 0, "revogadas": 0, "canceladas": 0, "obras": 0}
+    out = {"lidas": 0, "ilegiveis": 0, "revogadas": 0, "canceladas": 0, "obras": 0, "falhas_com_leitura_preservada": 0}
+    inicio = datetime.now().astimezone()
     rows = svc.conn.execute(
         "SELECT * FROM work WHERE authority IN ('cvm','bcb','cmn') AND authority NOT LIKE 'invalidated:%' "
         "ORDER BY authority, kind, number, year").fetchall()
@@ -193,12 +220,23 @@ def ressincronizar(svc: Any, *, fontes: tuple[str, ...] = ("cvm_normas", "bcb"),
             ws = registrar_cvm(svc.conn, svc.home, svc._get(fonte), cand, rw) if cand else _ilegivel(svc.conn, row["id"], "especie_sem_pagina")
         else:
             ws = _reler_bcb(svc, row, caps, rw)
+        if ws.situacao != "ilegivel" and _anterior(ws.lido_em, inicio):
+            out["falhas_com_leitura_preservada"] += 1  # tentativa frustrada; vale a leitura anterior
+            continue
         out["lidas"] += 1
         out["ilegiveis"] += ws.situacao == "ilegivel"
         out["revogadas"] += ws.situacao == "revogada"
         out["canceladas"] += ws.situacao == "cancelada"
     svc._resolver = type(svc._resolver)()
     return {"status": "ok", **out}
+
+
+def _anterior(lido_em: str | None, inicio: datetime) -> bool:
+    try:
+        lido = datetime.fromisoformat(str(lido_em))
+    except ValueError:
+        return True
+    return (lido if lido.tzinfo else lido.astimezone()) < inicio
 
 
 def _ilegivel(conn: sqlite3.Connection, work_id: str, motivo: str) -> WorkStatus:
@@ -224,8 +262,8 @@ def _reler_bcb(svc: Any, row: Any, caps: list, rw: Any) -> WorkStatus:
                                         metadata={"tipo": tipo, "numero": numero}))
         captura = repo.save_capture(svc.conn, resp, "bcb", home=svc.home)
         lida = ler_bcb(resp.body)
-        ws = WorkStatus(row["id"], lida["situacao"], lida.get("texto_oficial"), None, None,
-                        captura, resp.sha256, resp.fetched_at)
+        ws = WorkStatus(row["id"], lida["situacao"], lida.get("texto_oficial"), lida.get("ato_revogador"),
+                        lida.get("data_efeito"), captura, resp.sha256, resp.fetched_at)
     except Exception as exc:  # noqa: BLE001
         return _falha_de_leitura(svc.conn, WorkStatus(row["id"], "ilegivel", f"bcb_indisponivel: {getattr(exc, 'reason', type(exc).__name__)}"[:200]), svc.home)
     gravar(svc.conn, ws)

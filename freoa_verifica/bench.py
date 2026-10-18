@@ -110,9 +110,10 @@ def run_bench(svc: Any, gold_path: str | Path) -> dict[str, Any]:
             continue
 
         # positivo / mutante
-        res = svc.verificar_citacao(citacao, trecho=trecho)
+        res = svc.verificar_citacao(citacao, trecho=trecho, **({"data": caso["data"]} if caso.get("data") else {}))
         identity = _dim(res, "identity")
         text = _dim(res, "text")
+        temporal = _dim(res, "temporal")
         gold_suspeito = None
 
         if tipo == "positivo":
@@ -155,6 +156,11 @@ def run_bench(svc: Any, gold_path: str | Path) -> dict[str, Any]:
                 ok = not falso_verified
                 if expectativa.get("text"):
                     ok = text == expectativa["text"]
+            # Indisponibilidade não é recusa correta: o mutante não foi confrontado (1.1.0).
+            if "unavailable" in (identity, text) and not (expectativa.get("identity") or expectativa.get("text")):
+                ok = False
+        if expectativa.get("temporal"):
+            ok = ok and temporal == expectativa["temporal"]
 
         resultados.append(
             CasoResultado(
