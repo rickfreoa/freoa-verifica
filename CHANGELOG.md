@@ -3,6 +3,10 @@
 ## 1.0.3 (em preparação)
 
 - ADCT com escopo próprio (`adct/artN`) no parser do Planalto (`parser_version` 1.2.3), sentinela `SCOPE_COLLISION` contra substituição entre escopos e extração de "art. N do ADCT" (decisão 0022).
+- Negativa de dispositivo exige estrutura (decisão 0023): `pode_negar` único em todos os consumidores; obra não capturada é `COBERTURA`, documento cortado, em quarentena ou sem dispositivos estruturados (PDF da CVM) é `unknown` com motivo, nunca `inexistente`. "caput" usa a resolução canônica.
+- Histórico ausente (decisão 0024): data sem redação selecionada não confronta nem devolve a redação atual como se fosse da data (`HISTORICO_ANTERIOR_AUSENTE`; `texto=null` e `texto_atual` rotulado); `redacoes_anteriores` exclui a vigente; `redacao_anterior_ausente_na_fonte`.
+- `verificar_texto` lista remissões anafóricas como `referencia_nao_resolvida` e informa `total_detectado`, `total_processado` e `truncado` acima de 200 citações.
+- Recibo final (decisão 0027): o recibo é gravado depois de todos os rebaixamentos e coincide com a resposta; `verificar_citacao` aplica o bloqueio de confiança de extração (corrige "Lei 6.404/1976: art. 117 do contrato" verified).
 
 ## 1.0.2
 

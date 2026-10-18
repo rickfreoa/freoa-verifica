@@ -152,6 +152,38 @@ def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, sp
     )
 
 
+_INCOMPLETE_CODES = frozenset({"TRUNCATED", "EXTRACAO_INCOMPLETA"})
+
+
+def _scope_of(path: str) -> str:
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+def pode_negar(rw: ResolvedWork | None, path: str) -> str | None:
+    """C1 (decisão 0023): None autoriza DISPOSITIVO_INEXISTENTE; senão, o motivo que o impede."""
+    if rw is None or not rw.capture_id:
+        return "COBERTURA"
+    scope = _scope_of(path)
+    doc = rw.document
+    if any(i.code in _INCOMPLETE_CODES and (i.path is None or _scope_of(i.path) == scope)
+           for i in doc.issues):
+        return "ESTRUTURA_INCOMPLETA"
+    if rw.quarantined:
+        return "DOCUMENTO_QUARENTENADO"
+    if not any(_scope_of(p.path) == scope for p in doc.provisions):
+        return "DOCUMENTO_SEM_ESTRUTURA"
+    return None
+
+
+def negativa_dimension(rw: ResolvedWork | None, path: str) -> Dimension:
+    """Identidade de dispositivo ausente: not_found só se pode_negar autoriza."""
+    motivo = pode_negar(rw, path)
+    ev = [_ev_from_resolved(rw, path, None)] if rw is not None else []
+    if motivo is None:
+        return Dimension("not_found", "DISPOSITIVO_INEXISTENTE", ev)
+    return Dimension("unavailable" if motivo == "COBERTURA" else "unknown", motivo, ev)
+
+
 def _find_provision(doc: ParsedDocument, path: str) -> Provision | None:
     prov = doc.provision(path)
     if prov:
@@ -226,10 +258,16 @@ def verificar(
     resolver: Resolver | None = None,
     *,
     _path: str | None = None,
+    persistir: bool = True,
 ) -> VerificationResult:
-    """Verifica citação nas dimensões identity/text/temporal/support."""
+    """Verifica citação nas dimensões identity/text/temporal/support.
+
+    `persistir=False` (fachada) devolve sem gravar recibo: quem finaliza grava (C4).
+    """
     if resolver is None:
         raise ValueError("resolver é obrigatório")
+    if not persistir:
+        repo = None
 
     cite = parse_one(citacao)
     if _path is not None:
@@ -331,34 +369,19 @@ def verificar(
 
     # Bloqueios documentais/por dispositivo ANTES de seleção/comparação
     if rw.quarantined:
-        if path and prov is None:
-            identity = Dimension(
-                "not_found",
-                "DISPOSITIVO_INEXISTENTE",
-                [_ev_from_resolved(rw, path, None)],
-            )
-        elif path is None:
-            identity = Dimension(
-                "unknown",
-                "DOCUMENTO_QUARENTENADO",
-                [_ev_from_resolved(rw, None, None)],
-            )
-        else:
-            identity = Dimension(
-                "unknown",
-                "DOCUMENTO_QUARENTENADO",
-                [_ev_from_resolved(rw, path, None)],
-            )
+        # C1: documento quarentenado nunca nega outro dispositivo; motivo vem de pode_negar.
+        motivo = (pode_negar(rw, path) if path and prov is None else None) or "DOCUMENTO_QUARENTENADO"
+        identity = Dimension("unknown", motivo, [_ev_from_resolved(rw, path, None)])
         result = VerificationResult(
             identity=identity,
             text=Dimension(
                 "unknown",
-                "DOCUMENTO_QUARENTENADO",
+                motivo,
                 [_ev_from_resolved(rw, path, None)],
             )
             if trecho is not None
             else Dimension("not_assessed", "SEM_TRECHO"),
-            temporal=Dimension("unknown", "DOCUMENTO_QUARENTENADO"),
+            temporal=Dimension("unknown", motivo),
             support=support,
             citation=cite,
         )
@@ -437,11 +460,7 @@ def verificar(
             [_ev_from_resolved(rw, None, None)],
         )
     elif prov is None:
-        identity = Dimension(
-            "not_found",
-            "DISPOSITIVO_INEXISTENTE",
-            [_ev_from_resolved(rw, path, None)],
-        )
+        identity = negativa_dimension(rw, path)
     else:
         identity = Dimension(
             "verified",
@@ -468,11 +487,16 @@ def verificar(
     if trecho is None:
         text_dim = Dimension("not_assessed", "SEM_TRECHO")
     elif prov is None:
-        text_dim = Dimension("not_found", "SEM_DISPOSITIVO")
+        text_dim = (Dimension("not_found", "SEM_DISPOSITIVO") if identity.status == "not_found"
+                    else Dimension("unknown", identity.reason_code))
     elif temporal_res and temporal_res.status in ("revogado", "nao_existia", "ambiguous"):
         text_dim = Dimension("unknown", temporal_res.reason or temporal_res.status.upper())
     elif temporal_res and temporal_res.reason in {"INICIO_SUCESSOR_DESCONHECIDO", "CAPTURA_DATA_INVALIDA"}:
         text_dim = Dimension("unknown", temporal_res.reason)
+    elif (temporal_res and not temporal_res.redaction_id
+          and temporal_res.status not in ("verified", "vigente_na_fonte")):
+        # C3: sem redação selecionada para a data pedida, não confrontar a atual.
+        text_dim = Dimension("unknown", temporal_res.reason or "HISTORICO_ANTERIOR_AUSENTE")
     else:
         if temporal_res and temporal_res.redaction_id:
             red = _redaction_by_id(prov, temporal_res.redaction_id)
@@ -613,25 +637,25 @@ def _persist(
     modo: str,
     result: VerificationResult,
 ) -> VerificationResult:
-    request = {
-        "citacao": citacao,
-        "trecho": trecho,
-        "data": data,
-        "modo": modo,
-    }
-    request_json = json.dumps(request, ensure_ascii=False, sort_keys=True)
-    request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
-    result_json = json.dumps(_result_to_json(result), ensure_ascii=False, sort_keys=True)
     if conn is not None:
-        run_id = new_ulid()
-        conn.execute(
-            "INSERT INTO run(id, request_hash, request_json, policy_version, result_json) "
-            "VALUES (?,?,?,?,?)",
-            (run_id, request_hash, request_json, POLICY_VERSION, result_json),
-        )
-        conn.commit()
-        result.run_id = run_id
+        result.run_id = persistir_resultado(conn, citacao, trecho, data, modo, _result_to_json(result))
     return result
+
+
+def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any]) -> str:
+    """Grava o recibo (C4): chamado só depois da finalização, com a conclusão devolvida."""
+    request_json = json.dumps({"citacao": citacao, "trecho": trecho, "data": data, "modo": modo},
+                              ensure_ascii=False, sort_keys=True)
+    request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
+    result_json = json.dumps(resultado, ensure_ascii=False, sort_keys=True)
+    run_id = new_ulid()
+    conn.execute(
+        "INSERT INTO run(id, request_hash, request_json, policy_version, result_json) "
+        "VALUES (?,?,?,?,?)",
+        (run_id, request_hash, request_json, POLICY_VERSION, result_json),
+    )
+    conn.commit()
+    return run_id
 
 
 def populate_from_parsed(
