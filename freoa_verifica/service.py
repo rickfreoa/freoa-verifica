@@ -77,7 +77,7 @@ _ESPERA_CLOSE = 30.0
 from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E402,F401
 
 _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
-_JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "cvm_colegiado")
+_JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "tjdft", "cvm_colegiado")
 _DEFAULT_TEXT_LIMIT = 4000
 _EMENTA_MAX = 1200
 _CLASSES_POR_EXTENSO = (
@@ -1985,6 +1985,7 @@ class Verifica:
             "stj": "stj",
             "tcu": "tcu",
             "tjsp": "tjsp",
+            "tjdft": "tjdft",
             "cvm": "cvm_colegiado",
             "cvm_colegiado": "cvm_colegiado",
         }

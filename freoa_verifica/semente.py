@@ -749,6 +749,32 @@ class SementeSync:
         except Exception as exc:  # noqa: BLE001
             self._mark_indisponivel("tcu", chave, str(exc)[:200])
 
+    def sync_tjdft(self) -> None:
+        if not self._want("tjdft"):
+            return
+        cfg = self.corpus.get("jurisprudencia", {}).get("tjdft") or {}
+        por = int(cfg.get("por_consulta") or 20)
+        if self.max_itens is not None:
+            por = min(por, self.max_itens)
+        conn_obj = self.svc._get("tjdft")
+        for consulta in cfg.get("consultas") or []:
+            chave = f"consulta:{consulta}:{por}"
+            if self.state.done("tjdft", chave):
+                self._stats("tjdft").pulados += 1
+                continue
+            try:
+                self._sleep()
+                cands = conn_obj.search(consulta, limite=por)
+                ok = all([self._capture_juris("tjdft", conn_obj, c) for c in cands])
+                if ok:
+                    self.state.set("tjdft", chave, "capturado", payload={"n": len(cands), "total": cands.total})
+                else:
+                    self._mark_indisponivel("tjdft", chave, "candidato_sem_evidencia")
+            except Unavailable as exc:
+                self._mark_indisponivel("tjdft", chave, exc.reason[:200])
+            except Exception as exc:  # noqa: BLE001
+                self._mark_indisponivel("tjdft", chave, str(exc)[:200])
+
     def _capture_juris(self, fonte: str, connector: Any, cand: Any) -> bool:
         key = str(cand.key)
         checkpoint = fonte + "_doc"
@@ -879,6 +905,7 @@ class SementeSync:
             ("bcb", self.sync_bcb),
             ("stj", self.sync_stj),
             ("tcu", self.sync_tcu),
+            ("tjdft", self.sync_tjdft),
             ("cvm_colegiado", self.sync_cvm_colegiado),
             ("stf", self.sync_stf),
         ]

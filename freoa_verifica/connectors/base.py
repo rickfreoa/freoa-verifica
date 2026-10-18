@@ -139,6 +139,7 @@ def registry() -> dict[str, type[Connector]]:
         stf,
         stj,
         tcu,
+        tjdft,
         tjsp,
     )
 

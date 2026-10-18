@@ -204,7 +204,7 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         limite: Limite = 10,
         cursor: Cursor | None = None,
     ) -> dict[str, Any]:
-        """Pesquisa jurisprudência (STJ, STF, TCU, TJSP, CVM Colegiado).
+        """Pesquisa jurisprudência (STJ, STF, TCU, TJSP, TJDFT, CVM Colegiado).
 
         Pode gravar cache local. limite máximo: 50. Aceita siglas e nomes dos tribunais.
         """
