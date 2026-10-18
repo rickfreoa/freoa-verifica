@@ -17,14 +17,16 @@ Modelos de linguagem citam bem e conferem mal. O problema não está em encontra
 
 Estados possíveis em cada dimensão: `verified`, `divergent`, `not_found`, `ambiguous`, `unavailable`, `unknown`, `not_assessed`. Falha de rede nunca vira "não encontrado"; silêncio da fonte nunca vira "vigente".
 
+Em `verificar_texto`, associações com confiança `provavel` recebem `requer_conferencia`, com interpretação proposta, alternativas e evidência disponível; somente citações `exata` podem receber `encontrada` ou `inexistente`.
+
 ## Instalação
 
 Requer Python 3.11 ou superior.
 
 ```bash
-pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.1/freoa_verifica-1.0.1-py3-none-any.whl"
+pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.2/freoa_verifica-1.0.2-py3-none-any.whl"
 # ou a partir do código-fonte:
-pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.1"
+pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.2"
 fv doctor
 fv snapshot install                   # corpus semente (opcional, recomendado)
 ```
@@ -42,10 +44,10 @@ fv snapshot install                   # corpus semente (opcional, recomendado)
 Alternativa sem instalação permanente:
 
 ```bash
-uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.1 freoa-verifica-mcp
+uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.2 freoa-verifica-mcp
 ```
 
-O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.
+O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release que contenha o snapshot, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.
 
 Para uso remoto: `fv serve-mcp --http --port 8765` (streamable HTTP). API REST: `pip install "freoa-verifica[server]"` e `fv serve-api`.
 
@@ -87,6 +89,8 @@ Medições de 18/10/2026, com conjuntos montados por quem não escreveu o códig
 | Decisões reais identificadas (com consulta às fontes) | 6/15 |
 | Decisões inventadas rejeitadas com prova oficial | 2/5 |
 
+Extrator de citações em prosa (v1.0.2), oito corpora adversariais independentes com 779 frases e expectativas congeladas: falsos `encontrada`/`inexistente` 0 (eram 250 na v1.0.1); erros em citações `exata` 0/424; recall 93,7%; nenhum status definitivo nos 181 controles sem norma.
+
 Os números de decisões mostram o limite atual: sem consulta pública universal por número no STJ e no STF, a ferramenta informa "não confirmado no acervo" em vez de afirmar inexistência. A reconstrução histórica integral de redações não está demonstrada; quando falta a história anterior, a dimensão temporal permanece `unknown`.
 ## Arquitetura
 
@@ -100,3 +104,7 @@ O FREOA Verifica confere fontes; não emite parecer. A interpretação jurídica
 
 Autor: Ricardo Peres Freoa.
 `fv busca` e `fv juris`: busca local com flexão mínima por prefixos (mínimo de quatro letras), frases entre aspas exatas e ampliação AND→OR sinalizada por `modo_busca: "ampliada"` (ver seção Busca de `docs/ARQUITETURA.md`).
+
+Para consultar normas no acervo instalado em somente leitura, defina `FV_READ_ONLY=1` antes de executar `fv verifica` ou `fv verifica-texto`. Esse modo não grava recibos de execução, não executa migrações ou reparos e não captura documentos ausentes. O banco deve estar previamente instalado e atualizado.
+
+verificar_texto pressupõe texto jurídico; siglas em textos de outra natureza podem ser lidas como citações. Campos técnicos explicitamente rotulados exigem conferência; a forma jurídica usual `CC, art. 114` permanece exata sem esses marcadores. Veja a decisão [0020](docs/decisoes/0020-rotulos-e-contextos-tecnicos.md).

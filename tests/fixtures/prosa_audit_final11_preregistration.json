@@ -1,0 +1,13 @@
+{
+  "cases": 95,
+  "explicit_refs": 70,
+  "criteria": {
+    "a": "false encontrada/inexistente = 0",
+    "b": "wrong exata / all exata <= 0.01",
+    "c": "correct explicit device extractions (exata+provavel) / expected explicit device refs >= 0.95",
+    "d": "no-norm controls with definitive status = 0"
+  },
+  "matching": "Exact norm number, year and article; whole-norm fallback does not recall a device. Private-device proposals count as erroneous if exata. One-to-one matching. No post-run relabeling.",
+  "synthetic": "Two captures per norm: union of all expected and proposed articles; separate alien article 99999 only. Definitive full-norm results are permitted for genuine whole-norm expectations. Any definitive wrong interpretation is false.",
+  "corpus_sha256": "6ee10ba551b9b297d1dde76790ac5a2f6ab3b3f3d91a78a96057f4ddfd1a91f0"
+}

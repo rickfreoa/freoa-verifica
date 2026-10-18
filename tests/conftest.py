@@ -76,3 +76,44 @@ def verifica_populada(tmp_path, monkeypatch, _lsa_art254a):
     )
     yield svc, rw, doc
     svc.close()
+
+
+@pytest.fixture(autouse=True)
+def isolated_staging(tmp_path, monkeypatch):
+    """Todo staging de testes permanece no temporario do proprio teste."""
+    monkeypatch.setenv("FV_STAGING_DIR", str(tmp_path / "staging-root"))
+    # SQLite e subprocessos também precisam de uma raiz gravável por teste.
+    for variable in ("TEMP", "TMP", "SQLITE_TMPDIR"):
+        monkeypatch.setenv(variable, str(tmp_path))
+
+
+# Python recente cria ACL privada com mode=0700 no Windows. O token restrito
+# precisa que os temporarios de teste herdem a ACL do diretorio do projeto.
+import os
+from uuid import uuid4
+from pathlib import Path
+from _pytest.tmpdir import TempPathFactory
+
+
+if os.name == "nt":
+    class _InheritedTempPathFactory(TempPathFactory):
+        def getbasetemp(self):
+            if self._basetemp is None:
+                root = self._given_basetemp or Path(".tmp")
+                root = Path(root).resolve()
+                root.mkdir(parents=True, exist_ok=True)
+                self._basetemp = root / ("pytest-" + uuid4().hex)
+                self._basetemp.mkdir()
+            return self._basetemp
+
+        def mktemp(self, basename, numbered=True):
+            basename = self._ensure_relative_to_basetemp(basename)
+            name = basename + uuid4().hex if numbered else basename
+            directory = self.getbasetemp() / name
+            directory.mkdir()
+            return directory
+
+    @pytest.fixture(scope="session")
+    def tmp_path_factory(request):
+        # Preserva os artefatos para diagnóstico, como a retenção do pytest.
+        return _InheritedTempPathFactory.from_config(request.config, _ispytest=True)

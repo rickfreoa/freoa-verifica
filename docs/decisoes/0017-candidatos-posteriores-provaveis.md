@@ -1,0 +1,13 @@
+# Candidatos posteriores prováveis e interpretação preferida
+
+Data: 18/10/2026. Complementa a decisão 0016 na geração de candidatos prováveis. Não altera a gramática de associação exata nem os requisitos de identidade verificada.
+
+Dispositivos iniciados até 120 caracteres depois da norma podem ser propostos após `cujo/cuja/cujos/cujas`, dois-pontos, ponto e vírgula, quebra de linha, `notadamente`, `especialmente`, `em especial`, `no` ou `em seu`. Essa busca não atravessa outra norma. Parênteses e travessões pareados continuam produzindo propostas; delimitadores sem par continuam sem associação. Fronteiras de tokens e validação de romanos permanecem obrigatórias.
+
+Pertença explícita a outro referente nunca recebe associação exata. Rejeições estruturais anteriores continuam preservando a obra sem dispositivo. Nas propostas com marcador de pertença, a interpretação preferida é `dispositivo de outro referente`; o caminho normativo candidato permanece disponível como alternativa, sem representar a escolha preferida. Nos demais candidatos, a preferência é `norma+dispositivo`. O objeto `conferencia` explicita essa preferência, preservando a interpretação proposta, alternativas e confronto disponível. Nenhuma proposta recebe status definitivo, mesmo quando o dispositivo existe ou sua ausência está documentada.
+
+O corpus da décima auditoria preserva integralmente textos, grupos e expectativas, com hash e critérios pré-registrados. A regressão mede também os quatro corpora anteriores reunidos, sem substituições de oráculo. O recall compara multiconjuntos de identidades completas com a interpretação preferida, incluindo obras sem dispositivo; propostas com preferência por outro referente contam como obra sem dispositivo, não como artigo da norma. A omissão de um artigo esperado reduz recall. Reporta-se separadamente o recorte explicitamente normativo. Erro exato divide identidades inventadas ou dispositivos indevidos pelo total de extrações exatas.
+
+O aceite exige zero falsos status definitivos nos acervos sintéticos presente e ausente, erro exato de até 1%, recall de pelo menos 95% e zero status definitivos em controles sem norma. A suíte e a medição do desenvolvedor não substituem o parecer adversarial independente necessário ao avanço do marco.
+
+Os testes legados de fronteira passam a aceitar candidatos prováveis após dois-pontos, ponto e vírgula e quebras de linha, inclusive linhas em branco dentro da janela. As comparações dos oráculos históricos consideram a interpretação preferida: um caminho alternativo com preferência por outro referente não substitui a expectativa de obra sem dispositivo. Os arquivos originais de corpus permanecem intactos.

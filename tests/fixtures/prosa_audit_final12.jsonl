@@ -1,0 +1,120 @@
+{"id": "N001", "group": "milhares", "text": "Na Lei 10.406/2002, art. 1.142, procuramos a rubrica azul.", "expected": [{"work": "10406/2002", "path": "art1142"}]}
+{"id": "N002", "group": "milhares", "text": "Art. 1.022 da Lei 13.105/2015: ficha âmbar.", "expected": [{"work": "13105/2015", "path": "art1022"}]}
+{"id": "N003", "group": "milhares", "text": "Lei 13.105/2015, art. 1.015; conferir etiqueta violeta.", "expected": [{"work": "13105/2015", "path": "art1015"}]}
+{"id": "N004", "group": "milhares", "text": "Artigo 1.003 da Lei 13.105/2015 fica no envelope cinza.", "expected": [{"work": "13105/2015", "path": "art1003"}]}
+{"id": "N005", "group": "milhares", "text": "Lei 13.105/2015, art. 1.029. A ficha encerra aqui.", "expected": [{"work": "13105/2015", "path": "art1029"}]}
+{"id": "N006", "group": "milhares", "text": "Na Lei 10.406/2002 lemos o art. 1.228 na oficina.", "expected": [{"work": "10406/2002", "path": "art1228"}]}
+{"id": "N007", "group": "milhares", "text": "O art. 1.245 da Lei 10.406/2002 recebeu marcador verde.", "expected": [{"work": "10406/2002", "path": "art1245"}]}
+{"id": "N008", "group": "milhares", "text": "Lei 10.406/2002, art. 1.196: índice carmim.", "expected": [{"work": "10406/2002", "path": "art1196"}]}
+{"id": "N009", "group": "milhares", "text": "Consultar art. 1.210 da Lei 10.406/2002 para a ficha 8.", "expected": [{"work": "10406/2002", "path": "art1210"}]}
+{"id": "N010", "group": "milhares", "text": "Lei 13.105/2015, art. 1.009, anotação do laboratório.", "expected": [{"work": "13105/2015", "path": "art1009"}]}
+{"id": "N011", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 8.2 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N012", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 8.25 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N013", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 19.4 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N014", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 19.44 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N015", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 2.07 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N016", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 77.01 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N017", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 31.9 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N018", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 48.66 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N019", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 92.3 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N020", "group": "decimal_privado", "text": "Lei 10.406/2002; o art. 101.20 do pacto experimental rege a gaveta.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N021", "group": "pertenca_privada", "text": "Lei 10.406/2002, art. 73 relativo ao contrato Rubi.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N022", "group": "pertenca_privada", "text": "Lei 10.406/2002: art. 74 que integra o estatuto Safira.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N023", "group": "pertenca_privada", "text": "Lei 10.406/2002, art. 75 é parte da convenção Topázio.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N024", "group": "pertenca_privada", "text": "Lei 10.406/2002: art. 76 situado no regulamento Jade.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N025", "group": "pertenca_privada", "text": "Lei 10.406/2002, art. 77 extraído do acordo Coral.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N026", "group": "pertenca_privada", "text": "Lei 10.406/2002: art. 78 redigido para o contrato Ônix.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N027", "group": "pertenca_privada", "text": "Lei 10.406/2002, art. 79 cuja origem é o pacto Opala.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N028", "group": "pertenca_privada", "text": "Lei 10.406/2002, art. 80 pertencente à escritura Turquesa.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N029", "group": "pertenca_privada", "text": "Lei 10.406/2002: art. 81 localizado na apólice Cristal.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N030", "group": "pertenca_privada", "text": "Lei 10.406/2002, art. 82 — dispositivo do estatuto Granada.", "expected": [{"work": "10406/2002", "path": null}]}
+{"id": "N031", "group": "transferencia", "text": "Art. 201 da Lei 10.406/2002; art. 301 da Lei 13.105/2015: cartões 0.", "expected": [{"work": "10406/2002", "path": "art201"}, {"work": "13105/2015", "path": "art301"}]}
+{"id": "N032", "group": "transferencia", "text": "Lei 10.406/2002, art. 202; Lei 13.105/2015, art. 302. Revisão 1.", "expected": [{"work": "10406/2002", "path": "art202"}, {"work": "13105/2015", "path": "art302"}]}
+{"id": "N033", "group": "transferencia", "text": "Art. 203 da Lei 10.406/2002; art. 303 da Lei 13.105/2015: cartões 2.", "expected": [{"work": "10406/2002", "path": "art203"}, {"work": "13105/2015", "path": "art303"}]}
+{"id": "N034", "group": "transferencia", "text": "Lei 10.406/2002, art. 204; Lei 13.105/2015, art. 304. Revisão 3.", "expected": [{"work": "10406/2002", "path": "art204"}, {"work": "13105/2015", "path": "art304"}]}
+{"id": "N035", "group": "transferencia", "text": "Art. 205 da Lei 10.406/2002; art. 305 da Lei 13.105/2015: cartões 4.", "expected": [{"work": "10406/2002", "path": "art205"}, {"work": "13105/2015", "path": "art305"}]}
+{"id": "N036", "group": "transferencia", "text": "Lei 10.406/2002, art. 206; Lei 13.105/2015, art. 306. Revisão 5.", "expected": [{"work": "10406/2002", "path": "art206"}, {"work": "13105/2015", "path": "art306"}]}
+{"id": "N037", "group": "transferencia", "text": "Art. 207 da Lei 10.406/2002; art. 307 da Lei 13.105/2015: cartões 6.", "expected": [{"work": "10406/2002", "path": "art207"}, {"work": "13105/2015", "path": "art307"}]}
+{"id": "N038", "group": "transferencia", "text": "Lei 10.406/2002, art. 208; Lei 13.105/2015, art. 308. Revisão 7.", "expected": [{"work": "10406/2002", "path": "art208"}, {"work": "13105/2015", "path": "art308"}]}
+{"id": "N039", "group": "transferencia", "text": "Art. 209 da Lei 10.406/2002; art. 309 da Lei 13.105/2015: cartões 8.", "expected": [{"work": "10406/2002", "path": "art209"}, {"work": "13105/2015", "path": "art309"}]}
+{"id": "N040", "group": "transferencia", "text": "Lei 10.406/2002, art. 210; Lei 13.105/2015, art. 310. Revisão 9.", "expected": [{"work": "10406/2002", "path": "art210"}, {"work": "13105/2015", "path": "art310"}]}
+{"id": "N041", "group": "delimitadores", "text": "(Art. 401 da Lei 10.406/2002) recebeu selo laranja.", "expected": [{"work": "10406/2002", "path": "art401"}]}
+{"id": "N042", "group": "delimitadores", "text": "Lei 10.406/2002 (art. 402), pasta lilás.", "expected": [{"work": "10406/2002", "path": "art402"}]}
+{"id": "N043", "group": "delimitadores", "text": "Lei 10.406/2002 — art. 403 — recebeu fita dourada.", "expected": [{"work": "10406/2002", "path": "art403"}]}
+{"id": "N044", "group": "delimitadores", "text": "A ficha diz “art. 404 da Lei 10.406/2002”.", "expected": [{"work": "10406/2002", "path": "art404"}]}
+{"id": "N045", "group": "delimitadores", "text": "“Lei 10.406/2002, art. 405”, respondeu a catalogadora.", "expected": [{"work": "10406/2002", "path": "art405"}]}
+{"id": "N046", "group": "delimitadores", "text": "Lei 10.406/2002,\nart. 406; etiqueta de papel.", "expected": [{"work": "10406/2002", "path": "art406"}]}
+{"id": "N047", "group": "delimitadores", "text": "Art. 407\nda Lei 10.406/2002: linha dobrada.", "expected": [{"work": "10406/2002", "path": "art407"}]}
+{"id": "N048", "group": "delimitadores", "text": "Lei 10.406/2002\n(art. 408)\nFim da ficha.", "expected": [{"work": "10406/2002", "path": "art408"}]}
+{"id": "N049", "group": "delimitadores", "text": "[Art. 409 da Lei 10.406/2002] consta da anotação.", "expected": [{"work": "10406/2002", "path": "art409"}]}
+{"id": "N050", "group": "delimitadores", "text": "Lei 10.406/2002 — art. 410 —; fim do bilhete.", "expected": [{"work": "10406/2002", "path": "art410"}]}
+{"id": "N051", "group": "listas", "text": "Na lista: art. 501 da Lei 10.406/2002; depois, café.", "expected": [{"work": "10406/2002", "path": "art501"}]}
+{"id": "N052", "group": "listas", "text": "• Lei 10.406/2002, art. 502;\n• guardar ficha.", "expected": [{"work": "10406/2002", "path": "art502"}]}
+{"id": "N053", "group": "listas", "text": "1) Art. 503 da Lei 10.406/2002.\n2) Arquivar.", "expected": [{"work": "10406/2002", "path": "art503"}]}
+{"id": "N054", "group": "listas", "text": "Lei 10.406/2002:\n- art. 504;\n- anotação material.", "expected": [{"work": "10406/2002", "path": "art504"}]}
+{"id": "N055", "group": "listas", "text": "Na lista: art. 505 da Lei 10.406/2002; depois, café.", "expected": [{"work": "10406/2002", "path": "art505"}]}
+{"id": "N056", "group": "listas", "text": "• Lei 10.406/2002, art. 506;\n• guardar ficha.", "expected": [{"work": "10406/2002", "path": "art506"}]}
+{"id": "N057", "group": "listas", "text": "1) Art. 507 da Lei 10.406/2002.\n2) Arquivar.", "expected": [{"work": "10406/2002", "path": "art507"}]}
+{"id": "N058", "group": "listas", "text": "Lei 10.406/2002:\n- art. 508;\n- anotação material.", "expected": [{"work": "10406/2002", "path": "art508"}]}
+{"id": "N059", "group": "listas", "text": "Na lista: art. 509 da Lei 10.406/2002; depois, café.", "expected": [{"work": "10406/2002", "path": "art509"}]}
+{"id": "N060", "group": "listas", "text": "• Lei 10.406/2002, art. 510;\n• guardar ficha.", "expected": [{"work": "10406/2002", "path": "art510"}]}
+{"id": "N061", "group": "remissoes", "text": "Conforme a remissão ao art. 601 da Lei 10.406/2002, confira o índice.", "expected": [{"work": "10406/2002", "path": "art601"}]}
+{"id": "N062", "group": "remissoes", "text": "A nota remete à Lei 10.406/2002, art. 602.", "expected": [{"work": "10406/2002", "path": "art602"}]}
+{"id": "N063", "group": "remissoes", "text": "Art. 603 da Lei 10.406/2002 (remissão apenas identificadora).", "expected": [{"work": "10406/2002", "path": "art603"}]}
+{"id": "N064", "group": "remissoes", "text": "Lei 10.406/2002, art. 604, referido pela nota de rodapé.", "expected": [{"work": "10406/2002", "path": "art604"}]}
+{"id": "N065", "group": "remissoes", "text": "Conforme a remissão ao art. 605 da Lei 10.406/2002, confira o índice.", "expected": [{"work": "10406/2002", "path": "art605"}]}
+{"id": "N066", "group": "remissoes", "text": "A nota remete à Lei 10.406/2002, art. 606.", "expected": [{"work": "10406/2002", "path": "art606"}]}
+{"id": "N067", "group": "remissoes", "text": "Art. 607 da Lei 10.406/2002 (remissão apenas identificadora).", "expected": [{"work": "10406/2002", "path": "art607"}]}
+{"id": "N068", "group": "remissoes", "text": "Lei 10.406/2002, art. 608, referido pela nota de rodapé.", "expected": [{"work": "10406/2002", "path": "art608"}]}
+{"id": "N069", "group": "remissoes", "text": "Conforme a remissão ao art. 609 da Lei 10.406/2002, confira o índice.", "expected": [{"work": "10406/2002", "path": "art609"}]}
+{"id": "N070", "group": "remissoes", "text": "A nota remete à Lei 10.406/2002, art. 610.", "expected": [{"work": "10406/2002", "path": "art610"}]}
+{"id": "N071", "group": "alias", "text": "Rascunho 0: art. 701 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art701"}]}
+{"id": "N072", "group": "alias", "text": "Rascunho 1: art. 702 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art702"}]}
+{"id": "N073", "group": "alias", "text": "Rascunho 2: art. 703 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art703"}]}
+{"id": "N074", "group": "alias", "text": "Rascunho 3: art. 704 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art704"}]}
+{"id": "N075", "group": "alias", "text": "Rascunho 4: art. 705 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art705"}]}
+{"id": "N076", "group": "alias", "text": "Rascunho 5: art. 706 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art706"}]}
+{"id": "N077", "group": "alias", "text": "Rascunho 6: art. 707 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art707"}]}
+{"id": "N078", "group": "alias", "text": "Rascunho 7: art. 708 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art708"}]}
+{"id": "N079", "group": "alias", "text": "Rascunho 8: art. 709 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art709"}]}
+{"id": "N080", "group": "alias", "text": "Rascunho 9: art. 710 do Código Civil; etiqueta de conferência.", "expected": [{"work": "10406/2002", "path": "art710"}]}
+{"id": "N081", "group": "outra_norma", "text": "Art. 151 da Lei 6.404/1976: índice do ensaio 0.", "expected": [{"work": "6404/1976", "path": "art151"}]}
+{"id": "N082", "group": "outra_norma", "text": "Lei 6.404/1976, art. 152; ficha experimental 1.", "expected": [{"work": "6404/1976", "path": "art152"}]}
+{"id": "N083", "group": "outra_norma", "text": "Art. 153 da Lei 6.404/1976: índice do ensaio 2.", "expected": [{"work": "6404/1976", "path": "art153"}]}
+{"id": "N084", "group": "outra_norma", "text": "Lei 6.404/1976, art. 154; ficha experimental 3.", "expected": [{"work": "6404/1976", "path": "art154"}]}
+{"id": "N085", "group": "outra_norma", "text": "Art. 155 da Lei 6.404/1976: índice do ensaio 4.", "expected": [{"work": "6404/1976", "path": "art155"}]}
+{"id": "N086", "group": "outra_norma", "text": "Lei 6.404/1976, art. 156; ficha experimental 5.", "expected": [{"work": "6404/1976", "path": "art156"}]}
+{"id": "N087", "group": "outra_norma", "text": "Art. 157 da Lei 6.404/1976: índice do ensaio 6.", "expected": [{"work": "6404/1976", "path": "art157"}]}
+{"id": "N088", "group": "outra_norma", "text": "Lei 6.404/1976, art. 158; ficha experimental 7.", "expected": [{"work": "6404/1976", "path": "art158"}]}
+{"id": "N089", "group": "outra_norma", "text": "Art. 159 da Lei 6.404/1976: índice do ensaio 8.", "expected": [{"work": "6404/1976", "path": "art159"}]}
+{"id": "N090", "group": "outra_norma", "text": "Lei 6.404/1976, art. 160; ficha experimental 9.", "expected": [{"work": "6404/1976", "path": "art160"}]}
+{"id": "N091", "group": "controle_sem_norma", "text": "A tabela contém CC81 e CPC902 como nomes de colunas.", "expected": []}
+{"id": "N092", "group": "controle_sem_norma", "text": "Código do lote: CC8, CPC20 e LSA45; nada jurídico.", "expected": []}
+{"id": "N093", "group": "controle_sem_norma", "text": "O desenho registra art. 6.25 da convenção Neblina.", "expected": []}
+{"id": "N094", "group": "controle_sem_norma", "text": "Art. 9.02 do contrato Horizonte ocupa a margem.", "expected": []}
+{"id": "N095", "group": "controle_sem_norma", "text": "A amostra chama-se CPC2015X e sua altura é 18.", "expected": []}
+{"id": "N096", "group": "controle_sem_norma", "text": "O identificador CC2002A fica ao lado do art. 88.", "expected": []}
+{"id": "N097", "group": "controle_sem_norma", "text": "A senha fictícia LSA1976Z acompanha o item 7.", "expected": []}
+{"id": "N098", "group": "controle_sem_norma", "text": "Os números 13.105/2015 e 10.406/2002 são apenas lotes.", "expected": []}
+{"id": "N099", "group": "controle_sem_norma", "text": "Lei 10.406/2002X é o nome de um arquivo de teste.", "expected": []}
+{"id": "N100", "group": "controle_sem_norma", "text": "Lei 13.105/2015Y identifica uma pasta vazia.", "expected": []}
+{"id": "N101", "group": "controle_sem_norma", "text": "O art. 21 do estatuto Brisa foi renumerado.", "expected": []}
+{"id": "N102", "group": "controle_sem_norma", "text": "O art. 22 integra o contrato fictício Duna.", "expected": []}
+{"id": "N103", "group": "controle_sem_norma", "text": "Há remissão ao art. 23, sem identificação da obra.", "expected": []}
+{"id": "N104", "group": "controle_sem_norma", "text": "“art. 24” é todo o conteúdo do papel.", "expected": []}
+{"id": "N105", "group": "controle_sem_norma", "text": "A lista contém arts. 25, 26 e 27 de um instrumento sem nome.", "expected": []}
+{"id": "N106", "group": "controle_sem_norma", "text": "O valor decimal 1.022,50 não identifica dispositivo.", "expected": []}
+{"id": "N107", "group": "controle_sem_norma", "text": "A medida 8.25 mm está escrita na caixa.", "expected": []}
+{"id": "N108", "group": "controle_sem_norma", "text": "O lote CPC-901 é um produto fictício.", "expected": []}
+{"id": "N109", "group": "controle_sem_norma", "text": "Art. 31 do regulamento privado Cedro: conferir amanhã.", "expected": []}
+{"id": "N110", "group": "controle_sem_norma", "text": "A cláusula 32 do acordo Madeira tem duas linhas.", "expected": []}
+{"id": "N111", "group": "controle_sem_norma", "text": "Uma testemunha disse “lei” e depois anotou 33.", "expected": []}
+{"id": "N112", "group": "controle_sem_norma", "text": "Art. 34 pertencente ao pacto Areia foi copiado.", "expected": []}
+{"id": "N113", "group": "controle_sem_norma", "text": "O trecho “art. 35” integra a etiqueta da garrafa.", "expected": []}
+{"id": "N114", "group": "controle_sem_norma", "text": "Anexo 36 da proposta Vento, item 2.11.", "expected": []}
+{"id": "N115", "group": "controle_sem_norma", "text": "O rodapé menciona CPC99A, sem norma identificável.", "expected": []}
+{"id": "N116", "group": "controle_sem_norma", "text": "A palavra CC72B pertence ao código do equipamento.", "expected": []}
+{"id": "N117", "group": "controle_sem_norma", "text": "A versão LSA15C descreve o teste de bancada.", "expected": []}
+{"id": "N118", "group": "controle_sem_norma", "text": "Os artigos 37 e 38 desta convenção são privados.", "expected": []}
+{"id": "N119", "group": "controle_sem_norma", "text": "Artigo 39 constante do formulário Maré.", "expected": []}
+{"id": "N120", "group": "controle_sem_norma", "text": "Encerrado o inventário: nada foi citado nesta frase.", "expected": []}

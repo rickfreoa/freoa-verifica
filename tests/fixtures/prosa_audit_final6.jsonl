@@ -1,0 +1,80 @@
+{"id": "A001", "group": "explicita", "text": "O parecer cita o art. 5 da Lei 6.404/1976 para delimitar a consulta.", "gold": ["federal/lei/6404/1976/art5"]}
+{"id": "A002", "group": "explicita", "text": "A revisão começa pela Lei 6.404/1976, art. 6.", "gold": ["federal/lei/6404/1976/art6"]}
+{"id": "A003", "group": "explicita", "text": "Foram examinados os arts. 7 e 8 da Lei 6.404/76.", "gold": ["federal/lei/6404/1976/art7", "federal/lei/6404/1976/art8"]}
+{"id": "A004", "group": "explicita", "text": "A equipe indicou os arts. 9, 10 e 11 da Lei 6.404/1976.", "gold": ["federal/lei/6404/1976/art9", "federal/lei/6404/1976/art10", "federal/lei/6404/1976/art11"]}
+{"id": "A005", "group": "explicita", "text": "O documento menciona o artigo 12 da Lei nº 6.404/1976.", "gold": ["federal/lei/6404/1976/art12"]}
+{"id": "A006", "group": "explicita", "text": "A referência consta como art. 13 da Lei n. 6.404/76.", "gold": ["federal/lei/6404/1976/art13"]}
+{"id": "A007", "group": "explicita", "text": "O rodapé registra Lei 6.404/76, artigo 14.", "gold": ["federal/lei/6404/1976/art14"]}
+{"id": "A008", "group": "explicita", "text": "Leia-se o art. 15, § 1º, da Lei 6.404/1976.", "gold": ["federal/lei/6404/1976/art15.par1"]}
+{"id": "A009", "group": "explicita", "text": "O escopo abrange o art. 16, inciso II, da Lei 6.404/76.", "gold": ["federal/lei/6404/1976/art16.inc2"]}
+{"id": "A010", "group": "explicita", "text": "O relatório remete ao art. 17, inc. III, da Lei 6.404/1976.", "gold": ["federal/lei/6404/1976/art17.inc3"]}
+{"id": "A011", "group": "explicita", "text": "A nota identifica o art. 18, alínea “a”, da Lei 6.404/76.", "gold": ["federal/lei/6404/1976/art18.ali-a"]}
+{"id": "A012", "group": "explicita", "text": "A minuta cita o art. 19, al. ‘b’, da Lei 6.404/1976.", "gold": ["federal/lei/6404/1976/art19.ali-b"]}
+{"id": "A013", "group": "explicita", "text": "O consulente escreveu “art. 20 da Lei 6.404/1976” no sumário.", "gold": ["federal/lei/6404/1976/art20"]}
+{"id": "A014", "group": "explicita", "text": "A análise do art. 21 da\nLei 6.404/76 foi apartada.", "gold": ["federal/lei/6404/1976/art21"]}
+{"id": "A015", "group": "explicita", "text": "O anexo remete à Lei\n6.404/1976, art. 22.", "gold": ["federal/lei/6404/1976/art22"]}
+{"id": "A016", "group": "explicita", "text": "Confrontem-se os arts. 23 e\n24 da Lei 6.404/76.", "gold": ["federal/lei/6404/1976/art23", "federal/lei/6404/1976/art24"]}
+{"id": "A017", "group": "explicita", "text": "O parecer cita a Lei 6.404/1976 e a Lei 6.385/1976.", "gold": ["federal/lei/6404/1976/-", "federal/lei/6385/1976/-"]}
+{"id": "A018", "group": "explicita", "text": "O art. 5 da Lei 6.385/76 foi separado do art. 6 da Lei 6.404/76.", "gold": ["federal/lei/6385/1976/art5", "federal/lei/6404/1976/art6"]}
+{"id": "A019", "group": "explicita", "text": "O conselho pediu leitura do art. 7 da Lei 6.385/1976.", "gold": ["federal/lei/6385/1976/art7"]}
+{"id": "A020", "group": "explicita", "text": "Compare a Lei 6.385/76, art. 8, com a Lei 6.404/76, art. 9.", "gold": ["federal/lei/6385/1976/art8", "federal/lei/6404/1976/art9"]}
+{"id": "A021", "group": "explicita", "text": "A consulta individualiza a RCVM 44/2021, art. 3.", "gold": ["cvm/resolucao/44/2021/art3"]}
+{"id": "A022", "group": "explicita", "text": "O art. 4 da ICVM 44/1984 aparece na nota histórica.", "gold": ["cvm/instrucao/44/1984/art4"]}
+{"id": "A023", "group": "explicita", "text": "Compare o art. 5 da RCVM 44/21 com o art. 6 da ICVM 44/84.", "gold": ["cvm/resolucao/44/2021/art5", "cvm/instrucao/44/1984/art6"]}
+{"id": "A024", "group": "explicita", "text": "A nota separa a Resolução CVM 44/2021 da Instrução CVM 44/1984.", "gold": ["cvm/resolucao/44/2021/-", "cvm/instrucao/44/1984/-"]}
+{"id": "A025", "group": "explicita", "text": "O escopo inclui os arts. 7 e 8 da RCVM 44/21.", "gold": ["cvm/resolucao/44/2021/art7", "cvm/resolucao/44/2021/art8"]}
+{"id": "A026", "group": "explicita", "text": "A referência histórica é ICVM 44/84, art. 9.", "gold": ["cvm/instrucao/44/1984/art9"]}
+{"id": "A027", "group": "explicita", "text": "O redator escreveu art. 10 da Res. CVM 44/2021.", "gold": ["cvm/resolucao/44/2021/art10"]}
+{"id": "A028", "group": "explicita", "text": "A margem traz art. 11 da Instr. CVM 44/1984.", "gold": ["cvm/instrucao/44/1984/art11"]}
+{"id": "A029", "group": "explicita", "text": "A equipe revisará o art. 421 da Lei 10.406/02.", "gold": ["federal/lei/10406/2002/art421"]}
+{"id": "A030", "group": "explicita", "text": "A consulta identifica a Lei 10.406/2002, arts. 422 e 423.", "gold": ["federal/lei/10406/2002/art422", "federal/lei/10406/2002/art423"]}
+{"id": "A031", "group": "explicita", "text": "A referência abreviada é art. 24 da LSA.", "gold": ["federal/lei/6404/1976/art24"]}
+{"id": "A032", "group": "explicita", "text": "Foi destacada a Lei das Sociedades por Ações, art. 25.", "gold": ["federal/lei/6404/1976/art25"]}
+{"id": "A033", "group": "explicita", "text": "A nota se refere ao art. 26 da Lei das\nSociedades por Ações.", "gold": ["federal/lei/6404/1976/art26"]}
+{"id": "A034", "group": "explicita", "text": "O trecho encerra com Lei 6.404/1976.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "A035", "group": "explicita", "text": "O comentário faz referência à Lei 6.385/76.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "A036", "group": "explicita", "text": "A peça menciona a RCVM 44/21.", "gold": ["cvm/resolucao/44/2021/-"]}
+{"id": "A037", "group": "explicita", "text": "O inventário inclui a ICVM 44/84.", "gold": ["cvm/instrucao/44/1984/-"]}
+{"id": "A038", "group": "explicita", "text": "O art. 27 da Lei 6.404/1976; o art. 28 da Lei 6.385/1976.", "gold": ["federal/lei/6404/1976/art27", "federal/lei/6385/1976/art28"]}
+{"id": "A039", "group": "explicita", "text": "O estudo enumera: Lei 6.404/76, art. 29; RCVM 44/21, art. 12.", "gold": ["federal/lei/6404/1976/art29", "cvm/resolucao/44/2021/art12"]}
+{"id": "A040", "group": "explicita", "text": "Confira o art. 254-A da Lei 6.404/76.", "gold": ["federal/lei/6404/1976/art254-A"]}
+{"id": "A041", "group": "nao_explicita", "text": "A taxa cobrada foi de R$ 6.404,00, segundo a planilha.", "gold": []}
+{"id": "A042", "group": "nao_explicita", "text": "O art. 5 do contrato social disciplina o endereço da sede.", "gold": []}
+{"id": "A043", "group": "nao_explicita", "text": "A cláusula 7.1 contém a obrigação de notificar.", "gold": []}
+{"id": "A044", "group": "nao_explicita", "text": "O item 3 do edital pede comprovante de endereço.", "gold": []}
+{"id": "A045", "group": "nao_explicita", "text": "O art. 5 do mesmo diploma deve ser lido em conjunto.", "gold": []}
+{"id": "A046", "group": "nao_explicita", "text": "O § 2º da mesma lei foi mencionado sem identificação.", "gold": []}
+{"id": "A047", "group": "nao_explicita", "text": "A disposição do diploma anterior foi transcrita pelo cliente fictício.", "gold": []}
+{"id": "A048", "group": "nao_explicita", "text": "Os arts. 4 e 5 acima mencionados delimitam o pedido.", "gold": []}
+{"id": "A049", "group": "nao_explicita", "text": "O art. 9 da norma em questão não foi identificado.", "gold": []}
+{"id": "A050", "group": "nao_explicita", "text": "A folha 44 de 2021 foi juntada ao dossiê.", "gold": []}
+{"id": "A051", "group": "nao_explicita", "text": "O protocolo 6.385/76 é apenas o código interno do escritório.", "gold": []}
+{"id": "A052", "group": "nao_explicita", "text": "A fatura nº 6.404/1976 refere-se a serviço contábil.", "gold": []}
+{"id": "A053", "group": "nao_explicita", "text": "A lei de Murphy foi invocada em tom de brincadeira.", "gold": []}
+{"id": "A054", "group": "nao_explicita", "text": "O capítulo IV do manual tem a alínea “a” e o item 3.", "gold": []}
+{"id": "A055", "group": "nao_explicita", "text": "O documento diz “art. 5 do contrato social”, sem citar lei.", "gold": []}
+{"id": "A056", "group": "nao_explicita", "text": "A ata remete à cláusula\n7.1 e ao item\n3 do edital.", "gold": []}
+{"id": "A057", "group": "nao_explicita", "text": "O saldo passou de R$ 6.404,00 para R$ 6.385,00.", "gold": []}
+{"id": "A058", "group": "nao_explicita", "text": "A seção de siglas explica que CVM é apenas o nome da autarquia.", "gold": []}
+{"id": "A059", "group": "nao_explicita", "text": "A expressão “do mesmo diploma” não identifica uma norma específica.", "gold": []}
+{"id": "A060", "group": "nao_explicita", "text": "O art. 5 do estatuto e o inciso II do contrato foram comparados.", "gold": []}
+{"id": "A061", "group": "mista", "text": "A Lei 6.404/76 foi citada; o art. 5 do mesmo diploma ficou para depois.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "A062", "group": "mista", "text": "O art. 5 do contrato social foi revisto à luz da Lei 6.404/76.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "A063", "group": "mista", "text": "A cláusula 7.1 foi cotejada com a Lei 6.385/76.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "A064", "group": "mista", "text": "O item 3 do edital foi analisado; a RCVM 44/21 consta da bibliografia.", "gold": ["cvm/resolucao/44/2021/-"]}
+{"id": "A065", "group": "mista", "text": "O orçamento de R$ 6.404,00 não decorre da Lei 6.385/76.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "A066", "group": "mista", "text": "O art. 5 da Lei 6.404/76 foi citado, seguido do art. 6 do mesmo diploma.", "gold": ["federal/lei/6404/1976/art5"]}
+{"id": "A067", "group": "mista", "text": "O art. 7 da Lei 6.385/76 aparece antes da cláusula 7.1.", "gold": ["federal/lei/6385/1976/art7"]}
+{"id": "A068", "group": "mista", "text": "A Lei 6.404/76, art. 5 do contrato social, foi mencionada em frase confusa.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "A069", "group": "mista", "text": "A Lei 6.385/76. Art. 5 do contrato social é o título do próximo tópico.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "A070", "group": "mista", "text": "A RCVM 44/21, item 3 do edital, consta no comentário mal pontuado.", "gold": ["cvm/resolucao/44/2021/-"]}
+{"id": "A071", "group": "mista", "text": "O redator contrapôs a ICVM 44/84 à RCVM 44/21 sem citar dispositivo.", "gold": ["cvm/instrucao/44/1984/-", "cvm/resolucao/44/2021/-"]}
+{"id": "A072", "group": "mista", "text": "Sobre a Lei 6.404/76, o memorando pede revisão urgente.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "A073", "group": "mista", "text": "Quanto à Lei 6.385/76, a equipe não deu opinião.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "A074", "group": "mista", "text": "Aplica-se a Lei 6.404/76 ao cenário descrito.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "A075", "group": "mista", "text": "A Lei 6.404/76 é citada em conjunto com o item 3 do edital.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "A076", "group": "mista", "text": "O apêndice lista Lei 6.404/76 e Lei 6.385/76, arts. 5 e 6.", "gold": ["federal/lei/6404/1976/-", "federal/lei/6385/1976/art5", "federal/lei/6385/1976/art6"]}
+{"id": "A077", "group": "explicita", "text": "A nota traz Lei 6.404/76,\narts. 30 e 31.", "gold": ["federal/lei/6404/1976/art30", "federal/lei/6404/1976/art31"]}
+{"id": "A078", "group": "explicita", "text": "Confira “Lei 6.385/76, art. 12” antes da reunião.", "gold": ["federal/lei/6385/1976/art12"]}
+{"id": "A079", "group": "explicita", "text": "O art. 32, inciso IV, alínea “c”, da Lei 6.404/76 foi indicado.", "gold": ["federal/lei/6404/1976/art32.inc4.ali-c"]}
+{"id": "A080", "group": "explicita", "text": "O art. 33, parágrafo único, da Lei 6.404/76 encerra a lista.", "gold": ["federal/lei/6404/1976/art33.parunico"]}

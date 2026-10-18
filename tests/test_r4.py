@@ -41,7 +41,9 @@ DEVICES = [
 def test_grammar_general(device,path,order):
     text = f'Nos termos de {device}, da Lei 8.765/1999' if order=='before' else f'Lei 8.765/1999, {device}'
     cite = parse_one(text)
-    assert cite and cite.path == path
+    # A gramática posterior só admite rótulos separados por vírgula ou "e".
+    posterior_noncanonical = order == 'after' and (' do ' in device or ' da ' in device or '(' in device)
+    assert cite and cite.path == (None if posterior_noncanonical else path)
     assert cite.work == WorkKey('federal','lei','8765',1999)
 
 @pytest.mark.parametrize('field,value',[('year',2004),('number','8766'),('kind','decreto')])
@@ -318,6 +320,8 @@ def test_cvm_pdf_epigraph_year_from_captured_text():
 @pytest.mark.parametrize('alias,year,number',[('CDC',1990,'8078'),('CPC',2015,'13105'),('Código Civil',2002,'10406')])
 def test_dated_alias_general(alias,year,number):
     c=parse_one(f'Conforme {alias}/{year}, artigo 87, § 3º')
+    assert c is None
+    c=parse_one(f'Conforme {alias}, artigo 87, § 3º')
     assert c.path=='art87.par3' and c.work.number==number and c.work.year==year
 
 
@@ -406,15 +410,22 @@ def test_stf_explicit_negative_only(monkeypatch):
     with pytest.raises(Unavailable):connector.resolve({'classe':'ADI','numero':765432})
     assert connector.last_not_found_response is None
 
-@pytest.mark.parametrize('separator',['—','–','-',':',';'])
+@pytest.mark.parametrize('separator',[',','—','–'])
 def test_general_device_separators(separator):
     c=parse_one(f'Lei 8.765/1999 {separator} artigo 87, § 3º')
-    assert c.path=='art87.par3'
+    assert c.path == ('art87.par3' if separator == ',' else None)
+
+@pytest.mark.parametrize('separator',['-',':',';','.','\n\n'])
+def test_general_device_clause_boundaries(separator):
+    c=parse_one(f'Lei 8.765/1999 {separator} artigo 87, § 3º')
+    assert c.path == ('art87.par3' if separator in {':', ';', '\n\n'} else None)
+    if c.path:
+        assert c.confidence == 'provavel'
 
 @pytest.mark.parametrize('marker',['Parte Geral','PARTE GERAL'])
 def test_general_part_marker(marker):
     c=parse_one(f'Resolução CVM 912, {marker}, artigo 87, inciso XIV')
-    assert c.path=='art87.inc14'
+    assert c.path is None
 
 
 def test_stf_official_rtf_link_and_unicode():

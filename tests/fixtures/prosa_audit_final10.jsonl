@@ -1,0 +1,114 @@
+{"id": "F10-001", "group": "explicit", "text": "A relatora releu o art. 37 da Lei nº 6.404/1976 antes do intervalo.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-002", "group": "explicit", "text": "No memorial suplementar: Lei nº 6.404/1976, art. 37.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-003", "group": "explicit", "text": "O apontamento marginal registra Lei nº 6.404/1976 (art. 37).", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-004", "group": "explicit", "text": "A nota de rodapé invoca Lei nº 6.404/1976 — art. 37 — para o debate.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-005", "group": "explicit", "text": "A Lei nº 6.404/1976, em seu art. 37, orienta a leitura do parecer.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-006", "group": "explicit", "text": "O voto cita a Lei nº 6.404/1976 cujo art. 37 embasa a conclusão.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-007", "group": "explicit", "text": "O art. 37, da Lei nº 6.404/1976, foi transcrito no apêndice.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-008", "group": "explicit", "text": "O recurso identifica \"art. 37 da Lei nº 6.404/1976\" como fundamento.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-009", "group": "explicit", "text": "No índice: Lei nº 6.404/1976,\nart. 37.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-010", "group": "explicit", "text": "O quadro azul registra (Lei nº 6.404/1976, art. 37).", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-011", "group": "explicit", "text": "A defesa invoca a Lei nº 6.404/1976: art. 37.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-012", "group": "explicit", "text": "No tópico final, Lei nº 6.404/1976; art. 37.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-013", "group": "explicit", "text": "O dispositivo invocado é o artigo 37 da Lei nº 6.404/1976.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-014", "group": "explicit", "text": "A Lei nº 6.404/1976, art. 37, sustenta a réplica.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-015", "group": "explicit", "text": "O sumário cita a Lei nº 6.404/1976\nart. 37.", "expected": [["lei", "6404", "1976", "37"]]}
+{"id": "F10-016", "group": "explicit", "text": "A relatora releu o art. 59 da Lei nº 6.404/1976 antes do intervalo.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-017", "group": "explicit", "text": "No memorial suplementar: Lei nº 6.404/1976, art. 59.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-018", "group": "explicit", "text": "O apontamento marginal registra Lei nº 6.404/1976 (art. 59).", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-019", "group": "explicit", "text": "A nota de rodapé invoca Lei nº 6.404/1976 — art. 59 — para o debate.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-020", "group": "explicit", "text": "A Lei nº 6.404/1976, em seu art. 59, orienta a leitura do parecer.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-021", "group": "explicit", "text": "O voto cita a Lei nº 6.404/1976 cujo art. 59 embasa a conclusão.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-022", "group": "explicit", "text": "O art. 59, da Lei nº 6.404/1976, foi transcrito no apêndice.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-023", "group": "explicit", "text": "O recurso identifica \"art. 59 da Lei nº 6.404/1976\" como fundamento.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-024", "group": "explicit", "text": "No índice: Lei nº 6.404/1976,\nart. 59.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-025", "group": "explicit", "text": "O quadro azul registra (Lei nº 6.404/1976, art. 59).", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-026", "group": "explicit", "text": "A defesa invoca a Lei nº 6.404/1976: art. 59.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-027", "group": "explicit", "text": "No tópico final, Lei nº 6.404/1976; art. 59.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-028", "group": "explicit", "text": "O dispositivo invocado é o artigo 59 da Lei nº 6.404/1976.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-029", "group": "explicit", "text": "A Lei nº 6.404/1976, art. 59, sustenta a réplica.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-030", "group": "explicit", "text": "O sumário cita a Lei nº 6.404/1976\nart. 59.", "expected": [["lei", "6404", "1976", "59"]]}
+{"id": "F10-031", "group": "explicit", "text": "A relatora releu o art. 1.142 da Lei nº 6.404/1976 antes do intervalo.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-032", "group": "explicit", "text": "No memorial suplementar: Lei nº 6.404/1976, art. 1.142.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-033", "group": "explicit", "text": "O apontamento marginal registra Lei nº 6.404/1976 (art. 1.142).", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-034", "group": "explicit", "text": "A nota de rodapé invoca Lei nº 6.404/1976 — art. 1.142 — para o debate.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-035", "group": "explicit", "text": "A Lei nº 6.404/1976, em seu art. 1.142, orienta a leitura do parecer.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-036", "group": "explicit", "text": "O voto cita a Lei nº 6.404/1976 cujo art. 1.142 embasa a conclusão.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-037", "group": "explicit", "text": "O art. 1.142, da Lei nº 6.404/1976, foi transcrito no apêndice.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-038", "group": "explicit", "text": "O recurso identifica \"art. 1.142 da Lei nº 6.404/1976\" como fundamento.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-039", "group": "explicit", "text": "No índice: Lei nº 6.404/1976,\nart. 1.142.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-040", "group": "explicit", "text": "O quadro azul registra (Lei nº 6.404/1976, art. 1.142).", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-041", "group": "explicit", "text": "A defesa invoca a Lei nº 6.404/1976: art. 1.142.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-042", "group": "explicit", "text": "No tópico final, Lei nº 6.404/1976; art. 1.142.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-043", "group": "explicit", "text": "O dispositivo invocado é o artigo 1.142 da Lei nº 6.404/1976.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-044", "group": "explicit", "text": "A Lei nº 6.404/1976, art. 1.142, sustenta a réplica.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-045", "group": "explicit", "text": "O sumário cita a Lei nº 6.404/1976\nart. 1.142.", "expected": [["lei", "6404", "1976", "1142"]]}
+{"id": "F10-046", "group": "explicit", "text": "A relatora releu o art. 1.022 da Lei nº 6.404/1976 antes do intervalo.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-047", "group": "explicit", "text": "No memorial suplementar: Lei nº 6.404/1976, art. 1.022.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-048", "group": "explicit", "text": "O apontamento marginal registra Lei nº 6.404/1976 (art. 1.022).", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-049", "group": "explicit", "text": "A nota de rodapé invoca Lei nº 6.404/1976 — art. 1.022 — para o debate.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-050", "group": "explicit", "text": "A Lei nº 6.404/1976, em seu art. 1.022, orienta a leitura do parecer.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-051", "group": "explicit", "text": "O voto cita a Lei nº 6.404/1976 cujo art. 1.022 embasa a conclusão.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-052", "group": "explicit", "text": "O art. 1.022, da Lei nº 6.404/1976, foi transcrito no apêndice.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-053", "group": "explicit", "text": "O recurso identifica \"art. 1.022 da Lei nº 6.404/1976\" como fundamento.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-054", "group": "explicit", "text": "No índice: Lei nº 6.404/1976,\nart. 1.022.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-055", "group": "explicit", "text": "O quadro azul registra (Lei nº 6.404/1976, art. 1.022).", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-056", "group": "explicit", "text": "A defesa invoca a Lei nº 6.404/1976: art. 1.022.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-057", "group": "explicit", "text": "No tópico final, Lei nº 6.404/1976; art. 1.022.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-058", "group": "explicit", "text": "O dispositivo invocado é o artigo 1.022 da Lei nº 6.404/1976.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-059", "group": "explicit", "text": "A Lei nº 6.404/1976, art. 1.022, sustenta a réplica.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-060", "group": "explicit", "text": "O sumário cita a Lei nº 6.404/1976\nart. 1.022.", "expected": [["lei", "6404", "1976", "1022"]]}
+{"id": "F10-061", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 do pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-062", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 que pertence ao pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-063", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 pertencente ao pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-064", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 integrante do pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-065", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 inserido no pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-066", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 previsto no pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-067", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 constante do pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-068", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 extraído do pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-069", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 oriundo do pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-070", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 cuja sede é o pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-071", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 estabelecido pelo pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-072", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 redigido no pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-073", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 contido no pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-074", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 que integra o pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-075", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 do anexo do pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-076", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 deste pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-077", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 atribuído ao pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-078", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 veiculado pelo pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-079", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 estipulado no pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-080", "group": "private", "text": "No quadro comparativo, Lei nº 6.404/1976, art. 37 é parte do pacto de voto.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-081", "group": "decimal", "text": "A tabela relaciona Lei nº 6.404/1976, art. 37.4 do pacto revisado.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-082", "group": "decimal", "text": "A tabela relaciona Lei nº 6.404/1976, art. 37.42 do pacto revisado.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-083", "group": "decimal", "text": "A tabela relaciona Lei nº 6.404/1976, art. 1.142,9 do pacto revisado.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-084", "group": "decimal", "text": "A tabela relaciona Lei nº 6.404/1976, art. 59.07 do pacto revisado.", "expected": [["lei", "6404", "1976", null]]}
+{"id": "F10-085", "group": "transfer_list", "text": "A ementa lista art. 37 da Lei nº 6.404/1976 e art. 59 da Lei nº 6.385/1976.", "expected": [["lei", "6404", "1976", "37"], ["lei", "6385", "1976", "59"]]}
+{"id": "F10-086", "group": "transfer_list", "text": "Na planilha: Lei nº 6.404/1976, art. 37; Lei nº 6.385/1976, art. 59.", "expected": [["lei", "6404", "1976", "37"], ["lei", "6385", "1976", "59"]]}
+{"id": "F10-087", "group": "transfer_list", "text": "O roteiro distingue Lei nº 6.404/1976 e art. 59 da Lei nº 6.385/1976.", "expected": [["lei", "6404", "1976", null], ["lei", "6385", "1976", "59"]]}
+{"id": "F10-088", "group": "transfer_list", "text": "A primeira nota: art. 37 da Lei nº 6.404/1976; a seguinte: Lei nº 6.385/1976.", "expected": [["lei", "6404", "1976", "37"], ["lei", "6385", "1976", null]]}
+{"id": "F10-089", "group": "transfer_list", "text": "Lei nº 6.404/1976 (art. 37) e Lei nº 6.385/1976 (art. 59) constam do índice novo.", "expected": [["lei", "6404", "1976", "37"], ["lei", "6385", "1976", "59"]]}
+{"id": "F10-090", "group": "transfer_list", "text": "Lei nº 6.404/1976, art. 37 da Lei nº 6.385/1976: confronto de fontes.", "expected": [["lei", "6404", "1976", null], ["lei", "6385", "1976", "37"]]}
+{"id": "F10-091", "group": "transfer_list", "text": "O roteiro enumera arts. 37 e 59 da Lei nº 6.404/1976.", "expected": [["lei", "6404", "1976", "37"], ["lei", "6404", "1976", "59"]]}
+{"id": "F10-092", "group": "transfer_list", "text": "A pauta enumera Lei nº 6.404/1976, arts. 37 e 59.", "expected": [["lei", "6404", "1976", "37"], ["lei", "6404", "1976", "59"]]}
+{"id": "F10-093", "group": "transfer_list", "text": "São citados os artigos 37, 59 e 61 da Lei nº 6.404/1976.", "expected": [["lei", "6404", "1976", "37"], ["lei", "6404", "1976", "59"], ["lei", "6404", "1976", "61"]]}
+{"id": "F10-094", "group": "transfer_list", "text": "A réplica remete ao art. 37 da Lei nº 6.404/1976, conforme art. 59 da Lei nº 6.385/1976.", "expected": [["lei", "6404", "1976", "37"], ["lei", "6385", "1976", "59"]]}
+{"id": "F10-095", "group": "control", "text": "O art. 37.42 do pacto de voto foi renumerado ontem.", "expected": []}
+{"id": "F10-096", "group": "control", "text": "A cláusula 59.07 do protocolo foi substituída no aditivo.", "expected": []}
+{"id": "F10-097", "group": "control", "text": "O conselho releu o artigo 1.142 do regulamento privado.", "expected": []}
+{"id": "F10-098", "group": "control", "text": "O catálogo contém a chave LSA59 e a chave CVM44.", "expected": []}
+{"id": "F10-099", "group": "control", "text": "O campo informático contém Lei6404/1976A.", "expected": []}
+{"id": "F10-100", "group": "control", "text": "A chave cadastral é Lei 6.404B/1976, art. 37.", "expected": []}
+{"id": "F10-101", "group": "control", "text": "O identificador Lei nº 6.404/1976X não é uma citação normativa.", "expected": []}
+{"id": "F10-102", "group": "control", "text": "No rascunho consta CC37 sem indicação legislativa.", "expected": []}
+{"id": "F10-103", "group": "control", "text": "O anexo privado trata de juros de 1.022,59 reais.", "expected": []}
+{"id": "F10-104", "group": "control", "text": "A proposta é regida pelo artigo 59 do contrato social.", "expected": []}
+{"id": "F10-105", "group": "control", "text": "A ata apenas diz: conforme o artigo acima transcrito.", "expected": []}
+{"id": "F10-106", "group": "control", "text": "Na margem lê-se \"art. 37\" sem referência a diploma.", "expected": []}
+{"id": "F10-107", "group": "control", "text": "O documento contém a etiqueta CPC37/2015.", "expected": []}
+{"id": "F10-108", "group": "control", "text": "A lista interna registra RCVM44/2021 como senha de teste.", "expected": []}
+{"id": "F10-109", "group": "control", "text": "O item 1.142.37 pertence ao manual do fornecedor.", "expected": []}
+{"id": "F10-110", "group": "control", "text": "Leia o art. 37 previsto exclusivamente no estatuto do clube.", "expected": []}
+{"id": "F10-111", "group": "control", "text": "O memorando cita o art. 59 pertencente à convenção do condomínio.", "expected": []}
+{"id": "F10-112", "group": "control", "text": "Na tabela, Lei6.385/1976 acompanha a rubrica comercial.", "expected": []}
+{"id": "F10-113", "group": "control", "text": "A observação apenas registra o valor decimal 37.59.", "expected": []}
+{"id": "F10-114", "group": "control", "text": "O protocolo usa a designação CVM 44A/2021 como código interno.", "expected": []}

@@ -1,0 +1,80 @@
+{"id": "B001", "group": "explicita", "text": "O voto cita o art. 8 da Lei 6.404/1976 para delimitar a análise.", "gold": ["federal/lei/6404/1976/art8"]}
+{"id": "B002", "group": "explicita", "text": "A defesa transcreve o artigo 9 da Lei nº 6.385/1976 no rodapé.", "gold": ["federal/lei/6385/1976/art9"]}
+{"id": "B003", "group": "explicita", "text": "O relatório confronta o art. 4 da Resolução CVM 44/2021 com a política interna.", "gold": ["cvm/resolucao/44/2021/art4"]}
+{"id": "B004", "group": "explicita", "text": "A pesquisa histórica localizou o art. 2 da Instrução CVM 44/1984.", "gold": ["cvm/instrucao/44/1984/art2"]}
+{"id": "B005", "group": "explicita", "text": "O aditamento invoca o art. 422 da Lei 10.406/2002.", "gold": ["federal/lei/10406/2002/art422"]}
+{"id": "B006", "group": "explicita", "text": "O capítulo menciona a Lei 6.404/76 sem transcrever dispositivos.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "B007", "group": "explicita", "text": "A nota registra a Lei 6.385/76 como referência bibliográfica.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "B008", "group": "explicita", "text": "A equipe arquivou a RCVM 44/21 no dossiê regulatório.", "gold": ["cvm/resolucao/44/2021/-"]}
+{"id": "B009", "group": "explicita", "text": "A ICVM 44/84 figura no inventário histórico da pesquisa.", "gold": ["cvm/instrucao/44/1984/-"]}
+{"id": "B010", "group": "explicita", "text": "A Lei 10.406/02 consta do índice de diplomas consultados.", "gold": ["federal/lei/10406/2002/-"]}
+{"id": "B011", "group": "explicita", "text": "Aplicou-se o art. 8º da Lei n.º 6.404/1976 ao exemplo hipotético.", "gold": ["federal/lei/6404/1976/art8"]}
+{"id": "B012", "group": "explicita", "text": "Discute-se o art. 9º da Lei n. 6.385/1976 no parecer.", "gold": ["federal/lei/6385/1976/art9"]}
+{"id": "B013", "group": "explicita", "text": "O art. 4º da RCVM 44/2021 foi destacado em amarelo.", "gold": ["cvm/resolucao/44/2021/art4"]}
+{"id": "B014", "group": "explicita", "text": "A nota distingue o art. 2º da ICVM 44/1984 dos demais dispositivos.", "gold": ["cvm/instrucao/44/1984/art2"]}
+{"id": "B015", "group": "explicita", "text": "A revisão alcança o art. 421 da Lei nº 10.406/2002.", "gold": ["federal/lei/10406/2002/art421"]}
+{"id": "B016", "group": "explicita", "text": "O texto aproxima os arts. 8 e 9 da Lei 6.404/1976.", "gold": ["federal/lei/6404/1976/art8", "federal/lei/6404/1976/art9"]}
+{"id": "B017", "group": "explicita", "text": "O pedido enumera os arts. 8, 9 e 10 da Lei 6.385/1976.", "gold": ["federal/lei/6385/1976/art8", "federal/lei/6385/1976/art9", "federal/lei/6385/1976/art10"]}
+{"id": "B018", "group": "explicita", "text": "A ressalva abrange os arts. 4 e 5 da Resolução CVM 44/2021.", "gold": ["cvm/resolucao/44/2021/art4", "cvm/resolucao/44/2021/art5"]}
+{"id": "B019", "group": "explicita", "text": "O anexo histórico remete aos arts. 2 e 3 da Instrução CVM 44/1984.", "gold": ["cvm/instrucao/44/1984/art2", "cvm/instrucao/44/1984/art3"]}
+{"id": "B020", "group": "explicita", "text": "A conclusão considera os arts. 421 e 422 da Lei 10.406/2002.", "gold": ["federal/lei/10406/2002/art421", "federal/lei/10406/2002/art422"]}
+{"id": "B021", "group": "explicita", "text": "O revisor anotou “art. 8 da Lei 6.404/1976” na margem direita.", "gold": ["federal/lei/6404/1976/art8"]}
+{"id": "B022", "group": "explicita", "text": "O apontamento «art. 9 da Lei 6.385/1976» permaneceu no texto.", "gold": ["federal/lei/6385/1976/art9"]}
+{"id": "B023", "group": "explicita", "text": "A expressão ‘art. 4 da Resolução CVM 44/2021’ identifica o fundamento.", "gold": ["cvm/resolucao/44/2021/art4"]}
+{"id": "B024", "group": "explicita", "text": "O fundamento está no art. 8\nda Lei 6.404/1976, segundo o relator.", "gold": ["federal/lei/6404/1976/art8"]}
+{"id": "B025", "group": "explicita", "text": "A motivação alude ao art. 9 da Lei\n6.385/1976.", "gold": ["federal/lei/6385/1976/art9"]}
+{"id": "B026", "group": "explicita", "text": "O voto referencia o art. 4 da Resolução CVM\n44/2021.", "gold": ["cvm/resolucao/44/2021/art4"]}
+{"id": "B027", "group": "explicita", "text": "A nota menciona o art. 2 da Instrução\nCVM 44/1984.", "gold": ["cvm/instrucao/44/1984/art2"]}
+{"id": "B028", "group": "explicita", "text": "Para comparação, citam-se a Lei 6.404/1976 e a Lei 6.385/1976.", "gold": ["federal/lei/6404/1976/-", "federal/lei/6385/1976/-"]}
+{"id": "B029", "group": "explicita", "text": "No quadro histórico figuram a RCVM 44/2021 e a ICVM 44/1984.", "gold": ["cvm/resolucao/44/2021/-", "cvm/instrucao/44/1984/-"]}
+{"id": "B030", "group": "explicita", "text": "O art. 8 da Lei 6.404/1976 e o art. 9 da Lei 6.385/1976 orientam capítulos distintos.", "gold": ["federal/lei/6404/1976/art8", "federal/lei/6385/1976/art9"]}
+{"id": "B031", "group": "explicita", "text": "A nota contrapõe o art. 4 da RCVM 44/2021 ao art. 2 da ICVM 44/1984.", "gold": ["cvm/resolucao/44/2021/art4", "cvm/instrucao/44/1984/art2"]}
+{"id": "B032", "group": "explicita", "text": "O estudo registra a Lei das Sociedades por Ações como diploma central.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "B033", "group": "explicita", "text": "O art. 8 da LSA é indicado no sumário da manifestação.", "gold": ["federal/lei/6404/1976/art8"]}
+{"id": "B034", "group": "explicita", "text": "O art. 9 da Lei da CVM aparece na versão revista.", "gold": ["federal/lei/6385/1976/art9"]}
+{"id": "B035", "group": "explicita", "text": "A boa-fé foi vinculada ao art. 422 do Código Civil.", "gold": ["federal/lei/10406/2002/art422"]}
+{"id": "B036", "group": "explicita", "text": "O texto menciona a Res. CVM 44/2021 no encerramento.", "gold": ["cvm/resolucao/44/2021/-"]}
+{"id": "B037", "group": "explicita", "text": "A tabela referencia a Instr. CVM 44/1984 como ato histórico.", "gold": ["cvm/instrucao/44/1984/-"]}
+{"id": "B038", "group": "explicita", "text": "A Lei 6.404/1976, art. 8, foi citada sem transcrição.", "gold": ["federal/lei/6404/1976/art8"]}
+{"id": "B039", "group": "explicita", "text": "A Lei 6.385/1976 (art. 9) aparece em nota explicativa.", "gold": ["federal/lei/6385/1976/art9"]}
+{"id": "B040", "group": "explicita", "text": "A RCVM 44/21, arts. 4 e 5, integra o quadro de referências.", "gold": ["cvm/resolucao/44/2021/art4", "cvm/resolucao/44/2021/art5"]}
+{"id": "B041", "group": "nao_explicita", "text": "O custo da revisão alcançou R$ 6.404,00 antes dos tributos.", "gold": []}
+{"id": "B042", "group": "nao_explicita", "text": "O desembolso de R$ 6.385,00 foi aprovado pelos quotistas.", "gold": []}
+{"id": "B043", "group": "nao_explicita", "text": "A divergência envolve o art. 5 do contrato social da investida.", "gold": []}
+{"id": "B044", "group": "nao_explicita", "text": "A cláusula 7.1 distribui os encargos entre as partes signatárias.", "gold": []}
+{"id": "B045", "group": "nao_explicita", "text": "O item 3 do edital contém a regra de habilitação do certame.", "gold": []}
+{"id": "B046", "group": "nao_explicita", "text": "O art. 8 do mesmo diploma foi reservado para exame posterior.", "gold": []}
+{"id": "B047", "group": "nao_explicita", "text": "Os arts. 9 e 10 da referida lei foram apenas mencionados oralmente.", "gold": []}
+{"id": "B048", "group": "nao_explicita", "text": "A resolução 44 foi citada sem órgão expedidor nem data no memorando.", "gold": []}
+{"id": "B049", "group": "nao_explicita", "text": "A instrução 44 constava de anotação sem autoria identificada.", "gold": []}
+{"id": "B050", "group": "nao_explicita", "text": "A planilha contém os números 6.404 e 6.385 como códigos de fornecedores.", "gold": []}
+{"id": "B051", "group": "nao_explicita", "text": "O parecer interno nº 44/21 examina a cláusula 7.1 do acordo.", "gold": []}
+{"id": "B052", "group": "nao_explicita", "text": "O art. 12 do estatuto social disciplina a reunião da administração.", "gold": []}
+{"id": "B053", "group": "nao_explicita", "text": "A expressão “art. 5 do contrato social” não identifica lei federal.", "gold": []}
+{"id": "B054", "group": "nao_explicita", "text": "O item\n3 do edital foi lido antes da abertura dos envelopes.", "gold": []}
+{"id": "B055", "group": "nao_explicita", "text": "A cláusula 7.1 e o art. 5 do contrato social exigem leitura conjunta.", "gold": []}
+{"id": "B056", "group": "nao_explicita", "text": "O § 2º do mesmo diploma foi omitido na versão entregue.", "gold": []}
+{"id": "B057", "group": "nao_explicita", "text": "A fatura 6404/76 refere-se a serviços profissionais já prestados.", "gold": []}
+{"id": "B058", "group": "nao_explicita", "text": "A ata 6385/76 e o expediente 44/84 foram digitalizados ontem.", "gold": []}
+{"id": "B059", "group": "nao_explicita", "text": "O art. 4 do regulamento interno foi modificado por deliberação privada.", "gold": []}
+{"id": "B060", "group": "nao_explicita", "text": "O tópico «3 — edital» remete à proposta econômica da participante.", "gold": []}
+{"id": "B061", "group": "mista", "text": "A Lei 6.404/1976 é citada; o art. 12 do estatuto social cuida de matéria interna.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "B062", "group": "mista", "text": "A Lei 6.385/1976 foi consultada; a cláusula 7.1 do acordo continua em negociação.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "B063", "group": "mista", "text": "A RCVM 44/2021 é referência externa, enquanto o item 3 do edital define a entrega.", "gold": ["cvm/resolucao/44/2021/-"]}
+{"id": "B064", "group": "mista", "text": "A ICVM 44/1984 consta da pesquisa histórica, junto à cobrança de R$ 6.404,00.", "gold": ["cvm/instrucao/44/1984/-"]}
+{"id": "B065", "group": "mista", "text": "A Lei 6.404/76, art. 12 do estatuto social, foi lançada no índice de documentos.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "B066", "group": "mista", "text": "A Lei 6.385/76. O art. 12 do estatuto social pertence ao capítulo seguinte.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "B067", "group": "mista", "text": "A Lei 6.404/1976, art. 5 do nosso contrato social, aparece na legenda do quadro.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "B068", "group": "mista", "text": "A Lei 6.385/1976, art. 5 do referido contrato social, foi anotada na agenda.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "B069", "group": "mista", "text": "A Lei 6.404/1976, art. 5 do Contrato Social, consta da nota de revisão.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "B070", "group": "mista", "text": "A Lei 6.385/1976, art. 5 do instrumento contratual, foi mencionada na reunião.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "B071", "group": "mista", "text": "A Lei 6.404/1976, art. 5 deste estatuto, aparece ao lado da rubrica do diretor.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "B072", "group": "mista", "text": "A RCVM 44/2021, art. 5 da política interna, é a legenda deixada pelo redator.", "gold": ["cvm/resolucao/44/2021/-"]}
+{"id": "B073", "group": "mista", "text": "A Lei 6.404/1976. Art. 8: o texto seguinte é uma observação autônoma.", "gold": ["federal/lei/6404/1976/-"]}
+{"id": "B074", "group": "mista", "text": "A Lei 6.385/1976 foi listada; o art. 9 do mesmo diploma será objeto de outra consulta.", "gold": ["federal/lei/6385/1976/-"]}
+{"id": "B075", "group": "mista", "text": "O art. 8 da Lei 6.404/1976 foi estudado; o art. 9 do mesmo diploma segue pendente.", "gold": ["federal/lei/6404/1976/art8"]}
+{"id": "B076", "group": "mista", "text": "A Resolução CVM 44/2021 foi citada; o art. 4 do mesmo diploma ainda não foi transcrito.", "gold": ["cvm/resolucao/44/2021/-"]}
+{"id": "B077", "group": "mista", "text": "O item 3 do edital antecede a menção ao art. 9 da Lei 6.385/1976.", "gold": ["federal/lei/6385/1976/art9"]}
+{"id": "B078", "group": "mista", "text": "O pagamento de R$ 6.404,00 não altera o alcance do art. 422 da Lei 10.406/2002.", "gold": ["federal/lei/10406/2002/art422"]}
+{"id": "B079", "group": "mista", "text": "A cláusula 7.1 do acordo é analisada à luz do art. 8 da Lei 6.404/1976.", "gold": ["federal/lei/6404/1976/art8"]}
+{"id": "B080", "group": "mista", "text": "A Lei 6.385/76, art.\n5 do nosso contrato social, foi registrada com quebra de linha.", "gold": ["federal/lei/6385/1976/-"]}

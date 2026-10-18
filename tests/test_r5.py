@@ -196,7 +196,7 @@ def test_latest_download_authenticates_checksum(tmp_path,monkeypatch):
             Path(kwargs["sink"]).write_bytes(data)
         return SimpleNamespace(body=b"" if kwargs.get("sink") else data, sha256=hashlib.sha256(data).hexdigest())
     monkeypatch.setattr(httputil,'connector_fetch',fetch)
-    monkeypatch.setattr(snapshot.tempfile,'mkdtemp',lambda **kw: str(tmp_path/'staging'))
+    monkeypatch.setattr(snapshot,'_new_staging',lambda **kw: tmp_path/'staging')
     (tmp_path/'staging').mkdir()
     assert (snapshot._download_latest_release()/'MANIFEST.json').is_file()
     assert any(url.endswith('.sha256') for url in calls)
@@ -270,7 +270,7 @@ def test_snapshot_download_failure_is_explicit(populated,monkeypatch):
     from freoa_verifica import snapshot
     from freoa_verifica.connectors.base import Unavailable
     s,_=populated
-    def unavailable(): raise Unavailable('http_503')
+    def unavailable(**kwargs): raise Unavailable('http_503')
     monkeypatch.setattr(snapshot,'_download_latest_release',unavailable)
     assert s.snapshot_install()=={'status':'erro','motivo':'http_503'}
 

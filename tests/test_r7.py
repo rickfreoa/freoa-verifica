@@ -127,8 +127,10 @@ def test_stream_minimum_rate(monkeypatch, tmp_path):
 def test_actual_invalid_device(verifica_populada):
     svc, _, _ = verifica_populada
     result = svc.verificar_texto("artigo banana da Lei 6.404/76")["citacoes"][0]
-    assert result["identity"]["reason_code"] == "formato_invalido"
-    assert result["status"] == "formato_invalido"
+    assert result["identity"]["reason_code"] == "ASSOCIACAO_REQUER_CONFERENCIA"
+    assert result["status"] == "requer_conferencia"
+    assert result["confidence"] == "provavel"
+    assert "dispositivo_invalido" in result["parseada"]["flags"]
 
 
 @pytest.mark.parametrize("sink,limit", [(False, 50 * 1024**2 + 1), (True, 4 * 1024**3 + 1)])
@@ -163,7 +165,7 @@ def test_latest_release_fallback(monkeypatch):
             {"assets": []}, {"assets": [{"name": name, "browser_download_url": url}]}]
         return SimpleNamespace(body=json.dumps(data).encode())
     monkeypatch.setattr(httputil, "connector_fetch", fetch)
-    monkeypatch.setattr(snapshot, "_download_release", lambda found: found)
+    monkeypatch.setattr(snapshot, "_download_release", lambda found, **kwargs: found)
     assert snapshot._download_latest_release() == url
     assert "page=1" in calls[-1]
 
@@ -173,7 +175,7 @@ def test_snapshot_failure_cleans_before_extraction(monkeypatch, tmp_path, failur
     from freoa_verifica.connectors.base import Unavailable
     staging = tmp_path / "staging"
     staging.mkdir()
-    monkeypatch.setattr(snapshot.tempfile, "mkdtemp", lambda **kw: str(staging))
+    monkeypatch.setattr(snapshot, "_new_staging", lambda **kw: staging)
     def fetch(url, **kwargs):
         if url.endswith(".sha256"):
             if failure == "checksum_unavailable":

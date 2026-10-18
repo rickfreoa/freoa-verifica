@@ -178,10 +178,13 @@ class Verifica:
 
     def __init__(self, home: str | Path | None = None) -> None:
         self.home = Path(home).expanduser().resolve() if home else data_home()
-        self.home.mkdir(parents=True, exist_ok=True)
+        self._read_only = os.environ.get("FV_READ_ONLY", "").strip().lower() in {"1", "true", "yes"}
+        if not self._read_only:
+            self.home.mkdir(parents=True, exist_ok=True)
         self._db_path = self.home / "verifica.sqlite3"
-        boot = connect(self._db_path)
-        boot.close()
+        if not self._read_only:
+            boot = connect(self._db_path)
+            boot.close()
         self._local = threading.local()
         self._conn_lock = threading.Lock()
         self._all_conns: list[sqlite3.Connection] = []
@@ -190,11 +193,15 @@ class Verifica:
         self._last_health: dict[str, dict[str, Any]] = {}
 
     def _open_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._db_path), timeout=30.0)
+        target = self._db_path.as_uri() + "?mode=ro" if self._read_only else str(self._db_path)
+        conn = sqlite3.connect(target, timeout=30.0, uri=self._read_only)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute("PRAGMA journal_mode=WAL")
+        if self._read_only:
+            conn.execute("PRAGMA query_only=ON")
+        else:
+            conn.execute("PRAGMA journal_mode=WAL")
         with self._conn_lock:
             self._all_conns.append(conn)
         return conn
@@ -308,7 +315,7 @@ class Verifica:
     # ------------------------------------------------------------------
 
     def _rebuild_from_db(self, work: WorkKey, *, _exact=False) -> ResolvedWork | list[ResolvedWork] | None:
-        if self.conn.execute("SELECT 1 FROM work WHERE authority=? AND kind=? AND number=? AND year=0",
+        if not self._read_only and self.conn.execute("SELECT 1 FROM work WHERE authority=? AND kind=? AND number=? AND year=0",
                              (work.authority, work.kind, work.number)).fetchone():
             self.reparar_anos()
         rows = self.conn.execute(
@@ -489,7 +496,7 @@ class Verifica:
         return repairs
 
     def _offline(self) -> bool:
-        return os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
+        return self._read_only or os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
 
     def _capture_work(self, work: WorkKey, requested_work_date=None) -> ResolvedWork | list[ResolvedWork] | None:
         if self._offline():
@@ -720,7 +727,8 @@ class Verifica:
                 meta = cand.metadata or {}
                 number = str(meta.get("numero") or meta.get("number") or cand.key)
                 year = int(meta.get("ano") or meta.get("year") or 0)
-                kind = str(meta.get("tipo") or meta.get("kind") or "lei").lower()
+                source_kind = str(meta.get("tipo") or meta.get("kind") or "lei")
+                kind = source_kind.lower()
                 authority = "cvm" if connector.id.startswith("cvm") else (
                     "bcb" if connector.id == "bcb" else "federal"
                 )
@@ -728,7 +736,7 @@ class Verifica:
                     kind = {"resolucoes": "resolucao", "instrucoes": "instrucao",
                             "pareceres": "parecer_orientacao"}.get(kind, kind)
                 elif connector.id == "bcb":
-                    candidate_cite = parse_one(f"{kind} {number}")
+                    candidate_cite = parse_one(f"{source_kind} {number}")
                     if candidate_cite and candidate_cite.work:
                         authority = candidate_cite.work.authority
                         kind = candidate_cite.work.kind
@@ -1002,8 +1010,12 @@ class Verifica:
         data: str | None = None,
         modo: str = "literal",
         proposicao: str | None = None,
+        *,
+        _path: str | None = None,
     ) -> dict[str, Any]:
         cite = parse_one(citacao)
+        if _path is not None:
+            cite = next((c for c in extract(citacao) if c.path == _path), None)
         if cite and cite.work is not None:
             try:
                 resolved = self._resolve(cite.work, requested_date(cite.raw))
@@ -1070,8 +1082,9 @@ class Verifica:
             trecho=trecho,
             data=data,
             modo=modo,
-            repo=self.conn,
+            repo=None if self._read_only else self.conn,
             resolver=self._resolver_adapter(),
+            _path=_path,
         )
         out = _result_to_json(result)
         out["proposicao"] = proposicao
@@ -1182,7 +1195,7 @@ class Verifica:
                 # Reconhecimento só sintático — nunca "encontrada".
                 status, evidencia = self._confirm_decision(cite.decision, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
             else:
-                verif = self.verificar_citacao(cite.raw, trecho=trecho, data=data, modo="literal")
+                verif = self.verificar_citacao(cite.raw, trecho=trecho, data=data, modo="literal", _path=cite.path)
                 identity = verif.get("identity", {})
                 status = {"verified":"encontrada", "ambiguous":"ambigua", "unavailable":"indisponivel", "unknown":"indisponivel"}.get(identity.get("status"), "indisponivel")
                 if identity.get("reason_code") in {"formato_invalido", "CITACAO_NAO_RECONHECIDA"}:
@@ -1206,11 +1219,32 @@ class Verifica:
                             status = "indisponivel"
                 evidence = identity.get("evidence") or []
                 evidencia = evidence[0] if evidence else None
+            if cite.confidence == "provavel":
+                status = "requer_conferencia"
+                # O confronto é evidência da interpretação proposta, não da pertença.
+                proposta = _citation_to_dict(cite)
+                conferencia = {
+                    "interpretacao_proposta": proposta,
+                    "interpretacao_preferida": (
+                        "dispositivo de outro referente" if "preferir_outro_referente" in cite.flags
+                        else "norma+dispositivo" if cite.path else "norma sem dispositivo"
+                    ),
+                    "alternativas": ["norma sem dispositivo", "dispositivo de outro referente"],
+                    "evidencia_disponivel": evidencia,
+                    "confronto_proposto": verif,
+                }
+                verif = {
+                    "identity": {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
+                    "text": {"status": "not_assessed", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
+                    "conferencia": conferencia,
+                }
             resultados.append(
                 {
                     "citacao": cite.raw,
                     "span": list(cite.span),
                     "kind": cite.kind,
+                    "confidence": cite.confidence,
+                    "conferencia": verif.get("conferencia") if verif else None,
                     "caminho": cite.path,
                     "status": status,
                     "identity": verif.get("identity") if verif else {"status": status},

@@ -1,0 +1,14 @@
+{
+  "frozen_at": "2026-10-18T09:00:43.197211+00:00",
+  "corpus_sha256": "8a2c5b5a9dede5414c08c66dda9ea4b636c6470d4915b1f312b2e21df0d2553d",
+  "cases": 120,
+  "criteria": {
+    "a": "zero false encontrada/inexistente over both synthetic holdings",
+    "b": "incorrect exact interpretations / all exact interpretations <= 0.01",
+    "c": "matched expected explicit identities AND paths / all expected explicit references >= 0.95",
+    "d": "zero definitive statuses in 30 controls without explicit norm"
+  },
+  "matching": "Exact work number/year and full provision path; omitted/extra device is incorrect. None requires work-only. Extra extracted references count for precision. Gold is independent of output and confidence.",
+  "synthetic": "present: union of gold paths and extracted paths; alien: only art99999. False definitive includes any interpretation not in gold. Probable requires requer_conferencia and public unknown.",
+  "head": "e9639e451f6d3dccf216c269723b268f0f57887e"
+}

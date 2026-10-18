@@ -1,0 +1,2764 @@
+[
+  {
+    "id": "prosa-001",
+    "category": "explicit",
+    "text": "No parecer societário, aplica-se o art. 116 da Lei das S.A., preservado o exame dos fatos.",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei das S.A.",
+        "span": [
+          35,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-002",
+    "category": "explicit",
+    "text": "A petição invoca Lei das S.A., art. 2º, XVI para delimitar o pedido.",
+    "expected": [
+      {
+        "raw": "Lei das S.A., art. 2º, XVI",
+        "span": [
+          17,
+          43
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-003",
+    "category": "explicit",
+    "text": "O voto remete à Lei das S.A., art. 117 para fundamentar a conclusão.",
+    "expected": [
+      {
+        "raw": "Lei das S.A., art. 117",
+        "span": [
+          16,
+          38
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-004",
+    "category": "explicit",
+    "text": "A operação está sujeita à disciplina da Lei das S.A., art. 118.",
+    "expected": [
+      {
+        "raw": "Lei das S.A., art. 118",
+        "span": [
+          40,
+          62
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-005",
+    "category": "explicit",
+    "text": "Na Lei das S.A., art. 116, encontra-se o parâmetro de análise.",
+    "expected": [
+      {
+        "raw": "Lei das S.A., art. 116",
+        "span": [
+          3,
+          25
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-006",
+    "category": "explicit",
+    "text": "Pela Lei das S.A., art. 117, sustenta-se a necessidade de motivação.",
+    "expected": [
+      {
+        "raw": "Lei das S.A., art. 117",
+        "span": [
+          5,
+          27
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-007",
+    "category": "explicit",
+    "text": "A manifestação menciona a sociedade Alfa Ltda. e cita art. 116, parágrafo único, da Lei das S.A.: “Regra transcrita para confronto.”",
+    "expected": [
+      {
+        "raw": "art. 116, parágrafo único, da Lei das S.A.",
+        "span": [
+          54,
+          96
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-008",
+    "category": "explicit",
+    "text": "A petição registra art. 116 da Lei das S.A., «Regra transcrita para confronto.»",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei das S.A.",
+        "span": [
+          19,
+          43
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-009",
+    "category": "explicit",
+    "text": "No voto, lê-se Lei das S.A., art. 2º, inc. XVI: ‘Regra transcrita para confronto.’",
+    "expected": [
+      {
+        "raw": "Lei das S.A., art. 2º, inc. XVI",
+        "span": [
+          15,
+          46
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-010",
+    "category": "explicit",
+    "text": "O parecer examina os arts. 116, 117 e 118 da Lei das S.A., à luz dos fatos narrados.",
+    "expected": [
+      {
+        "raw": "arts. 116, 117 e 118 da Lei das S.A.",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Lei das S.A.",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Lei das S.A.",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-011",
+    "category": "explicit",
+    "text": "A petição transcreve art.\n116, § 1º, al. a, da Lei das S.A., \"Regra transcrita para confronto.\"",
+    "expected": [
+      {
+        "raw": "art.\n116, § 1º, al. a, da Lei das S.A.",
+        "span": [
+          21,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.par1.ali-a"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-012",
+    "category": "explicit",
+    "text": "No parecer, p. 12, a conclusão remete a Lei das S.A., arts. 116, 117 e 118.",
+    "expected": [
+      {
+        "raw": "Lei das S.A., arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "Lei das S.A., arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "Lei das S.A., arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-013",
+    "category": "explicit",
+    "text": "No parecer societário, aplica-se o art. 116 da Lei n. 6.404/1976, preservado o exame dos fatos.",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei n. 6.404/1976",
+        "span": [
+          35,
+          64
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-014",
+    "category": "explicit",
+    "text": "A petição invoca Lei n. 6.404/1976, art. 2º, XVI para delimitar o pedido.",
+    "expected": [
+      {
+        "raw": "Lei n. 6.404/1976, art. 2º, XVI",
+        "span": [
+          17,
+          48
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-015",
+    "category": "explicit",
+    "text": "O voto remete à Lei n. 6.404/1976, art. 117 para fundamentar a conclusão.",
+    "expected": [
+      {
+        "raw": "Lei n. 6.404/1976, art. 117",
+        "span": [
+          16,
+          43
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-016",
+    "category": "explicit",
+    "text": "A operação está sujeita à disciplina da Lei n. 6.404/1976, art. 118.",
+    "expected": [
+      {
+        "raw": "Lei n. 6.404/1976, art. 118",
+        "span": [
+          40,
+          67
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-017",
+    "category": "explicit",
+    "text": "Na Lei n. 6.404/1976, art. 116, encontra-se o parâmetro de análise.",
+    "expected": [
+      {
+        "raw": "Lei n. 6.404/1976, art. 116",
+        "span": [
+          3,
+          30
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-018",
+    "category": "explicit",
+    "text": "Pela Lei n. 6.404/1976, art. 117, sustenta-se a necessidade de motivação.",
+    "expected": [
+      {
+        "raw": "Lei n. 6.404/1976, art. 117",
+        "span": [
+          5,
+          32
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-019",
+    "category": "explicit",
+    "text": "A manifestação menciona a sociedade Alfa Ltda. e cita art. 116, parágrafo único, da Lei n. 6.404/1976: “Regra transcrita para confronto.”",
+    "expected": [
+      {
+        "raw": "art. 116, parágrafo único, da Lei n. 6.404/1976",
+        "span": [
+          54,
+          101
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-020",
+    "category": "explicit",
+    "text": "A petição registra art. 116 da Lei n. 6.404/1976, «Regra transcrita para confronto.»",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei n. 6.404/1976",
+        "span": [
+          19,
+          48
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-021",
+    "category": "explicit",
+    "text": "No voto, lê-se Lei n. 6.404/1976, art. 2º, inc. XVI: ‘Regra transcrita para confronto.’",
+    "expected": [
+      {
+        "raw": "Lei n. 6.404/1976, art. 2º, inc. XVI",
+        "span": [
+          15,
+          51
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-022",
+    "category": "explicit",
+    "text": "O parecer examina os arts. 116, 117 e 118 da Lei n. 6.404/1976, à luz dos fatos narrados.",
+    "expected": [
+      {
+        "raw": "arts. 116, 117 e 118 da Lei n. 6.404/1976",
+        "span": [
+          21,
+          62
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Lei n. 6.404/1976",
+        "span": [
+          21,
+          62
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Lei n. 6.404/1976",
+        "span": [
+          21,
+          62
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-023",
+    "category": "explicit",
+    "text": "A petição transcreve art.\n116, § 1º, al. a, da Lei n. 6.404/1976, \"Regra transcrita para confronto.\"",
+    "expected": [
+      {
+        "raw": "art.\n116, § 1º, al. a, da Lei n. 6.404/1976",
+        "span": [
+          21,
+          64
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.par1.ali-a"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-024",
+    "category": "explicit",
+    "text": "No parecer, p. 12, a conclusão remete a Lei n. 6.404/1976, arts. 116, 117 e 118.",
+    "expected": [
+      {
+        "raw": "Lei n. 6.404/1976, arts. 116, 117 e 118",
+        "span": [
+          40,
+          79
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "Lei n. 6.404/1976, arts. 116, 117 e 118",
+        "span": [
+          40,
+          79
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "Lei n. 6.404/1976, arts. 116, 117 e 118",
+        "span": [
+          40,
+          79
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-025",
+    "category": "explicit",
+    "text": "No parecer societário, aplica-se o art. 116 da Resolução CVM 160/2022, preservado o exame dos fatos.",
+    "expected": [
+      {
+        "raw": "art. 116 da Resolução CVM 160/2022",
+        "span": [
+          35,
+          69
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-026",
+    "category": "explicit",
+    "text": "A petição invoca Resolução CVM 160/2022, art. 2º, XVI para delimitar o pedido.",
+    "expected": [
+      {
+        "raw": "Resolução CVM 160/2022, art. 2º, XVI",
+        "span": [
+          17,
+          53
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-027",
+    "category": "explicit",
+    "text": "O voto remete à Resolução CVM 160/2022, art. 117 para fundamentar a conclusão.",
+    "expected": [
+      {
+        "raw": "Resolução CVM 160/2022, art. 117",
+        "span": [
+          16,
+          48
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-028",
+    "category": "explicit",
+    "text": "A operação está sujeita à disciplina da Resolução CVM 160/2022, art. 118.",
+    "expected": [
+      {
+        "raw": "Resolução CVM 160/2022, art. 118",
+        "span": [
+          40,
+          72
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-029",
+    "category": "explicit",
+    "text": "Na Resolução CVM 160/2022, art. 116, encontra-se o parâmetro de análise.",
+    "expected": [
+      {
+        "raw": "Resolução CVM 160/2022, art. 116",
+        "span": [
+          3,
+          35
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-030",
+    "category": "explicit",
+    "text": "Pela Resolução CVM 160/2022, art. 117, sustenta-se a necessidade de motivação.",
+    "expected": [
+      {
+        "raw": "Resolução CVM 160/2022, art. 117",
+        "span": [
+          5,
+          37
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-031",
+    "category": "explicit",
+    "text": "A manifestação menciona a sociedade Alfa Ltda. e cita art. 116, parágrafo único, da Resolução CVM 160/2022: “Regra transcrita para confronto.”",
+    "expected": [
+      {
+        "raw": "art. 116, parágrafo único, da Resolução CVM 160/2022",
+        "span": [
+          54,
+          106
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-032",
+    "category": "explicit",
+    "text": "A petição registra art. 116 da Resolução CVM 160/2022, «Regra transcrita para confronto.»",
+    "expected": [
+      {
+        "raw": "art. 116 da Resolução CVM 160/2022",
+        "span": [
+          19,
+          53
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-033",
+    "category": "explicit",
+    "text": "No voto, lê-se Resolução CVM 160/2022, art. 2º, inc. XVI: ‘Regra transcrita para confronto.’",
+    "expected": [
+      {
+        "raw": "Resolução CVM 160/2022, art. 2º, inc. XVI",
+        "span": [
+          15,
+          56
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-034",
+    "category": "explicit",
+    "text": "O parecer examina os arts. 116, 117 e 118 da Resolução CVM 160/2022, à luz dos fatos narrados.",
+    "expected": [
+      {
+        "raw": "arts. 116, 117 e 118 da Resolução CVM 160/2022",
+        "span": [
+          21,
+          67
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Resolução CVM 160/2022",
+        "span": [
+          21,
+          67
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Resolução CVM 160/2022",
+        "span": [
+          21,
+          67
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-035",
+    "category": "explicit",
+    "text": "A petição transcreve art.\n116, § 1º, al. a, da Resolução CVM 160/2022, \"Regra transcrita para confronto.\"",
+    "expected": [
+      {
+        "raw": "art.\n116, § 1º, al. a, da Resolução CVM 160/2022",
+        "span": [
+          21,
+          69
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art116.par1.ali-a"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-036",
+    "category": "explicit",
+    "text": "No parecer, p. 12, a conclusão remete a Resolução CVM 160/2022, arts. 116, 117 e 118.",
+    "expected": [
+      {
+        "raw": "Resolução CVM 160/2022, arts. 116, 117 e 118",
+        "span": [
+          40,
+          84
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "Resolução CVM 160/2022, arts. 116, 117 e 118",
+        "span": [
+          40,
+          84
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "Resolução CVM 160/2022, arts. 116, 117 e 118",
+        "span": [
+          40,
+          84
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-037",
+    "category": "explicit",
+    "text": "No parecer societário, aplica-se o art. 116 da Res. CVM n. 44/2021, preservado o exame dos fatos.",
+    "expected": [
+      {
+        "raw": "art. 116 da Res. CVM n. 44/2021",
+        "span": [
+          35,
+          66
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-038",
+    "category": "explicit",
+    "text": "A petição invoca Res. CVM n. 44/2021, art. 2º, XVI para delimitar o pedido.",
+    "expected": [
+      {
+        "raw": "Res. CVM n. 44/2021, art. 2º, XVI",
+        "span": [
+          17,
+          50
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-039",
+    "category": "explicit",
+    "text": "O voto remete à Res. CVM n. 44/2021, art. 117 para fundamentar a conclusão.",
+    "expected": [
+      {
+        "raw": "Res. CVM n. 44/2021, art. 117",
+        "span": [
+          16,
+          45
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-040",
+    "category": "explicit",
+    "text": "A operação está sujeita à disciplina da Res. CVM n. 44/2021, art. 118.",
+    "expected": [
+      {
+        "raw": "Res. CVM n. 44/2021, art. 118",
+        "span": [
+          40,
+          69
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-041",
+    "category": "explicit",
+    "text": "Na Res. CVM n. 44/2021, art. 116, encontra-se o parâmetro de análise.",
+    "expected": [
+      {
+        "raw": "Res. CVM n. 44/2021, art. 116",
+        "span": [
+          3,
+          32
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-042",
+    "category": "explicit",
+    "text": "Pela Res. CVM n. 44/2021, art. 117, sustenta-se a necessidade de motivação.",
+    "expected": [
+      {
+        "raw": "Res. CVM n. 44/2021, art. 117",
+        "span": [
+          5,
+          34
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-043",
+    "category": "explicit",
+    "text": "A manifestação menciona a sociedade Alfa Ltda. e cita art. 116, parágrafo único, da Res. CVM n. 44/2021: “Regra transcrita para confronto.”",
+    "expected": [
+      {
+        "raw": "art. 116, parágrafo único, da Res. CVM n. 44/2021",
+        "span": [
+          54,
+          103
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-044",
+    "category": "explicit",
+    "text": "A petição registra art. 116 da Res. CVM n. 44/2021, «Regra transcrita para confronto.»",
+    "expected": [
+      {
+        "raw": "art. 116 da Res. CVM n. 44/2021",
+        "span": [
+          19,
+          50
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-045",
+    "category": "explicit",
+    "text": "No voto, lê-se Res. CVM n. 44/2021, art. 2º, inc. XVI: ‘Regra transcrita para confronto.’",
+    "expected": [
+      {
+        "raw": "Res. CVM n. 44/2021, art. 2º, inc. XVI",
+        "span": [
+          15,
+          53
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-046",
+    "category": "explicit",
+    "text": "O parecer examina os arts. 116, 117 e 118 da Res. CVM n. 44/2021, à luz dos fatos narrados.",
+    "expected": [
+      {
+        "raw": "arts. 116, 117 e 118 da Res. CVM n. 44/2021",
+        "span": [
+          21,
+          64
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Res. CVM n. 44/2021",
+        "span": [
+          21,
+          64
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Res. CVM n. 44/2021",
+        "span": [
+          21,
+          64
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-047",
+    "category": "explicit",
+    "text": "A petição transcreve art.\n116, § 1º, al. a, da Res. CVM n. 44/2021, \"Regra transcrita para confronto.\"",
+    "expected": [
+      {
+        "raw": "art.\n116, § 1º, al. a, da Res. CVM n. 44/2021",
+        "span": [
+          21,
+          66
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art116.par1.ali-a"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-048",
+    "category": "explicit",
+    "text": "No parecer, p. 12, a conclusão remete a Res. CVM n. 44/2021, arts. 116, 117 e 118.",
+    "expected": [
+      {
+        "raw": "Res. CVM n. 44/2021, arts. 116, 117 e 118",
+        "span": [
+          40,
+          81
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "Res. CVM n. 44/2021, arts. 116, 117 e 118",
+        "span": [
+          40,
+          81
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "Res. CVM n. 44/2021, arts. 116, 117 e 118",
+        "span": [
+          40,
+          81
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "44",
+          2021
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-049",
+    "category": "explicit",
+    "text": "No parecer societário, aplica-se o art. 116 da Código Civil, preservado o exame dos fatos.",
+    "expected": [
+      {
+        "raw": "art. 116 da Código Civil",
+        "span": [
+          35,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-050",
+    "category": "explicit",
+    "text": "A petição invoca Código Civil, art. 2º, XVI para delimitar o pedido.",
+    "expected": [
+      {
+        "raw": "Código Civil, art. 2º, XVI",
+        "span": [
+          17,
+          43
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-051",
+    "category": "explicit",
+    "text": "O voto remete à Código Civil, art. 117 para fundamentar a conclusão.",
+    "expected": [
+      {
+        "raw": "Código Civil, art. 117",
+        "span": [
+          16,
+          38
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-052",
+    "category": "explicit",
+    "text": "A operação está sujeita à disciplina da Código Civil, art. 118.",
+    "expected": [
+      {
+        "raw": "Código Civil, art. 118",
+        "span": [
+          40,
+          62
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-053",
+    "category": "explicit",
+    "text": "Na Código Civil, art. 116, encontra-se o parâmetro de análise.",
+    "expected": [
+      {
+        "raw": "Código Civil, art. 116",
+        "span": [
+          3,
+          25
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-054",
+    "category": "explicit",
+    "text": "Pela Código Civil, art. 117, sustenta-se a necessidade de motivação.",
+    "expected": [
+      {
+        "raw": "Código Civil, art. 117",
+        "span": [
+          5,
+          27
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-055",
+    "category": "explicit",
+    "text": "A manifestação menciona a sociedade Alfa Ltda. e cita art. 116, parágrafo único, da Código Civil: “Regra transcrita para confronto.”",
+    "expected": [
+      {
+        "raw": "art. 116, parágrafo único, da Código Civil",
+        "span": [
+          54,
+          96
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-056",
+    "category": "explicit",
+    "text": "A petição registra art. 116 da Código Civil, «Regra transcrita para confronto.»",
+    "expected": [
+      {
+        "raw": "art. 116 da Código Civil",
+        "span": [
+          19,
+          43
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-057",
+    "category": "explicit",
+    "text": "No voto, lê-se Código Civil, art. 2º, inc. XVI: ‘Regra transcrita para confronto.’",
+    "expected": [
+      {
+        "raw": "Código Civil, art. 2º, inc. XVI",
+        "span": [
+          15,
+          46
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-058",
+    "category": "explicit",
+    "text": "O parecer examina os arts. 116, 117 e 118 da Código Civil, à luz dos fatos narrados.",
+    "expected": [
+      {
+        "raw": "arts. 116, 117 e 118 da Código Civil",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Código Civil",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Código Civil",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-059",
+    "category": "explicit",
+    "text": "A petição transcreve art.\n116, § 1º, al. a, da Código Civil, \"Regra transcrita para confronto.\"",
+    "expected": [
+      {
+        "raw": "art.\n116, § 1º, al. a, da Código Civil",
+        "span": [
+          21,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art116.par1.ali-a"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-060",
+    "category": "explicit",
+    "text": "No parecer, p. 12, a conclusão remete a Código Civil, arts. 116, 117 e 118.",
+    "expected": [
+      {
+        "raw": "Código Civil, arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "Código Civil, arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "Código Civil, arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-061",
+    "category": "explicit",
+    "text": "No parecer societário, aplica-se o art. 116 da Lei 6.385/76, preservado o exame dos fatos.",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei 6.385/76",
+        "span": [
+          35,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-062",
+    "category": "explicit",
+    "text": "A petição invoca Lei 6.385/76, art. 2º, XVI para delimitar o pedido.",
+    "expected": [
+      {
+        "raw": "Lei 6.385/76, art. 2º, XVI",
+        "span": [
+          17,
+          43
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-063",
+    "category": "explicit",
+    "text": "O voto remete à Lei 6.385/76, art. 117 para fundamentar a conclusão.",
+    "expected": [
+      {
+        "raw": "Lei 6.385/76, art. 117",
+        "span": [
+          16,
+          38
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-064",
+    "category": "explicit",
+    "text": "A operação está sujeita à disciplina da Lei 6.385/76, art. 118.",
+    "expected": [
+      {
+        "raw": "Lei 6.385/76, art. 118",
+        "span": [
+          40,
+          62
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-065",
+    "category": "explicit",
+    "text": "Na Lei 6.385/76, art. 116, encontra-se o parâmetro de análise.",
+    "expected": [
+      {
+        "raw": "Lei 6.385/76, art. 116",
+        "span": [
+          3,
+          25
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-066",
+    "category": "explicit",
+    "text": "Pela Lei 6.385/76, art. 117, sustenta-se a necessidade de motivação.",
+    "expected": [
+      {
+        "raw": "Lei 6.385/76, art. 117",
+        "span": [
+          5,
+          27
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-067",
+    "category": "explicit",
+    "text": "A manifestação menciona a sociedade Alfa Ltda. e cita art. 116, parágrafo único, da Lei 6.385/76: “Regra transcrita para confronto.”",
+    "expected": [
+      {
+        "raw": "art. 116, parágrafo único, da Lei 6.385/76",
+        "span": [
+          54,
+          96
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-068",
+    "category": "explicit",
+    "text": "A petição registra art. 116 da Lei 6.385/76, «Regra transcrita para confronto.»",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei 6.385/76",
+        "span": [
+          19,
+          43
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-069",
+    "category": "explicit",
+    "text": "No voto, lê-se Lei 6.385/76, art. 2º, inc. XVI: ‘Regra transcrita para confronto.’",
+    "expected": [
+      {
+        "raw": "Lei 6.385/76, art. 2º, inc. XVI",
+        "span": [
+          15,
+          46
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-070",
+    "category": "explicit",
+    "text": "O parecer examina os arts. 116, 117 e 118 da Lei 6.385/76, à luz dos fatos narrados.",
+    "expected": [
+      {
+        "raw": "arts. 116, 117 e 118 da Lei 6.385/76",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Lei 6.385/76",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Lei 6.385/76",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-071",
+    "category": "explicit",
+    "text": "A petição transcreve art.\n116, § 1º, al. a, da Lei 6.385/76, \"Regra transcrita para confronto.\"",
+    "expected": [
+      {
+        "raw": "art.\n116, § 1º, al. a, da Lei 6.385/76",
+        "span": [
+          21,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art116.par1.ali-a"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-072",
+    "category": "explicit",
+    "text": "No parecer, p. 12, a conclusão remete a Lei 6.385/76, arts. 116, 117 e 118.",
+    "expected": [
+      {
+        "raw": "Lei 6.385/76, arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "Lei 6.385/76, arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "Lei 6.385/76, arts. 116, 117 e 118",
+        "span": [
+          40,
+          74
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6385",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-073",
+    "category": "explicit",
+    "text": "No parecer societário, aplica-se o art. 116 da Lei\n6.404/1976, preservado o exame dos fatos.",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei\n6.404/1976",
+        "span": [
+          35,
+          61
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-074",
+    "category": "explicit",
+    "text": "A petição invoca Lei\n6.404/1976, art. 2º, XVI para delimitar o pedido.",
+    "expected": [
+      {
+        "raw": "Lei\n6.404/1976, art. 2º, XVI",
+        "span": [
+          17,
+          45
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-075",
+    "category": "explicit",
+    "text": "O voto remete à Lei\n6.404/1976, art. 117 para fundamentar a conclusão.",
+    "expected": [
+      {
+        "raw": "Lei\n6.404/1976, art. 117",
+        "span": [
+          16,
+          40
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-076",
+    "category": "explicit",
+    "text": "A operação está sujeita à disciplina da Lei\n6.404/1976, art. 118.",
+    "expected": [
+      {
+        "raw": "Lei\n6.404/1976, art. 118",
+        "span": [
+          40,
+          64
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-077",
+    "category": "explicit",
+    "text": "Na Lei\n6.404/1976, art. 116, encontra-se o parâmetro de análise.",
+    "expected": [
+      {
+        "raw": "Lei\n6.404/1976, art. 116",
+        "span": [
+          3,
+          27
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-078",
+    "category": "explicit",
+    "text": "Pela Lei\n6.404/1976, art. 117, sustenta-se a necessidade de motivação.",
+    "expected": [
+      {
+        "raw": "Lei\n6.404/1976, art. 117",
+        "span": [
+          5,
+          29
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-079",
+    "category": "explicit",
+    "text": "A manifestação menciona a sociedade Alfa Ltda. e cita art. 116, parágrafo único, da Lei\n6.404/1976: “Regra transcrita para confronto.”",
+    "expected": [
+      {
+        "raw": "art. 116, parágrafo único, da Lei\n6.404/1976",
+        "span": [
+          54,
+          98
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-080",
+    "category": "explicit",
+    "text": "A petição registra art. 116 da Lei\n6.404/1976, «Regra transcrita para confronto.»",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei\n6.404/1976",
+        "span": [
+          19,
+          45
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-081",
+    "category": "explicit",
+    "text": "No voto, lê-se Lei\n6.404/1976, art. 2º, inc. XVI: ‘Regra transcrita para confronto.’",
+    "expected": [
+      {
+        "raw": "Lei\n6.404/1976, art. 2º, inc. XVI",
+        "span": [
+          15,
+          48
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-082",
+    "category": "explicit",
+    "text": "O parecer examina os arts. 116, 117 e 118 da Lei\n6.404/1976, à luz dos fatos narrados.",
+    "expected": [
+      {
+        "raw": "arts. 116, 117 e 118 da Lei\n6.404/1976",
+        "span": [
+          21,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Lei\n6.404/1976",
+        "span": [
+          21,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "arts. 116, 117 e 118 da Lei\n6.404/1976",
+        "span": [
+          21,
+          59
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-083",
+    "category": "explicit",
+    "text": "A petição transcreve art.\n116, § 1º, al. a, da Lei\n6.404/1976, \"Regra transcrita para confronto.\"",
+    "expected": [
+      {
+        "raw": "art.\n116, § 1º, al. a, da Lei\n6.404/1976",
+        "span": [
+          21,
+          61
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.par1.ali-a"
+      }
+    ],
+    "quote": "Regra transcrita para confronto."
+  },
+  {
+    "id": "prosa-084",
+    "category": "explicit",
+    "text": "No parecer, p. 12, a conclusão remete a Lei\n6.404/1976, arts. 116, 117 e 118.",
+    "expected": [
+      {
+        "raw": "Lei\n6.404/1976, arts. 116, 117 e 118",
+        "span": [
+          40,
+          76
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "Lei\n6.404/1976, arts. 116, 117 e 118",
+        "span": [
+          40,
+          76
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      },
+      {
+        "raw": "Lei\n6.404/1976, arts. 116, 117 e 118",
+        "span": [
+          40,
+          76
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art118"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-085",
+    "category": "explicit",
+    "text": "Nos termos do art. 116, parágrafo único, da Lei das S.A.: \"O acionista controlador deve usar o poder\".",
+    "expected": [
+      {
+        "raw": "art. 116, parágrafo único, da Lei das S.A.",
+        "span": [
+          14,
+          56
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": "O acionista controlador deve usar o poder"
+  },
+  {
+    "id": "prosa-086",
+    "category": "explicit",
+    "text": "O voto segue Resolução CVM 160/2022,\nart. 2º, XVI.",
+    "expected": [
+      {
+        "raw": "Resolução CVM 160/2022,\nart. 2º, XVI",
+        "span": [
+          13,
+          49
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-087",
+    "category": "explicit",
+    "text": "O parecer considera art. 116, inciso II, alínea “a”, da Lei das S.A..",
+    "expected": [
+      {
+        "raw": "art. 116, inciso II, alínea “a”, da Lei das S.A.",
+        "span": [
+          20,
+          68
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.inc2.ali-a"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-088",
+    "category": "explicit",
+    "text": "A petição cita Lei 6.404/1976, art. 116, parágrafo único.",
+    "expected": [
+      {
+        "raw": "Lei 6.404/1976, art. 116, parágrafo único",
+        "span": [
+          15,
+          56
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116.parunico"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-089",
+    "category": "explicit",
+    "text": "O voto invoca art. 5º da Constituição Federal.",
+    "expected": [
+      {
+        "raw": "art. 5º da Constituição Federal",
+        "span": [
+          14,
+          45
+        ],
+        "work": [
+          "federal",
+          "constituicao",
+          "1988",
+          1988
+        ],
+        "path": "art5"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-090",
+    "category": "explicit",
+    "text": "A defesa apoia-se no art. 373, inciso I, do CPC.",
+    "expected": [
+      {
+        "raw": "art. 373, inciso I, do CPC",
+        "span": [
+          21,
+          47
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "13105",
+          2015
+        ],
+        "path": "art373.inc1"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-091",
+    "category": "explicit",
+    "text": "O parecer remete ao art. 1.007 do Código Civil.",
+    "expected": [
+      {
+        "raw": "art. 1.007 do Código Civil",
+        "span": [
+          20,
+          46
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art1007"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-092",
+    "category": "explicit",
+    "text": "O voto examina a Lei Complementar n. 101/2000, art. 1º.",
+    "expected": [
+      {
+        "raw": "Lei Complementar n. 101/2000, art. 1º",
+        "span": [
+          17,
+          54
+        ],
+        "work": [
+          "federal",
+          "lei_complementar",
+          "101",
+          2000
+        ],
+        "path": "art1"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-093",
+    "category": "explicit",
+    "text": "A petição menciona arts. 116 e 117 da Lei das S.A..",
+    "expected": [
+      {
+        "raw": "arts. 116 e 117 da Lei das S.A.",
+        "span": [
+          19,
+          50
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      },
+      {
+        "raw": "arts. 116 e 117 da Lei das S.A.",
+        "span": [
+          19,
+          50
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art117"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-094",
+    "category": "explicit",
+    "text": "No parecer, invoca-se art. 116 da Lei das\nS.A..",
+    "expected": [
+      {
+        "raw": "art. 116 da Lei das\nS.A.",
+        "span": [
+          22,
+          46
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": "art116"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-095",
+    "category": "explicit",
+    "text": "A sociedade Beta Ltda., segundo o parecer, submete-se ao art. 1.052 do Código Civil.",
+    "expected": [
+      {
+        "raw": "art. 1.052 do Código Civil",
+        "span": [
+          57,
+          83
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "10406",
+          2002
+        ],
+        "path": "art1052"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-096",
+    "category": "explicit",
+    "text": "A conclusão menciona Resolução\nCVM 160/2022, art.\n2º, XVI.",
+    "expected": [
+      {
+        "raw": "Resolução\nCVM 160/2022, art.\n2º, XVI",
+        "span": [
+          21,
+          57
+        ],
+        "work": [
+          "cvm",
+          "resolucao",
+          "160",
+          2022
+        ],
+        "path": "art2.inc16"
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-097",
+    "category": "remission",
+    "text": "O voto analisa o art. 999 do mesmo diploma.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-098",
+    "category": "remission",
+    "text": "O parecer menciona a Lei 6.404/1976. Em seção distinta, o art. 999 do mesmo diploma exige exame próprio.",
+    "expected": [
+      {
+        "raw": "Lei 6.404/1976",
+        "span": [
+          21,
+          35
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": null
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-099",
+    "category": "remission",
+    "text": "O voto analisa o art. 999 da referida Lei.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-100",
+    "category": "remission",
+    "text": "O parecer menciona a Lei 6.404/1976. Em seção distinta, o art. 999 da referida Lei exige exame próprio.",
+    "expected": [
+      {
+        "raw": "Lei 6.404/1976",
+        "span": [
+          21,
+          35
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": null
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-101",
+    "category": "remission",
+    "text": "O voto analisa o art. 999 desse diploma.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-102",
+    "category": "remission",
+    "text": "O parecer menciona a Lei 6.404/1976. Em seção distinta, o art. 999 desse diploma exige exame próprio.",
+    "expected": [
+      {
+        "raw": "Lei 6.404/1976",
+        "span": [
+          21,
+          35
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": null
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-103",
+    "category": "remission",
+    "text": "O voto analisa o art. 999 da mesma lei.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-104",
+    "category": "remission",
+    "text": "O parecer menciona a Lei 6.404/1976. Em seção distinta, o art. 999 da mesma lei exige exame próprio.",
+    "expected": [
+      {
+        "raw": "Lei 6.404/1976",
+        "span": [
+          21,
+          35
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": null
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-105",
+    "category": "remission",
+    "text": "O voto analisa o art. 999 da mencionada resolução.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-106",
+    "category": "remission",
+    "text": "O parecer menciona a Lei 6.404/1976. Em seção distinta, o art. 999 da mencionada resolução exige exame próprio.",
+    "expected": [
+      {
+        "raw": "Lei 6.404/1976",
+        "span": [
+          21,
+          35
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": null
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-107",
+    "category": "remission",
+    "text": "O voto analisa o art. 999 da norma acima.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-108",
+    "category": "remission",
+    "text": "O parecer menciona a Lei 6.404/1976. Em seção distinta, o art. 999 da norma acima exige exame próprio.",
+    "expected": [
+      {
+        "raw": "Lei 6.404/1976",
+        "span": [
+          21,
+          35
+        ],
+        "work": [
+          "federal",
+          "lei",
+          "6404",
+          1976
+        ],
+        "path": null
+      }
+    ],
+    "quote": null
+  },
+  {
+    "id": "prosa-109",
+    "category": "negative",
+    "text": "A sociedade Alfa S.A.: “O conselho deve reunir-se.”",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-110",
+    "category": "negative",
+    "text": "A sociedade Beta Ltda., “Os sócios deliberaram.”",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-111",
+    "category": "negative",
+    "text": "No parecer, p. 12, há referência a um artigo de opinião.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-112",
+    "category": "negative",
+    "text": "A lei de Murphy não constitui fundamento do pedido.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-113",
+    "category": "negative",
+    "text": "Os itens a, b e c integram a lista de documentos.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-114",
+    "category": "negative",
+    "text": "O pedido n. 116 foi reiterado pela requerente.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-115",
+    "category": "negative",
+    "text": "A al. a do relatório interno trata das premissas.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-116",
+    "category": "negative",
+    "text": "O inc. XVI do quadro interno ficou sem preenchimento.",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-117",
+    "category": "negative",
+    "text": "A decisão: “Leia o art. indicado no relatório.”",
+    "expected": [],
+    "quote": null
+  },
+  {
+    "id": "prosa-118",
+    "category": "negative",
+    "text": "Na ata, art. e p. são apenas abreviações discutidas pelos revisores.",
+    "expected": [],
+    "quote": null
+  }
+]

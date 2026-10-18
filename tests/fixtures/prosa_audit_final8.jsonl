@@ -1,0 +1,80 @@
+{"id": "C001", "group": "explicit", "text": "A fundamentação começa no art. 18 da Lei 6.404/1976.", "expected": [["federal", "lei", "6404", 1976, "art18"]]}
+{"id": "C002", "group": "explicit", "text": "O voto coteja o artigo 19 da Lei n.º 6.404/76.", "expected": [["federal", "lei", "6404", 1976, "art19"]]}
+{"id": "C003", "group": "explicit", "text": "O relator destacou a Lei nº. 6.385/76, art. 20.", "expected": [["federal", "lei", "6385", 1976, "art20"]]}
+{"id": "C004", "group": "explicit", "text": "Leia-se a Lei n. 6.404/1976 (art. 21) antes da conclusão.", "expected": [["federal", "lei", "6404", 1976, "art21"]]}
+{"id": "C005", "group": "explicit", "text": "A nota traz “art. 22 da Lei 6.385/1976” em destaque.", "expected": [["federal", "lei", "6385", 1976, "art22"]]}
+{"id": "C006", "group": "explicit", "text": "O índice aponta a RCVM 44/21, art. 23.", "expected": [["cvm", "resolucao", "44", 2021, "art23"]]}
+{"id": "C007", "group": "explicit", "text": "O histórico registra a ICVM 44/84, art. 24.", "expected": [["cvm", "instrucao", "44", 1984, "art24"]]}
+{"id": "C008", "group": "explicit", "text": "Consta do art. 25 da Res. CVM 44/2021 a referência examinada.", "expected": [["cvm", "resolucao", "44", 2021, "art25"]]}
+{"id": "C009", "group": "explicit", "text": "Transcreveu-se o art. 26 da Instr. CVM 44/1984 no apêndice.", "expected": [["cvm", "instrucao", "44", 1984, "art26"]]}
+{"id": "C010", "group": "explicit", "text": "A revisão alcança os arts. 27 e 28 da Lei 6.404/1976.", "expected": [["federal", "lei", "6404", 1976, "art27"], ["federal", "lei", "6404", 1976, "art28"]]}
+{"id": "C011", "group": "explicit", "text": "A Lei 6.385/1976, arts. 29, 30 e 31, integra a relação.", "expected": [["federal", "lei", "6385", 1976, "art29"], ["federal", "lei", "6385", 1976, "art30"], ["federal", "lei", "6385", 1976, "art31"]]}
+{"id": "C012", "group": "explicit", "text": "O art. 32 da\nLei 6.404/1976 encerra a primeira coluna.", "expected": [["federal", "lei", "6404", 1976, "art32"]]}
+{"id": "C013", "group": "explicit", "text": "A RCVM 44/2021,\nart. 33, abre a segunda coluna.", "expected": [["cvm", "resolucao", "44", 2021, "art33"]]}
+{"id": "C014", "group": "explicit", "text": "O art. 34, § 2º, da Lei 6.404/1976 é objeto do comentário.", "expected": [["federal", "lei", "6404", 1976, "art34.par2"]]}
+{"id": "C015", "group": "explicit", "text": "A Lei 6.385/1976, art. 35, inc. II, aparece no rodapé.", "expected": [["federal", "lei", "6385", 1976, "art35.inc2"]]}
+{"id": "C016", "group": "explicit", "text": "A al. “b” do art. 36 da Lei 6.404/1976 foi citada na reunião.", "expected": [["federal", "lei", "6404", 1976, "art36.ali-b"]]}
+{"id": "C017", "group": "explicit", "text": "O art. 37 do Anexo II da RCVM 44/2021 aparece na planilha.", "expected": [["cvm", "resolucao", "44", 2021, "anexo-ii/art37"]]}
+{"id": "C018", "group": "explicit", "text": "A RCVM 44/2021, art. 38 do Anexo I, consta da ementa interna.", "expected": [["cvm", "resolucao", "44", 2021, "anexo-i/art38"]]}
+{"id": "C019", "group": "explicit", "text": "O art. 39 do Capítulo IV da Lei 6.404/1976 orientou a leitura.", "expected": [["federal", "lei", "6404", 1976, "art39"]]}
+{"id": "C020", "group": "explicit", "text": "A Lei 6.385/1976, art. 40 do Capítulo II, foi indicada pelo parecerista.", "expected": [["federal", "lei", "6385", 1976, "art40"]]}
+{"id": "C021", "group": "explicit", "text": "O art. 41 da Lei 6.404/1976 contrasta com o art. 42 da Lei 6.385/1976.", "expected": [["federal", "lei", "6404", 1976, "art41"], ["federal", "lei", "6385", 1976, "art42"]]}
+{"id": "C022", "group": "explicit", "text": "A RCVM 44/2021, art. 43, e a ICVM 44/1984, art. 44, têm fichas distintas.", "expected": [["cvm", "resolucao", "44", 2021, "art43"], ["cvm", "instrucao", "44", 1984, "art44"]]}
+{"id": "C023", "group": "explicit", "text": "Foram listadas a Lei 6.404/1976 e a Lei 6.385/1976 no relatório.", "expected": [["federal", "lei", "6404", 1976, null], ["federal", "lei", "6385", 1976, null]]}
+{"id": "C024", "group": "explicit", "text": "O rol menciona RCVM 44/2021; ICVM 44/1984.", "expected": [["cvm", "resolucao", "44", 2021, null], ["cvm", "instrucao", "44", 1984, null]]}
+{"id": "C025", "group": "explicit", "text": "A tabela começa pela Lei 6.404/76 e termina na Lei 6.385/76.", "expected": [["federal", "lei", "6404", 1976, null], ["federal", "lei", "6385", 1976, null]]}
+{"id": "C026", "group": "explicit", "text": "A Lei 6.404/1976 — art. 45 — foi objeto da pergunta.", "expected": [["federal", "lei", "6404", 1976, "art45"]]}
+{"id": "C027", "group": "explicit", "text": "A Lei 6.385/1976 (arts. 46 e 47) consta do roteiro.", "expected": [["federal", "lei", "6385", 1976, "art46"], ["federal", "lei", "6385", 1976, "art47"]]}
+{"id": "C028", "group": "explicit", "text": "O art. 48 da Lei\n6.404/1976 foi mencionado sem transcrição.", "expected": [["federal", "lei", "6404", 1976, "art48"]]}
+{"id": "C029", "group": "explicit", "text": "O art. 49, inciso III, alínea “a”, da Lei 6.404/1976 aparece na ficha.", "expected": [["federal", "lei", "6404", 1976, "art49.inc3.ali-a"]]}
+{"id": "C030", "group": "explicit", "text": "A Lei 6.385/1976, art. 50, § 1º, inc. I, encerra o inventário.", "expected": [["federal", "lei", "6385", 1976, "art50.par1.inc1"]]}
+{"id": "C031", "group": "nonexplicit", "text": "A rubrica R$ 6.404,00 corresponde à primeira parcela.", "expected": []}
+{"id": "C032", "group": "nonexplicit", "text": "O art. 5 do contrato social foi lido pelo administrador.", "expected": []}
+{"id": "C033", "group": "nonexplicit", "text": "A cláusula 7.1 prevê a entrega dos certificados.", "expected": []}
+{"id": "C034", "group": "nonexplicit", "text": "O item 3 do edital contém a lista de documentos.", "expected": []}
+{"id": "C035", "group": "nonexplicit", "text": "O art. 51 do mesmo diploma foi invocado sem identificar a obra.", "expected": []}
+{"id": "C036", "group": "nonexplicit", "text": "O § 2º da avença anterior continua sob discussão.", "expected": []}
+{"id": "C037", "group": "nonexplicit", "text": "O Anexo II, art. 52, do nosso regulamento interno foi assinado.", "expected": []}
+{"id": "C038", "group": "nonexplicit", "text": "O capítulo IV do acordo recebeu três ressalvas.", "expected": []}
+{"id": "C039", "group": "nonexplicit", "text": "A seção “Lei” da biblioteca contém 6.404 fichas.", "expected": []}
+{"id": "C040", "group": "nonexplicit", "text": "O código do produto é RCVM-44; o lote é ICVM-44.", "expected": []}
+{"id": "C041", "group": "nonexplicit", "text": "A transferência foi de R$ 6.385,00, em duas parcelas.", "expected": []}
+{"id": "C042", "group": "nonexplicit", "text": "O art. 53 da minuta, lido com a cláusula 7.1, permanece entre colchetes.", "expected": []}
+{"id": "C043", "group": "nonexplicit", "text": "Os arts. 54 e 55 deste instrumento foram rubricados.", "expected": []}
+{"id": "C044", "group": "nonexplicit", "text": "O item 3 do edital e o art. 5 do contrato social têm objetos distintos.", "expected": []}
+{"id": "C045", "group": "nonexplicit", "text": "O quadro recebeu o identificador 6.404/76 na revisão editorial.", "expected": []}
+{"id": "C046", "group": "nonexplicit", "text": "A nota diz “do mesmo diploma”, mas não informa título nem número.", "expected": []}
+{"id": "C047", "group": "nonexplicit", "text": "No art. 56 do nosso pacto está a regra de convocação.", "expected": []}
+{"id": "C048", "group": "nonexplicit", "text": "A ficha 44/21 não se confunde com a ficha 44/84.", "expected": []}
+{"id": "C049", "group": "nonexplicit", "text": "A alínea ‘c’ do inciso II da cláusula oitava foi riscada.", "expected": []}
+{"id": "C050", "group": "nonexplicit", "text": "Os interessados citaram o artigo 57\ndo termo de adesão.", "expected": []}
+{"id": "C051", "group": "mixed", "text": "A Lei 6.404/1976, art. 58 do termo de investimento, foi apenas lembrada na margem.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C052", "group": "mixed", "text": "A Lei 6.385/1976, art. 59 deste ajuste preliminar, ocupa a coluna de referências.", "expected": [["federal", "lei", "6385", 1976, null]]}
+{"id": "C053", "group": "mixed", "text": "A RCVM 44/2021, art. 60 no formulário do proponente, aparece na capa.", "expected": [["cvm", "resolucao", "44", 2021, null]]}
+{"id": "C054", "group": "mixed", "text": "A ICVM 44/1984, art. 61 daquele compromisso, foi mencionada no índice.", "expected": [["cvm", "instrucao", "44", 1984, null]]}
+{"id": "C055", "group": "mixed", "text": "A Lei 6.404/1976, art. 62 do Anexo II do acordo de voto, foi incluída na legenda.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C056", "group": "mixed", "text": "A RCVM 44/2021, art. 63 do Capítulo III deste pacto, é uma referência bibliográfica.", "expected": [["cvm", "resolucao", "44", 2021, null]]}
+{"id": "C057", "group": "mixed", "text": "A Lei 6.404/1976, art. 64 (do contrato de opção), foi citada na exposição.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C058", "group": "mixed", "text": "A Lei 6.385/1976, art. 65 — do instrumento de garantia —, aparece como pano de fundo.", "expected": [["federal", "lei", "6385", 1976, null]]}
+{"id": "C059", "group": "mixed", "text": "A RCVM 44/2021, art. 66, pertencente ao estatuto associativo, foi lembrada no resumo.", "expected": [["cvm", "resolucao", "44", 2021, null]]}
+{"id": "C060", "group": "mixed", "text": "A Lei 6.404/1976, art. 67 constante do termo particular, foi invocada como contexto.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C061", "group": "mixed", "text": "A Lei 6.385/1976, art. 68 inserido no acordo de acionistas, está na lista de apoio.", "expected": [["federal", "lei", "6385", 1976, null]]}
+{"id": "C062", "group": "mixed", "text": "A Lei 6.404/1976, art. 69 segundo o contrato, foi lançada no quadro de correspondência.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C063", "group": "mixed", "text": "A Lei 6.404/1976, art. 70 do mesmo diploma, fundamenta a nota seguinte.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C064", "group": "mixed", "text": "A RCVM 44/2021, art. 71 dessa resolução, foi indicada novamente.", "expected": [["cvm", "resolucao", "44", 2021, null]]}
+{"id": "C065", "group": "mixed", "text": "A Lei 6.404/1976 foi lida; o art. 72 do mesmo diploma foi lembrado depois.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C066", "group": "mixed", "text": "A Lei 6.385/1976.\n\nArt. 73 do termo particular: texto a negociar.", "expected": [["federal", "lei", "6385", 1976, null]]}
+{"id": "C067", "group": "mixed", "text": "A Lei 6.404/1976, art. 74 da Lei 6.385/1976, aparece na tabela de remissões.", "expected": [["federal", "lei", "6404", 1976, null], ["federal", "lei", "6385", 1976, "art74"]]}
+{"id": "C068", "group": "mixed", "text": "A RCVM 44/2021, art. 75 da ICVM 44/1984, integra o histórico.", "expected": [["cvm", "resolucao", "44", 2021, null], ["cvm", "instrucao", "44", 1984, "art75"]]}
+{"id": "C069", "group": "mixed", "text": "O art. 76 do contrato remete ao art. 77 da Lei 6.404/1976.", "expected": [["federal", "lei", "6404", 1976, "art77"]]}
+{"id": "C070", "group": "mixed", "text": "A cláusula 7.1 menciona a Lei 6.385/1976 e cobra R$ 6.404,00.", "expected": [["federal", "lei", "6385", 1976, null]]}
+{"id": "C071", "group": "mixed", "text": "O item 3 do edital cita a RCVM 44/2021 sem identificar dispositivo.", "expected": [["cvm", "resolucao", "44", 2021, null]]}
+{"id": "C072", "group": "mixed", "text": "A Lei 6.404/1976, art. 78 do anexo contratual, foi posta ao lado da ICVM 44/1984.", "expected": [["federal", "lei", "6404", 1976, null], ["cvm", "instrucao", "44", 1984, null]]}
+{"id": "C073", "group": "mixed", "text": "A Lei 6.385/1976, art. 79 do Anexo II da Lei 6.404/1976, foi incluída no levantamento.", "expected": [["federal", "lei", "6385", 1976, null], ["federal", "lei", "6404", 1976, "anexo-ii/art79"]]}
+{"id": "C074", "group": "mixed", "text": "A Lei 6.404/1976, art. 80, do nosso protocolo privado, aparece entre as fontes.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C075", "group": "mixed", "text": "A RCVM 44/2021, arts. 81 e 82 do termo de compromisso, foi anotada no relatório.", "expected": [["cvm", "resolucao", "44", 2021, null]]}
+{"id": "C076", "group": "mixed", "text": "A Lei 6.404/1976, art. 83 e cláusula 7.1 do acordo, constam do debate.", "expected": [["federal", "lei", "6404", 1976, null]]}
+{"id": "C077", "group": "mixed", "text": "O art. 84 da Lei 6.404/1976 remete ao art. 85 do mesmo diploma.", "expected": [["federal", "lei", "6404", 1976, "art84"]]}
+{"id": "C078", "group": "mixed", "text": "A Lei 6.385/1976,\nart. 86 do acordo suplementar, foi incluída no cabeçalho.", "expected": [["federal", "lei", "6385", 1976, null]]}
+{"id": "C079", "group": "mixed", "text": "A Lei 6.404/1976, art. 87 do Anexo III, e a Lei 6.385/1976 foram catalogadas.", "expected": [["federal", "lei", "6404", 1976, "anexo-iii/art87"], ["federal", "lei", "6385", 1976, null]]}
+{"id": "C080", "group": "mixed", "text": "O art. 88 do Capítulo V da RCVM 44/2021 foi comparado ao art. 89 do contrato.", "expected": [["cvm", "resolucao", "44", 2021, "art88"]]}

@@ -109,17 +109,100 @@ def validate_cnj_dv(number: str) -> bool:
 # Dispositivos (art./§/inciso/alínea)
 # ---------------------------------------------------------------------------
 
-_ART_NUM = r"\d+(?:\.\d{3})?(?:-[A-Za-z])?[ºªo°]?"
+_ART_NUM = r"\d+(?:\.\d{3})?(?:-[A-Za-z])?[ºªo°]?(?!\w|\.\w|[-/]\w)"
 _ART_TOKEN = rf"(?:arts?\.?|artigos?)\s*{_ART_NUM}(?:\s*(?:,|e)\s*{_ART_NUM})*"
 _PAR_TOKEN = r"(?:§|par[aá]grafo)\s*(?:[uú]nico|\d+[ºªo°]?)"
-_INC_TOKEN = r"(?:inciso\s+)?[IVXLCDM]+(?:-[A-Za-z])?\b"
-_ALI_TOKEN = r"(?:al[ií]nea\s+[\"'“‘(]?[a-z](?!\w)[\"'”’)]?|[\"'“‘(][a-z][\"'”’)]|[a-z](?=\s*(?:,|do\b|da\b|$)))"
-_ITEM_TOKEN = r"item\s+\d+[ºªo°]?"
-_DEVICE_ATOM = rf"(?<!\w)(?:{_ART_TOKEN}|{_PAR_TOKEN}|{_ITEM_TOKEN}|caput\b|{_ALI_TOKEN}|{_INC_TOKEN})"
-_DEVICE_CORE = (rf"(?:(?:anexo)\s+[IVXLCDM\dA-Z]+\s*,?\s*)?"
+_INC_TOKEN = r"(?:(?:inciso|inc\.)\s+)?[IVXLCDM]+(?:-[A-Za-z])?\b"
+_ALI_TOKEN = r"(?:(?:al[ií]nea|al\.)\s+[\"'“‘(]?[a-z](?!\w)[\"'”’)]?|[\"'“‘(][a-z][\"'”’)]|[a-z](?!\w)(?=\s*(?:,|do\b|da\b|$)))"
+_ITEM_TOKEN = r"item\s+\d+[ºªo°]?(?!\w|\.\d)"
+_DEVICE_ATOM = rf"(?<!\w)(?:{_ART_TOKEN}|{_PAR_TOKEN}|{_ITEM_TOKEN}|caput\b|{_ALI_TOKEN}|{_INC_TOKEN})(?!\w|\.\w|[-/]\w)"
+_DEVICE_CORE = (rf"(?:(?:anexo)\s+(?:[IVXLCDM]+|\d+|[A-Z])\b\s*,?\s*)?"
                 rf"{_DEVICE_ATOM}(?:\s*(?:,\s*(?:(?:do|da|dos|das)\s+)?|(?:do|da|dos|das|e)\s+){_DEVICE_ATOM})*"
-                rf"(?:\s+do\s+anexo\s+[IVXLCDM\dA-Z]+)?")
+                rf"(?:\s+do\s+(?:anexo\s+(?:[IVXLCDM]+|\d+|[A-Z])|cap[ií]tulo\s+(?:[IVXLCDM]+|\d+))\b)?")
 _DEVICE_RE = re.compile(_DEVICE_CORE, re.I)
+
+# Gramática posterior fechada: não reutiliza a gramática anterior, que admite
+# complementos de pertença e divisões expressamente ligadas à obra.
+_POST_ROMAN = r"(?<![^\W\d_])[IVXLCDM]+(?![^\W\d_])"
+_POST_ALINEA = r"(?:(?:al[ií]nea|al\.)\s+[\"'“‘]?[a-z](?!\w)[\"'”’]?|[\"'“‘][a-z][\"'”’]|[a-z](?!\w)(?=\s*(?:[,.;:)\"“«‘]|$)))"
+_POST_ATOM = (
+    rf"(?:{_ART_TOKEN}(?!\w)|{_PAR_TOKEN}(?!\w)|{_ITEM_TOKEN}(?!\w)"
+    rf"|caput\b|(?:(?:inciso|inc\.)\s+)?{_POST_ROMAN}|{_POST_ALINEA})(?!\w|\.\w|[-/]\w)"
+)
+_POST_DEVICE_RE = re.compile(
+    rf"[^\S\r\n]*[,–—][^\S\r\n]*(?:\r?\n(?![^\S\n]*\r?\n))?[^\S\r\n]*"
+    rf"({_POST_ATOM}(?:\s*(?:,\s*|\be\s+){_POST_ATOM})*"
+    rf"(?:\s+do\s+(?:anexo\s+(?:[IVXLCDM]+|\d+|[A-Z])|cap[ií]tulo\s+(?:[IVXLCDM]+|\d+)|caput)\b)?)", re.I,
+)
+# Marcadores gramaticais de pertença, sem catálogo de instrumentos ou verbos.
+_POST_OWNER = re.compile(
+    r"(?:pertencente\b|constante\b|inserid\w*|previst\w*|integrante\b)", re.I,
+)
+_CANONICAL_POST = re.compile(
+    rf"arts?\.\s*{_ART_NUM}(?:\s*(?:,|e)\s*{_ART_NUM})*"
+    rf"(?:\s*,\s*{_PAR_TOKEN})?(?:\s*,\s*(?:(?:inciso|inc\.)\s+)?{_POST_ROMAN})?",
+    re.I,
+)
+
+# Ampliação exclusiva de propostas: não participa da gramática exata.
+_POST_DETERMINER = r"(?:o|os|a|as|um|uns|uma|umas|seu|seus|sua|suas|ess[ea]s?|est[ea]s?|aquel[ea]s?|tais|tal|referid[oa]s?|mencionad[oa]s?)\b"
+_PROBABLE_POST = re.compile(
+    rf"(?:\bcuj[oa]s?\b|[:;\n]|\bnotadamente\b|\bespecialmente\b|"
+    rf"\bem\s+especial\b|\bno\b|\bem\s+seu\b|\A\s*(?:lemos|consultamos|examinamos)\b|"
+    rf":\s*\r?\n[ \t]*[-•]|\A\s*,?\s*{_POST_DETERMINER})\s*"
+    rf"(?:{_POST_DETERMINER}\s+)*"
+    rf"((?:{_ART_TOKEN}|{_PAR_TOKEN}|{_ITEM_TOKEN})"
+    rf"(?:\s*(?:,\s*|\be\s+){_POST_ATOM})*"
+    rf"(?:\s+do\s+(?:anexo\s+(?:[IVXLCDM]+|\d+|[A-Z])|cap[ií]tulo\s+(?:[IVXLCDM]+|\d+)|caput)\b)?)",
+    re.I,
+)
+_PROBABLE_OWNER = re.compile(
+    r"\b(?:pertence|extra[ií]d\w*|oriund\w*|estabelecid\w*|redigid\w*|"
+    r"contid\w*|atribu[ií]d\w*|veiculad\w*|estipulad\w*)\b|"
+    r"\bque\s+integra\b|\bcuj[oa]s?\s+(?:sede|origem)\b|\b[eé]\s+(?:parte|objeto)\s+(?:do|da)\b|"
+    r"\b(?:relativ\w*|situad\w*|localizad\w*)\s+(?:ao|aos|à|às|no|na|nos|nas)\b|"
+    r"\b(?:registrad\w*|consta|prev[eê])\s+(?:no|na|do|da)\b", re.I,
+)
+
+
+def _posterior_romans_valid(chain: str) -> bool:
+    from freoa_verifica.parsers.paths import int_to_roman, roman_to_int
+
+    # A conversão aritmética é permissiva; exigir também a grafia canônica
+    # impede promover siglas como ICVM e CVM a números de inciso.
+    return all(int_to_roman(roman_to_int(token)) == token.upper()
+               for token in re.findall(r"(?<!\w)[IVXLCDM]+(?!\w)", chain, re.I))
+
+
+def _posterior_labels(chain: str) -> str:
+    """Normaliza romanos sem alterar letras de alínea ou a superfície citada."""
+    def normalize(match: re.Match[str]) -> str:
+        atom = match.group(0)
+        if re.fullmatch(r"(?:inciso|inc\.)\s+[IVXLCDM]+", atom, re.I):
+            return "inciso " + atom.split()[-1].upper()
+        if re.fullmatch(r"[IVXLCDM]{2,}", atom, re.I):
+            return atom.upper()
+        return atom
+
+    return re.sub(_POST_ATOM, normalize, chain, flags=re.I)
+
+
+def _posterior_terminated(text: str, position: int, norm_start: int, cites: list[Citation]) -> bool:
+    tail = text[position:]
+    stripped = tail.lstrip()
+    if not stripped or stripped[0] in '.;:"“”«»‘’':
+        return True
+    if stripped[0] == ')':
+        stack = []
+        for offset, char in enumerate(text[:position]):
+            if char == '(':
+                stack.append(offset)
+            elif char == ')' and stack:
+                stack.pop()
+        return bool(stack and stack[-1] < norm_start)
+    # Prosa e justaposição são propostas, nunca associações exatas.
+    return bool(re.match(r",?\s+[^\W\d_]", tail)) or bool(re.match(r",\s*[“\"«‘]", tail))
+
 
 def _split_article_numbers(chunk: str) -> list[str]:
     """Extrai números de artigo de 'arts. 116 e 117' ou 'art. 254-A'."""
@@ -188,6 +271,9 @@ def _anexo_scope(text: str) -> tuple[str, str]:
 def _device_to_paths(device_text: str) -> list[str]:
     """Converte texto de dispositivo em um ou mais caminhos canônicos."""
     text = " ".join(device_text.split())
+    text = re.sub(r"\binc\.", "inciso", text, flags=re.I)
+    text = re.sub(r"\bal\.", "alínea", text, flags=re.I)
+    text = re.sub(r"\s+do\s+cap[ií]tulo\s+[IVXLCDM\d]+$", "", text, flags=re.I)
     scope, body = _anexo_scope(text)
     # "Anexo II" sem artigo → só o escopo
     if scope and not re.search(
@@ -313,7 +399,7 @@ def _device_to_paths(device_text: str) -> list[str]:
 # Obras (leis, resoluções, …)
 # ---------------------------------------------------------------------------
 
-_NUM = r"([\d.]+(?:-[\dA-Za-z]+)?)"
+_NUM = r"(\d+(?:\.\d+)*(?:-[\dA-Za-z]+)?)"
 _YEAR = r"(\d{2,4})"
 
 _WORK_PATTERNS: list[tuple[re.Pattern[str], str, str]] = []
@@ -326,88 +412,87 @@ def _compile_work_patterns() -> None:
     specs: list[tuple[str, str, str]] = [
         # Lei Complementar / LC
         (
-            rf"\b(?:Lei\s+Complementar|LC)\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\b(?:Lei\s+Complementar|LC)\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR}|\s*,?\s*de\s+\d{{1,2}}\s+de\s+\w+\s+de\s+{_YEAR}|\s*,?\s*de\s+\d{{1,2}}/\d{{1,2}}/{_YEAR}|\s*,?\s*de\s+{_YEAR})?",
             "federal",
             "lei_complementar",
         ),
         # Decreto-Lei
         (
-            rf"\bDecreto-Lei\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\bDecreto-Lei\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR}|\s*,?\s*de\s+\d{{1,2}}\s+de\s+\w+\s+de\s+{_YEAR}|\s*,?\s*de\s+\d{{1,2}}/\d{{1,2}}/{_YEAR}|\s*,?\s*de\s+{_YEAR})?",
             "federal",
             "decreto_lei",
         ),
         # Medida Provisória / MP
         (
-            rf"\b(?:Medida\s+Provis[oó]ria|MP)\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\b(?:Medida\s+Provis[oó]ria|MP)\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR}|\s*,?\s*de\s+\d{{1,2}}\s+de\s+\w+\s+de\s+{_YEAR}|\s*,?\s*de\s+\d{{1,2}}/\d{{1,2}}/{_YEAR}|\s*,?\s*de\s+{_YEAR})?",
             "federal",
             "medida_provisoria",
         ),
         # Decreto (não Decreto-Lei)
         (
-            rf"\bDecreto\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\bDecreto\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR}|\s*,?\s*de\s+\d{{1,2}}\s+de\s+\w+\s+de\s+{_YEAR}|\s*,?\s*de\s+\d{{1,2}}/\d{{1,2}}/{_YEAR}|\s*,?\s*de\s+{_YEAR})?",
             "federal",
             "decreto",
         ),
         # Lei ordinária
         (
-            rf"\bLei\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\bLei\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR}|\s*,?\s*de\s+\d{{1,2}}\s+de\s+\w+\s+de\s+{_YEAR}|\s*,?\s*de\s+\d{{1,2}}/\d{{1,2}}/{_YEAR}|\s*,?\s*de\s+{_YEAR})?",
             "federal",
             "lei",
         ),
         # Constituição / CF/88
-        (r"\bCF\s*/\s*88\b", "federal", "constituicao"),
         (r"\bConstitui[cç][aã]o(?:\s+Federal)?\b", "federal", "constituicao"),
         # CVM
         (
-            rf"\b(?:Resolu[cç][aã]o\s+CVM|RCVM|Res\.?\s*CVM)\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\b(?:Resolu[cç][aã]o\s+CVM|RCVM|Res\.?\s*CVM)\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "cvm",
             "resolucao",
         ),
         (
-            rf"\b(?:Instru[cç][aã]o\s+CVM|ICVM)\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\b(?:Instru[cç][aã]o\s+CVM|ICVM|Instr?\.\s*CVM|IN\s+CVM)\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "cvm",
             "instrucao",
         ),
         (
-            rf"\b(?:Parecer\s+de\s+Orienta[cç][aã]o\s+CVM|PO\s+CVM)\s*(?:n[º°o.]?\s*)?{_NUM}",
+            rf"\b(?:Parecer\s+de\s+Orienta[cç][aã]o\s+CVM|PO\s+CVM)\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}",
             "cvm",
             "parecer_orientacao",
         ),
         (
-            rf"\bOf[ií]cio-Circular\s+CVM(?:/[A-Z]+)?\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\bOf[ií]cio-Circular\s+CVM(?:/[A-Z]+)?\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "cvm",
             "oficio_circular",
         ),
         # CMN
         (
-            rf"\b(?:Resolu[cç][aã]o\s+CMN|Res\.?\s*CMN)\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\b(?:Resolu[cç][aã]o\s+CMN|Res\.?\s*CMN)\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "cmn",
             "resolucao",
         ),
         # BCB
         (
-            rf"\bResolu[cç][aã]o\s+BCB\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\bResolu[cç][aã]o\s+BCB\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "bcb",
             "resolucao_bcb",
         ),
         (
-            rf"\bCircular\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\bCircular\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "bcb",
             "circular",
         ),
         (
-            rf"\bCarta-Circular\s*(?:n[º°o.]?\s*)?{_NUM}"
+            rf"\bCarta-Circular\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
             rf"(?:\s*/\s*{_YEAR})?",
             "bcb",
             "carta_circular",
@@ -446,26 +531,26 @@ _DECISION_CLASSES = (
 )
 
 _DECISION_RE = re.compile(
-    rf"\b({_DECISION_CLASSES})\s*(?:n[º°o.]?\s*)?([\d.]+)"
+    rf"\b({_DECISION_CLASSES})\s*(?:n\.?[º°o]?\.?\s*)?([\d.]+)"
     rf"(?:\s*/\s*(STF|STJ|[A-Z]{{2}}))?"
     rf"(?:\s+(?:do|da)\s+(STF|STJ))?",
     re.I,
 )
 
 _SUMULA_RE = re.compile(
-    r"\bS[uú]mula\s+(Vinculante\s+)?(?:n[º°o.]?\s*)?(\d+)"
+    r"\bS[uú]mula\s+(Vinculante\s+)?(?:n\.?[º°o]?\.?\s*)?(\d+)"
     r"(?:\s*(?:/|do|da)\s*(STF|STJ))?",
     re.I,
 )
 
 _TEMA_RE = re.compile(
-    r"\bTema\s+(Repetitivo\s+)?(?:n[º°o.]?\s*)?([\d.]+)"
+    r"\bTema\s+(Repetitivo\s+)?(?:n\.?[º°o]?\.?\s*)?([\d.]+)"
     r"(?:\s*(?:/|do|da)\s*(STF|STJ))?",
     re.I,
 )
 
 _ACORDAO_TCU_RE = re.compile(
-    r"\bAc[oó]rd[aã]o\s+(?:TCU\s+)?(?:n[º°o.]?\s*)?([\d.]+)\s*/\s*(\d{4})"
+    r"\bAc[oó]rd[aã]o\s+(?:TCU\s+)?(?:n\.?[º°o]?\.?\s*)?([\d.]+)\s*/\s*(\d{4})"
     r"(?:\s*[-–—]?\s*(?:TCU\s*)?[-–—]?\s*(Plen[aá]rio|1[ªa]\s*C[aâ]mara|2[ªa]\s*C[aâ]mara|[A-Za-z0-9/-]+))?",
     re.I,
 )
@@ -483,7 +568,7 @@ _NORMATIVE_CTX_RE = re.compile(
 )
 
 _PAS_CVM_RE = re.compile(
-    r"\b(?:PAS(?:\s+CVM)?|Processo(?:\s+Administrativo\s+Sancionador)?\s+CVM|CVM\s*[,–-]?\s*Processo)\s*(?:n[º°o.]?\s*)?((?:\d{5}\.\d{6}/\d{4}-\d{2})|(?:RJ\s*\d{4}/\d+))",
+    r"\b(?:PAS(?:\s+CVM)?|Processo(?:\s+Administrativo\s+Sancionador)?\s+CVM|CVM\s*[,–-]?\s*Processo)\s*(?:n\.?[º°o]?\.?\s*)?((?:\d{5}\.\d{6}/\d{4}-\d{2})|(?:RJ\s*\d{4}/\d+))",
     re.I,
 )
 
@@ -495,8 +580,8 @@ _CNJ_RE = re.compile(
 _ALIAS_SURFACES_SORTED = sorted(ALIAS_SURFACES, key=lambda x: len(x[0]), reverse=True)
 _ALIAS_RE = re.compile(
     r"\b(?:"
-    + "|".join(re.escape(surface) for surface, _ in _ALIAS_SURFACES_SORTED)
-    + r")\b",
+    + "|".join(re.escape(surface).replace(r"\ ", r"\s+") for surface, _ in _ALIAS_SURFACES_SORTED if "/" not in surface)
+    + r")(?!\w)",
     re.I,
 )
 _ALIAS_SURFACE_MAP: dict[str, WorkKey] = {
@@ -568,10 +653,43 @@ def _has_normative_context(text: str, start: int, end: int) -> bool:
     return False
 
 
+def _reference_boundary(text: str, start: int, end: int) -> bool:
+    """Pontuação de frase delimita; conectores de identificadores não delimitam."""
+    # Parênteses e vírgulas dentro de endereços não são pontuação de frase.
+    left = start
+    right = end
+    while left and not text[left - 1].isspace():
+        left -= 1
+    while right < len(text) and not text[right].isspace():
+        right += 1
+    envelope = text[left:right]
+    if "://" in envelope or "@" in envelope or re.search(
+        r"\.[A-Za-z][A-Za-z0-9]{1,9}(?:[?#]\S*)?$", envelope.rstrip(".,;:!?\"'”’»")
+    ):
+        return False
+    if start and (text[start - 1].isalnum() or text[start - 1] in "_-/\\.@+%#‐‑"):
+        return False
+    if end < len(text):
+        char = text[end]
+        if char.isalnum() or char in "_-/\\@+%#‐‑":
+            return False
+        if char == "." and end + 1 < len(text) and (text[end + 1].isalnum() or text[end + 1] == "_"):
+            return False
+    return True
+
+
 def _parse_work_match(
     m: re.Match[str], authority: str, kind: str, text: str
 ) -> Citation | None:
     raw = m.group(0)
+    if not _reference_boundary(text, m.start(), m.end()):
+        return None
+    # Abreviações exigem caixa original e separação do número da norma.
+    for token in re.finditer(r"\b(?:LC|MP|RCVM|ICVM|CF|CVM|CMN|BCB)\b", raw, re.I):
+        if token[0] != token[0].upper():
+            return None
+    if re.search(r"[A-Za-zÀ-ÿ]\d", raw) or (m.end() < len(text) and text[m.end()].isalnum()):
+        return None
     # Evitar Decreto-Lei casar como Decreto
     if kind == "decreto" and re.match(r"Decreto-Lei", raw, re.I):
         return None
@@ -598,7 +716,32 @@ def _parse_work_match(
         span=(m.start(), m.end()),
         work=work,
         confidence=conf,
+        flags=["apelido"] if kind == "constituicao" else [],
     )
+
+
+# Pertença é estrutural: dispensa vocabulário de instrumentos privados.
+_BELONGING = re.compile(
+    r"\s*,?\s*(?:do|da|dos|das|de|no|na|nos|nas|"
+    r"deste|desta|destes|destas|desse|dessa|desses|dessas|"
+    r"daquele|daquela|daqueles|daquelas|neste|nesta|nesse|nessa)\b\s+(?=\w)", re.I,
+)
+_SAME_SCOPE = re.compile(
+    r"(?:anexo\s+(?:[IVXLCDM]+|\d+|[A-Z])|cap[ií]tulo\s+(?:[IVXLCDM]+|\d+)|caput)\b", re.I,
+)
+
+
+def _foreign_complement(text: str, position: int, target: Citation) -> bool:
+    """Só a própria referência ou sua divisão pode completar o dispositivo."""
+    while complement := _BELONGING.match(text, position):
+        position = complement.end()
+        if position == target.span[0]:
+            return False
+        scope = _SAME_SCOPE.match(text, position)
+        if scope is None:
+            return True
+        position = scope.end()
+    return False
 
 
 def _attach_devices(text: str, cites: list[Citation]) -> list[Citation]:
@@ -611,41 +754,139 @@ def _attach_devices(text: str, cites: list[Citation]) -> list[Citation]:
         start, end = cite.span
         # Dispositivo ANTES: "... do/da <norma>" ou "..., da <norma>"
         before = text[max(0, start - 120) : start]
-        after = text[end : min(len(text), end + 80)]
+        # O complemento pertence ao dispositivo inteiro, inclusive em listas
+        # longas; uma janela curta poderia cortar "do contrato" e inventar vínculo.
+        after = text[end:]
         device_m = None
+        confidence = cite.confidence
         # "art. X ... da Lei" / "arts. X e Y da LSA"
         m_before = re.search(
             rf"({_DEVICE_CORE})\s*,?\s*(?:do|da|dos|das)?\s*$",
             before,
             re.I,
         )
+        # Uma letra isolada antes da obra pode ser artigo ou preposição.
+        # Alíneas exigem rótulo, aspas ou um dispositivo composto.
+        if m_before and re.fullmatch(r"[a-z]", m_before.group(1), re.I):
+            m_before = None
+        if m_before and _foreign_complement(text, start - len(before) + m_before.end(1), cite):
+            m_before = None
+        if m_before:
+            device_start = start - len(before) + m_before.start(1)
+            if any(previous.span[0] <= device_start < previous.span[1] for previous in result):
+                m_before = None
+            elif not re.search(r"\b(?:do|da|dos|das)\s*$", m_before.group(0), re.I):
+                # Sem pertença explícita, não tomar a cadeia que segue outra obra.
+                if any(other.span[1] <= device_start and not text[other.span[1]:device_start].strip(' ,')
+                       for other in cites if other is not cite):
+                    m_before = None
+                else:
+                    confidence = "provavel"
         if m_before:
             device_m = m_before
             device_text = m_before.group(1)
             abs_start = start - len(before) + m_before.start(1)
             abs_end = end
         else:
-            # Dispositivo DEPOIS: "Lei X, art. Y" ou "Lei X art. Y"
-            m_after = re.match(
-                rf"\s*[.,:;–—-]?\s*,?\s*(?:Parte\s+Geral\s*[,;:–—-]?\s*)?({_DEVICE_CORE})",
-                after,
-                re.I,
-            )
+            # Abertura/fecho devem envolver somente a cadeia, sem texto extra.
+            paired = re.match(r"\s*([(–—-])\s*", after)
+            m_after = _POST_DEVICE_RE.match(after)
+            possessive = re.match(rf"\s*,?\s*em\s+seu\s+({_DEVICE_CORE})", after, re.I)
+            if possessive:
+                m_after = possessive
+            paired_end = None
+            if paired:
+                atom = re.match(rf"({_DEVICE_CORE})", after[paired.end():], re.I)
+                if atom:
+                    closing = ')' if paired[1] == '(' else paired[1]
+                    close = re.match(rf"\s*{re.escape(closing)}", after[paired.end()+atom.end():])
+                    if close:
+                        m_after = re.match(rf"\s*{re.escape(paired[1])}\s*({_DEVICE_CORE})", after, re.I)
+                        paired_end = paired.end() + atom.end() + close.end()
+            if m_after:
+                chain_end = end + m_after.end(1)
+                chain = m_after.group(1)
+                invalid = (
+                    not _posterior_romans_valid(chain)
+                    or any(end + m_after.start(1) <= other.span[0] < chain_end for other in cites if other is not cite)
+                    or re.search(r"\n[ \t]*\n|\r\n[ \t]*\r\n", chain)
+                    or _foreign_complement(text, chain_end, cite)
+                )
+                tail = text[chain_end:]
+                predicate = re.split(r"[.;\n]", tail, maxsplit=1)[0]
+                if _POST_OWNER.search(predicate):
+                    invalid = True
+                if paired and paired_end is None:
+                    invalid = True
+                if not paired_end and not _posterior_terminated(text, chain_end, start, cites):
+                    invalid = True
+                if invalid:
+                    m_after = None
             if m_after:
                 device_m = m_after
-                device_text = m_after.group(1)
+                device_text = _posterior_labels(m_after.group(1))
                 abs_start = start
-                abs_end = end + m_after.end(1)
+                abs_end = end + (paired_end or m_after.end(1))
+                terminator = text[end + m_after.end(1):].lstrip()
+                canonical = (not paired and after.lstrip().startswith(',')
+                             and _CANONICAL_POST.fullmatch(m_after.group(1))
+                             and (not terminator or terminator[0] in '.;:"“”«»‘’)' ))
+                if not canonical:
+                    confidence = "provavel"
+                if (confidence == "provavel" and not paired_end
+                        and not re.search(r"\bdo\s+(?:anexo|cap[ií]tulo|caput)\b", chain, re.I)
+                        and _PROBABLE_OWNER.search(predicate)):
+                    cite.flags.append("preferir_outro_referente")
             else:
                 device_text = None
                 abs_start, abs_end = start, end
 
+            if device_text is None:
+                # Não atravessar outra norma, nem recuperar delimitador sem par.
+                limit = min([other.span[0] - end for other in cites
+                             if other.span[0] >= end and other is not cite] or [len(after)])
+                proposal = _PROBABLE_POST.search(after, 0, limit)
+                proposal_end = None
+                # Pares podem aparecer depois de prosa intermediária na janela.
+                # Reutilizar só a cadeia, sem tornar essa busca canônica.
+                if proposal is None and not paired:
+                    for opening in re.finditer(r"[(–—]", after[:limit]):
+                        if opening.end() > 120:
+                            break
+                        atom = re.compile(rf"\s*({_DEVICE_CORE})", re.I).match(after, opening.end())
+                        if atom is None or atom.start(1) > 120:
+                            continue
+                        closing = ')' if opening[0] == '(' else opening[0]
+                        close = re.match(rf"\s*{re.escape(closing)}", after[atom.end(1):limit])
+                        if close:
+                            proposal = atom
+                            proposal_end = atom.end(1) + close.end()
+                            break
+                if proposal and proposal.start(1) <= 120 and not paired:
+                    chain_end = end + proposal.end(1)
+                    belonging = _BELONGING.match(text, chain_end)
+                    other_owner = belonging and any(
+                        belonging.end() == other.span[0] for other in cites if other is not cite
+                    )
+                    if (_posterior_romans_valid(proposal.group(1))
+                            and not other_owner
+                            and (proposal_end or _posterior_terminated(text, chain_end, start, cites))):
+                        device_text = _posterior_labels(proposal.group(1))
+                        abs_end = end + (proposal_end or proposal.end(1))
+                        confidence = "provavel"
+                        predicate = re.split(r"[.;\n]", text[chain_end:], maxsplit=1)[0]
+                        if (not proposal_end and (_foreign_complement(text, chain_end, cite)
+                                or _POST_OWNER.search(predicate)
+                                or _PROBABLE_OWNER.search(predicate))):
+                            cite.flags.append("preferir_outro_referente")
+
         if not device_text:
             invalid = re.search(r"((?:art(?:igo)?s?\.?|§|inciso|al[ií]nea|item)\s+[^.;:\n]{1,100}?)\s+(?:do|da)\s*$", before, re.I)
-            invalid_after = re.match(r"\s*,\s*((?:art(?:igo)?s?\.?|§|inciso|al[ií]nea|item)\s+[^.;:\n]{1,80})", after, re.I)
-            if invalid or invalid_after:
-                a = start-len(before)+invalid.start(1) if invalid else start
-                b = end if invalid else end+invalid_after.end(1)
+            if invalid and any(_foreign_complement(text, start - len(before) + invalid.start(1) + m.start(), cite) for m in _BELONGING.finditer(invalid.group(1))):
+                invalid = None
+            if invalid:
+                a = start-len(before)+invalid.start(1)
+                b = end
                 cite.raw = text[a:b]
                 cite.span = (a,b)
                 cite.flags.append("dispositivo_invalido")
@@ -661,7 +902,7 @@ def _attach_devices(text: str, cites: list[Citation]) -> list[Citation]:
                     span=(abs_start, abs_end),
                     work=cite.work,
                     path=None,
-                    confidence=cite.confidence,
+                    confidence=confidence,
                     flags=[*cite.flags, "dispositivo_invalido"],
                 )
             )
@@ -674,11 +915,38 @@ def _attach_devices(text: str, cites: list[Citation]) -> list[Citation]:
                     span=(abs_start, abs_end),
                     work=cite.work,
                     path=path,
-                    confidence=cite.confidence,
+                    confidence=confidence,
                     flags=list(cite.flags),
                 )
             )
     return result
+
+
+_EXPLICIT_DEVICE_LABEL = re.compile(
+    r"(?<!\w)(?:arts?\.?|artigos?|inciso|inc\.|al[ií]nea|al\.|item|par[aá]grafo|§)"
+    r"(?=\s|\d|[_-])", re.I,
+)
+_NONLEGAL_FIELD = re.compile(
+    r"\b(?:etiqueta|SKU|c[oó]digo|lote|chave|arquivo|ticker|placa)\b"
+    r"[\"'”’`»]?\s*(?::\s*[\"'“‘`«]?|"
+    r"(?:(?:tem\s+o\s+texto|[eé]|tem|cont[eé]m)\s+)?[\"'“‘`«])\s*$", re.I,
+)
+
+
+def _unattached_device_nearby(text: str, cite: Citation, cites: list[Citation]) -> bool:
+    """Rótulo explícito sem vínculo: reter a dúvida, sem inventar caminho.
+
+    Outra citação delimita a janela e conserva a pertença já reconhecida.
+    """
+    start, end = cite.span
+    left = max([0, start - 120] + [c.span[1] for c in cites if c.span[1] <= start and c is not cite])
+    right = min([len(text), end + 120] + [c.span[0] for c in cites if c.span[0] >= end and c is not cite])
+    before, after = text[left:start], text[end:right]
+    boundary = r"[.!?]\s+(?=[A-ZÀ-Ý])|\n\s*\n"
+    before = re.split(boundary, before)[-1]
+    after = re.split(boundary, after)[0]
+    return bool(_EXPLICIT_DEVICE_LABEL.search(before) or _EXPLICIT_DEVICE_LABEL.search(after)
+                or _EXPLICIT_DEVICE_LABEL.search(cite.raw))
 
 
 def extract(texto: str) -> list[Citation]:
@@ -850,6 +1118,10 @@ def extract(texto: str) -> list[Citation]:
         if not _free(m.start(), m.end()):
             continue
         token = m.group(0)
+        if not _reference_boundary(text, m.start(), m.end()):
+            continue
+        if token.isalpha() and len(token) <= 5 and token != token.upper():
+            continue
         folded = fold_alias(token)
         # LRF ambíguo
         if folded == "lrf":
@@ -873,7 +1145,7 @@ def extract(texto: str) -> list[Citation]:
                         span=(m.start(), m.end()),
                         work=candidates[0],
                         confidence="exata",
-                        flags=[],
+                        flags=["apelido"],
                     )
                 )
             else:
@@ -892,7 +1164,8 @@ def extract(texto: str) -> list[Citation]:
             continue
         # CC / CF curtos exigem contexto normativo
         if folded in CONTEXT_REQUIRED_ALIASES:
-            if not _has_normative_context(text, m.start(), m.end()):
+            if (not _has_normative_context(text, m.start(), m.end())
+                    and not _NONLEGAL_FIELD.search(text[max(0, m.start() - 100):m.start()])):
                 continue
         work = (
             _ALIAS_SURFACE_MAP.get(folded)
@@ -902,10 +1175,6 @@ def extract(texto: str) -> list[Citation]:
         if work is None:
             continue
         alias_end = m.end()
-        explicit_year = re.match(r"\s*/\s*(\d{2,4})\b", text[alias_end:])
-        if explicit_year:
-            work = WorkKey(work.authority,work.kind,work.number,expand_year(int(explicit_year[1])))
-            alias_end += explicit_year.end()
         work_cites.append(
             Citation(
                 kind="norma",
@@ -913,12 +1182,27 @@ def extract(texto: str) -> list[Citation]:
                 span=(m.start(), alias_end),
                 work=work,
                 confidence="exata",
+                flags=["apelido"],
             )
         )
         _mark(m.start(), alias_end)
 
+    # Campo rotulado delimita uso técnico da sigla, mesmo com artigo ao lado.
+    for cite in work_cites:
+        if "apelido" in cite.flags or "alias_ambiguo" in cite.flags:
+            if _NONLEGAL_FIELD.search(text[max(0, cite.span[0] - 100):cite.span[0]]):
+                cite.confidence = "provavel"
+                cite.flags.append("campo_nao_juridico")
+
     # Anexar dispositivos às normas
     work_cites = _attach_devices(text, work_cites)
+    for cite in work_cites:
+        if cite.path is None and _unattached_device_nearby(text, cite, work_cites):
+            cite.confidence = "provavel"
+        if "apelido" in cite.flags:
+            cite.flags.remove("apelido")
+            if cite.path is None:
+                cite.confidence = "provavel"
     raw_cites.extend(work_cites)
 
     # Ordenar por posição

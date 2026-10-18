@@ -1,5 +1,19 @@
 # Histórico de versões
 
+## 1.0.2
+
+- Extração de citações em duas camadas: regras estruturais (numeração decimal de cláusulas, siglas coladas a números, pertença a instrumentos particulares, fronteiras de arquivo e de campo técnico) e confiança explícita `exata`/`provavel`. Em `verificar_texto`, citações `provavel` recebem `requer_conferencia`; só `exata` recebe `encontrada` ou `inexistente`. Nos oito corpora adversariais independentes (779 frases), falsos definitivos caíram de 250 para 0 e o recall subiu de 70,9% para 93,7%.
+- Associação de dispositivo posterior exige vírgula ou travessão na mesma oração e rejeita dispositivos de instrumentos particulares; reconhece `Instr. CVM`, `Inst. CVM` e `IN CVM`.
+- Corpus literal de 80 frases e controles de fronteira sintática cobrem as regressões de identidade.
+- Staging de snapshots fica no diretório de dados, configurável por `FV_STAGING_DIR`, com testes isolados em `tmp_path`.
+- Extração em prosa preserva o ponto de aliases como `Lei das S.A.`, aceita quebras de linha e dispositivos abreviados com `inc.` e `al.`.
+- Artigos e preposições anteriores à norma não são tratados como alíneas isoladas; dispositivos após a norma, separados por vírgula, são associados corretamente.
+- Trechos entre aspas após abreviações são confrontados, e listas de artigos verificam cada dispositivo extraído.
+- Corpus independente de 118 frases sintéticas cobre pontuação, abreviações, listas, remissões não resolvidas e controles negativos.
+- Instalação de snapshot mantém a seleção da última release que contenha esse asset, mesmo quando releases posteriores só distribuam o pacote.
+
+- `FV_READ_ONLY=1` permite verificar normas no acervo instalado sem gravações no banco ou captura sob demanda.
+
 ## 1.0.1
 
 - Pesquisa primeiro no acervo instalado de decisões de todos os tribunais, com FTS reconstruído na exportação/instalação, ranking bm25, desempate por autoridade/data e filtros SQL antes da paginação.

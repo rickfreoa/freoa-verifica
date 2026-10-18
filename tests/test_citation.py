@@ -37,7 +37,7 @@ POSITIVE_NORMS = [
     ("Decreto-Lei 5.452/1943", WorkKey("federal", "decreto_lei", "5452", 1943), None),
     ("MP 2.200-2/2001", WorkKey("federal", "medida_provisoria", "2200-2", 2001), None),
     ("Decreto nº 10.000/2019", WorkKey("federal", "decreto", "10000", 2019), None),
-    ("CF/88", WorkKey("federal", "constituicao", "1988", 1988), None),
+    ("Constituição Federal", WorkKey("federal", "constituicao", "1988", 1988), None),
     ("art. 5º da Constituição", WorkKey("federal", "constituicao", "1988", 1988), "art5"),
     ("Resolução CVM nº 160", WorkKey("cvm", "resolucao", "160", 0), None),
     ("RCVM 160", WorkKey("cvm", "resolucao", "160", 0), None),
@@ -104,7 +104,7 @@ DEVICE_CASES = [
     ("art. 254-A da Lei 6.404/76", "art254-A"),
     ("§ 2º do art. 118 da Lei 6.404/76", "art118.par2"),
     ("inciso II do art. 1º da Lei 6.404/76", "art1.inc2"),
-    ("caput do art. 5º da CF/88", "art5.caput"),
+    ("caput do art. 5º da CF", "art5.caput"),
     ("parágrafo único do art. 116 da LSA", "art116.parunico"),
 ]
 

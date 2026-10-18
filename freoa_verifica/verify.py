@@ -224,16 +224,21 @@ def verificar(
     modo: str = "literal",
     repo: sqlite3.Connection | None = None,
     resolver: Resolver | None = None,
+    *,
+    _path: str | None = None,
 ) -> VerificationResult:
     """Verifica citação nas dimensões identity/text/temporal/support."""
     if resolver is None:
         raise ValueError("resolver é obrigatório")
 
     cite = parse_one(citacao)
+    if _path is not None:
+        cite = next((c for c in extract(citacao) if c.path == _path), None)
     if cite is None:
         # tenta extract e pega norma
         cites = extract(citacao)
-        cite = next((c for c in cites if c.kind == "norma"), cites[0] if cites else None)
+        if _path is None:
+            cite = next((c for c in cites if c.kind == "norma"), cites[0] if cites else None)
 
     support = Dimension(status="not_assessed", reason_code="SUPPORT_NOT_IN_M3")
 

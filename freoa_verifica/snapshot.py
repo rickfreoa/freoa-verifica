@@ -8,7 +8,8 @@ import json
 import os
 import shutil
 import sqlite3
-import tempfile
+from contextlib import contextmanager
+from uuid import uuid4
 import tarfile
 import re
 from datetime import datetime, timezone
@@ -19,7 +20,7 @@ from urllib.parse import urlparse
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.store import blobs
-from freoa_verifica.store.db import connect
+from freoa_verifica.store.db import connect, data_home
 
 # Autenticidade do snapshot: confiança no canal autenticado (release GitHub do
 # autor rickfreoa/freoa-verifica) + attestation do GitHub Actions
@@ -247,18 +248,43 @@ def _restore_stj_ementas(conn: sqlite3.Connection, home: Path) -> None:
                   hashlib.sha256(text.encode("utf-8")).hexdigest()))
 
 
+def _staging_root(home: Path | None = None, staging_dir: str | Path | None = None) -> Path:
+    configured = staging_dir or os.environ.get("FV_STAGING_DIR")
+    root = Path(configured).expanduser().resolve() if configured else (home or data_home()) / "staging"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _new_staging(*, prefix: str, home: Path | None = None, staging_dir: str | Path | None = None) -> Path:
+    root = _staging_root(home, staging_dir)
+    # Herda as permissoes do diretorio configurado, inclusive no Windows.
+    directory = root / (prefix + uuid4().hex)
+    directory.mkdir()
+    return directory
+
+
+@contextmanager
+def _temporary_staging(**kwargs):
+    directory = _new_staging(**kwargs)
+    try:
+        yield directory
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
+
+
 def export_snapshot(
     conn: sqlite3.Connection,
     home: Path,
     destino: str | Path,
     *,
     atribuicoes: dict[str, str] | None = None,
+    staging_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     destino = Path(destino)
     if destino.name.endswith(".tar.gz"):
         if destino.exists():
             return {"status":"erro", "motivo":"destino_existente"}
-        with tempfile.TemporaryDirectory(prefix="fv-export-") as temporary:
+        with _temporary_staging(prefix="fv-export-", home=home, staging_dir=staging_dir) as temporary:
             directory = Path(temporary)
             result = export_snapshot(conn, home, directory, atribuicoes=atribuicoes)
             if result["status"] != "ok":
@@ -586,7 +612,7 @@ def install_snapshot(
     staging_download: Path | None = None
     try:
         if url:
-            origem_path = _download_release(url)
+            origem_path = _download_release(url, staging_dir=_staging_root(svc.home))
             staging_download = origem_path
         elif origem is not None:
             origem_path = Path(origem)
@@ -596,11 +622,11 @@ def install_snapshot(
                     expected = checksum.read_text(encoding="utf-8").split()
                     if not expected or expected[0] != _sha256_file(origem_path):
                         raise ValueError("asset_integridade")
-                staging_download = Path(tempfile.mkdtemp(prefix="fv-snap-local-"))
+                staging_download = _new_staging(prefix="fv-snap-local-", home=svc.home)
                 _extract_archive(origem_path, staging_download)
                 origem_path = staging_download
         else:
-            origem_path = _download_latest_release()
+            origem_path = _download_latest_release(staging_dir=_staging_root(svc.home))
             staging_download = origem_path
 
         return _install_from_dir(svc, origem_path)
@@ -613,7 +639,7 @@ def install_snapshot(
             shutil.rmtree(staging_download, ignore_errors=True)
 
 
-def _download_latest_release() -> Path:
+def _download_latest_release(*, staging_dir: str | Path | None = None) -> Path:
     """Baixa asset da última release via API GitHub (hosts permitidos)."""
     from freoa_verifica.connectors.httputil import connector_fetch
 
@@ -640,7 +666,7 @@ def _download_latest_release() -> Path:
 
     chosen = choose(data)
     if chosen:
-        return _download_release(chosen)
+        return _download_release(chosen, staging_dir=staging_dir)
     # A API lista as releases da mais recente para a mais antiga.
     page = 1
     while True:
@@ -656,20 +682,20 @@ def _download_latest_release() -> Path:
         for release in releases:
             chosen = choose(release)
             if chosen:
-                return _download_release(chosen)
+                return _download_release(chosen, staging_dir=staging_dir)
         if len(releases) < 100:
             raise RuntimeError("release_sem_assets")
         page += 1
 
 
-def _download_release(url: str) -> Path:
+def _download_release(url: str, *, staging_dir: str | Path | None = None) -> Path:
     from freoa_verifica.connectors.httputil import connector_fetch
 
     parsed = urlparse(url)
     host = parsed.hostname or ""
     if host not in GITHUB_HOSTS:
         raise RuntimeError(f"host_nao_permitido:{host}")
-    staging = Path(tempfile.mkdtemp(prefix="fv-snap-dl-"))
+    staging = _new_staging(prefix="fv-snap-dl-", staging_dir=staging_dir)
     try:
         raw = staging / "asset.tar.gz"
         resp = connector_fetch(
@@ -788,7 +814,7 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
         return {"status": "erro", "motivo": "db_integridade"}
 
     # Mesmo volume do destino para que cada troca use rename atomico.
-    staging = Path(tempfile.mkdtemp(prefix="fv-snap-", dir=svc.home.parent))
+    staging = _new_staging(prefix="fv-snap-", home=svc.home)
     staging_db = staging / "verifica.sqlite3"
     staging_blobs = staging / "blobs"
     backup_db = svc.home / f"verifica.sqlite3.bak-{new_ulid()}"

@@ -1,0 +1,11 @@
+{
+  "corpus_sha256": "7e7975e9b921cd10a247aa58245828cba046b9064f0033d488900136bd057a45",
+  "cases": 114,
+  "criteria": {
+    "a": "zero false encontrada or inexistente across present/absent synthetic stores",
+    "b": "wrong exact citations / all exact citations <= .01",
+    "c": "multiset matched expected citations / all expected citations >= .95; omitted article is a miss; both confidence levels accepted",
+    "d": "zero definitive statuses on control rows"
+  },
+  "oracle": "Frozen before reading implementation or executing extraction. Expected tuples (kind,number,year,article); bare works count in recall; unexpected tuples are errors; definitive rows require correct tuple. Probable requires requer_conferencia. Present store contains all observed and expected article paths; absent store only unrelated article 99999. No post-run oracle changes."
+}

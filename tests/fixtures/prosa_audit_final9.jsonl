@@ -1,0 +1,90 @@
+{"id": "D001", "group": "explicit", "text": "A controvérsia depende do art. 118 da Lei 6.404/1976.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D002", "group": "explicit", "text": "Leia-se o artigo 119 da Lei nº 6.404/76 antes da votação.", "expected": [[["federal", "lei", "6404", 1976], "art119"]]}
+{"id": "D003", "group": "explicit", "text": "O art. 20 da Lei 6.385/76 foi objeto do quesito.", "expected": [[["federal", "lei", "6385", 1976], "art20"]]}
+{"id": "D004", "group": "explicit", "text": "A nota reproduz o art. 8º da RCVM 44/21.", "expected": [[["cvm", "resolucao", "44", 2021], "art8"]]}
+{"id": "D005", "group": "explicit", "text": "Examinou-se o art. 9º da ICVM 44/84 na sessão.", "expected": [[["cvm", "instrucao", "44", 1984], "art9"]]}
+{"id": "D006", "group": "explicit", "text": "Fundamento: Lei 6.404/1976, art. 118.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D007", "group": "explicit", "text": "Fundamento: Lei 6.385/1976 — art. 20.", "expected": [[["federal", "lei", "6385", 1976], "art20"]]}
+{"id": "D008", "group": "explicit", "text": "Referência: RCVM 44/2021 – art. 8º; prossiga-se.", "expected": [[["cvm", "resolucao", "44", 2021], "art8"]]}
+{"id": "D009", "group": "explicit", "text": "Referência: ICVM 44/1984, art. 9º: interpretação pendente.", "expected": [[["cvm", "instrucao", "44", 1984], "art9"]]}
+{"id": "D010", "group": "explicit", "text": "O quadro (Lei 6.404/1976, art. 118) acompanha o voto.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D011", "group": "explicit", "text": "Base legal: Lei 6.404/1976, art. 118, § 3º.", "expected": [[["federal", "lei", "6404", 1976], "art118.par3"]]}
+{"id": "D012", "group": "explicit", "text": "Base legal: art. 118, § 3º, da Lei 6.404/1976.", "expected": [[["federal", "lei", "6404", 1976], "art118.par3"]]}
+{"id": "D013", "group": "explicit", "text": "Aplicam-se os arts. 118 e 119 da Lei 6.404/1976.", "expected": [[["federal", "lei", "6404", 1976], "art118"], [["federal", "lei", "6404", 1976], "art119"]]}
+{"id": "D014", "group": "explicit", "text": "Quadro legal: Lei 6.385/1976, arts. 20 e 21.", "expected": [[["federal", "lei", "6385", 1976], "art20"], [["federal", "lei", "6385", 1976], "art21"]]}
+{"id": "D015", "group": "explicit", "text": "O inc. II do art. 8º da RCVM 44/2021 delimita a consulta.", "expected": [[["cvm", "resolucao", "44", 2021], "art8.inc2"]]}
+{"id": "D016", "group": "explicit", "text": "O art. 8º, inciso II, da RCVM 44/2021 delimita a consulta.", "expected": [[["cvm", "resolucao", "44", 2021], "art8.inc2"]]}
+{"id": "D017", "group": "explicit", "text": "A alínea “c” do inciso II do art. 9º da ICVM 44/1984 consta da nota.", "expected": [[["cvm", "instrucao", "44", 1984], "art9.inc2.ali-c"]]}
+{"id": "D018", "group": "explicit", "text": "Lei 6.404/1976, art. 118, caput, rege a questão suscitada.", "expected": [[["federal", "lei", "6404", 1976], "art118.caput"]]}
+{"id": "D019", "group": "explicit", "text": "Lei 6.404/1976, art. 118, permite a conclusão do relator.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D020", "group": "explicit", "text": "Lei 6.404/1976, art. 118, exige exame individualizado.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D021", "group": "explicit", "text": "Lei 6.385/1976, art. 20, autoriza o procedimento descrito.", "expected": [[["federal", "lei", "6385", 1976], "art20"]]}
+{"id": "D022", "group": "explicit", "text": "RCVM 44/2021, art. 8º, será aplicada ao caso concreto.", "expected": [[["cvm", "resolucao", "44", 2021], "art8"]]}
+{"id": "D023", "group": "explicit", "text": "ICVM 44/1984, art. 9º, dispõe sobre o tema pesquisado.", "expected": [[["cvm", "instrucao", "44", 1984], "art9"]]}
+{"id": "D024", "group": "explicit", "text": "A Lei 6.404/1976 (art. 118) integra a fundamentação.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D025", "group": "explicit", "text": "A RCVM 44/2021 — art. 8º — integra a fundamentação.", "expected": [[["cvm", "resolucao", "44", 2021], "art8"]]}
+{"id": "D026", "group": "explicit", "text": "Considere a Lei 6.385/1976, em seu art. 20.", "expected": [[["federal", "lei", "6385", 1976], "art20"]]}
+{"id": "D027", "group": "explicit", "text": "Considere o art. 118 da Lei n.º 6.404/1976.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D028", "group": "explicit", "text": "Considere o art. 8 da Res. CVM nº 44/21.", "expected": [[["cvm", "resolucao", "44", 2021], "art8"]]}
+{"id": "D029", "group": "explicit", "text": "Considere o art. 9 da Instr. CVM nº 44/84.", "expected": [[["cvm", "instrucao", "44", 1984], "art9"]]}
+{"id": "D030", "group": "explicit", "text": "A ementa cita o art. 118\nda Lei 6.404/1976.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D031", "group": "explicit", "text": "A ementa cita Lei 6.404/1976,\nart. 118.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D032", "group": "explicit", "text": "A ementa cita Lei 6.404/1976, art. 118, “texto apenas ilustrativo”.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D033", "group": "explicit", "text": "Comparem-se art. 118 da Lei 6.404/1976 e art. 20 da Lei 6.385/1976.", "expected": [[["federal", "lei", "6404", 1976], "art118"], [["federal", "lei", "6385", 1976], "art20"]]}
+{"id": "D034", "group": "explicit", "text": "Comparem-se RCVM 44/2021, art. 8º, e ICVM 44/1984, art. 9º.", "expected": [[["cvm", "resolucao", "44", 2021], "art8"], [["cvm", "instrucao", "44", 1984], "art9"]]}
+{"id": "D035", "group": "explicit", "text": "Aplica-se a Lei 6.404/76, art. 118, § 3º, inciso IV, alínea “b”.", "expected": [[["federal", "lei", "6404", 1976], "art118.par3.inc4.ali-b"]]}
+{"id": "D036", "group": "explicit", "text": "O relatório cita a Lei 6.385/76 e a Lei 6.404/76.", "expected": [[["federal", "lei", "6385", 1976], null], [["federal", "lei", "6404", 1976], null]]}
+{"id": "D037", "group": "explicit", "text": "Lei 6.404/1976, arts. 118, 119 e 120; fim da enumeração.", "expected": [[["federal", "lei", "6404", 1976], "art118"], [["federal", "lei", "6404", 1976], "art119"], [["federal", "lei", "6404", 1976], "art120"]]}
+{"id": "D038", "group": "explicit", "text": "À luz do artigo 118, parágrafo único, da Lei 6.404/1976.", "expected": [[["federal", "lei", "6404", 1976], "art118.parunico"]]}
+{"id": "D039", "group": "explicit", "text": "A Lei 6.404/1976, art. 118, não admite a solução sugerida.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D040", "group": "explicit", "text": "A Lei 6.404/1976, art. 118, é citada neste parecer preliminar.", "expected": [[["federal", "lei", "6404", 1976], "art118"]]}
+{"id": "D041", "group": "mixed", "text": "A Lei 6.404/1976, art. 83 (do contrato de licença), surge no inventário.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D042", "group": "mixed", "text": "A Lei 6.385/1976, art. 84 — do regulamento privado — surge no inventário.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D043", "group": "mixed", "text": "A RCVM 44/2021, art. 85 pertencente ao estatuto privado, consta do anexo.", "expected": [[["cvm", "resolucao", "44", 2021], null]]}
+{"id": "D044", "group": "mixed", "text": "A ICVM 44/1984, art. 86 constante da convenção privada, consta do anexo.", "expected": [[["cvm", "instrucao", "44", 1984], null]]}
+{"id": "D045", "group": "mixed", "text": "A Lei 6.404/1976, art. 87 inserido no contrato social, foi comparada.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D046", "group": "mixed", "text": "A Lei 6.385/1976, art. 88, foi inserido no acordo privado.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D047", "group": "mixed", "text": "A RCVM 44/2021, art. 89 da ICVM 44/1984, orienta a comparação.", "expected": [[["cvm", "resolucao", "44", 2021], null], [["cvm", "instrucao", "44", 1984], "art89"]]}
+{"id": "D048", "group": "mixed", "text": "A ICVM 44/1984, art. 90 da RCVM 44/2021, orienta a comparação.", "expected": [[["cvm", "instrucao", "44", 1984], null], [["cvm", "resolucao", "44", 2021], "art90"]]}
+{"id": "D049", "group": "mixed", "text": "A Lei 6.404/1976, art. 91IV do contrato, foi mencionada no índice.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D050", "group": "mixed", "text": "A Lei 6.385/1976, art. 92 ICVM44, aparece no catálogo interno.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D051", "group": "mixed", "text": "A Lei 6.404/1976, art. 93 CVM, aparece no catálogo interno.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D052", "group": "mixed", "text": "A Lei 6.385/1976, art. 94 IVan, aparece no catálogo interno.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D053", "group": "mixed", "text": "A RCVM 44/2021, art. 95, ICVM 44/1984, art. 96, foi examinada.", "expected": [[["cvm", "resolucao", "44", 2021], null], [["cvm", "instrucao", "44", 1984], "art96"]]}
+{"id": "D054", "group": "mixed", "text": "A Lei 6.404/1976, art. 7.1 do contrato de investimento, foi anotada.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D055", "group": "mixed", "text": "A RCVM 44/2021, item 3.2 do edital de seleção, foi anotada.", "expected": [[["cvm", "resolucao", "44", 2021], null]]}
+{"id": "D056", "group": "mixed", "text": "A Lei 6.385/1976, art. 8.2 (do contrato), foi anotada.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D057", "group": "mixed", "text": "A ICVM 44/1984, art. 9.1 — do contrato —, foi anotada.", "expected": [[["cvm", "instrucao", "44", 1984], null]]}
+{"id": "D058", "group": "mixed", "text": "O art. 5 do contrato social foi cotejado com a Lei 6.404/1976.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D059", "group": "mixed", "text": "A cláusula 7.1 é anterior à transcrição da RCVM 44/2021.", "expected": [[["cvm", "resolucao", "44", 2021], null]]}
+{"id": "D060", "group": "mixed", "text": "O item 3 do edital e a Lei 6.385/1976 são entradas distintas.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D061", "group": "mixed", "text": "A Lei 6.404/1976 foi citada; o art. 118 do mesmo diploma foi debatido depois.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D062", "group": "mixed", "text": "A Lei 6.385/1976 foi citada. Do mesmo diploma, o art. 20 foi destacado.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D063", "group": "mixed", "text": "A Lei 6.404/1976, art. 97\n\ndo contrato particular, foi listada.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D064", "group": "mixed", "text": "O índice (Lei 6.404/1976, art. 98 (do contrato)) terminou aqui.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D065", "group": "mixed", "text": "A Lei 6.385/1976, art. 99, e o contrato social são tópicos distintos.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D066", "group": "mixed", "text": "A Lei 6.404/1976 — art. 100 de instrumento particular — recebeu destaque.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D067", "group": "mixed", "text": "A RCVM 44/2021, art. 101, registrado no contrato privado, foi listada.", "expected": [[["cvm", "resolucao", "44", 2021], null]]}
+{"id": "D068", "group": "mixed", "text": "A ICVM 44/1984, art. 102, consta do contrato privado.", "expected": [[["cvm", "instrucao", "44", 1984], null]]}
+{"id": "D069", "group": "mixed", "text": "A Lei 6.404/1976, art. 103, prevê no contrato a regra discutida.", "expected": [[["federal", "lei", "6404", 1976], null]]}
+{"id": "D070", "group": "mixed", "text": "A Lei 6.385/1976, art. 104, é objeto do contrato particular.", "expected": [[["federal", "lei", "6385", 1976], null]]}
+{"id": "D071", "group": "nonexplicit", "text": "O desembolso de R$ 6.404,00 ocorreu numa terça-feira.", "expected": []}
+{"id": "D072", "group": "nonexplicit", "text": "O art. 5 do contrato social condiciona o resgate privado.", "expected": []}
+{"id": "D073", "group": "nonexplicit", "text": "A cláusula 7.1 remete exclusivamente ao quadro comercial.", "expected": []}
+{"id": "D074", "group": "nonexplicit", "text": "O item 3 do edital fixa o endereço para recebimento.", "expected": []}
+{"id": "D075", "group": "nonexplicit", "text": "O art. 18 do mesmo diploma será tratado na próxima reunião.", "expected": []}
+{"id": "D076", "group": "nonexplicit", "text": "O inciso IV do regulamento privado está riscado no original.", "expected": []}
+{"id": "D077", "group": "nonexplicit", "text": "A expressão “6.385/76” é a senha fictícia do exercício.", "expected": []}
+{"id": "D078", "group": "nonexplicit", "text": "A coluna RCVM44 é apenas um identificador interno de planilha.", "expected": []}
+{"id": "D079", "group": "nonexplicit", "text": "O lote ICVM44X foi devolvido ao almoxarifado.", "expected": []}
+{"id": "D080", "group": "nonexplicit", "text": "A numeração 44/21, isoladamente, não identifica o documento.", "expected": []}
+{"id": "D081", "group": "nonexplicit", "text": "A ata cita o anexo II e o item 3.2 do contrato de seguro.", "expected": []}
+{"id": "D082", "group": "nonexplicit", "text": "O valor R$ 6.385,76 consta da cláusula 7.1.", "expected": []}
+{"id": "D083", "group": "nonexplicit", "text": "O modelo IVX e a série CIVIL são códigos do equipamento.", "expected": []}
+{"id": "D084", "group": "nonexplicit", "text": "“Art. 6”\n“do acordo de sócios” são linhas da minuta privada.", "expected": []}
+{"id": "D085", "group": "nonexplicit", "text": "A norma anteriormente mencionada teve seu art. 17 debatido.", "expected": []}
+{"id": "D086", "group": "nonexplicit", "text": "A Lei de Murphy foi lembrada durante a apresentação informal.", "expected": []}
+{"id": "D087", "group": "nonexplicit", "text": "O orçamento nº 6.404/76 substitui o recibo nº 6.385/76.", "expected": []}
+{"id": "D088", "group": "nonexplicit", "text": "O art. 11 (do contrato de cessão) não foi aprovado.", "expected": []}
+{"id": "D089", "group": "nonexplicit", "text": "O art. 12 — pertencente ao acordo privado — foi excluído.", "expected": []}
+{"id": "D090", "group": "nonexplicit", "text": "Art. 13 do mesmo diploma; inciso II da mesma disposição.", "expected": []}

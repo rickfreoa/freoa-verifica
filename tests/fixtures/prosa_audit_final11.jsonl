@@ -1,0 +1,95 @@
+{"id": "F11-001", "group": "canonical", "text": "No parecer sintético Z17, aplica-se a Lei nº 13.105/2015, art. 17.", "expected": [{"number": 13105, "year": 2015, "article": "17"}]}
+{"id": "F11-002", "group": "canonical", "text": "No parecer sintético Z23, aplica-se a Lei nº 13.105/2015, art. 23.", "expected": [{"number": 13105, "year": 2015, "article": "23"}]}
+{"id": "F11-003", "group": "canonical", "text": "No parecer sintético Z31, aplica-se a Lei nº 13.105/2015, art. 31.", "expected": [{"number": 13105, "year": 2015, "article": "31"}]}
+{"id": "F11-004", "group": "canonical", "text": "No parecer sintético Z44, aplica-se a Lei nº 13.105/2015, art. 44.", "expected": [{"number": 13105, "year": 2015, "article": "44"}]}
+{"id": "F11-005", "group": "canonical", "text": "No parecer sintético Z57, aplica-se a Lei nº 13.105/2015, art. 57.", "expected": [{"number": 13105, "year": 2015, "article": "57"}]}
+{"id": "F11-006", "group": "canonical", "text": "No parecer sintético Z68, aplica-se a Lei nº 13.105/2015, art. 68.", "expected": [{"number": 13105, "year": 2015, "article": "68"}]}
+{"id": "F11-007", "group": "canonical", "text": "No parecer sintético Z79, aplica-se a Lei nº 13.105/2015, art. 79.", "expected": [{"number": 13105, "year": 2015, "article": "79"}]}
+{"id": "F11-008", "group": "canonical", "text": "No parecer sintético Z83, aplica-se a Lei nº 13.105/2015, art. 83.", "expected": [{"number": 13105, "year": 2015, "article": "83"}]}
+{"id": "F11-009", "group": "canonical", "text": "No parecer sintético Z96, aplica-se a Lei nº 13.105/2015, art. 96.", "expected": [{"number": 13105, "year": 2015, "article": "96"}]}
+{"id": "F11-010", "group": "canonical", "text": "No parecer sintético Z107, aplica-se a Lei nº 13.105/2015, art. 107.", "expected": [{"number": 13105, "year": 2015, "article": "107"}]}
+{"id": "F11-011", "group": "thousands", "text": "O recurso fictício Q1022 invoca o art. 1.022 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "1022"}]}
+{"id": "F11-012", "group": "thousands", "text": "O recurso fictício Q1142 invoca o art. 1.142 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "1142"}]}
+{"id": "F11-013", "group": "thousands", "text": "O recurso fictício Q1009 invoca o art. 1.009 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "1009"}]}
+{"id": "F11-014", "group": "thousands", "text": "O recurso fictício Q1015 invoca o art. 1.015 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "1015"}]}
+{"id": "F11-015", "group": "thousands", "text": "O recurso fictício Q1030 invoca o art. 1.030 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "1030"}]}
+{"id": "F11-016", "group": "parentheses", "text": "A nota U121 transcreve a Lei nº 13.105/2015 (art. 121).", "expected": [{"number": 13105, "year": 2015, "article": "121"}]}
+{"id": "F11-017", "group": "parentheses", "text": "A nota U134 transcreve a Lei nº 13.105/2015 (art. 134).", "expected": [{"number": 13105, "year": 2015, "article": "134"}]}
+{"id": "F11-018", "group": "parentheses", "text": "A nota U145 transcreve a Lei nº 13.105/2015 (art. 145).", "expected": [{"number": 13105, "year": 2015, "article": "145"}]}
+{"id": "F11-019", "group": "parentheses", "text": "A nota U156 transcreve a Lei nº 13.105/2015 (art. 156).", "expected": [{"number": 13105, "year": 2015, "article": "156"}]}
+{"id": "F11-020", "group": "parentheses", "text": "A nota U167 transcreve a Lei nº 13.105/2015 (art. 167).", "expected": [{"number": 13105, "year": 2015, "article": "167"}]}
+{"id": "F11-021", "group": "dashes", "text": "A ficha V178 remete à Lei nº 13.105/2015 — art. 178 — para exame.", "expected": [{"number": 13105, "year": 2015, "article": "178"}]}
+{"id": "F11-022", "group": "dashes", "text": "A ficha V189 remete à Lei nº 13.105/2015 — art. 189 — para exame.", "expected": [{"number": 13105, "year": 2015, "article": "189"}]}
+{"id": "F11-023", "group": "dashes", "text": "A ficha V201 remete à Lei nº 13.105/2015 — art. 201 — para exame.", "expected": [{"number": 13105, "year": 2015, "article": "201"}]}
+{"id": "F11-024", "group": "dashes", "text": "A ficha V212 remete à Lei nº 13.105/2015 — art. 212 — para exame.", "expected": [{"number": 13105, "year": 2015, "article": "212"}]}
+{"id": "F11-025", "group": "dashes", "text": "A ficha V223 remete à Lei nº 13.105/2015 — art. 223 — para exame.", "expected": [{"number": 13105, "year": 2015, "article": "223"}]}
+{"id": "F11-026", "group": "newlines", "text": "Registro W234: art.\n234\nda Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "234"}]}
+{"id": "F11-027", "group": "newlines", "text": "Registro W245: art.\n245\nda Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "245"}]}
+{"id": "F11-028", "group": "newlines", "text": "Registro W256: art.\n256\nda Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "256"}]}
+{"id": "F11-029", "group": "newlines", "text": "Registro W267: art.\n267\nda Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "267"}]}
+{"id": "F11-030", "group": "newlines", "text": "Registro W278: art.\n278\nda Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "278"}]}
+{"id": "F11-031", "group": "quotes", "text": "A observação X289 contém “art. 289 da Lei nº 13.105/2015”.", "expected": [{"number": 13105, "year": 2015, "article": "289"}]}
+{"id": "F11-032", "group": "quotes", "text": "A observação X301 contém “art. 301 da Lei nº 13.105/2015”.", "expected": [{"number": 13105, "year": 2015, "article": "301"}]}
+{"id": "F11-033", "group": "quotes", "text": "A observação X312 contém “art. 312 da Lei nº 13.105/2015”.", "expected": [{"number": 13105, "year": 2015, "article": "312"}]}
+{"id": "F11-034", "group": "quotes", "text": "A observação X323 contém “art. 323 da Lei nº 13.105/2015”.", "expected": [{"number": 13105, "year": 2015, "article": "323"}]}
+{"id": "F11-035", "group": "quotes", "text": "A observação X334 contém “art. 334 da Lei nº 13.105/2015”.", "expected": [{"number": 13105, "year": 2015, "article": "334"}]}
+{"id": "F11-036", "group": "prose", "text": "Na Lei nº 13.105/2015, o art. 345 orienta a anotação fictícia Y345.", "expected": [{"number": 13105, "year": 2015, "article": "345"}]}
+{"id": "F11-037", "group": "prose", "text": "Na Lei nº 13.105/2015, o art. 356 orienta a anotação fictícia Y356.", "expected": [{"number": 13105, "year": 2015, "article": "356"}]}
+{"id": "F11-038", "group": "prose", "text": "Na Lei nº 13.105/2015, o art. 367 orienta a anotação fictícia Y367.", "expected": [{"number": 13105, "year": 2015, "article": "367"}]}
+{"id": "F11-039", "group": "prose", "text": "Na Lei nº 13.105/2015, o art. 378 orienta a anotação fictícia Y378.", "expected": [{"number": 13105, "year": 2015, "article": "378"}]}
+{"id": "F11-040", "group": "prose", "text": "Na Lei nº 13.105/2015, o art. 389 orienta a anotação fictícia Y389.", "expected": [{"number": 13105, "year": 2015, "article": "389"}]}
+{"id": "F11-041", "group": "lists", "text": "O roteiro K401 inclui os arts. 401 e 402 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "401"}, {"number": 13105, "year": 2015, "article": "402"}]}
+{"id": "F11-042", "group": "lists", "text": "O roteiro K413 inclui os arts. 413 e 414 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "413"}, {"number": 13105, "year": 2015, "article": "414"}]}
+{"id": "F11-043", "group": "lists", "text": "O roteiro K425 inclui os arts. 425 e 426 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "425"}, {"number": 13105, "year": 2015, "article": "426"}]}
+{"id": "F11-044", "group": "lists", "text": "O roteiro K437 inclui os arts. 437 e 438 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "437"}, {"number": 13105, "year": 2015, "article": "438"}]}
+{"id": "F11-045", "group": "lists", "text": "O roteiro K449 inclui os arts. 449 e 450 da Lei nº 13.105/2015.", "expected": [{"number": 13105, "year": 2015, "article": "449"}, {"number": 13105, "year": 2015, "article": "450"}]}
+{"id": "F11-046", "group": "nearby", "text": "Art. 461 da Lei nº 13.105/2015; art. 462 da Lei nº 10.406/2002: confronto J461.", "expected": [{"number": 13105, "year": 2015, "article": "461"}, {"number": 10406, "year": 2002, "article": "462"}]}
+{"id": "F11-047", "group": "nearby", "text": "Art. 473 da Lei nº 13.105/2015; art. 474 da Lei nº 10.406/2002: confronto J473.", "expected": [{"number": 13105, "year": 2015, "article": "473"}, {"number": 10406, "year": 2002, "article": "474"}]}
+{"id": "F11-048", "group": "nearby", "text": "Art. 485 da Lei nº 13.105/2015; art. 486 da Lei nº 10.406/2002: confronto J485.", "expected": [{"number": 13105, "year": 2015, "article": "485"}, {"number": 10406, "year": 2002, "article": "486"}]}
+{"id": "F11-049", "group": "nearby", "text": "Art. 497 da Lei nº 13.105/2015; art. 498 da Lei nº 10.406/2002: confronto J497.", "expected": [{"number": 13105, "year": 2015, "article": "497"}, {"number": 10406, "year": 2002, "article": "498"}]}
+{"id": "F11-050", "group": "nearby", "text": "Art. 509 da Lei nº 13.105/2015; art. 510 da Lei nº 10.406/2002: confronto J509.", "expected": [{"number": 13105, "year": 2015, "article": "509"}, {"number": 10406, "year": 2002, "article": "510"}]}
+{"id": "F11-051", "group": "remissions", "text": "A remissão H521, cf. art. 521 da Lei nº 13.105/2015, foi destacada.", "expected": [{"number": 13105, "year": 2015, "article": "521"}]}
+{"id": "F11-052", "group": "remissions", "text": "A remissão H532, cf. art. 532 da Lei nº 13.105/2015, foi destacada.", "expected": [{"number": 13105, "year": 2015, "article": "532"}]}
+{"id": "F11-053", "group": "remissions", "text": "A remissão H543, cf. art. 543 da Lei nº 13.105/2015, foi destacada.", "expected": [{"number": 13105, "year": 2015, "article": "543"}]}
+{"id": "F11-054", "group": "remissions", "text": "A remissão H554, cf. art. 554 da Lei nº 13.105/2015, foi destacada.", "expected": [{"number": 13105, "year": 2015, "article": "554"}]}
+{"id": "F11-055", "group": "remissions", "text": "A remissão H565, cf. art. 565 da Lei nº 13.105/2015, foi destacada.", "expected": [{"number": 13105, "year": 2015, "article": "565"}]}
+{"id": "F11-056", "group": "possessive", "text": "Na Lei nº 13.105/2015, em seu art. 576, está a referência G576.", "expected": [{"number": 13105, "year": 2015, "article": "576"}]}
+{"id": "F11-057", "group": "possessive", "text": "Na Lei nº 13.105/2015, em seu art. 587, está a referência G587.", "expected": [{"number": 13105, "year": 2015, "article": "587"}]}
+{"id": "F11-058", "group": "possessive", "text": "Na Lei nº 13.105/2015, em seu art. 598, está a referência G598.", "expected": [{"number": 13105, "year": 2015, "article": "598"}]}
+{"id": "F11-059", "group": "possessive", "text": "Na Lei nº 13.105/2015, em seu art. 609, está a referência G609.", "expected": [{"number": 13105, "year": 2015, "article": "609"}]}
+{"id": "F11-060", "group": "possessive", "text": "Na Lei nº 13.105/2015, em seu art. 620, está a referência G620.", "expected": [{"number": 13105, "year": 2015, "article": "620"}]}
+{"id": "F11-061", "group": "private", "text": "Lei nº 13.105/2015, art. 7.25 do acordo de distribuição: nota P01.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-062", "group": "private", "text": "Lei nº 13.105/2015, art. 8.6 do instrumento de garantia: nota P02.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-063", "group": "private", "text": "Lei nº 13.105/2015, art. 9.04 do regulamento da associação: nota P03.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-064", "group": "private", "text": "Lei nº 13.105/2015, art. 16 pertencente ao pacto de sócios: nota P04.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-065", "group": "private", "text": "Lei nº 13.105/2015, art. 27 constante da escritura particular: nota P05.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-066", "group": "private", "text": "Lei nº 13.105/2015, art. 38 inserido no compromisso de venda: nota P06.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-067", "group": "private", "text": "Lei nº 13.105/2015, art. 49 previsto neste termo de adesão: nota P07.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-068", "group": "private", "text": "Lei nº 13.105/2015, art. 61 integrante daquele estatuto privado: nota P08.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-069", "group": "private", "text": "Lei nº 13.105/2015, art. 72 que pertence ao contrato de licença: nota P09.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-070", "group": "private", "text": "Lei nº 13.105/2015, art. 84 cuja sede é o estatuto associativo: nota P10.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-071", "group": "private", "text": "Lei nº 13.105/2015, art. 95 redigido pelas partes no contrato: nota P11.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-072", "group": "private", "text": "Lei nº 13.105/2015, art. 106 situado no acordo de voto: nota P12.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-073", "group": "private", "text": "Lei nº 13.105/2015 (art. 117 do nosso ajuste): nota P13.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-074", "group": "private", "text": "Lei nº 13.105/2015 — art. 128 do contrato de franquia —: nota P14.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-075", "group": "private", "text": "Lei nº 13.105/2015, art. 139, pertencente ao regulamento privado: nota P15.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-076", "group": "private", "text": "Art. 151 do acordo de acionistas, considerado à luz da Lei nº 13.105/2015: P16.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-077", "group": "private", "text": "Art. 162, copiado do termo de quitação, em contraste com a Lei nº 13.105/2015: P17.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-078", "group": "private", "text": "Lei nº 13.105/2015: cláusula 173 do contrato de agência, nota P18.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-079", "group": "private", "text": "Lei nº 13.105/2015, art. 184 deste protocolo de intenções: nota P19.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-080", "group": "private", "text": "Lei nº 13.105/2015; no art. 195 do memorando particular consta a condição P20.", "expected": [{"number": 13105, "year": 2015, "article": null}]}
+{"id": "F11-081", "group": "no_norm", "text": "A seção R01 trata do art. 12.45 do contrato de cessão.", "expected": []}
+{"id": "F11-082", "group": "no_norm", "text": "Em R02, o art. 23.7 disciplina o estatuto da cooperativa.", "expected": []}
+{"id": "F11-083", "group": "no_norm", "text": "R03 registra CPC13105 e art. 34 como códigos internos.", "expected": []}
+{"id": "F11-084", "group": "no_norm", "text": "R04 registra CC10406, art. 45, em etiqueta de arquivo.", "expected": []}
+{"id": "F11-085", "group": "no_norm", "text": "R05: Lei13105/2015 é a senha fictícia do catálogo.", "expected": []}
+{"id": "F11-086", "group": "no_norm", "text": "R06: Lei 13.105X/2015 identifica um rótulo inventado.", "expected": []}
+{"id": "F11-087", "group": "no_norm", "text": "R07: art. 56 do pacto de investimento.", "expected": []}
+{"id": "F11-088", "group": "no_norm", "text": "R08: “art. 67”, segundo o instrumento privado.", "expected": []}
+{"id": "F11-089", "group": "no_norm", "text": "R09: a cláusula 78 do termo comercial foi alterada.", "expected": []}
+{"id": "F11-090", "group": "no_norm", "text": "R10: capítulo 89 do manual da sociedade.", "expected": []}
+{"id": "F11-091", "group": "no_norm", "text": "R11: item 90.12 da proposta de prestação de serviços.", "expected": []}
+{"id": "F11-092", "group": "no_norm", "text": "R12: a remissão ao art. 101 não identifica diploma.", "expected": []}
+{"id": "F11-093", "group": "no_norm", "text": "R13: art.\n112 do regulamento interno da empresa.", "expected": []}
+{"id": "F11-094", "group": "no_norm", "text": "R14: arts. 123 e 124 do contrato de fornecimento.", "expected": []}
+{"id": "F11-095", "group": "no_norm", "text": "R15: (art. 135) — obrigação redigida pelos sócios.", "expected": []}

@@ -1,0 +1,255 @@
+{
+  "A020": [
+    "federal/lei/6385/1976/-",
+    "federal/lei/6404/1976/art9"
+  ],
+  "A078": [
+    "federal/lei/6385/1976/-"
+  ],
+  "B039": [
+    "federal/lei/6385/1976/-"
+  ],
+  "C004": [
+    "federal/lei/6404/1976/-"
+  ],
+  "C018": [
+    "cvm/resolucao/44/2021/-"
+  ],
+  "C020": [
+    "federal/lei/6385/1976/-"
+  ],
+  "C026": [
+    "federal/lei/6404/1976/-"
+  ],
+  "C027": [
+    "federal/lei/6385/1976/-"
+  ],
+  "C079": [
+    "federal/lei/6404/1976/-",
+    "federal/lei/6385/1976/-"
+  ],
+  "prosa-002": [
+    {
+      "raw": "Lei das S.A.",
+      "span": [
+        17,
+        29
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "6404",
+        1976
+      ],
+      "path": null
+    }
+  ],
+  "prosa-003": [
+    {
+      "raw": "Lei das S.A.",
+      "span": [
+        16,
+        28
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "6404",
+        1976
+      ],
+      "path": null
+    }
+  ],
+  "prosa-014": [
+    {
+      "raw": "Lei n. 6.404/1976",
+      "span": [
+        17,
+        34
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "6404",
+        1976
+      ],
+      "path": null
+    }
+  ],
+  "prosa-015": [
+    {
+      "raw": "Lei n. 6.404/1976",
+      "span": [
+        16,
+        33
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "6404",
+        1976
+      ],
+      "path": null
+    }
+  ],
+  "prosa-026": [
+    {
+      "raw": "Resolução CVM 160/2022",
+      "span": [
+        17,
+        39
+      ],
+      "work": [
+        "cvm",
+        "resolucao",
+        "160",
+        2022
+      ],
+      "path": null
+    }
+  ],
+  "prosa-027": [
+    {
+      "raw": "Resolução CVM 160/2022",
+      "span": [
+        16,
+        38
+      ],
+      "work": [
+        "cvm",
+        "resolucao",
+        "160",
+        2022
+      ],
+      "path": null
+    }
+  ],
+  "prosa-038": [
+    {
+      "raw": "Res. CVM n. 44/2021",
+      "span": [
+        17,
+        36
+      ],
+      "work": [
+        "cvm",
+        "resolucao",
+        "44",
+        2021
+      ],
+      "path": null
+    }
+  ],
+  "prosa-039": [
+    {
+      "raw": "Res. CVM n. 44/2021",
+      "span": [
+        16,
+        35
+      ],
+      "work": [
+        "cvm",
+        "resolucao",
+        "44",
+        2021
+      ],
+      "path": null
+    }
+  ],
+  "prosa-050": [
+    {
+      "raw": "Código Civil",
+      "span": [
+        17,
+        29
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "10406",
+        2002
+      ],
+      "path": null
+    }
+  ],
+  "prosa-051": [
+    {
+      "raw": "Código Civil",
+      "span": [
+        16,
+        28
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "10406",
+        2002
+      ],
+      "path": null
+    }
+  ],
+  "prosa-062": [
+    {
+      "raw": "Lei 6.385/76",
+      "span": [
+        17,
+        29
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "6385",
+        1976
+      ],
+      "path": null
+    }
+  ],
+  "prosa-063": [
+    {
+      "raw": "Lei 6.385/76",
+      "span": [
+        16,
+        28
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "6385",
+        1976
+      ],
+      "path": null
+    }
+  ],
+  "prosa-074": [
+    {
+      "raw": "Lei\n6.404/1976",
+      "span": [
+        17,
+        31
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "6404",
+        1976
+      ],
+      "path": null
+    }
+  ],
+  "prosa-075": [
+    {
+      "raw": "Lei\n6.404/1976",
+      "span": [
+        16,
+        30
+      ],
+      "work": [
+        "federal",
+        "lei",
+        "6404",
+        1976
+      ],
+      "path": null
+    }
+  ]
+}
