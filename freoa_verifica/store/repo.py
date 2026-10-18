@@ -88,6 +88,10 @@ def upsert_work(
     work_id: str | None = None,
 ) -> str:
     wid = work_id or new_ulid()
+    if label is not None and authority == "cvm":
+        from freoa_verifica.rotulos import corrigir_mojibake
+
+        label = corrigir_mojibake(label)
     conn.execute(
         "INSERT INTO work(id, jurisdiction, authority, kind, number, year, label) "
         "VALUES (?,?,?,?,?,?,?) "
@@ -301,10 +305,11 @@ def index_redaction(
     text: str,
     work_label: str,
     path: str,
+    rubrica: str | None = None,
 ) -> None:
     conn.execute(
-        "INSERT INTO fts_redaction(text, work_label, path) VALUES (?,?,?)",
-        (text, work_label, path),
+        "INSERT INTO fts_redaction(text, rubrica, work_label, path) VALUES (?,?,?,?)",
+        (text, rubrica, work_label, path),
     )
     conn.commit()
 
