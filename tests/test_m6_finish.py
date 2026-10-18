@@ -120,7 +120,7 @@ def test_stj_monthly_resource_limit_cache_and_proof(tmp_path, monkeypatch):
         assert not any('archive' in u for u in calls)
         before=len(calls)
         assert c.sync(orgaos=['pkg'],max_itens=2) == 0
-        assert len(calls) == before
+        assert len(calls) == before + 2  # decisão 0039: os 2 meses mais recentes são sempre revalidados (sha igual: nada reprocessado)
         cand=c.search('EMENTA',limite=1)[0]
         raw=c.fetch(cand)
         parsed=c.parse_candidate(raw,cand)

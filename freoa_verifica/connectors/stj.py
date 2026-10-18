@@ -9,7 +9,7 @@ import hashlib
 import re
 import sqlite3
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -26,6 +26,50 @@ from freoa_verifica.connectors.base import (
 from freoa_verifica.authority import normalize_species
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.transport import Response
+
+_MESES_REVALIDADOS = 2
+_REVALIDAR_DIAS = 30
+
+
+def _agora() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _meta_ckan(res: dict[str, Any]) -> dict[str, Any]:
+    """Metadados CKAN do recurso que, ao mudar, invalidam o checkpoint."""
+    return {k: res[k] for k in ("last_modified", "metadata_modified", "size", "hash") if res.get(k) not in (None, "")}
+
+
+def _parse_ts(value: Any) -> datetime | None:
+    try:
+        dt = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _ts_ok(estado: dict[str, Any]) -> datetime | None:
+    """Última captura bem-sucedida; linhas anteriores à 0039 usam updated_at."""
+    v = estado["info"].get("ultima_captura_ok") or (estado["updated_at"] if estado["status"] == "capturado" else None)
+    return _parse_ts(v) if v else None
+
+
+def resumo_atualizacao(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """Agregado do estado por recurso: captura bem-sucedida mais recente e atraso em dias."""
+    try:
+        rows = conn.execute("SELECT status, updated_at, payload_json FROM sync_state "
+                            "WHERE fonte='stj_resource' AND chave LIKE 'resource:%'").fetchall()
+    except sqlite3.Error:
+        return None
+    estados = [{"status": r[0], "updated_at": r[1], "info": json.loads(r[2]) if r[2] else {}} for r in rows]
+    oks = [t for t in (_ts_ok(e) for e in estados) if t]
+    if not oks:
+        return None
+    ultimo = max(oks)
+    tent = [t for t in (_parse_ts(e["info"].get("ultima_tentativa")) for e in estados) if t]
+    return {"ultima_captura_ok": ultimo.isoformat(), "atraso_dias": (_agora() - ultimo).days,
+            "ultima_tentativa": max(tent).isoformat() if tent else None}
+
 
 _CKAN = "https://dadosabertos.web.stj.jus.br/api/3/action/package_show"
 _ESPELHOS = (
@@ -448,31 +492,45 @@ class StjConnector(Connector):
                     for res in monthly:
                         by_month.setdefault(res["name"][:6], res)
                     monthly = list(by_month.values())[:12]
+                recentes = set(sorted({r["name"][:6] for r in monthly}, reverse=True)[:_MESES_REVALIDADOS])
                 for res in monthly:
                     url = res.get("url")
                     if not url:
                         continue
-                    checkpoint = f"resource:{res.get('id') or url}:{max_itens}"
-                    saved = self.sync_state.get("stj_resource", checkpoint) if self.sync_state else None
-                    if saved and saved["status"] == "capturado":
-                        info = json.loads(saved["payload_json"])
-                        cached = self.resource_dir / (info["sha256"] + ".json")
-                        if cached.is_file() and hashlib.sha256(cached.read_bytes()).hexdigest() == info["sha256"]:
-                            continue
+                    rid = res.get("id") or url
+                    checkpoint = f"resource:{rid}:{max_itens}"
+                    meta_ckan = _meta_ckan(res)
+                    agora = _agora()
+                    estados = self._estados_recurso(rid)
+                    ultimo_ok = max((t for t in (_ts_ok(e) for e in estados) if t), default=None)
+                    # Revalidação (decisão 0039): meses recentes e capturas velhas ignoram os dois caches.
+                    forcar = (res["name"][:6] in recentes or ultimo_ok is None
+                              or agora - ultimo_ok > timedelta(days=_REVALIDAR_DIAS))
+                    saved = next((e for e in estados if e["chave"] == checkpoint), None)
+                    saved_info = (saved or {}).get("info") or {}
+                    saved_ok = bool(saved and saved["status"] == "capturado"
+                                    and self._bytes_ok(saved_info.get("sha256")))
+                    if saved_ok and not forcar and saved_info.get("meta", {}) == meta_ckan:
+                        continue
+                    novo_ok, novo_rev, tentativa = agora.isoformat(), agora.isoformat(), agora.isoformat()
                     try:
-                        # O limite de indexação não muda o recurso oficial capturado.
-                        prior = self.sync_state.conn.execute("SELECT payload_json FROM sync_state WHERE fonte='stj_resource' AND chave LIKE ? AND status='capturado' AND payload_json IS NOT NULL", (f"resource:{res.get('id') or url}:%",)).fetchall() if self.sync_state else []
                         resp = None
-                        for old in prior:
-                            info = json.loads(old[0])
-                            cached_path = self.resource_dir / (info['sha256'] + '.json')
-                            if cached_path.is_file():
-                                cached_body = cached_path.read_bytes()
-                                if hashlib.sha256(cached_body).hexdigest() == info['sha256']:
-                                    receipt = self.sync_state.conn.execute('SELECT fetched_at FROM capture WHERE sha256=? AND url=? ORDER BY fetched_at LIMIT 1',(info['sha256'],url)).fetchone()
-                                    if not receipt:
-                                        continue
-                                    resp = Response(url,url,200,{'content-type':'application/json'},cached_body,info['sha256'],receipt[0],[],'application/json')
+                        if not forcar:
+                            # O limite de indexação não muda o recurso oficial capturado.
+                            for old in estados:
+                                info = old["info"]
+                                if old["status"] != "capturado" or info.get("meta", {}) != meta_ckan:
+                                    continue
+                                cached_body = self._bytes_ok(info.get("sha256"))
+                                receipt = self.sync_state.conn.execute(
+                                    "SELECT fetched_at FROM capture WHERE sha256=? AND url=? ORDER BY fetched_at LIMIT 1",
+                                    (info["sha256"], url)).fetchone() if cached_body else None
+                                if receipt:
+                                    resp = Response(url, url, 200, {"content-type": "application/json"}, cached_body,
+                                                    info["sha256"], receipt[0], [], "application/json")
+                                    novo_ok = info.get("ultima_captura_ok") or old["updated_at"]
+                                    novo_rev = info.get("revalidado_em") or novo_ok
+                                    tentativa = info.get("ultima_tentativa") or novo_ok
                                     break
                         if resp is None:
                             resp = connector_fetch(
@@ -483,7 +541,16 @@ class StjConnector(Connector):
                         if not isinstance(rows, list):
                             raise Unavailable("stj_recurso_nao_lista")
                         self.resource_dir.mkdir(parents=True, exist_ok=True)
+                        # Versões antigas permanecem em resource_dir (nome = sha256).
                         (self.resource_dir / (resp.sha256 + ".json")).write_bytes(resp.body)
+                        selo = {"meta": meta_ckan, "ultima_tentativa": tentativa,
+                                "ultima_captura_ok": novo_ok, "revalidado_em": novo_rev}
+                        if saved_ok and saved_info.get("sha256") == resp.sha256:
+                            # Mesmo conteúdo: só carimba a revalidação, sem reprocessar registros.
+                            if self.sync_state:
+                                self.sync_state.set("stj_resource", checkpoint, "capturado",
+                                                    payload={**saved_info, **selo})
+                            continue
                         resource_count = 0
                         for item in rows:
                             if max_itens is not None and resource_count >= max_itens:
@@ -503,11 +570,14 @@ class StjConnector(Connector):
                         if self.sync_state:
                             self.sync_state.set("stj_resource", checkpoint, "capturado",
                                                 payload={"sha256": resp.sha256, "url": resp.final_url,
-                                                         "n": resource_count, "mes": res["name"][:6]})
+                                                         "n": resource_count, "mes": res["name"][:6], **selo})
                     except Exception as exc:
                         if self.sync_state is None:
                             raise
-                        self.sync_state.set("stj_resource", checkpoint, "indisponivel", motivo=str(exc)[:200])
+                        self.sync_state.set("stj_resource", checkpoint, "indisponivel", motivo=str(exc)[:200],
+                                            payload={"ultima_tentativa": agora.isoformat(),
+                                                     "ultima_captura_ok": ultimo_ok.isoformat() if ultimo_ok else None,
+                                                     "sha256": saved_info.get("sha256")})
                         self.last_failures.append((checkpoint, str(exc)[:200]))
                         continue
             if precedentes:
@@ -522,6 +592,24 @@ class StjConnector(Connector):
             return inserted
         finally:
             conn.close()
+
+    def _estados_recurso(self, rid: str) -> list[dict[str, Any]]:
+        if not self.sync_state:
+            return []
+        rows = self.sync_state.conn.execute(
+            "SELECT chave, status, updated_at, payload_json FROM sync_state WHERE fonte='stj_resource' AND chave LIKE ?",
+            (f"resource:{rid}:%",)).fetchall()
+        return [{"chave": r[0], "status": r[1], "updated_at": r[2],
+                 "info": json.loads(r[3]) if r[3] else {}} for r in rows]
+
+    def _bytes_ok(self, sha: str | None) -> bytes | None:
+        """Bytes capturados por sha256, se o arquivo local existe e confere."""
+        path = self.resource_dir / f"{sha}.json" if sha else None
+        if path and path.is_file():
+            body = path.read_bytes()
+            if hashlib.sha256(body).hexdigest() == sha:
+                return body
+        return None
 
     @staticmethod
     def _put(conn: sqlite3.Connection, rows_by_key: dict, key: str, item: dict[str, Any]) -> None:

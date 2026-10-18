@@ -2614,8 +2614,12 @@ class Verifica:
         checks.append({"nome": "acervo", "status": "alerta" if aviso else "ok",
                        "detalhe": aviso or "atende ao manifesto/mínimo"})
         ok = all(c["status"] in {"ok", "alerta"} for c in checks)
+        from freoa_verifica.connectors.stj import resumo_atualizacao
+
+        stj_atual = resumo_atualizacao(self.conn)
         return {"status": "ok" if ok else "falha", "verificacoes": checks,
-                **({"acervo_incompleto": aviso} if aviso else {})}
+                **({"acervo_incompleto": aviso} if aviso else {}),
+                **({"stj_atualizacao": stj_atual} if stj_atual else {})}
 
     # ------------------------------------------------------------------
     # Snapshot
