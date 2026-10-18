@@ -864,13 +864,15 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
     if sum_err:
         return {"status": "erro", "motivo": sum_err}
 
-    local_schema = {
+    local_schema = sorted(
         r[0] for r in svc.conn.execute("SELECT version FROM schema_version").fetchall()
-    }
-    snap_schema = set(manifest.get("esquema") or [])
-    minimo = int(manifest.get("esquema_minimo") or 0)
-    if snap_schema != local_schema or (minimo and minimo > max(local_schema or {0})):
-        return {"status": "erro", "motivo": "esquema_incompativel"}
+    )
+    snap_schema = manifest.get("esquema")
+    # Aceita esquema igual ou anterior (prefixo): as migrações faltantes rodam na área de staging.
+    if (not isinstance(snap_schema, list) or not snap_schema
+            or sorted(snap_schema) != local_schema[:len(snap_schema)]):
+        return {"status": "erro", "motivo": "esquema_incompativel",
+                "detalhe": f"snapshot {snap_schema}, local {local_schema}"}
 
     try:
         db_src = _find_db(origem, manifest)
@@ -949,6 +951,22 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(f, dest)
+        # C6: derivados fora da versão atual (snapshot v1.0.2, sem derived_version) são reconstruídos
+        # aqui, no staging, antes da troca.
+        probe = sqlite3.connect(str(merged_db))
+        try:
+            reconstruir = not derivados.compativel(probe)
+        finally:
+            probe.close()
+        if reconstruir:
+            rebuild = staging / "rebuild"
+            rebuild.mkdir()
+            os.replace(merged_db, rebuild / "verifica.sqlite3")
+            (rebuild / "blobs").symlink_to(merged_blobs, target_is_directory=True)
+            try:
+                derivados.reprocessar_pasta(rebuild)
+            finally:
+                os.replace(rebuild / "verifica.sqlite3", merged_db)
         check = sqlite3.connect(str(merged_db))
         try:
             if check.execute("PRAGMA integrity_check").fetchone()[0] != "ok":

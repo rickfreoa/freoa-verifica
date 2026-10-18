@@ -112,10 +112,50 @@ def _validar(origem: dict[str, int], novo: sqlite3.Connection) -> None:
         raise RuntimeError("extrações perdidas")
 
 
-def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
-    """Reconstrói os derivados numa cópia e troca o banco só depois de validar (idempotente)."""
+def reprocessar_pasta(pasta: Path, *, com_situacao: bool = False) -> dict[str, Any]:
+    """Reprocessa com os parsers atuais o banco `pasta/verifica.sqlite3` (+ blobs), reindexa o FTS,
+    carimba DERIVED_VERSION e valida contagens. Levanta RuntimeError se algo não fechar."""
     from freoa_verifica.service import Verifica
 
+    raw = sqlite3.connect(str(pasta / "verifica.sqlite3"))
+    try:
+        origem = _contagens(raw)
+        reprocessaveis = raw.execute(
+            "SELECT COUNT(*) FROM capture c JOIN parsed_document p ON p.capture_id=c.id "
+            "JOIN work w ON w.id=p.work_id WHERE p.model_json IS NOT NULL "
+            "AND c.source_id IN ('planalto','cvm_normas','bcb') AND w.authority NOT LIKE 'invalidated:%'").fetchone()[0]
+    finally:
+        raw.close()
+    if origem["work"] == 0:
+        raise RuntimeError("acervo_vazio")
+    relatorio: dict[str, Any] = {}
+    with Verifica(home=pasta) as novo:
+        rep = novo.reprocessar_capturas()
+        if rep["falhas"]:
+            raise RuntimeError(f"reprocessamento falhou em {len(rep['falhas'])} captura(s): "
+                               f"{rep['falhas'][0]['motivo'][:120]}")
+        if reprocessaveis and not rep["reprocessados"]:
+            raise RuntimeError("nenhuma_captura_reprocessada")
+        relatorio.update(reprocessados=rep["reprocessados"], divergentes=rep["divergentes"])
+        with novo.conn:
+            relatorio["fts"] = reindexar_fts(novo.conn)
+        if com_situacao:
+            if novo._offline():
+                relatorio["situacao"] = "ignorada_offline"
+            else:
+                relatorio["situacao"] = novo.ressincronizar_situacao()
+        with novo.conn:
+            definir(novo.conn, DERIVED_VERSION)
+        _validar(origem, novo.conn)
+        novo.conn.commit()
+        novo.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    for suf in ("-wal", "-shm"):
+        Path(str(pasta / "verifica.sqlite3") + suf).unlink(missing_ok=True)
+    return relatorio
+
+
+def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
+    """Reconstrói os derivados numa cópia e troca o banco só depois de validar (idempotente)."""
     if svc._read_only:
         return {"status": "erro", "motivo": "somente_leitura"}
     home: Path = svc.home
@@ -136,26 +176,7 @@ def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
                 svc.conn.backup(dst)
             finally:
                 dst.close()
-            origem = _contagens(svc.conn)
-            relatorio: dict[str, Any] = {}
-            with Verifica(home=pasta) as novo:
-                rep = novo.reprocessar_capturas()
-                if rep["falhas"]:
-                    raise RuntimeError(f"reprocessamento falhou em {len(rep['falhas'])} captura(s): "
-                                       f"{rep['falhas'][0]['motivo'][:120]}")
-                relatorio.update(reprocessados=rep["reprocessados"], divergentes=rep["divergentes"])
-                with novo.conn:
-                    relatorio["fts"] = reindexar_fts(novo.conn)
-                if com_situacao:
-                    if novo._offline():
-                        relatorio["situacao"] = "ignorada_offline"
-                    else:
-                        relatorio["situacao"] = novo.ressincronizar_situacao()
-                with novo.conn:
-                    definir(novo.conn, DERIVED_VERSION)
-                _validar(origem, novo.conn)
-                novo.conn.commit()
-                novo.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            relatorio = reprocessar_pasta(pasta, com_situacao=com_situacao)
             for suf in ("-wal", "-shm"):
                 Path(str(copia) + suf).unlink(missing_ok=True)
             svc._close_all_conns(strict=True)

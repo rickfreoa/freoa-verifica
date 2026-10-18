@@ -188,3 +188,106 @@ def test_manifesto_carrega_derived_version_real(tmp_path, novo):
     dest = tmp_path / "snap"
     novo.snapshot_export(dest)
     assert json.loads((dest / "MANIFEST.json").read_text())["derived_version"] == "2"
+
+
+# ---------------------------------------------------------------------------
+# Snapshot no formato v1.0.2 (esquema 1..5, sem derived_version) e reconstrução vazia
+# ---------------------------------------------------------------------------
+
+def _snapshot_v102(tmp_path, legado):
+    """Exporta o home legado e regrava banco e manifesto como a v1.0.2 os publicava."""
+    import json
+    from freoa_verifica.snapshot import SNAPSHOT_TABLE_COLUMNS, _compress, _sha256_file
+    from freoa_verifica.store.db import _migration_files, split_sql_statements
+
+    dest = tmp_path / "snap102"
+    assert legado.snapshot_export(dest)["status"] == "ok"
+    manifest = json.loads((dest / "MANIFEST.json").read_text())
+    novo_db = tmp_path / "antigo.db"
+    old = sqlite3.connect(str(novo_db))
+    old.execute("CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))")
+    for versao, sql in _migration_files():
+        if versao <= 5:
+            for stmt in split_sql_statements(sql):
+                old.execute(stmt)
+            old.execute("INSERT INTO schema_version(version) VALUES (?)", (versao,))
+    old.execute("ATTACH DATABASE ? AS novo", (str(dest / manifest["db_arquivo"]),))
+    for tabela, cols in SNAPSHOT_TABLE_COLUMNS.items():
+        antigas = {r[1] for r in old.execute(f"PRAGMA main.table_info({tabela})")}
+        comuns = ", ".join(c for c in cols if c in antigas)
+        if comuns:
+            old.execute(f"INSERT INTO main.{tabela}({comuns}) SELECT {comuns} FROM novo.{tabela}")
+    old.commit()
+    old.close()
+    assert not sqlite3.connect(str(novo_db)).execute("SELECT 1 FROM sqlite_master WHERE name IN ('meta','work_status')").fetchall()
+    for nome in (manifest["db_arquivo"], "verifica.sqlite3"):
+        (dest / nome).write_bytes(novo_db.read_bytes())
+    (dest / manifest["db_compactado"]).unlink()
+    comp = _compress(dest / manifest["db_arquivo"], dest / manifest["db_arquivo"])
+    sha = _sha256_file(dest / manifest["db_arquivo"])
+    manifest.update(esquema=[1, 2, 3, 4, 5], esquema_minimo=5, db_sha256=sha, db_compactado=comp.name)
+    manifest.pop("derived_version", None)
+    manifest["arquivos_sha256"].update({manifest["db_arquivo"]: sha, "verifica.sqlite3": sha,
+                                        comp.name: _sha256_file(comp)})
+    _regravar(dest, manifest)
+    return dest, manifest
+
+
+def _regravar(dest, manifest):
+    import json
+    raw = json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    (dest / "MANIFEST.json").write_bytes(raw)
+    (dest / "MANIFEST.sha256").write_bytes((hashlib.sha256(raw).hexdigest() + "\n").encode("ascii"))
+    linhas = [f"{d}  {n}" for n, d in {**manifest["arquivos_sha256"],
+                                         "MANIFEST.json": hashlib.sha256(raw).hexdigest()}.items()]
+    (dest / "SHA256SUMS").write_text("\n".join(linhas) + "\n", encoding="utf-8")
+
+
+def test_snapshot_v102_instala_reconstroi_e_reinstala(tmp_path, novo):
+    esperado = _respostas(novo)
+    legado = _home_legado(tmp_path)
+    try:
+        dest, _ = _snapshot_v102(tmp_path, legado)
+    finally:
+        legado.close()
+    with Verifica(home=tmp_path / "alvo") as alvo:
+        out = alvo.snapshot_install(dest)
+        assert out["status"] == "ok", out
+        assert derivados.versao(alvo.conn) == derivados.DERIVED_VERSION
+        assert _respostas(alvo) == esperado
+        assert esperado[0][2][0] == "verified" and esperado[1][3][0] != "verified"
+        assert alvo.snapshot_install(dest)["status"] == "ok"
+        assert derivados.versao(alvo.conn) == derivados.DERIVED_VERSION
+        assert _respostas(alvo) == esperado
+
+
+def test_snapshot_de_esquema_futuro_ou_nao_prefixo_e_recusado(tmp_path, novo):
+    dest = tmp_path / "snap"
+    novo.snapshot_export(dest)
+    import json
+    manifest = json.loads((dest / "MANIFEST.json").read_text())
+    for esquema in (manifest["esquema"] + [99], [1, 2, 4]):
+        manifest["esquema"] = esquema
+        manifest["esquema_minimo"] = max(esquema)
+        _regravar(dest, manifest)
+        with Verifica(home=tmp_path / f"alvo{len(esquema)}") as alvo:
+            out = alvo.snapshot_install(dest)
+            assert out["status"] == "erro" and out["motivo"] == "esquema_incompativel", out
+
+
+def test_reconstruir_home_vazio_recusa(tmp_path):
+    with Verifica(home=tmp_path / "vazio") as svc:
+        out = svc.reconstruir_acervo()
+        assert out["status"] == "erro" and out["motivo"] == "acervo_vazio" and out["original_intacto"]
+
+
+def test_reconstruir_sem_nenhuma_captura_reprocessada_recusa(tmp_path, monkeypatch):
+    svc = _home_legado(tmp_path)
+    try:
+        monkeypatch.setattr(Verifica, "reprocessar_capturas",
+                            lambda self: {"reprocessados": 0, "divergentes": [], "falhas": []})
+        out = svc.reconstruir_acervo()
+        assert out["status"] == "erro" and out["motivo"] == "nenhuma_captura_reprocessada"
+        assert derivados.versao(svc.conn) is None
+    finally:
+        svc.close()
