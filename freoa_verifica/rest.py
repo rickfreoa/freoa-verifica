@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import hmac
 import os
+import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, StrictStr
+
+from freoa_verifica.limites import servidor_max_concorrencia
+from freoa_verifica.limites import MAX_CORPO_HTTP, EntradaInvalida, Sobrecarga
 from freoa_verifica.service import Verifica
 
 try:
@@ -28,13 +34,92 @@ def _problem(status: int, title: str, detail: str, type_: str = "about:blank") -
     )
 
 
-def create_app(home: str | None = None, token: str | None = None) -> Any:
+class _CorpoGrande(Exception):
+    pass
+
+
+class _LimiteCorpo:
+    """Recusa corpo acima do teto: por Content-Length e cortando a leitura em streaming."""
+
+    def __init__(self, app: Any, limite: int = MAX_CORPO_HTTP) -> None:
+        self.app, self.limite = app, limite
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        resp = _problem(413, "erro", "corpo da requisição excede o limite")
+        declared = dict(scope["headers"]).get(b"content-length")
+        try:
+            if declared is not None and int(declared) > self.limite:
+                return await resp(scope, receive, send)
+        except ValueError:
+            return await _problem(400, "erro", "Content-Length inválido")(scope, receive, send)
+        total = 0
+        excedeu = False
+        respondeu = False
+
+        async def counted() -> Any:
+            nonlocal total, excedeu
+            msg = await receive()
+            if msg["type"] == "http.request":
+                total += len(msg.get("body", b""))
+                if total > self.limite:
+                    excedeu = True
+                    raise _CorpoGrande
+            return msg
+
+        async def watch(msg: Any) -> None:
+            # O framework pode traduzir a leitura cortada em 400: troca por 413.
+            nonlocal respondeu
+            if excedeu:
+                if not respondeu:
+                    respondeu = True
+                    await resp(scope, receive, send)
+                return
+            await send(msg)
+
+        try:
+            await self.app(scope, counted, watch)
+        except _CorpoGrande:
+            if not respondeu:
+                await resp(scope, receive, send)
+
+
+class _VerificacaoIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    citacao: StrictStr = ""
+    trecho: StrictStr | None = None
+    data: StrictStr | None = None
+    modo: StrictStr | None = None
+    proposicao: StrictStr | None = None
+
+
+class _TextoIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    texto: StrictStr = ""
+    data: StrictStr | None = None
+
+
+def create_app(
+    home: str | None = None,
+    token: str | None = None,
+    *,
+    modo: str = "local",
+    registro: str | None = None,
+) -> Any:
+    """Fábrica ASGI. `modo`: "local" (sem token só aceita origem loopback) ou
+    "remoto" (token obrigatório). Sem token em modo remoto, a fábrica recusa subir."""
     if FastAPI is None:
         raise RuntimeError(
             "fastapi não instalado; instale o extra: pip install 'freoa-verifica[server]'"
         )
+    if modo not in ("local", "remoto"):
+        raise ValueError("modo deve ser 'local' ou 'remoto'")
+    expected = token if token is not None else os.environ.get("FV_API_TOKEN")
+    if modo == "remoto" and not expected:
+        raise RuntimeError("recusado: modo remoto exige token (--token ou FV_API_TOKEN)")
 
-    svc = Verifica(home=home)
+    svc = Verifica(home=home, registro=registro, exigir_acervo=True, max_concorrencia=servidor_max_concorrencia())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -48,7 +133,6 @@ def create_app(home: str | None = None, token: str | None = None) -> Any:
         lifespan=lifespan,
     )
     app.state.verifica = svc
-    expected = token if token is not None else os.environ.get("FV_API_TOKEN")
     bearer = HTTPBearer(auto_error=False)
 
     def require_auth(
@@ -58,6 +142,29 @@ def create_app(home: str | None = None, token: str | None = None) -> Any:
             return
         if creds is None or creds.scheme.lower() != "bearer" or creds.credentials != expected:
             raise HTTPException(status_code=401, detail="token inválido ou ausente")
+
+    @app.middleware("http")
+    async def fronteira(request: Request, call_next):
+        # Vale para toda rota (inclusive as desconhecidas), não só as com Depends.
+        if expected:
+            auth = request.headers.get("authorization", "")
+            scheme, _, cred = auth.partition(" ")
+            if scheme.lower() != "bearer" or not hmac.compare_digest(cred.strip(), expected):
+                return _problem(401, "erro", "token inválido ou ausente")
+        else:
+            host = request.client.host if request.client else None
+            proxied = "x-forwarded-for" in request.headers or "forwarded" in request.headers
+            if host not in _LOCAL_HOSTS or proxied:
+                return _problem(401, "erro", "sem token, apenas origem local direta é aceita")
+        return await call_next(request)
+
+    @app.exception_handler(EntradaInvalida)
+    async def entrada_invalida(request: Request, exc: EntradaInvalida):
+        return _problem(422, "entrada_invalida", str(exc))
+
+    @app.exception_handler(Sobrecarga)
+    async def sobrecarga(request: Request, exc: Sobrecarga):
+        return _problem(503, "sobrecarga", "serviço ocupado; tente novamente")
 
     @app.exception_handler(HTTPException)
     async def http_exc_handler(request: Request, exc: HTTPException):
@@ -116,18 +223,18 @@ def create_app(home: str | None = None, token: str | None = None) -> Any:
         return svc.historico_dispositivo(citacao)
 
     @app.post("/v1/verificacoes")
-    def post_verificacao(body: dict[str, Any], _: None = Depends(require_auth)):
+    def post_verificacao(body: _VerificacaoIn, _: None = Depends(require_auth)):
         return svc.verificar_citacao(
-            body.get("citacao") or "",
-            trecho=body.get("trecho"),
-            data=body.get("data"),
-            modo=body.get("modo") or "literal",
-            proposicao=body.get("proposicao"),
+            body.citacao,
+            trecho=body.trecho,
+            data=body.data,
+            modo=body.modo or "literal",
+            proposicao=body.proposicao,
         )
 
     @app.post("/v1/verificacoes/texto")
-    def post_verificacao_texto(body: dict[str, Any], _: None = Depends(require_auth)):
-        return svc.verificar_texto(body.get("texto") or "", data=body.get("data"))
+    def post_verificacao_texto(body: _TextoIn, _: None = Depends(require_auth)):
+        return svc.verificar_texto(body.texto, data=body.data)
 
     @app.get("/v1/jurisprudencia")
     def get_juris(
@@ -182,6 +289,7 @@ def create_app(home: str | None = None, token: str | None = None) -> Any:
     def get_fontes(_: None = Depends(require_auth)):
         return svc.listar_fontes()
 
+    app.add_middleware(_LimiteCorpo)
     return app
 
 
@@ -191,6 +299,7 @@ def run_api(
     port: int = 8766,
     token: str | None = None,
     home: str | None = None,
+    registro: str | None = None,
 ) -> None:
     try:
         import uvicorn
@@ -205,5 +314,13 @@ def run_api(
         )
     if token:
         os.environ["FV_API_TOKEN"] = token
-    app = create_app(home=home, token=token if token is not None else effective)
+    app = create_app(
+        home=home,
+        token=token if token is not None else effective,
+        modo="local" if host in _LOCAL_HOSTS else "remoto",
+        registro=registro,
+    )
+    aviso = app.state.verifica.acervo_status()
+    if aviso:
+        print(f"[aviso] acervo_incompleto: {aviso}", file=sys.stderr, flush=True)
     uvicorn.run(app, host=host, port=port)

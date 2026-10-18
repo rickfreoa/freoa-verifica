@@ -7,9 +7,11 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin
 
+from lxml import etree as lxml_etree
 from lxml import html as lxml_html
 
 from freoa_verifica.connectors.base import (
+    CandidateList,
     Candidate,
     Connector,
     HealthProbe,
@@ -142,9 +144,10 @@ class CvmNormasConnector(Connector):
             tipo = "resolucoes"
         numero = filtros.get("numero")
         if numero is None and q:
-            m = re.search(r"(?i)(?:resolu[cç][aã]o|instru[cç][aã]o|parecer)\s*(?:cvm\s*)?(\d+)", q)
-            if m:
-                numero = int(m.group(1))
+            especie, num_q = _especie_numero(q)
+            if num_q is not None:
+                numero = num_q
+                tipo = especie or tipo  # M2: "Instrução CVM 358" não vai à pasta de resoluções
         if numero is not None:
             cand = self.resolve({"tipo": tipo, "numero": int(numero)})
             return [cand] if cand else []
@@ -211,10 +214,22 @@ class CvmNormasConnector(Connector):
                 continue
         raise last or Unavailable("sem_documento")
 
+    def fetch_situacao(self, candidate: Candidate) -> Response:
+        """C2: a página do ato é sempre capturada como evidência de situação."""
+        return connector_fetch(
+            candidate.metadata.get("page_url") or candidate.url,
+            hosts=self.hosts,
+            path_prefixes=self.path_prefixes,
+            mimes=self.mimes,
+            user_agent=self.user_agent,
+            timeout=45.0,
+            max_bytes=5 * 1024 * 1024,
+        )
+
     def parse(self, resp: Response) -> ParsedDocument:
         kind = _kind_from_url(resp.final_url)
         if kind == "docx" or resp.body[:2] == b"PK":
-            return parse_cvm_docx(resp.body)
+            return _parse_docx(resp.body)
         if kind == "pdf" or resp.body[:4] == b"%PDF":
             return _parse_pdf(resp.body, source=resp.final_url)
         # HTML da página do ato — ementa/situação
@@ -290,11 +305,46 @@ def _hidden(tree, name: str) -> str:
     return str(el[0]) if el else ""
 
 
+_ESPECIES = (
+    (r"resolu[cç][aã]o", "resolucoes"),
+    (r"instru[cç][aã]o", "instrucoes"),
+    (r"parecer(?:\s+de)?(?:\s+orienta[cç][aã]o)?", "pareceres-orientacao"),
+    (r"delibera[cç][aã]o", "deliberacoes"),
+    (r"of[ií]cio[\s-]+circular", "oficios-circulares"),
+)
+_ESPECIE_NUM = re.compile(
+    r"(?i)\b(" + "|".join(p for p, _ in _ESPECIES) + r")\s*(?:cvm\s*)?(?:(?:n[ºo°.]+|n\.?\s*[ºo°])\s*)?(\d[\d.]*)"
+)
+
+
+def _especie_numero(texto: str) -> tuple[str | None, int | None]:
+    m = _ESPECIE_NUM.search(texto or "")
+    if not m:
+        return None, None
+    rotulo = m.group(1)
+    tipo = next(t for p, t in _ESPECIES if re.fullmatch(p, rotulo, re.I))
+    digitos = m.group(2).replace(".", "")
+    return tipo, int(digitos) if digitos.isdigit() else None
+
+
+def _html_tree(body: bytes):
+    """UTF-8 primeiro; sem isso o lxml presume latin-1 e produz mojibake (A4)."""
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        text = body.decode("cp1252", errors="replace")
+    text = re.sub(r"^\s*<\?xml[^>]*\?>", "", text)
+    try:
+        return lxml_html.fromstring(text)
+    except (ValueError, lxml_etree.ParserError) as exc:
+        raise Unavailable("resposta_inesperada") from exc
+
+
 def _parse_list_html(
     body: bytes, *, source_id: str, tipo: str, limite: int, q: str
 ) -> list[Candidate]:
-    text = body.decode("utf-8", errors="replace")
-    tree = lxml_html.fromstring(body)
+    tree = _html_tree(body)
+    text = tree.text_content()
     total_el = tree.xpath('//*[contains(@class,"orderResults")]//span')
     total_txt = total_el[0].text_content() if total_el else ""
     if not total_txt:
@@ -303,19 +353,17 @@ def _parse_list_html(
     if re.fullmatch(r"\s*Nenhum resultado encontrado\s*", total_txt, re.I):
         return []
     m_total = re.search(r"(\d+)", total_txt)
-    if m_total and int(m_total.group(1)) == 0:
+    total = int(m_total.group(1)) if m_total else None
+    if total == 0:
         return []
     articles = tree.xpath("//article")
-    if not articles and not m_total:
+    if not articles and total is None:
         # fallback: página estática de resolucoes.html
         articles = tree.xpath("//a[contains(@href,'/legislacao/')]")
         if not articles:
             raise Unavailable("resposta_inesperada")
-    out: list[Candidate] = []
-    q_lower = (q or "").lower()
+    por_ato: dict[str, Candidate] = {}
     for art in articles:
-        if len(out) >= limite:
-            break
         if art.tag == "a":
             href = art.get("href") or ""
             title = (art.text_content() or "").strip()
@@ -333,53 +381,90 @@ def _parse_list_html(
             situacao = None
             if re.search(r"(?i)revogad", title + " " + (ementa or "")):
                 situacao = "revogada"
-        if q_lower and q_lower not in (title + " " + (ementa or "")).lower():
-            continue
         abs_url = urljoin("https://conteudo.cvm.gov.br/", href)
+        especie, num_t = _especie_numero(title)
         num_m = re.search(r"(\d+)", title)
+        numero = num_t if num_t is not None else (int(num_m.group(1)) if num_m else None)
+        tipo_item = especie or tipo
         dates = art.xpath(".//b/text()") if art.tag != "a" else []
         dated_year = next((m.group(0) for value in dates
                            if (m := re.search(r"\b(?:19|20)\d{2}\b", value))), None)
-        out.append(
-            Candidate(
-                source_id=source_id,
-                key=f"cvm:{tipo}:{num_m.group(1) if num_m else title}",
-                title=title,
-                url=abs_url,
-                snippet=(ementa or "")[:300] or None,
-                metadata={"tipo": tipo, "ementa": ementa, "situacao": situacao,
-                          "page_url": abs_url, "ano": int(dated_year) if dated_year else None},
-            )
+        cand = Candidate(
+            source_id=source_id,
+            key=f"cvm:{tipo_item}:{numero if numero is not None else title}",
+            title=title,
+            url=abs_url,
+            snippet=(ementa or "")[:300] or None,
+            metadata={"tipo": tipo_item, "ementa": ementa, "situacao": situacao,
+                      "page_url": abs_url, "ano": int(dated_year) if dated_year else None},
         )
-    if not out and m_total and int(m_total.group(1)) == 0:
-        return []
-    if not out and q:
-        return []
+        # M3: um item por ato; anexo não normativo cede lugar à página/peça do ato.
+        anterior = por_ato.get(cand.key)
+        if anterior is None or (_e_anexo(anterior) and not _e_anexo(cand)):
+            por_ato[cand.key] = cand
+    out = CandidateList(list(por_ato.values())[:limite], total)
     if not out:
-        raise Unavailable("resposta_inesperada")
+        if total is None and not articles:
+            raise Unavailable("resposta_inesperada")
+        raise Unavailable("itens_nao_lidos")  # A4: a fonte informa total>0 e nada foi lido
     return out
 
 
+def _e_anexo(c: Candidate) -> bool:
+    return bool(re.search(r"(?i)\banexo\b|/anexos/", f"{c.title} {c.url}"))
+
+
+def ler_situacao_pagina(body: bytes, esperado: tuple[str | None, int | None] | None = None) -> dict[str, Any] | None:
+    """Situação cadastral declarada na página do ato (C2).
+
+    None = página ilegível (sem título/artigo, ou sem a identidade do ato: espécie e número
+    no título, iguais a `esperado` quando dado): o chamador grava `ilegivel`.
+    A ausência de marca de revogação numa página lida é `vigente_declarada`,
+    nunca prova de vigência temporal.
+    """
+    try:
+        tree = _html_tree(body)
+    except Unavailable:
+        return None
+    h2 = tree.xpath("//article//h2|//h2")
+    if not h2 or not tree.xpath("//article"):
+        return None
+    title = h2[0].text_content().strip()
+    especie, numero = _especie_numero(title)
+    if especie is None or numero is None or (esperado is not None and esperado != (especie, numero)):
+        return None  # "Serviço indisponível" ou página de outro ato não declara situação alguma
+    textos = [(p.text_content() or "").strip() for p in tree.xpath("//article//p")]
+    marca = re.compile(r"(?is)^\W*(revogad[ao]|cancelad[ao])\b")
+    achado = next((t for t in textos if marca.match(t)), None)
+    if achado is None and re.search(r"(?i)\((?:revogad|cancelad)", title):
+        achado = title
+    if achado is None:
+        return {"situacao": "vigente_declarada", "texto_oficial": None, "ato_revogador": None}
+    cancelada = bool(re.search(r"(?i)cancelad", achado[:20]))
+    rev = re.search(r"(?is)\bpel[ao]s?\s+(.+?)(?=\s*(?:[,;.(]|\s+de\s+\d|$))", achado)
+    return {
+        "situacao": "cancelada" if cancelada else "revogada",
+        "texto_oficial": re.sub(r"\s+", " ", achado)[:500],
+        "ato_revogador": rev.group(1).strip()[:200] if rev else None,
+    }
+
+
 def _parse_ato_html(body: bytes, *, base_url: str) -> ParsedDocument:
-    tree = lxml_html.fromstring(body)
+    tree = _html_tree(body)
     h2 = tree.xpath("//article//h2|//h2")
     title = h2[0].text_content().strip() if h2 else ""
-    situacao = "revogada" if re.search(r"(?i)revogad", title) else "vigente"
+    lida = ler_situacao_pagina(body)
+    situacao = lida["situacao"] if lida else "nao_declarada"  # C2: nunca presume vigente
     paras = tree.xpath("//article//section[contains(@class,'contentArticle')]//p")
     ementa = None
     for p in paras:
         t = (p.text_content() or "").strip()
         if t and not re.match(r"(?i)^(publicad|tue |mon |wed |thu |fri |sat |sun )", t):
-            if "revogad" in t.lower() and ementa is None:
-                situacao = t
-            elif ementa is None and len(t) > 40:
+            if "revogad" in t.lower():
+                continue
+            if ementa is None and len(t) > 40:
                 ementa = t
                 break
-    links = []
-    for a in tree.xpath("//a[@href]"):
-        href = a.get("href") or ""
-        if any(href.lower().endswith(ext) for ext in (".pdf", ".docx", ".doc")):
-            links.append(urljoin(base_url, href))
     text = "\n".join((p.text_content() or "").strip() for p in paras if (p.text_content() or "").strip())
     return ParsedDocument(
         profile="cvm_html",
@@ -393,16 +478,53 @@ def _parse_ato_html(body: bytes, *, base_url: str) -> ParsedDocument:
     )
 
 
-def _parse_pdf(body: bytes, *, source: str) -> ParsedDocument:
-    text = ""
-    if PdfReader is not None:
-        import io
+# F03: PDF sempre em processo descartável com limites (decisão 0026).
+PDF_MAX_PAGINAS = 600
+PDF_MAX_TEXTO = 8 * 1024 * 1024
+PDF_TIMEOUT_S = 90.0
 
-        reader = PdfReader(io.BytesIO(body))
-        parts = []
-        for page in reader.pages:
-            parts.append(page.extract_text() or "")
-        text = "\n".join(parts)
+
+DOCX_TIMEOUT_S = 60.0
+
+
+def _parse_docx(body: bytes) -> ParsedDocument:
+    from freoa_verifica.parsers.isolated import parse_isolated
+
+    doc = parse_isolated("cvm_docx", body, DOCX_TIMEOUT_S)
+    if doc.profile == "cvm_docx" and not doc.quarantined:
+        return doc
+    detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "docx_isolado_falhou")
+    raise Unavailable(f"docx_nao_processado: {detalhe}")
+
+
+def _parse_pdf(body: bytes, *, source: str) -> ParsedDocument:
+    from freoa_verifica.parsers.isolated import parse_isolated
+
+    doc = parse_isolated("cvm_pdf", body, PDF_TIMEOUT_S)
+    if doc.profile == "cvm_pdf" and not doc.quarantined:
+        return doc
+    detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "pdf_isolado_falhou")
+    raise Unavailable(f"pdf_nao_processado: {detalhe}")
+
+
+def parse_pdf_direto(body: bytes) -> ParsedDocument:
+    """Corpo do filho isolado: aplica limites de páginas e texto."""
+    if PdfReader is None:
+        raise Unavailable("pdf_sem_biblioteca")
+    import io
+
+    reader = PdfReader(io.BytesIO(body))
+    if len(reader.pages) > PDF_MAX_PAGINAS:
+        raise Unavailable(f"pdf_paginas_excedidas: {len(reader.pages)}>{PDF_MAX_PAGINAS}")
+    parts: list[str] = []
+    total = 0
+    for page in reader.pages:
+        t = page.extract_text() or ""
+        total += len(t)
+        if total > PDF_MAX_TEXTO:
+            raise Unavailable("pdf_texto_excedido")
+        parts.append(t)
+    text = "\n".join(parts)
     issues = [
         Issue(
             code="PDF_SEM_RASURAS",

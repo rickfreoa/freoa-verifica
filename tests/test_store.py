@@ -95,8 +95,29 @@ def test_reopen_idempotent(db_path):
     row = c2.execute("SELECT id FROM source WHERE id='s1'").fetchone()
     assert row is not None
     versions = {row[0] for row in c2.execute("SELECT version FROM schema_version")}
-    assert versions == {1, 2, 3, 4, 5}
+    assert versions == set(range(1, 14))
     c2.close()
+
+
+def test_banco_v102_migra_para_v103(tmp_path, monkeypatch):
+    """Banco v1.0.2 (versões 1..5) recebe 006 a 009 sem perder dados."""
+    from freoa_verifica.store import db as dbmod
+
+    todas = dbmod._migration_files()
+    monkeypatch.setattr(dbmod, "_migration_files", lambda: [m for m in todas if m[0] <= 5])
+    c = dbmod.connect(tmp_path / "v102.sqlite3")
+    c.execute("INSERT INTO source(id, authority, profile, hosts_json) VALUES ('s1','x','p','[]')")
+    c.commit()
+    assert {r[0] for r in c.execute("SELECT version FROM schema_version")} == {1, 2, 3, 4, 5}
+    c.close()
+    monkeypatch.undo()
+    c = dbmod.connect(tmp_path / "v102.sqlite3")
+    assert {r[0] for r in c.execute("SELECT version FROM schema_version")} == set(range(1, 14))
+    assert c.execute("SELECT id FROM source").fetchone()[0] == "s1"
+    for tabela in ("work_status", "fts_staging"):
+        c.execute(f"SELECT * FROM {tabela} LIMIT 1")
+    c.execute("SELECT rubrica FROM fts_redaction LIMIT 1")
+    c.close()
 
 
 def test_migration_rollback_on_bad_sql(tmp_path, monkeypatch):

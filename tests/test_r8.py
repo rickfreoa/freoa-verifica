@@ -50,8 +50,8 @@ def test_mcp_aliases_and_stf(mixed, monkeypatch):
     from freoa_verifica import mcp_server
     from tests.test_mcp import _tool_payload
 
-    monkeypatch.setattr(mcp_server, "_svc", mixed)
-    server = mcp_server.create_mcp()
+    monkeypatch.setitem(mcp_server._servicos, str(mixed.home), mixed)
+    server = mcp_server.create_mcp(home=str(mixed.home))
 
     async def run():
         async with Client(server) as client:

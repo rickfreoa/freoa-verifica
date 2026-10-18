@@ -6,13 +6,15 @@ import json
 import logging
 import re
 import time
+import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
 
 from freoa_verifica.aliases import WorkKey
+from freoa_verifica.citation import _MONTHS
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.parsers.model import ParsedDocument
@@ -113,6 +115,27 @@ class SyncState:
             "parseado",
             "ambiguo",
         }
+
+
+_MESES_EPIGRAFE = {unicodedata.normalize("NFKD", k).encode("ascii", "ignore").decode(): v for k, v in _MONTHS.items()}
+
+_EPIGRAFE_DATA_RE = re.compile(
+    r"\bDE\s+(\d{1,2})\s*[º°o]?\s+DE\s+([^\W\d_]+)\s+DE\s+(\d{4})\b", re.I
+)
+
+
+def data_da_epigrafe(epigrafe: str) -> str | None:
+    """Data ISO do ato na epígrafe ("LEI Nº 14.195, DE 26 DE AGOSTO DE 2021"); inválida vira None."""
+    m = _EPIGRAFE_DATA_RE.search(epigrafe or "")
+    if not m:
+        return None
+    mes = _MESES_EPIGRAFE.get(unicodedata.normalize("NFKD", m[2].lower()).encode("ascii", "ignore").decode())
+    if mes is None:
+        return None
+    try:
+        return date(int(m[3]), mes, int(m[1])).isoformat()
+    except ValueError:
+        return None
 
 
 def parse_act_ref(ref: str) -> tuple[str, str, int | None] | None:
@@ -371,9 +394,13 @@ class SementeSync:
                 self._mark_indisponivel("alterador", akey, str(exc)[:200])
                 continue
             if alterador and not isinstance(alterador, list):
+                # Senado sem data: a epígrafe capturada do próprio ato alterador; ano deve bater com a remissão.
+                epigrafe_iso = None if iso else data_da_epigrafe(alterador.document.title)
                 for ann in annotations:
                     if ann.act_ref:
                         rw.amending_act_texts[ann.act_ref] = alterador.document.text
+                    if epigrafe_iso and epigrafe_iso[:4] == str(aano) and (ann.act_date is None or len(ann.act_date) == 4):
+                        ann.act_date = epigrafe_iso
         from freoa_verifica.store import repo
         rw.document = doc
         repo.persist_parsed_document(self.svc.conn, capture_id=rw.capture_id,

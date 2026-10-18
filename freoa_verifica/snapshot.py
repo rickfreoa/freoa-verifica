@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from freoa_verifica import acervo, derivados
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.store import blobs
@@ -106,8 +107,13 @@ SNAPSHOT_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "capture_id", "profile", "parser_version", "quarantined",
         "issues_json", "ambiguous_paths_json", "editorial_json",
         "model_json", "work_id", "work_date", "amending_texts_json", "events_json",
+        "candidato_ao_vivo",
     ),
     "work_year_issue": ("work_id", "reason", "capture_id"),
+    "work_status": (
+        "work_id", "situacao", "texto_oficial", "ato_revogador", "data_efeito",
+        "captura_id", "sha256", "lido_em",
+    ),
 }
 
 # Tabelas/colunas excluídas do snapshot público
@@ -308,6 +314,8 @@ def export_snapshot(
     legacy_db = destino / "verifica.sqlite3"
 
     out_conn = connect(export_db)
+    derivados.definir(out_conn, derivados.versao(conn))  # o banco exportado herda a versão da origem
+    out_conn.commit()
     for t in SNAPSHOT_TABLE_COLUMNS:
         try:
             out_conn.execute(f"DELETE FROM {t}")
@@ -435,6 +443,7 @@ def export_snapshot(
         "capturas": len(blob_digests),
         "obras": conn.execute("SELECT COUNT(*) FROM work").fetchone()[0],
         "decisoes": conn.execute("SELECT COUNT(*) FROM decision").fetchone()[0],
+        **{k: v for k, v in acervo.manifest_fields(conn).items() if k not in ("obras", "decisoes", "db_sha256")},
         "hashes_blobs": sorted(blob_digests.keys()),
         "blob_sha256": blob_digests,
         "blobs_completos": blobs_completos,
@@ -550,7 +559,32 @@ def _verify_sums(origem: Path, manifest: dict[str, Any]) -> str | None:
         return "inventario_invalido"
 
 
-def _merge_attach(live_db: Path, snap_db: Path) -> None:
+def _versao_derivados(conn: sqlite3.Connection, schema: str) -> int | None:
+    try:
+        row = conn.execute(f"SELECT value FROM {schema}.meta WHERE key='derived_version'").fetchone()
+        return int(row[0]) if row else None
+    except (sqlite3.Error, ValueError):
+        return None
+
+
+def _reconstruir_derivados_substituidos(conn: sqlite3.Connection, capturas: list[str]) -> None:
+    """Regrava provisions, redações e ocorrências dos documentos cujo modelo o snapshot substituiu."""
+    from freoa_verifica.parsers.model import document_from_dict
+    from freoa_verifica.store.repo import sincronizar_derivados
+
+    for cid in capturas:
+        row = conn.execute("SELECT model_json, work_id FROM main.parsed_document WHERE capture_id=?",
+                           (cid,)).fetchone()
+        if not row or not row["model_json"] or not row["work_id"]:
+            continue
+        ext = conn.execute("SELECT id FROM main.extract WHERE capture_id=? ORDER BY created_at DESC, id DESC LIMIT 1",
+                           (cid,)).fetchone()
+        sincronizar_derivados(conn, capture_id=cid, work_id=row["work_id"],
+                              document=document_from_dict(json.loads(row["model_json"])),
+                              extract_id=ext["id"] if ext else None)
+
+
+def _merge_attach(live_db: Path, snap_db: Path) -> list:
     """Anexa dados publicos, remapeando identidades naturais ja existentes."""
     conn = sqlite3.connect(str(live_db))
     conn.row_factory = sqlite3.Row
@@ -561,8 +595,14 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
         "alias": ("scheme", "value"),
     }
     mappings = {}
+    divergentes: list = []
     try:
         conn.execute("ATTACH DATABASE ? AS snap", (str(snap_db),))
+        local_dv = derivados.versao(conn)
+        snap_dv = _versao_derivados(conn, "snap")
+        # C6: snapshot de derivados mais novos substitui os modelos locais.
+        substituir = (snap_dv or 0) > (local_dv or 0)
+        substituidas: list[str] = []
         for table, columns in SNAPSHOT_TABLE_COLUMNS.items():
             fks = conn.execute(f"PRAGMA foreign_key_list({table})").fetchall()
             rows = conn.execute(f"SELECT {', '.join(columns)} FROM snap.{table}").fetchall()
@@ -586,24 +626,56 @@ def _merge_attach(live_db: Path, snap_db: Path) -> None:
                     continue
                 col_list = ", ".join(columns)
                 placeholders = ",".join("?" for _ in columns)
-                conn.execute(f"INSERT OR IGNORE INTO main.{table}({col_list}) VALUES ({placeholders})",
+                modo = "OR REPLACE" if table == "parsed_document" and substituir else "OR IGNORE"
+                conn.execute(f"INSERT {modo} INTO main.{table}({col_list}) VALUES ({placeholders})",
                              [values[c] for c in columns])
+                if table == "parsed_document":
+                    substituidas.append(values["capture_id"])
                 if old_id:
                     table_map[old_id] = values["id"]
         if conn.execute("PRAGMA foreign_key_check").fetchone():
             raise ValueError("snapshot_relacoes_invalidas")
-        conn.execute("DELETE FROM fts_redaction")
-        conn.execute("INSERT INTO fts_redaction(text, work_label, path) "
-                     "SELECT r.text, COALESCE(w.label,w.number), p.path FROM redaction r "
-                     "JOIN provision p ON p.id=r.provision_id JOIN work w ON w.id=p.work_id")
+        from freoa_verifica.rotulos import corrigir_rotulos
+        corrigir_rotulos(conn)
+        if substituir:
+            _reconstruir_derivados_substituidos(conn, substituidas)
+        # C6: o FTS só leva as redações do modelo atual (nunca as de modelos substituídos).
+        derivados.reindexar_fts(conn, divergentes)
+        # Versão do home: a do snapshot só vale se nenhum modelo local ficou para trás.
+        if substituir:
+            chaves = {tuple(r) for r in conn.execute(
+                "SELECT sha256, url, fetched_at FROM snap.capture WHERE id IN "
+                "(SELECT capture_id FROM snap.parsed_document)")}
+            fora = any(tuple(r) not in chaves for r in conn.execute(
+                "SELECT c.sha256, c.url, c.fetched_at FROM main.parsed_document pd "
+                "JOIN main.capture c ON c.id=pd.capture_id WHERE pd.model_json IS NOT NULL"))
+            if not fora:
+                derivados.definir(conn, snap_dv)
+        elif (snap_dv or 0) < (local_dv or 0):
+            derivados.definir(conn, snap_dv)  # dados de derivados antigos entraram: home volta a incompatível
         from freoa_verifica.store.repo import rebuild_decision_index
         rebuild_decision_index(conn)
         conn.commit()
+        return divergentes
     finally:
         conn.close()
 
 
 def install_snapshot(
+    svc: Any,
+    origem: str | Path | None = None,
+    *,
+    url: str | None = None,
+) -> dict[str, Any]:
+    """Instala o snapshot com acesso exclusivo: espera as operações ativas terminarem."""
+    try:
+        with svc.exclusivo():
+            return _install_snapshot(svc, origem, url=url)
+    except TimeoutError as exc:
+        return {"status": "erro", "motivo": str(exc)}
+
+
+def _install_snapshot(
     svc: Any,
     origem: str | Path | None = None,
     *,
@@ -777,6 +849,9 @@ def pack_snapshot(directory: Path, archive: Path) -> str:
 
 def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
     origem = Path(origem)
+    if derivados.origem_nao_publicada(svc.conn):  # a instalação anexa ao banco local: não parte de banco limpo
+        return {"status": "erro", "motivo": derivados.REASON_NAO_PUBLICADA,
+                "orientacao": "instale o snapshot em home novo"}
     manifest_path = origem / "MANIFEST.json"
     sha_path = origem / "MANIFEST.sha256"
     if not manifest_path.is_file():
@@ -795,13 +870,15 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
     if sum_err:
         return {"status": "erro", "motivo": sum_err}
 
-    local_schema = {
+    local_schema = sorted(
         r[0] for r in svc.conn.execute("SELECT version FROM schema_version").fetchall()
-    }
-    snap_schema = set(manifest.get("esquema") or [])
-    minimo = int(manifest.get("esquema_minimo") or 0)
-    if snap_schema != local_schema or (minimo and minimo > max(local_schema or {0})):
-        return {"status": "erro", "motivo": "esquema_incompativel"}
+    )
+    snap_schema = manifest.get("esquema")
+    # Aceita esquema igual ou anterior (prefixo): as migrações faltantes rodam na área de staging.
+    if (not isinstance(snap_schema, list) or not snap_schema
+            or sorted(snap_schema) != local_schema[:len(snap_schema)]):
+        return {"status": "erro", "motivo": "esquema_incompativel",
+                "detalhe": f"snapshot {snap_schema}, local {local_schema}"}
 
     try:
         db_src = _find_db(origem, manifest)
@@ -863,7 +940,7 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             svc.conn.backup(merged_conn)
         finally:
             merged_conn.close()
-        _merge_attach(merged_db, staging_db)
+        divergentes = _merge_attach(merged_db, staging_db)
         merged_blobs = staging / "merged-blobs"
         if live_blobs.is_dir():
             shutil.copytree(live_blobs, merged_blobs, copy_function=shutil.copy2)
@@ -880,17 +957,38 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(f, dest)
+        # C6: derivados fora da versão atual (snapshot v1.0.2, sem derived_version) são reconstruídos
+        # aqui, no staging, antes da troca.
+        probe = sqlite3.connect(str(merged_db))
+        try:
+            reconstruir = not derivados.compativel(probe)
+        finally:
+            probe.close()
+        if reconstruir:
+            rebuild = staging / "rebuild"
+            rebuild.mkdir()
+            os.replace(merged_db, rebuild / "verifica.sqlite3")
+            os.replace(merged_blobs, rebuild / "blobs")  # troca de diretório, sem symlink
+            try:
+                rel = derivados.reprocessar_pasta(rebuild)
+                divergentes += [d for d in rel["divergentes"] if d not in divergentes]
+            finally:
+                os.replace(rebuild / "verifica.sqlite3", merged_db)
+                os.replace(rebuild / "blobs", merged_blobs)
         check = sqlite3.connect(str(merged_db))
         try:
             if check.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("snapshot_banco_invalido")
             if check.execute("PRAGMA foreign_key_check").fetchone():
                 raise ValueError("snapshot_relacoes_invalidas")
+            # C6: nunca publicar derivados abaixo da versão do código (sem rebaixamento silencioso).
+            if not derivados.compativel(check):
+                raise ValueError("derivados_abaixo_da_versao_atual")
         finally:
             check.close()
 
         # So agora fechar e guardar os originais completos antes de publicar.
-        svc._close_all_conns()
+        svc._close_all_conns(strict=True)
         closed = True
         if db_dst.exists():
             os.replace(db_dst, backup_db)
@@ -906,6 +1004,7 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
         svc._db_path = db_dst
         svc._clear_caches()
         svc.conn = connect(db_dst)
+        acervo.save_installed(svc.home, manifest)
         return {
             "status": "ok",
             "backup": str(backup_db) if backup_db.exists() else None,
@@ -913,7 +1012,10 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             "obras": manifest.get("obras"),
             "capturas": manifest.get("capturas"),
             "modo": "anexacao",
+            "divergentes": divergentes,
             "autenticidade": AUTHENTICITY_NOTE,
+            **({"aviso": "derivados do snapshot em versão anterior; reconstruídos para a versão atual "
+                         f"({derivados.DERIVED_VERSION}) antes de publicar"} if reconstruir else {}),
         }
     except Exception as exc:  # noqa: BLE001
         mutated = db_saved or blobs_saved or db_installed or blobs_installed

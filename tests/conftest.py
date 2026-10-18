@@ -117,3 +117,8 @@ if os.name == "nt":
     def tmp_path_factory(request):
         # Preserva os artefatos para diagnóstico, como a retenção do pytest.
         return _InheritedTempPathFactory.from_config(request.config, _ispytest=True)
+
+
+def pytest_configure(config):
+    # O teste do pacote instalado roda sem pytest.ini; registra o marcador aqui.
+    config.addinivalue_line("markers", "live: testes que acessam fontes oficiais reais")

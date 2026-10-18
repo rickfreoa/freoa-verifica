@@ -292,7 +292,7 @@ def test_rest_problem_json_sem_vazamento(verifica_populada, monkeypatch):
         raise RuntimeError(f"segredo em {svc.home / 'verifica.sqlite3'}")
 
     app.get("/v1/_boom")(boom)
-    with TestClient(app, raise_server_exceptions=False) as c:
+    with TestClient(app, raise_server_exceptions=False, client=("127.0.0.1", 50000)) as c:
         r = c.get("/v1/_boom")
         assert r.status_code == 500
         assert r.headers["content-type"].startswith("application/problem+json")
@@ -435,14 +435,8 @@ def test_cli_resolve_e_matriz_paridade(verifica_populada, monkeypatch, capsys):
     pytest.importorskip("mcp")
     from mcp import Client
 
-    if ms._svc is not None:
-        try:
-            ms._svc.close()
-        except Exception:  # noqa: BLE001
-            pass
-        ms._svc = None
+    monkeypatch.setitem(ms._servicos, str(svc.home), svc)
     mcp = create_mcp(home=str(svc.home))
-    ms._svc = svc
 
     async def _mcp() -> dict:
         async with Client(mcp) as client:
@@ -469,7 +463,7 @@ def test_cli_resolve_e_matriz_paridade(verifica_populada, monkeypatch, capsys):
 
     app = create_app(home=str(svc.home), token=None)
     app.state.verifica.registrar(rw)
-    with TestClient(app) as c:
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
         r = c.post(
             "/v1/verificacoes",
             json={"citacao": citacao, "trecho": trecho},

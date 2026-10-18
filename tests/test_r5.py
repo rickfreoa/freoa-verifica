@@ -168,7 +168,7 @@ def test_facades_reject_invalid_evidence(populated,attack,monkeypatch):
         assert response.status_code==200
         assert response.json()['identity']['reason_code']==expected
     server=create_mcp(home=str(s.home))
-    monkeypatch.setattr(ms,'_svc',s)
+    monkeypatch.setitem(ms._servicos, str(s.home), s)
     async def run():
         async with Client(server) as client:
             result=await client.call_tool('verificar_citacao',{'citacao':query,'trecho':'Regra principal.'})

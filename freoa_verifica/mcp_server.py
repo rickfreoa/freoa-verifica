@@ -6,6 +6,11 @@ Pendência: sampling / avaliar_vigencia — NÃO implementado nesta versão.
 from __future__ import annotations
 
 import argparse
+import hmac
+import os
+import sys
+import threading
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import Field
@@ -16,7 +21,11 @@ except ModuleNotFoundError:
     # mcp>=2 renomeou FastMCP → MCPServer
     from mcp.server.mcpserver import MCPServer as FastMCP
 
+from freoa_verifica.limites import servidor_max_concorrencia
+from freoa_verifica.limites import MAX_CORPO_HTTP
+from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica.service import DOC_CLOSE, DOC_OPEN, Verifica
+from freoa_verifica.store.db import data_home
 
 _INSTRUCTIONS = """\
 FREOA Verifica — verificação de citações jurídicas contra fontes oficiais.
@@ -33,7 +42,11 @@ Regras de uso:
 8. Sampling / avaliação de vigência por modelo de linguagem: pendente (não disponível).
 """
 
-_svc: Verifica | None = None
+# Um serviço por home resolvido (F08): dois homes no mesmo processo não se misturam.
+_servicos: dict[str, Verifica] = {}
+_servicos_lock = threading.Lock()  # F08: lookup/criação/publicação atômicos
+_LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+_LOCAL_CLIENTES = _LOCAL_HOSTS
 
 Modo = Literal["literal", "normalizado"]
 Parte = Literal["ementa", "inteiro_teor", "voto", "certidao"]
@@ -58,11 +71,18 @@ Tribunal = Annotated[Tribunal, Field(max_length=256)]
 Tribunais = Annotated[list[Tribunal], Field(max_length=5)]
 
 
-def _service(home: str | None = None) -> Verifica:
-    global _svc
-    if _svc is None:
-        _svc = Verifica(home=home)
-    return _svc
+def _service(home: str | None = None, registro: str | None = None) -> Verifica:
+    chave = str(Path(home).expanduser().resolve()) if home else str(data_home())
+    with _servicos_lock:
+        svc = _servicos.get(chave)
+        if svc is None:
+            svc = _servicos[chave] = Verifica(home=chave, registro=registro, exigir_acervo=True, max_concorrencia=servidor_max_concorrencia())
+        elif normalizar_registro(registro) != svc.registro:
+            # C5: nunca gravar mais (nem aceitar em silêncio uma promessa de gravar menos) do que o serviço faz
+            raise ValueError(
+                f"conflito de política de registro: serviço do home já usa {svc.registro!r}, "
+                f"pedido {normalizar_registro(registro)!r} (argumento > FV_REGISTRO > padrão)")
+    return svc
 
 
 def _wrap_oficial(texto: str | None) -> str | None:
@@ -81,13 +101,20 @@ def _wrap_result_text(data: dict[str, Any], keys: tuple[str, ...] = ("texto",)) 
     return out
 
 
-def create_mcp(home: str | None = None) -> FastMCP:
+def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
     """Cria o servidor MCP com ferramentas espelhando a fachada (exceto sincronizar)."""
     mcp = FastMCP(
         name="freoa-verifica",
         instructions=_INSTRUCTIONS,
     )
-    _service(home)
+    registro = normalizar_registro(registro)  # política efetiva fixada na criação (argumento > ambiente > padrão)
+
+    def svc_() -> Verifica:
+        return _service(home, registro)
+
+    aviso = svc_().acervo_status()
+    if aviso:
+        print(f"[aviso] acervo_incompleto: {aviso}", file=sys.stderr, flush=True)
 
     @mcp.tool()
     def buscar_legislacao(
@@ -103,7 +130,7 @@ def create_mcp(home: str | None = None) -> FastMCP:
         limite máximo: 50.
         """
         limite = max(1, min(int(limite), 50))
-        return _service().buscar_legislacao(
+        return svc_().buscar_legislacao(
             q, fonte=fonte, data=data, limite=limite, cursor=cursor
         )
 
@@ -113,7 +140,7 @@ def create_mcp(home: str | None = None) -> FastMCP:
 
         Pode gravar cache local ao capturar a obra.
         """
-        return _service().resolver_citacao(citacao)
+        return svc_().resolver_citacao(citacao)
 
     @mcp.tool()
     def obter_dispositivo(
@@ -123,7 +150,7 @@ def create_mcp(home: str | None = None) -> FastMCP:
         data: Data | None = None,
     ) -> dict[str, Any]:
         """Obtém o texto da redação selecionada (documento oficial delimitado)."""
-        data_out = _service().obter_dispositivo(
+        data_out = svc_().obter_dispositivo(
             citacao=citacao, work_id=work_id, caminho=caminho, data=data
         )
         return _wrap_result_text(data_out, ("texto",))
@@ -131,7 +158,7 @@ def create_mcp(home: str | None = None) -> FastMCP:
     @mcp.tool()
     def historico_dispositivo(citacao: Consulta) -> dict[str, Any]:
         """Linha do tempo de redações e eventos do dispositivo citado."""
-        data_out = _service().historico_dispositivo(citacao)
+        data_out = svc_().historico_dispositivo(citacao)
         if isinstance(data_out.get("linha_do_tempo"), list):
             for item in data_out["linha_do_tempo"]:
                 if isinstance(item, dict) and "trecho" in item:
@@ -151,7 +178,7 @@ def create_mcp(home: str | None = None) -> FastMCP:
         Pode gravar cache local. support permanece not_assessed; proposicao é apenas ecoada.
         modo: literal | normalizado.
         """
-        return _service().verificar_citacao(
+        return svc_().verificar_citacao(
             citacao, trecho=trecho, data=data, modo=modo, proposicao=proposicao
         )
 
@@ -169,7 +196,7 @@ def create_mcp(home: str | None = None) -> FastMCP:
                 "citacoes": [],
                 "total": 0,
             }
-        return _service().verificar_texto(texto, data=data)
+        return svc_().verificar_texto(texto, data=data)
 
     @mcp.tool()
     def pesquisar_jurisprudencia(
@@ -186,7 +213,7 @@ def create_mcp(home: str | None = None) -> FastMCP:
         Pode gravar cache local. limite máximo: 50. Aceita siglas e nomes dos tribunais.
         """
         limite = max(1, min(int(limite), 50))
-        data_out = _service().pesquisar_jurisprudencia(
+        data_out = svc_().pesquisar_jurisprudencia(
             q,
             tribunais=list(tribunais) if tribunais is not None else None,
             desde=desde,
@@ -212,7 +239,7 @@ def create_mcp(home: str | None = None) -> FastMCP:
         max_chars máximo: 50.000. parte: ementa|inteiro_teor|voto|certidao.
         """
         max_chars = max(1, min(int(max_chars), 50_000))
-        data_out = _service().obter_decisao(
+        data_out = svc_().obter_decisao(
             id, parte=parte, max_chars=max_chars, offset=offset
         )
         return _wrap_result_text(data_out, ("texto",))
@@ -220,12 +247,12 @@ def create_mcp(home: str | None = None) -> FastMCP:
     @mcp.tool()
     def buscar_normas_cvm(q: Consulta, tipo: Identificador | None = None) -> dict[str, Any]:
         """Busca normas na CVM. Pode gravar cache local."""
-        return _service().buscar_normas_cvm(q, tipo=tipo)
+        return svc_().buscar_normas_cvm(q, tipo=tipo)
 
     @mcp.tool()
     def buscar_normas_bcb(q: Consulta, tipo: Identificador | None = None) -> dict[str, Any]:
         """Busca normativos no BCB/CMN. Pode gravar cache local."""
-        return _service().buscar_normas_bcb(q, tipo=tipo)
+        return svc_().buscar_normas_bcb(q, tipo=tipo)
 
     @mcp.tool()
     def obter_evidencia(
@@ -238,16 +265,69 @@ def create_mcp(home: str | None = None) -> FastMCP:
         max_chars máximo: 50.000.
         """
         max_chars = max(1, min(int(max_chars), 50_000))
-        return _service().obter_evidencia(
+        return svc_().obter_evidencia(
             capture_id, offset=offset, max_chars=max_chars
         )
 
     @mcp.tool()
     def listar_fontes() -> dict[str, Any]:
         """Lista conectores com cobertura declarada, último health e estado do circuito."""
-        return _service().listar_fontes()
+        return svc_().listar_fontes()
 
     return mcp
+
+
+class _SoLoopback:
+    """ASGI do modo local sem token: só cliente loopback direto, sem cabeçalhos de encaminhamento (F01)."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            cliente = (scope.get("client") or (None,))[0]
+            hdrs = {k.lower() for k, _ in scope["headers"]}
+            if cliente not in _LOCAL_CLIENTES or hdrs & {b"x-forwarded-for", b"forwarded"}:
+                if scope["type"] == "websocket":
+                    return
+                body = b'{"title":"erro","status":403,"detail":"modo local aceita apenas cliente loopback direto"}'
+                await send({"type": "http.response.start", "status": 403, "headers": [
+                    (b"content-type", b"application/problem+json"),
+                    (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
+
+
+class _BearerMCP:
+    """ASGI: exige Authorization: Bearer em toda requisição HTTP (inclusive rotas desconhecidas)."""
+
+    def __init__(self, app, token: str) -> None:
+        self.app, self.token = app, token
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            auth = dict(scope["headers"]).get(b"authorization", b"").decode("latin-1")
+            scheme, _, cred = auth.partition(" ")
+            if scheme.lower() != "bearer" or not hmac.compare_digest(cred.strip(), self.token):
+                body = b'{"title":"erro","status":401,"detail":"token invalido ou ausente"}'
+                await send({"type": "http.response.start", "status": 401, "headers": [
+                    (b"content-type", b"application/problem+json"),
+                    (b"www-authenticate", b"Bearer"),
+                    (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return
+        elif scope["type"] == "websocket":
+            return
+        await self.app(scope, receive, send)
+
+
+def build_http_app(mcp: FastMCP, *, host: str, token: str | None):
+    """App ASGI do MCP HTTP. Host não local exige token (verificado em toda requisição)."""
+    if host not in _LOCAL_HOSTS and not token:
+        raise RuntimeError("recusado: host não local exige token (--token ou FV_MCP_TOKEN)")
+    app = mcp.streamable_http_app(host=host, max_request_body_size=MAX_CORPO_HTTP)
+    return _BearerMCP(app, token) if token else _SoLoopback(app)
 
 
 def run_server(
@@ -256,10 +336,17 @@ def run_server(
     host: str = "127.0.0.1",
     port: int = 8765,
     home: str | None = None,
+    token: str | None = None,
+    registro: str | None = None,
 ) -> None:
-    mcp = create_mcp(home=home)
+    token = token or os.environ.get("FV_MCP_TOKEN")
+    if http and host not in _LOCAL_HOSTS and not token:
+        raise RuntimeError("recusado: host não local exige token (--token ou FV_MCP_TOKEN)")
+    mcp = create_mcp(home=home, registro=registro)
     if http:
-        mcp.run(transport="streamable-http", host=host, port=port)
+        import uvicorn
+
+        uvicorn.run(build_http_app(mcp, host=host, token=token), host=host, port=port)
     else:
         mcp.run(transport="stdio")
 
@@ -270,8 +357,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--home", default=None)
+    parser.add_argument("--token", default=None, help="bearer (obrigatório com host não local)")
+    parser.add_argument("--sem-registro", action="store_true", help="não grava entradas (registro sem_conteudo)")
     args = parser.parse_args(argv)
-    run_server(http=args.http, host=args.host, port=args.port, home=args.home)
+    run_server(http=args.http, host=args.host, port=args.port, home=args.home, token=args.token,
+               registro="sem_conteudo" if args.sem_registro else None)
 
 
 if __name__ == "__main__":

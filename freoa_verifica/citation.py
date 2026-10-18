@@ -584,6 +584,7 @@ _ALIAS_RE = re.compile(
     + r")(?!\w)",
     re.I,
 )
+_ADCT_ALIASES = frozenset({"adct", "ato das disposicoes constitucionais transitorias"})
 _ALIAS_SURFACE_MAP: dict[str, WorkKey] = {
     fold_alias(surface): work for surface, work in ALIAS_SURFACES
 }
@@ -706,9 +707,12 @@ def _parse_work_match(
         year = 1988
         number = "1988"
     conf = "exata"
+    flags = ["apelido"] if kind == "constituicao" else []
     if year is None:
         year = 0
-        conf = "provavel"
+        # Nasce exata com a marca; no fim de extract() vira provável, com `so_sem_ano` se o ano
+        # ausente for a única razão (decisão 0016, adendo): o serviço pode promovê-la (série única no acervo).
+        flags.append("sem_ano")
     work = WorkKey(authority, kind, number, year)
     return Citation(
         kind="norma",
@@ -716,7 +720,7 @@ def _parse_work_match(
         span=(m.start(), m.end()),
         work=work,
         confidence=conf,
-        flags=["apelido"] if kind == "constituicao" else [],
+        flags=flags,
     )
 
 
@@ -1182,7 +1186,7 @@ def extract(texto: str) -> list[Citation]:
                 span=(m.start(), alias_end),
                 work=work,
                 confidence="exata",
-                flags=["apelido"],
+                flags=["apelido", "adct"] if folded in _ADCT_ALIASES else ["apelido"],
             )
         )
         _mark(m.start(), alias_end)
@@ -1197,6 +1201,10 @@ def extract(texto: str) -> list[Citation]:
     # Anexar dispositivos às normas
     work_cites = _attach_devices(text, work_cites)
     for cite in work_cites:
+        if "adct" in cite.flags:
+            cite.flags.remove("adct")
+            if cite.path:
+                cite.path = f"adct/{cite.path}"
         if cite.path is None and _unattached_device_nearby(text, cite, work_cites):
             cite.confidence = "provavel"
         if "apelido" in cite.flags:
@@ -1204,6 +1212,10 @@ def extract(texto: str) -> list[Citation]:
             if cite.path is None:
                 cite.confidence = "provavel"
     raw_cites.extend(work_cites)
+    for cite in raw_cites:
+        if "sem_ano" in cite.flags and cite.confidence == "exata":
+            cite.confidence = "provavel"
+            cite.flags.append("so_sem_ano")
 
     # Ordenar por posição
     raw_cites.sort(key=lambda c: (c.span[0], -c.span[1]))

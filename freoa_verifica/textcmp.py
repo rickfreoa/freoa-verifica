@@ -33,6 +33,7 @@ class CmpResult:
     end: int | None
     transforms: list[str] = field(default_factory=list)
     diff: str | None = None
+    ancora_motivo: str | None = None  # preenchido quando a âncora foi recusada
 
 
 def _collapse_spaces(s: str) -> tuple[str, list[str]]:
@@ -105,87 +106,52 @@ def normalize(s: str, mode: str = "literal") -> tuple[str, list[str]]:
     return out, transforms
 
 
-def _map_norm_to_orig(original: str, mode: str) -> list[int]:
-    """Para cada índice no texto normalizado, o índice correspondente no original.
+def _map_norm_to_orig(original: str, mode: str) -> list[tuple[int, int]] | None:
+    """Para cada caractere do texto normalizado, o intervalo (início, fim) no original.
 
-    Construído reaplicando a mesma lógica caractere a caractere de forma
-    aproximada: usamos a normalização do original e alinhamos via varredura.
+    O mapa é construído durante a normalização, por grupo base+combinantes (NFC
+    pode fundir ou expandir). Devolve None se o resultado não reproduzir
+    `normalize(original, mode)`: nesse caso nenhuma âncora é confiável.
     """
-    # Abordagem: construir normalizado acumulando e registrar origem
-    import re
-
-    nfc = unicodedata.normalize("NFC", original)
-    # Mapa nfc_index → original_index (NFC pode fundir; usamos proporção simples)
-    # Como NFC em PT-BR quase nunca funde graphemes aqui, alinhamos 1:1 se lens iguais
-    if len(nfc) == len(original):
-        base_map = list(range(len(nfc)))
-        text = nfc
-    else:
-        # fallback: cada char NFC aponta para min(i, len-1) no original
-        base_map = [min(i, len(original) - 1) for i in range(len(nfc))]
-        text = nfc
-
-    # Substituir NBSP etc. mantendo índice
     chars: list[str] = []
-    origins: list[int] = []
-    for i, ch in enumerate(text):
-        if ch in ("\xa0", "\u202f", "\u2007"):
-            chars.append(" ")
-        elif ch in "\t\r\n\f\v":
-            chars.append(" ")
-        else:
-            chars.append(ch)
-        origins.append(base_map[i] if base_map else i)
-
-    # Colapsar espaços consecutivos
-    chars2: list[str] = []
-    origins2: list[int] = []
-    prev_space = False
-    for ch, orig in zip(chars, origins):
-        if ch == " ":
-            if prev_space:
+    spans: list[tuple[int, int]] = []
+    i, n = 0, len(original)
+    while i < n:
+        j = i + 1
+        while j < n and unicodedata.combining(original[j]):
+            j += 1
+        for ch in unicodedata.normalize("NFC", original[i:j]):
+            if ch in "\xa0\u202f\u2007\t\r\n\f\v":
+                ch = " "
+            if ch == " " and chars and chars[-1] == " " and spans[-1][1] == i:
+                spans[-1] = (spans[-1][0], j)  # colapso: o espaço cobre toda a corrida
                 continue
-            prev_space = True
-            chars2.append(ch)
-            origins2.append(orig)
-        else:
-            prev_space = False
-            chars2.append(ch)
-            origins2.append(orig)
+            if mode == "normalizado":
+                ch = _QUOTE_MAP.get(ch, _DASH_MAP.get(ch, ch))
+            chars.append(ch)
+            spans.append((i, j))
+        i = j
+    if mode == "normalizado":
+        keep = [
+            k for k, ch in enumerate(chars)
+            if not (ch == " " and k + 1 < len(chars) and chars[k + 1] in ",.;:!?%")
+        ]
+        chars = [chars[k].lower() for k in keep]
+        spans = [spans[k] for k in keep]
+    if "".join(chars) != normalize(original, mode)[0]:
+        return None
+    return spans
 
-    if mode == "literal":
-        return origins2
 
-    # normalizado: aspas, dashes, espaço antes de pontuação, lower
-    chars3: list[str] = []
-    origins3: list[int] = []
-    for ch, orig in zip(chars2, origins2):
-        if ch in _QUOTE_MAP:
-            chars3.append(_QUOTE_MAP[ch])
-            origins3.append(orig)
-        elif ch in _DASH_MAP:
-            chars3.append(_DASH_MAP[ch])
-            origins3.append(orig)
-        else:
-            chars3.append(ch)
-            origins3.append(orig)
-
-    # remover espaço antes de pontuação
-    chars4: list[str] = []
-    origins4: list[int] = []
-    i = 0
-    while i < len(chars3):
-        if (
-            chars3[i] == " "
-            and i + 1 < len(chars3)
-            and chars3[i + 1] in ",.;:!?%"
-        ):
-            i += 1
-            continue
-        chars4.append(chars3[i].lower())
-        origins4.append(origins3[i])
-        i += 1
-    return origins4
+def _anchor(original: str, mode: str, b: int, size: int, expected: str) -> tuple[int | None, int | None, str | None]:
+    """Intervalo no original para norm[b:b+size]; recusa se não reproduzir `expected`."""
+    spans = _map_norm_to_orig(original, mode)
+    if not spans or size <= 0 or b + size > len(spans):
+        return None, None, "mapa_indisponivel"
+    start, end = spans[b][0], spans[b + size - 1][1]
+    if normalize(original[start:end], mode)[0] != expected:
+        return None, None, "intervalo_nao_reproduz_trecho"
+    return start, end, None
 
 
 def _lexical_boundaries(haystack: str, start: int, length: int) -> bool:
@@ -223,15 +189,8 @@ def compare(trecho: str, texto_oficial: str, mode: str = "literal", *, exact_onl
 
     idx = _find_with_boundaries(norm_o, norm_t)
     if idx >= 0:
-        origins = _map_norm_to_orig(texto_oficial, mode)
-        # idx e idx+len no espaço normalizado → original
-        if origins and idx < len(origins):
-            start = origins[idx]
-            end_idx = idx + len(norm_t) - 1
-            end = origins[min(end_idx, len(origins) - 1)] + 1
-        else:
-            start, end = idx, idx + len(norm_t)
-        return CmpResult("match", start, end, transforms, None)
+        start, end, why = _anchor(texto_oficial, mode, idx, len(norm_t), norm_t)
+        return CmpResult("match", start, end, transforms, None, why)
 
     if exact_only:
         return CmpResult("no_match", None, None, transforms, None)
@@ -242,13 +201,9 @@ def compare(trecho: str, texto_oficial: str, mode: str = "literal", *, exact_onl
     # maior bloco contínuo
     best = max(blocks, key=lambda b: b.size) if blocks else None
     if best and best.size >= 0.85 * len(norm_t) and best.size > 0:
-        origins = _map_norm_to_orig(texto_oficial, mode)
-        if origins and best.b < len(origins):
-            start = origins[best.b]
-            end_idx = best.b + best.size - 1
-            end = origins[min(end_idx, len(origins) - 1)] + 1
-        else:
-            start, end = best.b, best.b + best.size
+        start, end, why = _anchor(
+            texto_oficial, mode, best.b, best.size, norm_o[best.b : best.b + best.size]
+        )
         diff = "\n".join(
             difflib.unified_diff(
                 norm_t.splitlines() or [norm_t],
@@ -270,7 +225,7 @@ def compare(trecho: str, texto_oficial: str, mode: str = "literal", *, exact_onl
                     lineterm="",
                 )
             )
-        return CmpResult("partial", start, end, transforms, diff[:2000])
+        return CmpResult("partial", start, end, transforms, diff[:2000], why)
 
     # ratio global como fallback para partial
     ratio = matcher.ratio()

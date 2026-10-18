@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from freoa_verifica.citation import Citation, extract, parse_one
 from freoa_verifica.ids import new_ulid
+from freoa_verifica.limites import cancelado
 from freoa_verifica.parsers.model import (
     AmbiguousProvision,
     ParsedDocument,
@@ -79,6 +80,7 @@ class ResolvedWork:
     quarantined: bool
     amending_act_texts: dict[str, str] = field(default_factory=dict)
     persisted_incomplete: bool = False
+    caminhos_conhecidos: frozenset[str] = frozenset()  # dispositivos de qualquer captura canônica da obra (0034)
 
 
 class Resolver(Protocol):
@@ -150,6 +152,40 @@ def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, sp
         span=span,
         trecho_oficial=t,
     )
+
+
+_INCOMPLETE_CODES = frozenset({"TRUNCATED", "EXTRACAO_INCOMPLETA"})
+
+
+def _scope_of(path: str) -> str:
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+def pode_negar(rw: ResolvedWork | None, path: str) -> str | None:
+    """C1 (decisão 0023): None autoriza DISPOSITIVO_INEXISTENTE; senão, o motivo que o impede."""
+    if rw is None or not rw.capture_id:
+        return "COBERTURA"
+    scope = _scope_of(path)
+    doc = rw.document
+    if any(i.code in _INCOMPLETE_CODES and (i.path is None or _scope_of(i.path) == scope)
+           for i in doc.issues):
+        return "ESTRUTURA_INCOMPLETA"
+    if rw.quarantined:
+        return "DOCUMENTO_QUARENTENADO"
+    if not any(_scope_of(p.path) == scope for p in doc.provisions):
+        return "DOCUMENTO_SEM_ESTRUTURA"
+    if path in rw.caminhos_conhecidos or path.removesuffix(".caput") in rw.caminhos_conhecidos:
+        return "ESTRUTURA_DIVERGENTE_ENTRE_CAPTURAS"  # outra captura canônica tinha o dispositivo (0034)
+    return None
+
+
+def negativa_dimension(rw: ResolvedWork | None, path: str) -> Dimension:
+    """Identidade de dispositivo ausente: not_found só se pode_negar autoriza."""
+    motivo = pode_negar(rw, path)
+    ev = [_ev_from_resolved(rw, path, None)] if rw is not None else []
+    if motivo is None:
+        return Dimension("not_found", "DISPOSITIVO_INEXISTENTE", ev)
+    return Dimension("unavailable" if motivo == "COBERTURA" else "unknown", motivo, ev)
 
 
 def _find_provision(doc: ParsedDocument, path: str) -> Provision | None:
@@ -226,10 +262,16 @@ def verificar(
     resolver: Resolver | None = None,
     *,
     _path: str | None = None,
+    persistir: bool = True,
 ) -> VerificationResult:
-    """Verifica citação nas dimensões identity/text/temporal/support."""
+    """Verifica citação nas dimensões identity/text/temporal/support.
+
+    `persistir=False` (fachada) devolve sem gravar recibo: quem finaliza grava (C4).
+    """
     if resolver is None:
         raise ValueError("resolver é obrigatório")
+    if not persistir:
+        repo = None
 
     cite = parse_one(citacao)
     if _path is not None:
@@ -331,34 +373,19 @@ def verificar(
 
     # Bloqueios documentais/por dispositivo ANTES de seleção/comparação
     if rw.quarantined:
-        if path and prov is None:
-            identity = Dimension(
-                "not_found",
-                "DISPOSITIVO_INEXISTENTE",
-                [_ev_from_resolved(rw, path, None)],
-            )
-        elif path is None:
-            identity = Dimension(
-                "unknown",
-                "DOCUMENTO_QUARENTENADO",
-                [_ev_from_resolved(rw, None, None)],
-            )
-        else:
-            identity = Dimension(
-                "unknown",
-                "DOCUMENTO_QUARENTENADO",
-                [_ev_from_resolved(rw, path, None)],
-            )
+        # C1: documento quarentenado nunca nega outro dispositivo; motivo vem de pode_negar.
+        motivo = (pode_negar(rw, path) if path and prov is None else None) or "DOCUMENTO_QUARENTENADO"
+        identity = Dimension("unknown", motivo, [_ev_from_resolved(rw, path, None)])
         result = VerificationResult(
             identity=identity,
             text=Dimension(
                 "unknown",
-                "DOCUMENTO_QUARENTENADO",
+                motivo,
                 [_ev_from_resolved(rw, path, None)],
             )
             if trecho is not None
             else Dimension("not_assessed", "SEM_TRECHO"),
-            temporal=Dimension("unknown", "DOCUMENTO_QUARENTENADO"),
+            temporal=Dimension("unknown", motivo),
             support=support,
             citation=cite,
         )
@@ -437,11 +464,7 @@ def verificar(
             [_ev_from_resolved(rw, None, None)],
         )
     elif prov is None:
-        identity = Dimension(
-            "not_found",
-            "DISPOSITIVO_INEXISTENTE",
-            [_ev_from_resolved(rw, path, None)],
-        )
+        identity = negativa_dimension(rw, path)
     else:
         identity = Dimension(
             "verified",
@@ -468,11 +491,16 @@ def verificar(
     if trecho is None:
         text_dim = Dimension("not_assessed", "SEM_TRECHO")
     elif prov is None:
-        text_dim = Dimension("not_found", "SEM_DISPOSITIVO")
+        text_dim = (Dimension("not_found", "SEM_DISPOSITIVO") if identity.status == "not_found"
+                    else Dimension("unknown", identity.reason_code))
     elif temporal_res and temporal_res.status in ("revogado", "nao_existia", "ambiguous"):
         text_dim = Dimension("unknown", temporal_res.reason or temporal_res.status.upper())
     elif temporal_res and temporal_res.reason in {"INICIO_SUCESSOR_DESCONHECIDO", "CAPTURA_DATA_INVALIDA"}:
         text_dim = Dimension("unknown", temporal_res.reason)
+    elif (temporal_res and not temporal_res.redaction_id
+          and temporal_res.status not in ("verified", "vigente_na_fonte")):
+        # C3: sem redação selecionada para a data pedida, não confrontar a atual.
+        text_dim = Dimension("unknown", temporal_res.reason or "HISTORICO_ANTERIOR_AUSENTE")
     else:
         if temporal_res and temporal_res.redaction_id:
             red = _redaction_by_id(prov, temporal_res.redaction_id)
@@ -613,25 +641,47 @@ def _persist(
     modo: str,
     result: VerificationResult,
 ) -> VerificationResult:
-    request = {
-        "citacao": citacao,
-        "trecho": trecho,
-        "data": data,
-        "modo": modo,
-    }
+    if conn is not None:
+        result.run_id = persistir_resultado(conn, citacao, trecho, data, modo, _result_to_json(result))
+    return result
+
+
+def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any]) -> str:
+    """Grava o recibo (C4): chamado só depois da finalização, com a conclusão devolvida.
+
+    Política `sem_conteudo` (C5): só hashes, política e dimensões; sem citação, trecho nem evidência.
+    """
+    from freoa_verifica.registro import politica_atual
+
+    request = {"citacao": citacao, "trecho": trecho, "data": data, "modo": modo}
     request_json = json.dumps(request, ensure_ascii=False, sort_keys=True)
     request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
-    result_json = json.dumps(_result_to_json(result), ensure_ascii=False, sort_keys=True)
-    if conn is not None:
-        run_id = new_ulid()
-        conn.execute(
-            "INSERT INTO run(id, request_hash, request_json, policy_version, result_json) "
-            "VALUES (?,?,?,?,?)",
-            (run_id, request_hash, request_json, POLICY_VERSION, result_json),
+    if politica_atual.get() == "sem_conteudo":
+        h = lambda v: None if v is None else hashlib.sha256(str(v).encode("utf-8")).hexdigest()  # noqa: E731
+        request_json = json.dumps(
+            {"registro": "sem_conteudo", **{f"{k}_sha256": h(v) for k, v in request.items()}},
+            sort_keys=True,
         )
-        conn.commit()
-        result.run_id = run_id
-    return result
+        result_json = json.dumps(
+            {
+                "registro": "sem_conteudo",
+                **{d: {"status": (resultado.get(d) or {}).get("status"),
+                       "reason_code": (resultado.get(d) or {}).get("reason_code")}
+                   for d in ("identity", "text", "temporal", "support")},
+                "algo_versions": resultado.get("algo_versions"),
+            },
+            ensure_ascii=False, sort_keys=True,
+        )
+    else:
+        result_json = json.dumps(resultado, ensure_ascii=False, sort_keys=True)
+    run_id = new_ulid()
+    conn.execute(
+        "INSERT INTO run(id, request_hash, request_json, policy_version, result_json) "
+        "VALUES (?,?,?,?,?)",
+        (run_id, request_hash, request_json, POLICY_VERSION, result_json),
+    )
+    conn.commit()
+    return run_id
 
 
 def populate_from_parsed(
@@ -646,8 +696,14 @@ def populate_from_parsed(
     work_date: str | None = None,
     label: str | None = None,
     home=None,
+    fts_alvo: str = "fts_redaction",
 ) -> ResolvedWork:
-    """Persiste obra parseada no repositório e devolve ResolvedWork."""
+    """Persiste obra parseada no repositório e devolve ResolvedWork.
+
+    `fts_alvo="fts_staging"`: candidato ao vivo (A7) é indexado direto no staging, nunca no canônico.
+    """
+    if fts_alvo not in ("fts_redaction", "fts_staging"):
+        raise ValueError(f"fts_alvo inválido: {fts_alvo}")
     from freoa_verifica.transport import Response
 
     from freoa_verifica.identity import validate_identity
@@ -699,9 +755,17 @@ def populate_from_parsed(
                     continue
                 conn.execute("INSERT INTO redaction(id, provision_id, text, text_sha256) VALUES (?,?,?,?)",
                              (new_ulid(), pid, red.text, digest_text))
-                if not red.struck:
-                    conn.execute("INSERT INTO fts_redaction(text, work_label, path) VALUES (?,?,?)",
+                if red.struck:
+                    continue
+                if fts_alvo == "fts_staging":
+                    conn.execute("INSERT INTO fts_staging(text, work_label, path) VALUES (?,?,?)",
                                  (red.text, label or work_key.number, prov.path))
+                else:
+                    conn.execute("INSERT INTO fts_redaction(text, rubrica, work_label, path) VALUES (?,?,?,?)",
+                                 (red.text, prov.rubrica, label or work_key.number, prov.path))
+        if cancelado():  # orçamento estourou: levanta dentro do `with conn` e desfaz a transação
+            from freoa_verifica.connectors.base import Unavailable
+            raise Unavailable("orcamento")
 
     return ResolvedWork(
         work_id=work_id,

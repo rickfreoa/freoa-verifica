@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from typing import Any
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -104,6 +105,8 @@ class _Ctx:
     issues: list[Issue] = field(default_factory=list)
     started: bool = False
     last_path: str | None = None
+    # continuações acumuladas por redação (id -> (redação, partes)); juntadas uma vez em _flush_continuations
+    cont: dict[int, tuple[Any, list[str]]] = field(default_factory=dict)
 
 
 def parse_cvm_docx(
@@ -329,6 +332,7 @@ def parse_cvm_docx(
             for prov in ctx.provisions.values():
                 if prov.scope == scope:
                     ctx.issues.append(Issue("ORPHAN_ANNOTATION", prov.path, note["annotation"].raw, "provision"))
+    _flush_continuations(ctx)
     doc = ParsedDocument(
         profile="cvm_docx",
         parser_version=PARSER_VERSION,
@@ -691,8 +695,16 @@ def _append_continuation(ctx: _Ctx, text: str) -> None:
     end = start + len(text)
     extra = _normalize_ws(text)
     if extra:
-        target.text = _normalize_ws(f"{target.text} {extra}")
+        # partes já normalizadas: juntar com espaço equivale a renormalizar o acumulado (sem custo quadrático)
+        _, parts = ctx.cont.setdefault(id(target), (target, [target.text] if target.text else []))
+        parts.append(extra)
     target.span = (target.span[0], end)
+
+
+def _flush_continuations(ctx: _Ctx) -> None:
+    for target, parts in ctx.cont.values():
+        target.text = " ".join(parts)
+    ctx.cont.clear()
 
 
 def _add_red(

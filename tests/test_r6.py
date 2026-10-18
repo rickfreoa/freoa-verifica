@@ -95,7 +95,9 @@ def test_specialized_searches_authenticate(populated,monkeypatch,method,source,a
     if attack=='missing': path.unlink()
     else: path.write_bytes(b'bad')
     expected='EVIDENCIA_AUSENTE' if attack=='missing' else 'EVIDENCIA_CORROMPIDA'
-    assert getattr(s,method)('regra')['reason_code']==expected
+    r=getattr(s,method)('regra')  # evidência inválida rebaixa só o item (busca não cai)
+    assert r['status']=='parcial' and r['itens'][0]['nao_indexado'] and r['itens'][0]['motivo']==expected
+    assert r['itens'][0]['capture_id'] is None
 
 
 def test_all_works_have_year_or_reason(populated, tmp_path):
@@ -141,16 +143,19 @@ def test_auxiliary_facades_authenticate(populated, attack, monkeypatch):
     else: p.write_bytes(b'corrupt')
     expected='EVIDENCIA_AUSENTE' if attack=='missing' else 'EVIDENCIA_CORROMPIDA'
     calls=[('obter_dispositivo',{'citacao':q}),('resolver_citacao',{'citacao':q}),
-           ('historico_dispositivo',{'citacao':q}),('obter_evidencia',{'capture_id':rw.capture_id}),
-           ('buscar_legislacao',{'q':'principal'})]
+           ('historico_dispositivo',{'citacao':q}),('obter_evidencia',{'capture_id':rw.capture_id})]
     with Verifica(s.home) as fresh:
         for svc in [s,fresh]:
             for name,params in calls:
                 result=getattr(svc,name)(**params)
                 assert result=={'status':'unavailable','motivo':expected,'reason_code':expected}
+        for svc in [s,fresh]:  # busca: itens com evidência inválida viram candidatos não indexados
+            r=svc.buscar_legislacao('principal')
+            assert r['status']=='parcial' and r['itens']
+            assert all(i['nao_indexado'] and i['motivo']==expected and not i['vigencia'] for i in r['itens'])
         monkeypatch.setenv('FV_HOME',str(s.home))
         for cmd,args in [('lei',[q]),('resolve',[q]),('historico',[q]),
-                         ('evidencia',[rw.capture_id]),('busca',['principal'])]:
+                         ('evidencia',[rw.capture_id])]:
             cli=subprocess.run([sys.executable,'-m','freoa_verifica.cli',cmd,*args,'--json'],
                                capture_output=True,text=True)
             assert cli.returncode==0, cli.stderr
@@ -158,13 +163,13 @@ def test_auxiliary_facades_authenticate(populated, attack, monkeypatch):
         with TestClient(create_app(home=str(s.home),token='test-token')) as client:
             for route,params in [('/v1/dispositivos',{'citacao':q}),('/v1/citacoes/resolver',{'citacao':q}),
                                  ('/v1/dispositivos/historico',{'citacao':q}),
-                                 (f'/v1/evidencias/{rw.capture_id}',{}),('/v1/legislacao',{'q':'principal'})]:
+                                 (f'/v1/evidencias/{rw.capture_id}',{})]:
                 result=client.get(route,params=params,headers={'Authorization':'Bearer test-token'})
                 assert result.status_code==200
                 assert result.json()['reason_code']==expected
         server=create_mcp(home=str(s.home))
         from freoa_verifica import mcp_server
-        monkeypatch.setattr(mcp_server,'_svc',s)
+        monkeypatch.setitem(mcp_server._servicos, str(s.home), s)
         async def run():
             async with Client(server) as client:
                 for name,params in calls:
@@ -203,7 +208,7 @@ def test_decision_queries_authenticate(populated,attack,monkeypatch):
         for route,params in [(f'/v1/decisoes/{did}',{}),('/v1/jurisprudencia',{'q':'principal'})]:
             assert client.get(route,params=params,headers={'Authorization':'Bearer test-token'}).json()['reason_code']==expected
     server=create_mcp(home=str(s.home))
-    monkeypatch.setattr(mcp_server,'_svc',s)
+    monkeypatch.setitem(mcp_server._servicos, str(s.home), s)
     async def run():
         async with Client(server) as client:
             for name,params in calls:

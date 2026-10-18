@@ -27,12 +27,13 @@ def _migration_files() -> list[tuple[int, str]]:
     items: list[tuple[int, str]] = []
     for entry in root.iterdir():
         name = entry.name
-        if not name.endswith(".sql"):
+        if not name.endswith((".sql", ".py")) or name == "__init__.py":
             continue
         prefix = name.split("_", 1)[0]
         if not prefix.isdigit():
             continue
-        items.append((int(prefix), entry.read_text(encoding="utf-8")))
+        # migração Python: texto sentinela "#py:<módulo>", demais consumidores só leem as .sql
+        items.append((int(prefix), entry.read_text(encoding="utf-8") if name.endswith(".sql") else f"#py:{name[:-3]}"))
     items.sort(key=lambda item: item[0])
     return items
 
@@ -90,8 +91,13 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             for version, sql in _migration_files():
                 if version in current:
                     continue
-                for statement in split_sql_statements(sql):
-                    conn.execute(statement)
+                if sql.startswith("#py:"):  # módulo com migrar(conn), na mesma transação
+                    import importlib
+
+                    importlib.import_module(f"freoa_verifica.store.migrations.{sql[4:]}").migrar(conn)
+                else:
+                    for statement in split_sql_statements(sql):
+                        conn.execute(statement)
                 conn.execute(
                     "INSERT INTO schema_version(version) VALUES (?)", (version,)
                 )
@@ -103,7 +109,7 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
         conn.isolation_level = previous
 
 
-def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000) -> sqlite3.Connection:
+def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000, check_same_thread: bool = True) -> sqlite3.Connection:
     """Abre SQLite com foreign_keys, WAL e migrações aplicadas."""
     if path is None:
         home = data_home()
@@ -112,10 +118,25 @@ def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000) ->
     else:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=busy_timeout_ms / 1000)
+    conn = sqlite3.connect(str(path), timeout=busy_timeout_ms / 1000, check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=WAL")
     apply_migrations(conn)
+    _carimbar_derivados(conn)
     return conn
+
+
+def _carimbar_derivados(conn: sqlite3.Connection) -> None:
+    """Home vazio nasce com o DERIVED_VERSION atual; home com obras e sem versão fica incompatível (C6)."""
+    from freoa_verifica.derivados import DERIVED_VERSION
+
+    try:
+        if conn.execute("SELECT 1 FROM work LIMIT 1").fetchone():
+            return
+        conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('derived_version', ?)",
+                     (str(DERIVED_VERSION),))
+        conn.commit()
+    except sqlite3.OperationalError:  # esquema parcial (testes de migração)
+        pass

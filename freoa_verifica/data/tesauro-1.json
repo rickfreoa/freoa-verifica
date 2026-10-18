@@ -1,0 +1,26 @@
+{
+  "versao": "tesauro-1",
+  "nota": "Equivalências jurídicas determinísticas e bidirecionais; expandem a consulta por OR. Alterar exige nova versão.",
+  "pares": [
+    ["tag along", "art. 254-A"],
+    ["tag along", "alienação de controle"],
+    ["art. 254-A", "alienação de controle"],
+    ["recesso", "retirada"],
+    ["direito de recesso", "direito de retirada"],
+    ["apuração de haveres", "dissolução parcial"],
+    ["OPA", "oferta pública de aquisição"],
+    ["OPA", "oferta pública de aquisição de ações"],
+    ["fato relevante", "ato ou fato relevante"],
+    ["conflito de interesses", "interesse conflitante"],
+    ["abuso de poder de controle", "abuso do poder de controle"],
+    ["incorporação de ações", "art. 252"],
+    ["dever de diligência", "art. 153"],
+    ["dever de lealdade", "art. 155"],
+    ["fechamento de capital", "cancelamento de registro"],
+    ["companhia aberta", "sociedade anônima de capital aberto"],
+    ["ações em tesouraria", "ações de própria emissão"],
+    ["poison pill", "pílula de veneno"],
+    ["business judgment rule", "regra de julgamento empresarial"],
+    ["acordo de acionistas", "acordo de voto"]
+  ]
+}

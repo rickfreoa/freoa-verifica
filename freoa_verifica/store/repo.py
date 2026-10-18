@@ -88,6 +88,10 @@ def upsert_work(
     work_id: str | None = None,
 ) -> str:
     wid = work_id or new_ulid()
+    if label is not None and authority == "cvm":
+        from freoa_verifica.rotulos import corrigir_mojibake
+
+        label = corrigir_mojibake(label)
     conn.execute(
         "INSERT INTO work(id, jurisdiction, authority, kind, number, year, label) "
         "VALUES (?,?,?,?,?,?,?) "
@@ -301,10 +305,11 @@ def index_redaction(
     text: str,
     work_label: str,
     path: str,
+    rubrica: str | None = None,
 ) -> None:
     conn.execute(
-        "INSERT INTO fts_redaction(text, work_label, path) VALUES (?,?,?)",
-        (text, work_label, path),
+        "INSERT INTO fts_redaction(text, rubrica, work_label, path) VALUES (?,?,?,?)",
+        (text, rubrica, work_label, path),
     )
     conn.commit()
 
@@ -328,13 +333,19 @@ def index_decision(
     conn.commit()
 
 
-def search_redactions(conn: sqlite3.Connection, q: str, limit: int = 10) -> list[dict[str, Any]]:
+def search_redactions(conn: sqlite3.Connection, q: str, limit: int = 10, *,
+                      source_id: str | None = None, table: str = "fts_redaction") -> list[dict[str, Any]]:
+    """`source_id` filtra antes do LIMIT; `table` escolhe o FTS canônico ou o staging (A7)."""
+    where, params = f"{table} MATCH ?", [q]
+    if source_id:
+        where += (" AND work_label IN (SELECT COALESCE(w.label,w.number) FROM work w "
+                  "JOIN provision p ON p.work_id=w.id JOIN redaction r ON r.provision_id=p.id "
+                  "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
+                  "JOIN capture c ON c.id=e.capture_id WHERE c.source_id=?)")
+        params.append(source_id)
     rows = conn.execute(
-        "SELECT text, work_label, path, bm25(fts_redaction) AS score "
-        "FROM fts_redaction WHERE fts_redaction MATCH ? "
-        "ORDER BY score LIMIT ?",
-        (q, limit),
-    ).fetchall()
+        f"SELECT text, work_label, path, bm25({table}) AS score FROM {table} "
+        f"WHERE {where} ORDER BY score LIMIT ?", (*params, limit)).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -367,6 +378,33 @@ def search_decisions(
         "ORDER BY score LIMIT ?"
     )
     rows = conn.execute(sql, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def decisions_by_number(conn: sqlite3.Connection, court: str, number: str) -> list[dict[str, Any]]:
+    """Decisões confirmadas do tribunal com o número (sem pontos), no formato de search_local_decisions."""
+    rows = conn.execute("""
+        SELECT d.court, d.class, d.official_id, d.id AS decision_id, d.organ, d.rapporteur,
+               d.number, d.judgment_date, d.publication_date, dd.capture_id, dd.sha256,
+               dd.nivel_prova, c.url AS url_oficial,
+               (SELECT text FROM decision_document WHERE decision_id=d.id AND kind='ementa'
+                ORDER BY created_at DESC, id DESC LIMIT 1) AS ementa,
+               (SELECT text FROM decision_document WHERE decision_id=d.id AND kind='inteiro_teor'
+                ORDER BY created_at DESC, id DESC LIMIT 1) AS inteiro_teor,
+               (SELECT capture_id FROM decision_document
+                WHERE decision_id=d.id AND kind='inteiro_teor'
+                ORDER BY created_at DESC, id DESC LIMIT 1) AS full_capture_id
+        FROM decision d
+        LEFT JOIN decision_document dd ON dd.id=(
+            SELECT id FROM decision_document
+            WHERE decision_id=d.id
+              AND (kind='inteiro_teor' OR (kind='ementa' AND COALESCE(text,'')!=''))
+            ORDER BY CASE WHEN kind='ementa' THEN 0 ELSE 1 END, created_at DESC, id DESC LIMIT 1)
+        LEFT JOIN capture c ON c.id=dd.capture_id
+        WHERE d.court=? AND d.identity_status='confirmed'
+          AND UPPER(REPLACE(REPLACE(d.number,'.',''),' ',''))=?
+        ORDER BY d.judgment_date DESC, d.id
+    """, (court.upper(), number.replace(".", "").replace(" ", "").upper())).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -419,7 +457,7 @@ def search_local_decisions(
     rows = conn.execute(f"""
         SELECT fts_decision.ementa, fts_decision.inteiro_teor,
                fts_decision.court, fts_decision.class, fts_decision.official_id,
-               bm25(fts_decision) AS score, d.id AS decision_id,
+               bm25(fts_decision, 5.0, 1.0, 0.0, 0.0, 0.0) AS score, d.id AS decision_id,
                d.organ, d.rapporteur, d.number, d.judgment_date, d.publication_date,
                dd.capture_id, dd.sha256, dd.nivel_prova, c.url AS url_oficial,
                (SELECT capture_id FROM decision_document
@@ -467,6 +505,7 @@ def persist_parsed_document(
     work_id: str,
     work_date: str | None = None,
     amending_act_texts: dict[str, str] | None = None,
+    candidato_ao_vivo: bool | None = None,
 ) -> str:
     """Persiste parsed_document, extract e occurrences (redaction → extract/capture)."""
     text_sha = hashlib.sha256((document.text or "").encode("utf-8")).hexdigest()
@@ -527,35 +566,98 @@ def persist_parsed_document(
          json.dumps(amending_act_texts or {}, ensure_ascii=False),
          json.dumps(events, ensure_ascii=False), capture_id),
     )
-    for prov in document.provisions:
-        prow = conn.execute(
-            "SELECT id FROM provision WHERE work_id=? AND scope=? AND path=?",
-            (work_id, prov.scope, prov.path),
-        ).fetchone()
-        if prow is None:
-            continue
-        reds = conn.execute(
-            "SELECT id, text_sha256 FROM redaction WHERE provision_id=? ORDER BY rowid",
-            (prow["id"],),
-        ).fetchall()
-        captured_hashes = {hashlib.sha256(r.text.encode("utf-8")).hexdigest() for r in prov.redactions}
-        for red in reds:
-            if red["text_sha256"] not in captured_hashes:
-                continue
-            existing = conn.execute(
-                "SELECT id FROM occurrence WHERE redaction_id=? AND extract_id=?",
-                (red["id"], extract_id),
-            ).fetchone()
-            if existing:
-                continue
-            conn.execute(
-                "INSERT INTO occurrence("
-                "id, redaction_id, extract_id, anchor_json, editorial_json"
-                ") VALUES (?,?,?,?,?)",
-                (new_ulid(), red["id"], extract_id, None, None),
-            )
+    if candidato_ao_vivo is not None:  # None preserva a marca existente (reprocessamento)
+        conn.execute("UPDATE parsed_document SET candidato_ao_vivo=? WHERE capture_id=?",
+                     (1 if candidato_ao_vivo else 0, capture_id))
+    sincronizar_derivados(conn, capture_id=capture_id, work_id=work_id, document=document, extract_id=extract_id)
     conn.commit()
     return extract_id
+
+
+def sincronizar_derivados(
+    conn: sqlite3.Connection, *, capture_id: str, work_id: str, document: Any, extract_id: str | None,
+) -> None:
+    """Atômico: DML e DDL de triggers num só SAVEPOINT, sem commit intermediário (C6).
+
+    Falha ou morte do processo desfaz tudo, inclusive a suspensão das triggers (DDL é transacional no SQLite).
+    """
+    conn.execute("SAVEPOINT sync_derivados")
+    try:
+        _sincronizar_derivados(conn, capture_id=capture_id, work_id=work_id, document=document,
+                               extract_id=extract_id)
+    except BaseException:
+        conn.execute("ROLLBACK TO sync_derivados")
+        conn.execute("RELEASE sync_derivados")
+        raise
+    conn.execute("RELEASE sync_derivados")
+
+
+def _sincronizar_derivados(
+    conn: sqlite3.Connection, *, capture_id: str, work_id: str, document: Any, extract_id: str | None,
+) -> None:
+    """Regrava provisions, redações e ocorrências da captura a partir do modelo (C6).
+
+    Remove antes os derivados antigos da captura: ocorrências de suas extrações e as redações e
+    dispositivos que só elas sustentavam e que o modelo atual não tem mais. Caminhos novos são criados.
+    """
+    antigas = conn.execute(
+        "SELECT o.id AS oid, o.redaction_id AS rid, r.provision_id AS pid FROM occurrence o "
+        "JOIN extract e ON e.id=o.extract_id JOIN redaction r ON r.id=o.redaction_id "
+        "WHERE e.capture_id=?", (capture_id,)).fetchall()
+    # Ocorrências antigas dão lugar às da extração atual; as de outras capturas não se tocam.
+    for r in antigas:
+        conn.execute("UPDATE relation SET evidence_occurrence_id=NULL WHERE evidence_occurrence_id=?", (r["oid"],))
+        conn.execute("UPDATE event SET evidence_occurrence_id=NULL WHERE evidence_occurrence_id=?", (r["oid"],))
+        conn.execute("DELETE FROM occurrence WHERE id=?", (r["oid"],))
+    atuais: dict[tuple[str, str], set[str]] = {}
+    for prov in document.provisions:
+        atuais[(prov.scope, prov.path)] = {
+            hashlib.sha256(r.text.encode("utf-8")).hexdigest() for r in prov.redactions}
+    for prov in document.provisions:
+        conn.execute(
+            "INSERT INTO provision(id, work_id, scope, path) VALUES (?,?,?,?) "
+            "ON CONFLICT(work_id, scope, path) DO NOTHING", (new_ulid(), work_id, prov.scope, prov.path))
+        pid = conn.execute("SELECT id FROM provision WHERE work_id=? AND scope=? AND path=?",
+                           (work_id, prov.scope, prov.path)).fetchone()["id"]
+        for red in prov.redactions:
+            h = hashlib.sha256(red.text.encode("utf-8")).hexdigest()
+            row = conn.execute("SELECT id FROM redaction WHERE provision_id=? AND text_sha256=?",
+                               (pid, h)).fetchone()
+            rid = row["id"] if row else new_ulid()
+            if not row:
+                conn.execute("INSERT INTO redaction(id, provision_id, text, text_sha256) VALUES (?,?,?,?)",
+                             (rid, pid, red.text, h))
+            if extract_id and not conn.execute(
+                    "SELECT 1 FROM occurrence WHERE redaction_id=? AND extract_id=?", (rid, extract_id)).fetchone():
+                conn.execute("INSERT INTO occurrence(id, redaction_id, extract_id, anchor_json, editorial_json) "
+                             "VALUES (?,?,?,?,?)", (new_ulid(), rid, extract_id, None, None))
+    # Órfãs: redações antigas ausentes do modelo e sem ocorrência em outra captura; depois os dispositivos vazios.
+    triggers = [(n, q) for n, q in conn.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='redaction'").fetchall()]
+    orfas = []
+    for r in antigas:
+        prov = conn.execute("SELECT scope, path FROM provision WHERE id=?", (r["pid"],)).fetchone()
+        sha = conn.execute("SELECT text_sha256 FROM redaction WHERE id=?", (r["rid"],)).fetchone()
+        if prov is None or sha is None:
+            continue
+        if sha[0] in atuais.get((prov["scope"], prov["path"]), set()):
+            continue
+        if conn.execute("SELECT 1 FROM occurrence WHERE redaction_id=?", (r["rid"],)).fetchone():
+            continue
+        orfas.append((r["rid"], r["pid"]))
+    if orfas:
+        for n, _ in triggers:
+            conn.execute(f'DROP TRIGGER "{n}"')
+        for rid, _ in orfas:
+            conn.execute("DELETE FROM event WHERE redaction_id=?", (rid,))
+            conn.execute("DELETE FROM redaction WHERE id=?", (rid,))
+        for pid in {p for _, p in orfas}:
+            if not conn.execute("SELECT 1 FROM redaction WHERE provision_id=?", (pid,)).fetchone():
+                conn.execute("DELETE FROM event WHERE provision_id=?", (pid,))
+                conn.execute("UPDATE provision SET parent_id=NULL WHERE parent_id=?", (pid,))
+                conn.execute("DELETE FROM provision WHERE id=?", (pid,))
+        for _, q in triggers:
+            conn.execute(q)
 
 
 def get_parsed_document(
@@ -570,7 +672,7 @@ def get_parsed_document(
 def captures_for_work(conn: sqlite3.Connection, work_id: str) -> list[dict[str, Any]]:
     """Capturas ligadas à obra via redaction → occurrence → extract."""
     rows = conn.execute(
-        "SELECT c.*, pd.profile, pd.parser_version, pd.quarantined, "
+        "SELECT c.*, pd.profile, pd.parser_version, pd.quarantined, pd.candidato_ao_vivo, "
         "pd.issues_json, pd.ambiguous_paths_json, pd.editorial_json "
         "FROM capture c LEFT JOIN parsed_document pd ON pd.capture_id=c.id "
         "WHERE pd.work_id=? OR c.id IN ("
@@ -608,3 +710,44 @@ def proof_level_for_capture(
     if kind_doc == "inteiro_teor":
         return "inteiro_teor_capturado"
     return "ementa_capturada"
+
+
+FONTES_COMPILADAS = ("planalto", "cvm_normas", "bcb")
+
+
+def avaliar_monotonia(conn: sqlite3.Connection, work_id: str, *, marcar: bool = False
+                      ) -> tuple[set[tuple[str, str]], list[dict[str, Any]], set[str]]:
+    """Decisão 0034: texto compilado não apaga dispositivos. Percorre as capturas não candidatas da obra
+    da mais antiga à mais nova; a que perde caminhos do modelo canônico vigente não é promovida.
+
+    Devolve (caminhos do canônico vigente, perdas [{capture_id, motivo}], caminhos de qualquer captura
+    canônica). `marcar=True` grava `candidato_ao_vivo=1` nas rebaixadas."""
+    rows = conn.execute(
+        "SELECT pd.capture_id, pd.model_json FROM parsed_document pd JOIN capture c ON c.id=pd.capture_id "
+        f"WHERE pd.work_id=? AND pd.model_json IS NOT NULL AND pd.candidato_ao_vivo=0 "
+        f"AND c.source_id IN ({','.join('?' * len(FONTES_COMPILADAS))}) ORDER BY c.fetched_at, c.id",
+        (work_id, *FONTES_COMPILADAS)).fetchall()
+    vigente: set[tuple[str, str]] | None = None
+    perdas: list[dict[str, Any]] = []
+    todos: set[str] = set()
+    for r in rows:
+        provs = json.loads(r["model_json"]).get("provisions") or []
+        caminhos = {(p.get("scope") or "", p["path"]) for p in provs}
+        todos |= {c[1] for c in caminhos}
+        if vigente is None or vigente <= caminhos:
+            vigente = caminhos
+            continue
+        perdas.append({"work_id": work_id, "capture_id": r["capture_id"], "motivo": "PERDA_ESTRUTURAL",
+                       "perdidos": sorted(c[1] for c in vigente - caminhos)[:20]})
+        if marcar:
+            conn.execute("UPDATE parsed_document SET candidato_ao_vivo=1 WHERE capture_id=?", (r["capture_id"],))
+    return vigente or set(), perdas, todos
+
+
+def aplicar_monotonia(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Rebaixa, em todas as obras, as capturas que perdem estrutura (idempotente)."""
+    out: list[dict[str, Any]] = []
+    for r in conn.execute("SELECT work_id FROM parsed_document WHERE work_id IS NOT NULL "
+                          "GROUP BY work_id HAVING COUNT(*)>1").fetchall():
+        out += avaliar_monotonia(conn, r[0], marcar=True)[1]
+    return out
