@@ -54,7 +54,23 @@ def gravar(conn: sqlite3.Connection, ws: WorkStatus) -> None:
         )
 
 
-def carregar(conn: sqlite3.Connection | None, rw: Any) -> WorkStatus | None:
+def _autentico(conn: sqlite3.Connection, ws: WorkStatus, home: Any) -> bool:
+    """A captura de situação existe, pertence à situação gravada e o blob confere (sha256)."""
+    from freoa_verifica.store import blobs
+
+    if not ws.captura_id:
+        return ws.situacao == "ilegivel"  # sem captura só sobra o rebaixamento
+    cap = conn.execute("SELECT sha256 FROM capture WHERE id=?", (ws.captura_id,)).fetchone()
+    if cap is None or not cap["sha256"] or cap["sha256"] != ws.sha256:
+        return False
+    try:
+        blobs.authenticate_blob(cap["sha256"], home=home)
+    except (OSError, ValueError, blobs.BlobCorruption):
+        return False
+    return True
+
+
+def carregar(conn: sqlite3.Connection | None, rw: Any, home: Any = None) -> WorkStatus | None:
     """Situação da obra. None = sem efeito (sem banco ou fonte sem situação cadastral).
 
     CVM/BCB/CMN sem registro valem `ilegivel`: o silêncio não é vigência.
@@ -65,8 +81,12 @@ def carregar(conn: sqlite3.Connection | None, rw: Any) -> WorkStatus | None:
         "SELECT s.*, c.url AS url FROM work_status s LEFT JOIN capture c ON c.id=s.captura_id "
         "WHERE s.work_id=?", (rw.work_id,)).fetchone()
     if row is not None:
-        return WorkStatus(row["work_id"], row["situacao"], row["texto_oficial"], row["ato_revogador"],
-                          row["data_efeito"], row["captura_id"], row["sha256"], row["lido_em"], row["url"])
+        ws = WorkStatus(row["work_id"], row["situacao"], row["texto_oficial"], row["ato_revogador"],
+                        row["data_efeito"], row["captura_id"], row["sha256"], row["lido_em"], row["url"])
+        # Captura de situação adulterada ou ausente: a conclusão temporal não pode apoiar-se nela.
+        if rw.work_key.authority in AUTORIDADES_COM_SITUACAO and not _autentico(conn, ws, home):
+            return WorkStatus(rw.work_id, "ilegivel", "captura_de_situacao_nao_autentica")
+        return ws
     if rw.work_key.authority in AUTORIDADES_COM_SITUACAO:
         return WorkStatus(rw.work_id, "ilegivel", "situacao_nao_lida")
     return None
@@ -119,7 +139,8 @@ def registrar_cvm(conn: sqlite3.Connection, home: Any, connector: Any, cand: Any
     try:
         resp = connector.fetch_situacao(cand)
         captura = repo.save_capture(conn, resp, "cvm_normas", home=home)
-        lida = ler_situacao_pagina(resp.body)
+        from freoa_verifica.connectors.cvm_normas import _parse_key
+        lida = ler_situacao_pagina(resp.body, _parse_key(cand.key))
         if lida is None:
             ws = WorkStatus(rw.work_id, "ilegivel", "pagina_do_ato_ilegivel", None, None,
                             captura, resp.sha256, resp.fetched_at)

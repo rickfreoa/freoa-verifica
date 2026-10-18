@@ -414,10 +414,11 @@ def _e_anexo(c: Candidate) -> bool:
     return bool(re.search(r"(?i)\banexo\b|/anexos/", f"{c.title} {c.url}"))
 
 
-def ler_situacao_pagina(body: bytes) -> dict[str, Any] | None:
+def ler_situacao_pagina(body: bytes, esperado: tuple[str | None, int | None] | None = None) -> dict[str, Any] | None:
     """Situação cadastral declarada na página do ato (C2).
 
-    None = página ilegível (sem título/artigo): o chamador grava `ilegivel`.
+    None = página ilegível (sem título/artigo, ou sem a identidade do ato: espécie e número
+    no título, iguais a `esperado` quando dado): o chamador grava `ilegivel`.
     A ausência de marca de revogação numa página lida é `vigente_declarada`,
     nunca prova de vigência temporal.
     """
@@ -429,6 +430,9 @@ def ler_situacao_pagina(body: bytes) -> dict[str, Any] | None:
     if not h2 or not tree.xpath("//article"):
         return None
     title = h2[0].text_content().strip()
+    especie, numero = _especie_numero(title)
+    if especie is None or numero is None or (esperado is not None and esperado != (especie, numero)):
+        return None  # "Serviço indisponível" ou página de outro ato não declara situação alguma
     textos = [(p.text_content() or "").strip() for p in tree.xpath("//article//p")]
     marca = re.compile(r"(?is)^\W*(revogad[ao]|cancelad[ao])\b")
     achado = next((t for t in textos if marca.match(t)), None)

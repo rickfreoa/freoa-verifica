@@ -912,11 +912,17 @@ class Verifica:
                     label=cand.title,
                 )
                 # A7: candidato ao vivo não entra no FTS canônico; vai para o staging.
-                with self.conn:
-                    self.conn.execute(
-                        "INSERT INTO fts_staging(text, work_label, path) "
-                        "SELECT text, work_label, path FROM fts_redaction WHERE rowid>?", (marca,))
-                    self.conn.execute("DELETE FROM fts_redaction WHERE rowid>?", (marca,))
+                try:
+                    with self.conn:
+                        self.conn.execute(
+                            "INSERT INTO fts_staging(text, work_label, path) "
+                            "SELECT text, work_label, path FROM fts_redaction WHERE rowid>?", (marca,))
+                        self.conn.execute("DELETE FROM fts_redaction WHERE rowid>?", (marca,))
+                except Exception:
+                    # a indexação já gravou no canônico (commit próprio): falha no staging desfaz o canônico
+                    with self.conn:
+                        self.conn.execute("DELETE FROM fts_redaction WHERE rowid>?", (marca,))
+                    raise
                 capture_id = rw.capture_id
                 if connector.id == "cvm_normas":  # C2
                     situacao.registrar_cvm(self.conn, self.home, connector, cand, rw)
@@ -961,6 +967,8 @@ class Verifica:
         if cite.work is None:
             out["status"] = "formato_invalido" if cite.kind == "norma" else "encontrada"
             return out
+        if (pend := self._so_conferencia(cite, citacao)) is not None:
+            return {**out, **pend}
         try:
             resolved = self._resolve(cite.work, strict=True)
         except SourceUnavailable as exc:
@@ -1007,6 +1015,8 @@ class Verifica:
         path = caminho
         if citacao:
             cite = parse_one(citacao)
+            if (pend := self._so_conferencia(cite, citacao)) is not None:
+                return pend
             if cite and cite.work:
                 path = path or cite.path
                 try:
@@ -1039,7 +1049,7 @@ class Verifica:
                         return {"status": "indisponivel", "motivo": exc.reason}
         if rw is None:
             return {"status": "inexistente"}
-        sit = situacao.carregar(self.conn, rw)  # C2
+        sit = situacao.carregar(self.conn, rw, self.home)  # C2
         if not path:
             return {
                 "status": "encontrada",
@@ -1135,6 +1145,8 @@ class Verifica:
         cite = parse_one(citacao)
         if cite is None or cite.work is None or not cite.path:
             return {"status": "formato_invalido", "citacao": citacao}
+        if (pend := self._so_conferencia(cite, citacao)) is not None:
+            return pend
         try:
             resolved = self._resolve(cite.work, strict=True)
         except SourceUnavailable as exc:
@@ -1153,15 +1165,29 @@ class Verifica:
             work_date=resolved.work_date,
             amending_act_texts=resolved.amending_act_texts,
         )
+        sit = situacao.carregar(self.conn, resolved, self.home)
         linha = []
         for d in dated:
+            fim, fim_desc = d.end, d.end_unknown
+            fl = list(d.flags)
+            if fim is None and not fim_desc and sit is not None:  # C2 sobre o intervalo aberto
+                if sit.situacao in ("revogada", "cancelada"):
+                    if situacao._iso(sit.data_efeito) is not None:
+                        fim = sit.data_efeito[:10]
+                        fl.append(situacao.REVOGADO_NA_FONTE)
+                    else:
+                        fim_desc = True
+                        fl += ["fim_desconhecido", situacao.DATA_DESCONHECIDA]
+                elif sit.situacao == "ilegivel":
+                    fl.append(situacao.INDISPONIVEL)
             linha.append(
                 {
                     "redaction_id": d.redaction_id,
                     "inicio": d.start,
-                    "fim": d.end,
+                    "fim": fim,
+                    "fim_desconhecido": fim_desc,
                     "regra": d.rule,
-                    "flags": d.flags,
+                    "flags": fl,
                     "riscada": d.redaction.struck,
                     "trecho": _truncate(d.redaction.text, 160)[0],
                 }
@@ -1188,7 +1214,7 @@ class Verifica:
             "flags": gflags,
             "needs_judgment": needs_judgment,
             "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov),
-            "situacao_obra": situacao.resumo(situacao.carregar(self.conn, resolved)),  # C2
+            "situacao_obra": situacao.resumo(sit),  # C2
         }
 
     @staticmethod
@@ -1310,6 +1336,35 @@ class Verifica:
         cite.flags = [f for f in cite.flags if f not in ("sem_ano", "so_sem_ano")] + ["numero_unico_no_acervo"]
         return True
 
+    @staticmethod
+    def _requer_conferencia(cite: Citation | None) -> bool:
+        """Decisão 0016: extração provável ou referente alternativo nunca produz conclusão definitiva."""
+        return cite is not None and (cite.confidence == "provavel" or "preferir_outro_referente" in cite.flags)
+
+    @staticmethod
+    def _bloco_conferencia(cite: Citation, evidencia=None, confronto=None) -> dict[str, Any]:
+        return {
+            "interpretacao_proposta": _citation_to_dict(cite),
+            "interpretacao_preferida": (
+                "dispositivo de outro referente" if "preferir_outro_referente" in cite.flags
+                else "norma+dispositivo" if cite.path else "norma sem dispositivo"
+            ),
+            "alternativas": ["norma sem dispositivo", "dispositivo de outro referente"],
+            "evidencia_disponivel": evidencia,
+            "confronto_proposto": confronto,
+        }
+
+    def _so_conferencia(self, cite: Citation | None, citacao: str) -> dict[str, Any] | None:
+        """Consumidores diretos (resolver/obter/histórico): associação provável não decide identidade nem vigência."""
+        if cite is None or cite.work is None:
+            return None
+        self._promover_sem_ano(cite)
+        if not self._requer_conferencia(cite):
+            return None
+        return {"status": "requer_conferencia", "citacao": citacao,
+                "identity": {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
+                "conferencia": self._bloco_conferencia(cite)}
+
     def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
                    trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
         """C4 (decisão 0027): todos os rebaixamentos, nesta ordem, e só então o recibo."""
@@ -1336,23 +1391,14 @@ class Verifica:
                 rw = None
             if isinstance(rw, ResolvedWork):
                 out["temporal"] = situacao.aplicar_situacao_dict(
-                    out["temporal"], situacao.carregar(self.conn, rw), data)
+                    out["temporal"], situacao.carregar(self.conn, rw, self.home), data)
         # Confiança de extração (decisão 0016): provável ou referente alternativo nunca é definitivo.
-        if (cite is not None and (cite.confidence == "provavel" or "preferir_outro_referente" in cite.flags)
+        if (self._requer_conferencia(cite)
                 # citação avulsa de formato inválido mantém o veredito; em texto, provável sempre pede conferência
                 and (em_texto or out["identity"].get("reason_code") not in {"formato_invalido", "CITACAO_NAO_RECONHECIDA"})):
             confronto = json.loads(json.dumps({k: out.get(k) for k in ("identity", "text", "temporal")}))
             evidencia = (confronto["identity"].get("evidence") or [None])[0]
-            out["conferencia"] = {
-                "interpretacao_proposta": _citation_to_dict(cite),
-                "interpretacao_preferida": (
-                    "dispositivo de outro referente" if "preferir_outro_referente" in cite.flags
-                    else "norma+dispositivo" if cite.path else "norma sem dispositivo"
-                ),
-                "alternativas": ["norma sem dispositivo", "dispositivo de outro referente"],
-                "evidencia_disponivel": evidencia,
-                "confronto_proposto": confronto,
-            }
+            out["conferencia"] = self._bloco_conferencia(cite, evidencia, confronto)
             out["identity"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
             out["text"] = {"status": "not_assessed", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
             out["temporal"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}

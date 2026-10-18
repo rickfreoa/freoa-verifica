@@ -267,7 +267,7 @@ def test_ressincronizar_situacao(svc, monkeypatch):
     monkeypatch.setattr(real, "fetch_situacao", _CvmFake(pagina).fetch_situacao)
     out = svc.ressincronizar_situacao(fontes=("cvm_normas",))
     assert out["revogadas"] == 1
-    assert situacao.carregar(svc.conn, rw).situacao == "revogada"
+    assert situacao.carregar(svc.conn, rw, svc.home).situacao == "revogada"
 
 
 # --- A4 / A9 / M2 / M3 ------------------------------------------------------
