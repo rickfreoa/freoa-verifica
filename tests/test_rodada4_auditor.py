@@ -85,7 +85,7 @@ def test_orcamento_repassado_ao_parse_e_item_nao_indexado(tmp_path, monkeypatch)
     with Verifica(tmp_path) as s:
         monkeypatch.setattr(s, "_get", lambda _id: Lento(2, 2))
         out = s._buscar_normas("cvm_normas", "x", None, orcamento_s=0.2)
-    assert visto and visto[0] <= 0.2  # min(restante, timeout do perfil)
+    assert visto and visto[0] <= 0.2 + 1e-6  # min(restante, timeout do perfil); folga de ponto flutuante
     assert [i.get("motivo") for i in out["itens"]] == ["orcamento", None]
     assert out["itens"][0]["nao_indexado"] and out["itens"][1]["nao_indexado"]
     assert out["status"] == "parcial" and out["nao_indexados"] == 2
@@ -123,7 +123,7 @@ def test_continuacoes_escalam_linearmente():
     a, d = t(8000)
     b, _ = t(16000)
     assert d.provisions[0].redactions[0].text.count("continuação") == 8000
-    assert b / a < 3
+    assert b / a < 3.5  # linear dá ~2; quadrático daria ~4
 
 
 def test_continuacao_fixtures_consolidadas_equivalentes():

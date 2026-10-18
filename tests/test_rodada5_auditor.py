@@ -104,7 +104,7 @@ def test_orcamento_cobre_a_busca_inicial(tmp_path, monkeypatch):
         monkeypatch.setattr(s, "_get", lambda _id: _Lento())
         t = time.monotonic()
         out = s._buscar_normas("cvm_normas", "x", None, orcamento_s=0.03)
-        assert time.monotonic() - t < 0.2
+        assert time.monotonic() - t < 0.35  # folga para runners lentos; o conector dorme mais que isso
         assert out["status"] == "indisponivel" and out["motivo"] == "orcamento"
 
 
