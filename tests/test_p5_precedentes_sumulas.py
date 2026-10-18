@@ -53,7 +53,7 @@ def test_stj_sync_ingere_temas_no_mesmo_fts(tmp_path, monkeypatch):
     hit = c.search("desvio de função")[0]
     assert hit.key == "tema:14"
     assert "Tese firmada: Reconhecido o desvio de função" in hit.snippet
-    assert "Processos paradigma: REsp 1091539" in hit.metadata["ementa"]
+    assert hit.metadata["processosParadigmaNaoAutenticados"] == ["REsp 1091539"]
     assert hit.metadata["siglaClasse"] == "Tema Repetitivo"
     assert [h.key for h in c.search("Cancelado")] == ["tema:479"]
     con = sqlite3.connect(tmp_path / "stj.sqlite")
@@ -136,3 +136,92 @@ def test_stf_sumulas_indexadas_com_autoridade_a(tmp_path, monkeypatch):
     assert sumula[0]["capture_id"]
     assert vinculante[0]["rotulo_autoridade"] == "A"
     assert outras["status"] == "indisponivel"  # detalhe não capturado nunca vira ausência silenciosa
+
+
+# ---- auditoria P5: duplicatas, paradigmas não autenticados, situação estruturada ----
+
+def _csv_duplicado() -> bytes:
+    import csv
+    import io
+    rows = list(csv.DictReader(io.StringIO(load_fixture("stj_precedentes_temas").decode("utf-8"), newline="")))
+    t14 = rows[0]
+    velha = {**t14, "teseFirmada": "TESE ANTIGA"}
+    nova = {**t14, "teseFirmada": "TESE NOVA", "situacao": "Cancelado"}
+    buf = io.StringIO(newline="")
+    w = csv.DictWriter(buf, fieldnames=list(t14), lineterminator="\n")
+    w.writeheader()
+    w.writerows([velha, nova])
+    return buf.getvalue().encode("utf-8")
+
+
+def test_stj_linhas_repetidas_mesma_politica_no_sync_e_na_releitura(tmp_path, monkeypatch):
+    csv_dup = _csv_duplicado()
+    monkeypatch.setattr(stj_mod, "connector_fetch", lambda url, **kw: _resp(
+        url, csv_dup if url.endswith("temas.csv") else load_fixture("stj_precedentes_processos"), "text/csv"))
+    c = stj_mod.StjConnector(tmp_path / "stj.sqlite")
+    monkeypatch.setattr(c, "package_show", lambda pkg: _PKG)
+    assert c.sync(orgaos=["precedentes-qualificados"]) == 1
+    hit = c.search("tema")[0]
+    assert "TESE NOVA" in hit.metadata["ementa"] and "TESE ANTIGA" not in hit.metadata["ementa"]
+    parsed = c.parse_candidate(c.fetch(hit), hit)  # releitura do CSV capturado
+    assert "TESE NOVA" in parsed.ementa and "TESE ANTIGA" not in parsed.ementa
+    assert "Divergência na fonte" in parsed.ementa
+    assert parsed.metadata["divergencia_na_fonte"] is True
+    assert parsed.metadata["situacao_precedente"] == {"valor": "cancelada", "texto_oficial": "Cancelado"}
+
+
+def test_stj_paradigma_adulterado_no_metadado_nao_entra_no_texto(tmp_path, monkeypatch):
+    monkeypatch.setattr(stj_mod, "connector_fetch", _fake_stj_fetch)
+    c = stj_mod.StjConnector(tmp_path / "stj.sqlite")
+    monkeypatch.setattr(c, "package_show", lambda pkg: _PKG)
+    c.sync(orgaos=["precedentes-qualificados"])
+    hit = c.search("desvio de função")[0]
+    assert "REsp 1091539" not in hit.metadata["ementa"]  # nem o verdadeiro: vem de outra captura
+    hit.metadata["processosParadigma"] = ["REsp 9999999"]
+    hit.metadata["processosParadigmaNaoAutenticados"] = ["REsp 9999999"]
+    parsed = c.parse_candidate(c.fetch(hit), hit)
+    assert "9999999" not in parsed.ementa + parsed.text
+
+
+def _situacoes(svc, q, tribunal):
+    item = svc.pesquisar_jurisprudencia(q, tribunais=[tribunal])["itens"][0]
+    full = svc.obter_decisao(item["id"])
+    return item, full
+
+
+def test_situacao_estruturada_persiste_e_alerta(tmp_path, monkeypatch):
+    monkeypatch.setattr(stj_mod, "connector_fetch", _fake_stj_fetch)
+    monkeypatch.setattr(stf_mod, "connector_fetch", _fake_stf_fetch)
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+    with Verifica(tmp_path) as svc:
+        monkeypatch.setattr(svc._get("stj"), "package_show", lambda pkg: _PKG)
+        SementeSync(svc, rate_delay=0, fontes=["stj"]).sync_stj()
+        SementeSync(svc, rate_delay=0, max_itens=9, fontes=["stf"]).sync_stf()
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    casos = [  # consulta, tribunal, situação esperada, alerta esperado
+        ("desvio de função", "stj", "vigente", False),
+        ("Cancelado", "stj", "cancelada", True),
+        ("imunidade deputados estaduais", "stf", "superada", True),
+        ("Lei de Execução Penal artigo 127", "stf", "cancelada", True),
+    ]
+    for _ in range(2):  # a segunda volta reabre o banco do disco
+        with Verifica(tmp_path) as svc:
+            for q, trib, valor, alerta in casos:
+                item, full = _situacoes(svc, q, trib)
+                for out in (item, full):
+                    assert out["situacao_precedente"]["valor"] == valor, (q, out["situacao_precedente"])
+                    assert ("PRECEDENTE_NAO_VIGENTE_NA_FONTE" in out.get("alertas", [])) is alerta
+                assert item["rotulo_autoridade"] in {"A", "B"}  # rótulo segue sendo espécie
+            assert item["situacao_precedente"]["texto_oficial"] == "cancelada"
+
+
+def test_situacao_ausente_e_desconhecida_nunca_vigente():
+    from freoa_verifica.service import _situacao_precedente
+    assert _situacao_precedente(None, "sumula")["situacao_precedente"]["valor"] == "desconhecida"
+    assert _situacao_precedente("{}", "repetitivo")["situacao_precedente"]["valor"] == "desconhecida"
+    assert _situacao_precedente(None, "acordao") == {}
+    html = (b"<html><head><meta charset=utf-8></head><body><div class='titulo'>S\xc3\xbamula 7</div><div class='parCOM'><p>Enunciado.</p></div></body></html>")
+    p = stf_mod.StfConnector().parse(_resp(_SUMARIO + "?base=30&sumula=1", html, "text/html"))
+    assert p.metadata["situacao_precedente"] == {"valor": "desconhecida", "texto_oficial": None}
+    assert stj_mod._situacao_estruturada("Afetado")["valor"] == "desconhecida"
+    assert stj_mod._situacao_estruturada("Revisado")["valor"] == "revisada"

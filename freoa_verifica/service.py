@@ -198,6 +198,34 @@ def _species_from_meta(court: str, class_name: str | None, organ: str | None) ->
     return "acordao"
 
 
+_ESPECIES_PRECEDENTE = frozenset({"sumula", "sumula_vinculante", "repetitivo", "irdr_iac", "repercussao_geral"})
+_NAO_VIGENTE = frozenset({"cancelada", "superada", "revisada"})
+
+
+def _situacao_precedente(attrs_json: str | None, species: str | None) -> dict[str, Any]:
+    """Situação estruturada (decisão 0036): ausente = desconhecida, nunca vigente; rótulo A/B segue sendo espécie."""
+    if species not in _ESPECIES_PRECEDENTE:
+        return {}
+    try:
+        attrs = json.loads(attrs_json) if attrs_json else {}
+    except ValueError:
+        attrs = {}
+    sit = attrs.get("situacao_precedente") or {"valor": "desconhecida", "texto_oficial": None}
+    alertas = []
+    if sit.get("valor") in _NAO_VIGENTE:
+        alertas.append("PRECEDENTE_NAO_VIGENTE_NA_FONTE")
+    if attrs.get("divergencia_na_fonte"):
+        alertas.append("LINHAS_DIVERGENTES_NA_FONTE")
+    return {"situacao_precedente": sit, **({"alertas": alertas} if alertas else {})}
+
+
+def _especie_gravada(attrs_json: str | None) -> str | None:
+    try:
+        return ((json.loads(attrs_json) if attrs_json else {}).get("attributes") or {}).get("species")
+    except ValueError:
+        return None
+
+
 def _authority_min_ok(label: str, minimo: str | None) -> bool:
     if not minimo:
         return True
@@ -2060,6 +2088,7 @@ class Verifica:
             "truncado": trunc,
             "pertinencia": row.get("pertinencia"),
             "correspondencia": row.get("correspondencia"),
+            **_situacao_precedente(row.get("authority_attrs_json"), auth.attributes.species),
         }
 
     def _save_juris_capture(self, connector, response):
@@ -2089,6 +2118,7 @@ class Verifica:
         capture_id = None
         nivel = "metadados"
         inteiro = ""
+        attrs = authority_as_dict(auth)
         try:
             self.conn.execute(
                 "INSERT OR IGNORE INTO source(id, authority, profile, hosts_json) VALUES (?,?,?,?)",
@@ -2110,6 +2140,10 @@ class Verifica:
                     species=_species_from_meta(court, class_name, organ),
                     court=court, class_name=class_name, organ=organ,
                 )
+                attrs = authority_as_dict(auth)
+                for extra in ("situacao_precedente", "divergencia_na_fonte"):
+                    if parsed.metadata.get(extra):
+                        attrs[extra] = parsed.metadata[extra]
                 did = repo.upsert_decision(
                     self.conn,
                     court=court,
@@ -2126,9 +2160,12 @@ class Verifica:
                     judgment_date=parsed.judgment_date,
                     publication_date=parsed.publication_date,
                     official_id=parsed.official_id,
-                    authority_attrs_json=json.dumps(authority_as_dict(auth), ensure_ascii=False),
+                    authority_attrs_json=json.dumps(attrs, ensure_ascii=False),
                     authority_label=auth.label,
                 )
+                # upsert não atualiza linha existente: a situação do precedente muda na fonte.
+                self.conn.execute("UPDATE decision SET authority_attrs_json=?, authority_label=? WHERE id=?",
+                                  (json.dumps(attrs, ensure_ascii=False), auth.label, did))
                 kind_doc = "inteiro_teor" if inteiro and len(inteiro) > 500 else "ementa"
                 if parsed.profile in {"stj_espelho", "tcu_acordao"}:
                     kind_doc = "ementa"
@@ -2205,6 +2242,7 @@ class Verifica:
             "capture_id": capture_id,
             "nivel_prova": nivel,
             "truncado": trunc,
+            **_situacao_precedente(json.dumps(attrs, ensure_ascii=False), auth.attributes.species),
         }
 
     @_authenticated_output
@@ -2257,6 +2295,7 @@ class Verifica:
             "cursor": str(offset + max_chars) if truncado else None,
             "capture_id": doc["capture_id"] if doc else None,
             "autoridade_label": row["authority_label"],
+            **_situacao_precedente(row["authority_attrs_json"], _especie_gravada(row["authority_attrs_json"])),
         }
 
     # ------------------------------------------------------------------
