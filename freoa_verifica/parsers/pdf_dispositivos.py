@@ -42,11 +42,12 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
         def op(operador, args, cm, _tm, imgs=imgs, page=page):
             if operador == b"Do" and args and _e_imagem(page, args[0]) or operador in (b"BI", b"INLINE IMAGE"):
                 base, alto = float(cm[5]), float(cm[3])
-                imgs.append((min(base, base + alto), max(base, base + alto)))
+                nome = str(args[0]) if operador == b"Do" and args else None
+                imgs.append((min(base, base + alto), max(base, base + alto), nome))
             elif operador == b"Do" and args:
                 faixa = _faixa_de_formulario_com_imagem(page, args[0], cm)
                 if faixa:  # imagem dentro de Form XObject: vale a caixa do formulário na página (rodada 12)
-                    imgs.append(faixa)
+                    imgs.append((*faixa, None))
 
         page.extract_text(visitor_text=vis, visitor_operand_before=op)
         frags.append(parts)
@@ -80,13 +81,18 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
     marcar = _manter_cortes_ambiguos(frags, fora_por_pagina)
     # Imagem no corpo pode conter texto normativo que o pypdf não extrai (auditoria 1.1.0, rodada 9):
     # as linhas mantidas imediatamente acima e abaixo dela ficam marcadas.
+    # Timbre: a mesma imagem (mesmo XObject), na mesma posição, em ao menos metade das páginas (mín. 3),
+    # inteira na faixa de margem e sem texto mantido na mesma altura nem do lado de fora da faixa.
+    timbres = Counter((nome, round(b), round(t)) for imgs in imagens for b, t, nome in imgs if nome)
     for p, (parts, fora, imgs, h) in enumerate(zip(frags, fora_por_pagina, imagens, alturas)):
         ys = sorted({round(y) for y, t in parts if _norm(t) and round(y) not in fora})
-        for base, topo in imgs:
+        for base, topo, nome in imgs:
             acima = [y for y in ys if y >= topo]
             abaixo = [y for y in ys if y <= base]
             lado = [y for y in ys if base - 2 < y < topo + 2]  # linha que divide a altura com a imagem
-            # Sem exceção para logotipo: nenhuma posição prova que a imagem não tem texto (rodada 11).
+            repetido = nome is not None and timbres[(nome, round(base), round(topo))] >= minimo
+            if repetido and not lado and ((base >= _FAIXA_SUP * h and not acima) or (topo <= _FAIXA_INF * h and not abaixo)):
+                continue
             for y in ([min(acima)] if acima else []) + ([max(abaixo)] if abaixo else []) + lado:
                 marcar.add((p, y))
             if not acima and p > 0:  # imagem no alto do corpo: fecho do dispositivo da página anterior
@@ -169,7 +175,7 @@ def _tem_imagem(xobj, profundidade: int = 0) -> bool:
             if f.get("/Subtype") == "/Image" or (f.get("/Subtype") == "/Form" and _tem_imagem(f, profundidade + 1)):
                 return True
         conteudo = xobj.get_data() if hasattr(xobj, "get_data") else b""
-        return b" BI" in conteudo or conteudo.startswith(b"BI")
+        return re.search(rb"(?:^|[\s\]>)])BI(?:\s|$)", conteudo) is not None  # imagem inline (operador BI)
     except (KeyError, TypeError, AttributeError, ValueError):
         return True
 
@@ -177,6 +183,7 @@ def _tem_imagem(xobj, profundidade: int = 0) -> bool:
 def _faixa_de_formulario_com_imagem(page, nome, cm) -> tuple[float, float] | None:
     try:
         obj = page["/Resources"]["/XObject"][nome].get_object()
+        # Formulário com imagem (XObject, inline pelo operador BI, ou aninhada); o que não se inspeciona conta.
         if obj.get("/Subtype") != "/Form" or not _tem_imagem(obj):
             return None
         x0, y0, x1, y1 = (float(v) for v in obj.get("/BBox", [0, 0, 0, 0]))

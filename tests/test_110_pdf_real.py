@@ -1,4 +1,6 @@
 """1.1.0, auditoria rodada 6: PDF real gerado em memória; descarte em fronteira limpa bloqueia o dispositivo."""
+import pytest
+
 from freoa_verifica.connectors.cvm_normas import parse_pdf_direto
 
 
@@ -139,3 +141,22 @@ def test_imagem_dentro_de_formulario_transladado_bloqueia():
     doc = parse_pdf_direto(out)
     res = _verificar(doc, "art. 1 da Resolução CVM 999/2026", "A divulgacao e obrigatoria.")
     assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
+
+
+@pytest.mark.parametrize("sep", ["\n", " ", "\r\n"])
+def test_imagem_inline_em_formulario_bloqueia(sep):
+    # Auditor, rodada 13: "cm\nBI" dentro de Form XObject sem /XObject nos recursos.
+    from freoa_verifica.parsers.pdf_dispositivos import _tem_imagem
+    class D(dict):
+        def get_object(self):
+            return self
+
+    class F(D):
+        def get_data(self):
+            return conteudo
+
+    sem_xobject = D({"/XObject": D()})
+    conteudo = f"q 300 0 0 20 0 0 cm{sep}BI /W 1 /H 1 /CS /G /BPC 8 ID \x00 EI Q".encode("latin-1")
+    assert _tem_imagem(F({"/Resources": sem_xobject}))
+    conteudo = b"BT /F1 11 Tf (OBITUARIO) Tj ET"  # "BI" dentro de palavra não é operador
+    assert not _tem_imagem(F({"/Resources": sem_xobject}))
