@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freoa-verifica"
+version = "1.0.0"
+description = "Verificação de citações jurídicas contra fontes oficiais"
+readme = "README.md"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "Ricardo Peres Freoa" }]
+requires-python = ">=3.11"
+dependencies = [
+    "lxml>=5",
+    "pypdf>=4",
+    "mcp>=2.3,<3",
+    "tzdata; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+server = ["fastapi", "uvicorn"]
+pdf-fast = ["PyMuPDF"]
+test = ["pytest", "fastapi", "httpx", "uvicorn"]
+
+[project.scripts]
+fv = "freoa_verifica.cli:main"
+freoa-verifica-mcp = "freoa_verifica.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["freoa_verifica*"]
+
+[tool.setuptools.package-data]
+freoa_verifica = ["store/migrations/*.sql", "connectors/*.json", "data/*.json"]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: testes que acessam fontes oficiais reais",
+]
+testpaths = ["tests"]

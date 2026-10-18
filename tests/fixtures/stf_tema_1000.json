@@ -1,0 +1,115 @@
+{"package": {
+    "situacao": "normal",
+    "repercussaoGeral": {"processoLeadingCase": {
+        "numeroTema": 1000,
+        "dataFimPrevistaJulgamento": "14/06/2018",
+        "siglaClasse": "RE",
+        "seqObjetoIncidente": 5461726,
+        "tituloTema": "Discussão quanto à constitucionalidade de norma que prevê a possibilidade de nomeação de cônjuge, companheiro ou parente, em linha reta colateral ou por afinidade, até o terceiro grau, inclusive, da autoridade nomeante, para o exercício de cargo político.",
+        "seqArquivoEletronico": 7598874,
+        "dataInicioJulgamento": "25/05/2018",
+        "numeroProcesso": 1133118,
+        "relator": "MIN. LUIZ FUX",
+        "placar": {"ministro": [
+            {
+                "seq_arquivo_manifestacao": 7598874,
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. LUIZ FUX",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. DIAS TOFFOLI",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. ROSA WEBER",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. CELSO DE MELLO",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. ALEXANDRE DE MORAES",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. CÁRMEN LÚCIA",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. EDSON FACHIN",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": 7625871,
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. MARCO AURÉLIO",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. LUÍS ROBERTO BARROSO",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "Há",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. RICARDO LEWANDOWSKI",
+                "votoSN": "",
+                "votoRG": "Há",
+                "votoRJ": ""
+            },
+            {
+                "seq_arquivo_manifestacao": "",
+                "votoQC": "",
+                "seq_arquivo_complemento": "",
+                "nomeMinistro": "MIN. GILMAR MENDES",
+                "votoSN": "",
+                "votoRG": "",
+                "votoRJ": ""
+            }
+        ]}
+    }}
+}}

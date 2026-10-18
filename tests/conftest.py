@@ -1,0 +1,78 @@
+"""Fixtures compartilhadas M5 — repositório populado com LSA (só art. 254-A)."""
+
+from __future__ import annotations
+
+import pytest
+
+from freoa_verifica.aliases import WorkKey
+from freoa_verifica.parsers.model import ParsedDocument, Provision, Redaction
+from freoa_verifica.parsers.planalto import parse_planalto
+from freoa_verifica.service import Verifica
+from tests.fixture_util import load_fixture, load_meta
+
+LSA_KEY = WorkKey("federal", "lei", "6404", 1976)
+WORK_DATE_LSA = "1976-12-15"
+
+
+@pytest.fixture(scope="session")
+def _lsa_art254a():
+    """Parse completo uma vez; devolve só o dispositivo usado nos testes M5."""
+    body = load_fixture("planalto_lei_6404_1976")
+    full = parse_planalto(
+        body,
+        base_url="https://www.planalto.gov.br/ccivil_03/leis/",
+    )
+    prov = full.provision("art254-A")
+    assert prov is not None
+    slim = ParsedDocument(
+        profile=full.profile,
+        parser_version=full.parser_version,
+        title=full.title or "Lei nº 6.404/1976",
+        ementa=full.ementa,
+        text=prov.redactions[-1].text if prov.redactions else "",
+        provisions=[
+            Provision(
+                path=prov.path,
+                label=prov.label,
+                scope=prov.scope,
+                headings=list(prov.headings),
+                redactions=[
+                    Redaction(
+                        text=r.text,
+                        struck=r.struck,
+                        order=r.order,
+                        annotations=list(r.annotations),
+                        span=r.span,
+                        superseded_without_strike=r.superseded_without_strike,
+                    )
+                    for r in prov.redactions
+                ],
+                ambiguous=prov.ambiguous,
+            )
+        ],
+        issues=list(full.issues),
+    )
+    entry = load_meta()["planalto_lei_6404_1976"]
+    return body, slim, entry
+
+
+@pytest.fixture
+def verifica_populada(tmp_path, monkeypatch, _lsa_art254a):
+    home = tmp_path / "fv-m5"
+    home.mkdir()
+    monkeypatch.setenv("FV_HOME", str(home))
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    body, doc, entry = _lsa_art254a
+    svc = Verifica(home=home)
+    rw = svc.indexar_obra(
+        source_id="planalto",
+        work_key=LSA_KEY,
+        document=doc,
+        body=body,
+        url=entry["url"],
+        fetched_at=entry.get("fetched_at"),
+        work_date=WORK_DATE_LSA,
+        label="Lei nº 6.404/1976",
+    )
+    yield svc, rw, doc
+    svc.close()

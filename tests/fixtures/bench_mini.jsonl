@@ -1,0 +1,6 @@
+{"id": "pos-1", "tipo": "positivo", "citacao": "art. 254-A da Lei 6.404/76", "trecho": "A alienação, direta ou indireta, do controle de companhia aberta"}
+{"id": "pos-2", "tipo": "positivo", "citacao": "art. 254-A da Lei nº 6.404/1976"}
+{"id": "mut-1", "tipo": "mutante", "citacao": "art. 254-A da Lei 6.404/76", "trecho": "A alienação NÃO ocorre do controle de companhia aberta"}
+{"id": "mut-2", "tipo": "mutante", "citacao": "art. 999-Z da Lei 6.404/76", "trecho": "dispositivo inexistente inventado para mutante"}
+{"id": "dec-1", "tipo": "decisao", "texto": "Conforme o art. 254-A da Lei 6.404/76", "decisao_real": true}
+{"id": "dec-2", "tipo": "decisao", "texto": "Nos termos do acórdão inventado STJ-ZZ-999999/2099", "decisao_real": false}

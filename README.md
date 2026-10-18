@@ -1,0 +1,101 @@
+# FREOA Verifica
+
+**Busca verificada de fontes primárias do direito brasileiro: legislação, normas da CVM e do CMN/BCB, jurisprudência e decisões administrativas, cada resultado acompanhado da prova de onde, quando e como foi conferido.**
+
+Modelos de linguagem citam bem e conferem mal. O problema não está em encontrar um precedente plausível, mas em saber se o dispositivo existe, se o trecho é literal, se a redação estava em vigor na data relevante e se a decisão citada é aquela mesma. O FREOA Verifica responde a essas quatro perguntas separadamente, com evidência reproduzível, e se abstém quando a fonte oficial não permite conclusão.
+
+## O que faz
+
+| Pergunta | Ferramenta | Prova devolvida |
+|---|---|---|
+| Este dispositivo existe? Qual o texto? | `obter_dispositivo` | URL oficial, data de captura, SHA-256, caminho do dispositivo |
+| O trecho citado é literal? | `verificar_citacao` | confronto textual versionado, diff quando divergente |
+| Qual redação vigorava em certa data? | `historico_dispositivo` | redações sucessivas, atos alteradores, regras aplicadas |
+| As citações deste parecer existem? | `verificar_texto` | status por citação: encontrada, inexistente, ambígua, indisponível |
+| O que decidiram STJ, STF, TJSP, TCU e o Colegiado da CVM? | `pesquisar_jurisprudencia` | ementa, metadados, nível de prova, atributos de autoridade |
+| Quais normas da CVM e do CMN/BCB tratam do tema? | `buscar_normas_cvm`, `buscar_normas_bcb` | ato, situação, texto consolidado oficial |
+
+Estados possíveis em cada dimensão: `verified`, `divergent`, `not_found`, `ambiguous`, `unavailable`, `unknown`, `not_assessed`. Falha de rede nunca vira "não encontrado"; silêncio da fonte nunca vira "vigente".
+
+## Instalação
+
+Requer Python 3.11 ou superior.
+
+```bash
+pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.0/freoa_verifica-1.0.0-py3-none-any.whl"
+# ou a partir do código-fonte:
+pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.0"
+fv doctor
+fv snapshot install                   # corpus semente (opcional, recomendado)
+```
+
+### Como servidor para clientes compatíveis com MCP
+
+```json
+{
+  "mcpServers": {
+    "freoa-verifica": { "command": "freoa-verifica-mcp" }
+  }
+}
+```
+
+Alternativa sem instalação permanente:
+
+```bash
+uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.0 freoa-verifica-mcp
+```
+
+O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.
+
+Para uso remoto: `fv serve-mcp --http --port 8765` (streamable HTTP). API REST: `pip install "freoa-verifica[server]"` e `fv serve-api`.
+
+## Exemplos
+
+```bash
+fv lei "art. 254-A da Lei 6.404/76"
+fv historico "art. 2º, XVI, da Resolução CVM 160"
+fv verifica "art. 116, parágrafo único, da LSA" --trecho "O acionista controlador deve usar o poder com o fim de fazer a companhia realizar o seu objeto"
+fv verifica-texto parecer.md
+fv juris "acordo de acionistas execução específica" --tribunais stj tjsp
+```
+
+## Cobertura e limites
+
+A apuração de 18/10/2026 está em [docs/FONTES.md](docs/FONTES.md). O acervo é um recorte, sem garantia de completude histórica ou atualização contínua.
+
+- STJ: Corte Especial, Segunda Seção, Terceira e Quarta Turmas; julgamentos de 10/06/2024 a 26/08/2026 no recorte medido. Espelhos e ementas não substituem inteiro teor. SCON/consulta pública apresentaram barreira de acesso.
+- TCU: 2.000 itens percorridos, 1.800 identificadores distintos; julgamentos de 26/08/2026 a 14/10/2026. Sumários são tratados como ementas; ausência nesse recorte não demonstra inexistência.
+- CVM Colegiado: semente de 40 decisões entre 19/12/2023 e 18/09/2026; processo, ata e item decisório são identidades distintas. Normas CVM dependem do documento e da associação segura das notas editoriais.
+- STF: consulta por processo; 1.399 temas como metadados. Tema ou processo identificado não prova julgamento capturado. Busca textual sob WAF permanece indisponível.
+- TJSP: consultas medidas sem julgamento identificado; formulário com CAPTCHA. STF, TJSP e STJ podem ficar indisponíveis por barreiras oficiais, sem contorno.
+- DataJud confirma processo público, não julgamento. Os demais tribunais e segmentos não têm cobertura jurisprudencial demonstrada.
+- Legislação: redações anteriores somente quando presentes na fonte capturada. História integral não garantida; data do ato não equivale a início da vigência. Identidade, texto e tempo são apresentados separadamente; tempo pode permanecer `unknown` com texto literal conferido.
+- Suporte da fonte a uma proposição jurídica não é avaliado. Não há tratamento sistemático demonstrado de precedentes superados. Busca local vazia não prova inexistência.
+
+`fv fontes` informa a cobertura declarada e o estado de acesso dos conectores. Falha, WAF ou CAPTCHA produzem indisponibilidade com motivo.
+
+## Resultados de avaliação
+
+Medições de 18/10/2026, com conjuntos montados por quem não escreveu o código e oráculo extraído diretamente dos documentos oficiais capturados. As auditorias adversariais foram três rodadas sucessivas, cada uma com consultas novas; os defeitos que encontraram (nota editorial aceita como texto, evidência ausente aceita, traversal no snapshot, ano de normas CVM, negativa temporal indevida) foram corrigidos e reverificados antes desta versão.
+
+| Conjunto | Resultado |
+|---|---|
+| Benchmark independente (116 casos): positivos com identidade e texto verificados | 56/56 |
+| Benchmark independente: mutantes com falso `verified` (dígito, negação, dispositivo vizinho, redação revogada, ano ou norma inexistente) | 0/40 |
+| Auditorias adversariais com consultas novas: positivos verificados | 48/49 (uma abstenção conservadora) |
+| Auditorias adversariais: mutantes com falso `verified` | 0/143 |
+| Decisões reais identificadas (com consulta às fontes) | 6/15 |
+| Decisões inventadas rejeitadas com prova oficial | 2/5 |
+
+Os números de decisões mostram o limite atual: sem consulta pública universal por número no STJ e no STF, a ferramenta informa "não confirmado no acervo" em vez de afirmar inexistência. A reconstrução histórica integral de redações não está demonstrada; quando falta a história anterior, a dimensão temporal permanece `unknown`.
+## Arquitetura
+
+Transporte com proteção contra SSRF e limites rígidos; conectores por fonte; parsers por perfil editorial com sentinelas que recusam colisão de endereços; armazenamento SQLite com bytes originais endereçados por hash e evidência imutável; motor temporal por eventos; uma fachada única servida por CLI, MCP e REST. Detalhes em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+
+## Licença
+
+Código sob **AGPL-3.0-or-later**, com licença comercial disponível. Dados derivados conforme o regime de cada fonte. Ver [LICENCIAMENTO.md](LICENCIAMENTO.md).
+
+O FREOA Verifica confere fontes; não emite parecer. A interpretação jurídica permanece com quem a assina.
+
+Autor: Ricardo Peres Freoa.

@@ -1,0 +1,904 @@
+"""Transporte HTTP com IP fixado, validação por salto e limites.
+
+Portado e adaptado de freoa-verifica (core.py, http_receipts.py).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import http.client
+import ipaddress
+import os
+import re
+import socket
+import ssl
+import threading
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from email.utils import format_datetime, parsedate_to_datetime
+from http.cookiejar import CookieJar
+from queue import Empty, Queue
+from urllib.parse import unquote, urljoin, urlsplit
+from urllib.request import Request as _UrlLibRequest
+
+# --- cabeçalhos de recibo HTTP ---
+# portado de freoa-verifica/http_receipts.py (HEADER_NAMES / _valid_header)
+
+HEADER_NAMES = frozenset({"date", "last-modified", "content-type", "content-length"})
+_MIME = re.compile(
+    r"[a-z0-9.+-]{1,64}/[a-z0-9.+-]{1,64}"
+    r"(?:;[ ]*charset=(?:utf-8|utf-16|iso-8859-1|windows-1252|us-ascii))?",
+    re.I,
+)
+
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+DNS_TIMEOUT = 10.0
+MIN_BYTES_PER_SECOND = 2048
+SLOW_WINDOW = 30.0
+MAX_BYTES = 10 * 1024 * 1024
+MAX_REDIRECTS = 3
+DEFAULT_ALLOWED_MIMES = frozenset(
+    {
+        "text/html",
+        "application/xhtml+xml",
+        "application/xml",
+        "text/xml",
+        "application/pdf",
+        "application/rss+xml",
+        "text/plain",
+    }
+)
+_RESERVED_REQUEST_HEADERS = frozenset(
+    {"host", "content-length", "transfer-encoding", "connection"}
+)
+_HOP_CREDENTIAL_HEADERS = frozenset(
+    {"authorization", "cookie", "proxy-authorization"}
+)
+_DNS_SLOTS = threading.BoundedSemaphore(4)
+_MAX_CONCURRENCY = max(1, int(os.environ.get("FV_MAX_CONCURRENCY", "4")))
+_CAPTURE_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENCY)
+
+
+class TransportError(Exception):
+    """Erro base do transporte."""
+
+    def __init__(self, message: str | None = None, *, http: HTTPMetadata | None = None):
+        self.http = http
+        super().__init__(message)
+
+
+class BlockedHost(TransportError):
+    """Host, porta, caminho ou endereço IP recusado pela política."""
+
+
+class TooLarge(TransportError):
+    """Corpo declarado ou baixado acima do limite."""
+
+
+class Timeout(TransportError):
+    """Prazo de captura ou DNS esgotado."""
+
+
+class EmptyBody(TransportError):
+    """GET com corpo vazio."""
+
+
+class TransporteLento(TransportError):
+    """Leitura abaixo da taxa mínima durante uma janela completa."""
+
+
+class HTTPStatusError(TransportError):
+    """Resposta HTTP com status inesperado."""
+
+    def __init__(
+        self,
+        status: int,
+        message: str | None = None,
+        *,
+        http: HTTPMetadata | None = None,
+    ):
+        self.status = status
+        super().__init__(message or f"HTTP {status}", http=http)
+
+
+class ChallengeDetected(TransportError):
+    """Desafio interativo (CAPTCHA/JS) detectado — definida aqui; não lançada neste módulo."""
+
+
+@dataclass(frozen=True)
+class HTTPMetadata:
+    """Recibo HTTP validado (status + Date/Last-Modified/Content-Type/Content-Length)."""
+
+    status_code: int
+    headers: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.status_code) is not int or not 100 <= self.status_code <= 599:
+            raise ValueError("INVALID_HTTP_METADATA_STATUS")
+        if type(self.headers) is not tuple or len(self.headers) > len(HEADER_NAMES):
+            raise ValueError("INVALID_HTTP_METADATA_HEADERS")
+        seen: set[str] = set()
+        for pair in self.headers:
+            if type(pair) is not tuple or len(pair) != 2:
+                raise ValueError("INVALID_HTTP_METADATA_HEADERS")
+            name, value = pair
+            if not _valid_header(name, value) or name in seen:
+                raise ValueError("INVALID_HTTP_METADATA_HEADERS")
+            seen.add(name)
+
+
+@dataclass(frozen=True)
+class Response:
+    url: str
+    final_url: str
+    status: int
+    headers: dict[str, str]
+    body: bytes
+    sha256: str
+    fetched_at: str
+    redirects: list[str]
+    mime: str
+    http: HTTPMetadata | None = None
+
+
+# portado de freoa-verifica/http_receipts.py:_valid_header
+def _valid_header(name: str, value: str) -> bool:
+    if type(name) is not str or name not in HEADER_NAMES or type(value) is not str:
+        return False
+    if not 1 <= len(value) <= 192 or any(ord(c) < 32 or ord(c) > 126 for c in value):
+        return False
+    if name in {"date", "last-modified"}:
+        try:
+            parsed = parsedate_to_datetime(value)
+            return format_datetime(parsed, usegmt=True) == value
+        except (ValueError, TypeError, OverflowError):
+            return False
+    if name == "content-length":
+        return (
+            re.fullmatch(r"0|[1-9][0-9]{0,8}", value) is not None
+            and int(value) <= 50 * 1024 * 1024
+        )
+    return _MIME.fullmatch(value) is not None
+
+
+# portado de freoa-verifica/http_receipts.py:observe_http_response
+def observe_http_response(response) -> HTTPMetadata:
+    """Seleciona cabeçalhos permitidos e válidos; descarta o restante."""
+    getheaders = getattr(response, "getheaders", None)
+    if callable(getheaders):
+        rows = getheaders()
+    else:
+        rows = [(name, response.getheader(name)) for name in sorted(HEADER_NAMES)]
+    if type(rows) not in (tuple, list) or len(rows) > 100:
+        raise ValueError("INVALID_HTTP_METADATA_HEADERS")
+    selected: dict[str, str] = {}
+    duplicates: set[str] = set()
+    for pair in rows:
+        if type(pair) not in (tuple, list) or len(pair) != 2:
+            raise ValueError("INVALID_HTTP_METADATA_HEADERS")
+        name, value = pair
+        if type(name) is not str:
+            continue
+        name = name.lower()
+        if name not in HEADER_NAMES:
+            continue
+        if name in selected:
+            duplicates.add(name)
+        selected[name] = value
+    headers = tuple(
+        (name, value)
+        for name, value in sorted(selected.items())
+        if name not in duplicates and _valid_header(name, value)
+    )
+    return HTTPMetadata(response.status, headers)
+
+
+def observe_headers(response) -> dict[str, str]:
+    """Compat: devolve dict dos cabeçalhos observados no recibo."""
+    try:
+        meta = observe_http_response(response)
+    except (AttributeError, TypeError, ValueError):
+        return {}
+    return dict(meta.headers)
+
+
+def _failure_http(response) -> HTTPMetadata | None:
+    if response is None:
+        return None
+    try:
+        return observe_http_response(response)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _contact_headers() -> dict[str, str]:
+    contact = (os.environ.get("FV_CONTACT") or "").strip()
+    headers = {"User-Agent": DEFAULT_USER_AGENT, "Accept-Encoding": "identity"}
+    if contact:
+        headers["From"] = contact
+    return headers
+
+
+def _normalize_caller_headers(headers: dict[str, str] | None) -> dict[str, str]:
+    """Normaliza nomes (case-insensitive) e recusa cabeçalhos reservados."""
+    if not headers:
+        return {}
+    normalized: dict[str, str] = {}
+    for name, value in headers.items():
+        if type(name) is not str or type(value) is not str:
+            raise ValueError("cabeçalho inválido")
+        key = name.strip()
+        if not key:
+            raise ValueError("cabeçalho inválido")
+        lower = key.lower()
+        if lower in _RESERVED_REQUEST_HEADERS:
+            raise ValueError(f"cabeçalho reservado: {key}")
+        if lower in normalized:
+            raise ValueError(f"cabeçalho duplicado: {key}")
+        # Preserva a forma canônica Title-Case simples para envio.
+        canonical = "-".join(part.capitalize() for part in lower.split("-"))
+        normalized[canonical] = value
+    return normalized
+
+
+def _origin(url: str) -> tuple[str, str, int]:
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return parsed.scheme.lower(), host, port
+
+
+def _path_allowed(
+    host: str,
+    target: str,
+    decoded_path: str,
+    allowed_path_prefixes: dict[str, tuple[str, ...]] | None,
+) -> bool:
+    if not allowed_path_prefixes or host not in allowed_path_prefixes:
+        return True
+    prefixes = allowed_path_prefixes[host]
+    if type(prefixes) is not tuple or not prefixes:
+        raise ValueError("allowed_path_prefixes inválido")
+    for prefix in prefixes:
+        if (
+            not isinstance(prefix, str)
+            or not prefix.startswith("/")
+            or prefix == "/"
+        ):
+            raise ValueError("allowed_path_prefixes inválido")
+    return any(
+        decoded_path.lower().startswith(prefix.lower())
+        and target.lower().startswith(prefix.lower())
+        for prefix in prefixes
+    )
+
+
+def _mime_allowed(mime: str, allowed_mimes: frozenset[str]) -> bool:
+    """Aceita apenas igualdade do tipo base (ex.: application/json ≠ application/json-unexpected)."""
+    return mime in allowed_mimes
+
+
+@dataclass
+class Session:
+    """Sessão efêmera com CookieJar em memória (escopo de uma consulta).
+
+    Cookies nunca entram em recibos HTTP (`Response.headers` / `HTTPMetadata`).
+    """
+
+    _jar: CookieJar = field(default_factory=CookieJar, repr=False, init=False)
+
+    def cookie_header(self, url: str) -> str | None:
+        req = _UrlLibRequest(url)
+        self._jar.add_cookie_header(req)
+        return req.get_header("Cookie") or None
+
+    def absorb_response(self, url: str, response) -> None:
+        """Incorpora Set-Cookie da resposta bruta; não altera metadados de recibo."""
+        from http.cookiejar import Cookie
+
+        host = (urlsplit(url).hostname or "").lower()
+        path = urlsplit(url).path or "/"
+        rows = []
+        getheaders = getattr(response, "getheaders", None)
+        if callable(getheaders):
+            rows = getheaders()
+        for name, value in rows:
+            if str(name).lower() != "set-cookie" or not value:
+                continue
+            parts = [p.strip() for p in str(value).split(";")]
+            if not parts or "=" not in parts[0]:
+                continue
+            cname, cvalue = parts[0].split("=", 1)
+            cname, cvalue = cname.strip(), cvalue.strip()
+            if not cname:
+                continue
+            cpath = path.rsplit("/", 1)[0] or "/"
+            for attr in parts[1:]:
+                if "=" in attr and attr.split("=", 1)[0].strip().lower() == "path":
+                    cpath = attr.split("=", 1)[1].strip() or "/"
+            try:
+                cookie = Cookie(
+                    version=0,
+                    name=cname,
+                    value=cvalue,
+                    port=None,
+                    port_specified=False,
+                    domain=host,
+                    domain_specified=bool(host),
+                    domain_initial_dot=False,
+                    path=cpath,
+                    path_specified=True,
+                    secure=urlsplit(url).scheme == "https",
+                    expires=None,
+                    discard=True,
+                    comment=None,
+                    comment_url=None,
+                    rest={},
+                    rfc2109=False,
+                )
+                self._jar.set_cookie(cookie)
+            except Exception:
+                continue
+
+    def has_cookie(self, name: str) -> bool:
+        target = name.upper()
+        return any(c.name.upper() == target for c in self._jar)
+
+
+# portado de freoa-verifica/core.py:validate_reference
+def validate_reference(
+    url: str,
+    allowed_hosts: frozenset[str],
+    *,
+    allowed_path_prefixes: dict[str, tuple[str, ...]] | None = None,
+) -> tuple[str, str]:
+    """Valida sintaxe e política de host/caminho sem acesso à rede."""
+    if any(not 33 <= ord(char) <= 126 for char in url):
+        raise BlockedHost("URL deve usar ASCII imprimível; percent-encode UTF-8")
+    try:
+        parsed = urlsplit(url)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        port = parsed.port
+    except ValueError as exc:
+        raise BlockedHost(str(exc)) from exc
+    if parsed.scheme != "https" or host not in allowed_hosts or port not in (None, 443):
+        raise BlockedHost("HTTPS em host permitido e porta 443 obrigatórios")
+    if parsed.username or parsed.password or parsed.fragment or "\\" in url:
+        raise BlockedHost("Componente de URL não suportado")
+    target = parsed.path or "/"
+    decoded_path = unquote(target)
+    if any(part in (".", "..") for part in decoded_path.split("/")) or "\\" in decoded_path:
+        raise BlockedHost("Caminho ambíguo")
+    if not _path_allowed(host, target, decoded_path, allowed_path_prefixes):
+        raise BlockedHost("caminho fora do escopo permitido para o host")
+    if parsed.query:
+        target += "?" + parsed.query
+    return host, target
+
+
+# portado de freoa-verifica/core.py:_public_unicast
+def _public_unicast(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    if not ip.is_global or ip.is_multicast:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address):
+        return (
+            ip in ipaddress.ip_network("2000::/3")
+            and ip not in ipaddress.ip_network("2002::/16")
+            and ip not in ipaddress.ip_network("2001::/32")
+            and ip.ipv4_mapped is None
+        )
+    return True
+
+
+# portado de freoa-verifica/core.py:validate_url
+def validate_url(
+    url: str,
+    allowed_hosts: frozenset[str],
+    *,
+    timeout: float = DNS_TIMEOUT,
+    allowed_path_prefixes: dict[str, tuple[str, ...]] | None = None,
+) -> tuple[str, str, str]:
+    """Valida referência e resolve DNS; recusa endereços privados/não unicast."""
+    host, target = validate_reference(
+        url, allowed_hosts, allowed_path_prefixes=allowed_path_prefixes
+    )
+    slots = _DNS_SLOTS
+    if not slots.acquire(blocking=False):
+        raise Timeout("Limite de concorrência DNS atingido")
+    resolved: Queue = Queue(maxsize=1)
+
+    def resolve() -> None:
+        try:
+            resolved.put((socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM), None))
+        except Exception as exc:
+            resolved.put((None, exc))
+        finally:
+            slots.release()
+
+    try:
+        threading.Thread(target=resolve, daemon=True).start()
+    except Exception:
+        slots.release()
+        raise
+    try:
+        records, error = resolved.get(timeout=max(0.0, min(timeout, DNS_TIMEOUT)))
+    except Empty as exc:
+        raise Timeout("Prazo de DNS esgotado") from exc
+    if error is not None:
+        raise BlockedHost(f"Falha de DNS: {error}") from error
+    addresses = sorted({record[4][0] for record in records})
+    if not addresses or any(not _public_unicast(ip) for ip in addresses):
+        raise BlockedHost("DNS retornou endereço inseguro ou não suportado")
+    return host, target, addresses[0]
+
+
+# portado de freoa-verifica/core.py:PinnedHTTPSConnection
+class PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, host: str, ip: str, *, timeout: float = 10.0):
+        super().__init__(host, 443, timeout=timeout, context=ssl.create_default_context())
+        self.ip = ip
+
+    def connect(self) -> None:
+        self.sock = socket.create_connection((self.ip, 443), self.timeout)
+        self.sock = self._context.wrap_socket(
+            self.sock, server_hostname=self.host, do_handshake_on_connect=False
+        )
+        remaining = getattr(self, "capture_deadline", time.monotonic() + self.timeout) - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Prazo esgotado antes do handshake TLS")
+        self.sock.settimeout(min(self.timeout, remaining))
+        self.sock.do_handshake()
+
+
+@dataclass
+class TokenBucket:
+    """Limitador simples por host (tokens/segundo)."""
+
+    rate: float = 1.0
+    capacity: float = 1.0
+    tokens: float = field(default=1.0, init=False)
+    updated: float = field(default_factory=time.monotonic, init=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+
+    def acquire(self, *, timeout: float = 30.0) -> None:
+        deadline = time.monotonic() + timeout
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                elapsed = now - self.updated
+                self.updated = now
+                self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
+                if self.tokens >= 1.0:
+                    self.tokens -= 1.0
+                    return
+                wait = (1.0 - self.tokens) / self.rate if self.rate > 0 else timeout
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Timeout("Rate limit: prazo esgotado")
+            time.sleep(min(wait, remaining))
+
+
+@dataclass
+class CircuitBreaker:
+    """Abre após N falhas consecutivas; permanece aberto por cooldown segundos."""
+
+    failure_threshold: int = 5
+    cooldown: float = 120.0
+    failures: int = field(default=0, init=False)
+    opened_at: float | None = field(default=None, init=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+
+    def before_call(self) -> None:
+        with self._lock:
+            if self.opened_at is not None:
+                if time.monotonic() - self.opened_at < self.cooldown:
+                    raise Timeout("Circuit breaker aberto para este host")
+                self.opened_at = None
+                self.failures = 0
+
+    def record_success(self) -> None:
+        with self._lock:
+            self.failures = 0
+            self.opened_at = None
+
+    def record_failure(self) -> None:
+        with self._lock:
+            self.failures += 1
+            if self.failures >= self.failure_threshold:
+                self.opened_at = time.monotonic()
+
+
+_RATE_LIMITERS: dict[str, TokenBucket] = {}
+_CIRCUIT_BREAKERS: dict[str, CircuitBreaker] = {}
+_GUARD_LOCK = threading.Lock()
+_DEFAULT_RATE = float(os.environ.get("FV_RATE_LIMIT", "1.0"))
+
+
+def _rate_limiter(host: str) -> TokenBucket:
+    with _GUARD_LOCK:
+        if host not in _RATE_LIMITERS:
+            _RATE_LIMITERS[host] = TokenBucket(rate=_DEFAULT_RATE, capacity=max(1.0, _DEFAULT_RATE))
+        return _RATE_LIMITERS[host]
+
+
+def _circuit_breaker(host: str) -> CircuitBreaker:
+    with _GUARD_LOCK:
+        if host not in _CIRCUIT_BREAKERS:
+            _CIRCUIT_BREAKERS[host] = CircuitBreaker()
+        return _CIRCUIT_BREAKERS[host]
+
+
+def reset_guards() -> None:
+    """Limpa limitadores e breakers (uso em testes)."""
+    with _GUARD_LOCK:
+        _RATE_LIMITERS.clear()
+        _CIRCUIT_BREAKERS.clear()
+
+
+def circuit_retry_after() -> float:
+    """Espera conservadora até a reabertura dos circuitos ativos."""
+    with _GUARD_LOCK:
+        breakers = list(_CIRCUIT_BREAKERS.values())
+    return max([0.0] + [max(0.0, b.cooldown - (time.monotonic() - b.opened_at))
+                        for b in breakers if b.opened_at is not None])
+
+
+def _attach_http(exc: BaseException, response) -> None:
+    http_meta = _failure_http(response)
+    if http_meta is None:
+        return
+    if isinstance(exc, TransportError) and exc.http is None:
+        exc.http = http_meta
+
+
+def _fetch_once(
+    url: str,
+    *,
+    method: str,
+    body: bytes | None,
+    caller_headers: dict[str, str],
+    allowed_hosts: frozenset[str],
+    allowed_path_prefixes: dict[str, tuple[str, ...]] | None,
+    allowed_mimes: frozenset[str],
+    max_bytes: int,
+    max_redirects: int,
+    deadline: float,
+    min_bytes_per_second: float | None = None,
+    session: Session | None = None,
+) -> Response:
+    original = url
+    redirects: list[str] = []
+    current_method = method
+    current_body = body
+    req_extra = dict(caller_headers)
+
+    for _ in range(max_redirects + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise Timeout("Prazo de captura esgotado")
+        host, target, ip = validate_url(
+            url,
+            allowed_hosts,
+            timeout=remaining,
+            allowed_path_prefixes=allowed_path_prefixes,
+        )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise Timeout("Prazo de captura esgotado")
+        # Prazo do soquete acompanha o timeout da captura (CKAN/STJ ~25–90s).
+        connection = PinnedHTTPSConnection(host, ip, timeout=max(1.0, remaining))
+        connection.capture_deadline = deadline
+        timed_out = threading.Event()
+        slow = threading.Event()
+        finished = threading.Event()
+        rate_timer = None
+        network_state: dict = {"socket": None}
+
+        def expire(expired=timed_out, conn=connection, state=network_state) -> None:
+            expired.set()
+            active_socket = state["socket"] or getattr(conn, "sock", None)
+            if active_socket is not None:
+                try:
+                    if isinstance(active_socket, socket.socket):
+                        socket.socket.shutdown(active_socket, socket.SHUT_RDWR)
+                    else:
+                        active_socket.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+        timer = threading.Timer(remaining, expire)
+        timer.daemon = True
+        timer.start()
+        response = None
+        try:
+            req_headers = _contact_headers()
+            req_headers.update(req_extra)
+            req_headers["Host"] = host
+            if session is not None:
+                # Cookie da sessão por hop (não misturar com recibo).
+                req_headers.pop("Cookie", None)
+                cookie = session.cookie_header(url)
+                if cookie:
+                    req_headers["Cookie"] = cookie
+            connection.request(
+                current_method, target, body=current_body, headers=req_headers
+            )
+            network_state["socket"] = getattr(connection, "sock", None)
+            response = connection.getresponse()
+            if session is not None:
+                session.absorb_response(url, response)
+            if response.status in (301, 302, 303, 307, 308):
+                location = response.getheader("Location")
+                if not location:
+                    raise BlockedHost(
+                        "Redirecionamento sem Location",
+                        http=_failure_http(response),
+                    )
+                next_url = urljoin(url, location)
+                redirects.append(next_url)
+                validate_reference(
+                    next_url,
+                    allowed_hosts,
+                    allowed_path_prefixes=allowed_path_prefixes,
+                )
+                same_origin = _origin(url) == _origin(next_url)
+                if response.status in (301, 302, 303):
+                    if current_method == "POST":
+                        current_method = "GET"
+                        current_body = None
+                elif response.status in (307, 308):
+                    if not same_origin:
+                        raise BlockedHost(
+                            "307/308 entre origens distintas não permitido",
+                            http=_failure_http(response),
+                        )
+                if not same_origin:
+                    req_extra = {
+                        name: value
+                        for name, value in req_extra.items()
+                        if name.lower() not in _HOP_CREDENTIAL_HEADERS
+                    }
+                url = next_url
+                continue
+            if response.status != 200:
+                raise HTTPStatusError(
+                    response.status, http=_failure_http(response)
+                )
+            encoding = response.getheader("Content-Encoding")
+            if encoding is not None and encoding.strip().lower() != "identity":
+                raise TransportError(
+                    "Apenas Content-Encoding identity é suportado",
+                    http=_failure_http(response),
+                )
+            raw_type = response.getheader("Content-Type", "") or ""
+            if "," in raw_type:
+                raise TransportError(
+                    "Content-Type ambíguo", http=_failure_http(response)
+                )
+            mime = raw_type.split(";", 1)[0].strip().lower()
+            if not mime or not _mime_allowed(mime, allowed_mimes):
+                raise TransportError(
+                    f"MIME não permitido: {mime or '(ausente)'}",
+                    http=_failure_http(response),
+                )
+            transfer_encoding = response.getheader("Transfer-Encoding")
+            if transfer_encoding is not None and transfer_encoding.strip().lower() != "chunked":
+                raise TransportError(
+                    "Transfer-Encoding não suportado",
+                    http=_failure_http(response),
+                )
+            declared = response.getheader("Content-Length")
+            declared_size = None
+            if declared is not None:
+                if len(declared) > 20 or not re.fullmatch(r"[0-9]+", declared):
+                    raise TransportError(
+                        "Content-Length inválido", http=_failure_http(response)
+                    )
+                declared_size = int(declared)
+                if declared_size > max_bytes:
+                    raise TooLarge(
+                        "Corpo declarado acima do limite",
+                        http=_failure_http(response),
+                    )
+                if transfer_encoding is not None:
+                    raise TransportError(
+                        "Cabeçalhos de framing conflitantes",
+                        http=_failure_http(response),
+                    )
+            chunks: list[bytes] = []
+            size = 0
+            window_start = time.monotonic()
+            window_size = 0
+
+            def check_rate() -> None:
+                nonlocal window_start, window_size, rate_timer
+                if finished.is_set():
+                    return
+                now = time.monotonic()
+                if (size - window_size) / max(now - window_start, 0.001) < (MIN_BYTES_PER_SECOND if min_bytes_per_second is None else min_bytes_per_second):
+                    slow.set()
+                    expire()
+                    return
+                window_start, window_size = now, size
+                rate_timer = threading.Timer(SLOW_WINDOW, check_rate)
+                rate_timer.daemon = True
+                rate_timer.start()
+
+            rate_timer = threading.Timer(SLOW_WINDOW, check_rate)
+            rate_timer.daemon = True
+            rate_timer.start()
+            while True:
+                if slow.is_set():
+                    raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response))
+                if timed_out.is_set() or time.monotonic() >= deadline:
+                    raise Timeout(
+                        "Prazo de captura esgotado", http=_failure_http(response)
+                    )
+                # read(n) pode aguardar n bytes apesar de receber dados continuamente.
+                # read1 devolve os bytes disponíveis, permitindo medir o progresso real.
+                reader = getattr(response, "read1", response.read)
+                chunk = reader(min(65536, max_bytes + 1 - size))
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > max_bytes:
+                    raise TooLarge(
+                        "Corpo baixado acima do limite",
+                        http=_failure_http(response),
+                    )
+                chunks.append(chunk)
+            if slow.is_set():
+                raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response))
+            if timed_out.is_set() or time.monotonic() >= deadline:
+                raise Timeout(
+                    "Prazo de captura esgotado", http=_failure_http(response)
+                )
+            if declared_size is not None and size != declared_size:
+                raise TransportError(
+                    "Content-Length difere dos bytes recebidos",
+                    http=_failure_http(response),
+                )
+            payload = b"".join(chunks)
+            if current_method == "GET" and not payload:
+                raise EmptyBody("GET com corpo vazio", http=_failure_http(response))
+            http_meta = observe_http_response(response)
+            return Response(
+                url=original,
+                final_url=url,
+                status=response.status,
+                headers=dict(http_meta.headers),
+                body=payload,
+                sha256=hashlib.sha256(payload).hexdigest(),
+                fetched_at=datetime.now(timezone.utc).isoformat(),
+                redirects=list(redirects),
+                mime=mime,
+                http=http_meta,
+            )
+        except TransportError as exc:
+            _attach_http(exc, response)
+            raise
+        except (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
+            if slow.is_set():
+                raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response)) from exc
+            if isinstance(exc, TimeoutError) or timed_out.is_set() or time.monotonic() >= deadline:
+                raise Timeout(str(exc), http=_failure_http(response)) from exc
+            raise TransportError(str(exc), http=_failure_http(response)) from exc
+        finally:
+            finished.set()
+            if rate_timer is not None:
+                rate_timer.cancel()
+            timer.cancel()
+            if response is not None:
+                close_response = getattr(response, "close", None)
+                if close_response is not None:
+                    close_response()
+            connection.close()
+    raise BlockedHost("Limite de redirecionamentos excedido")
+
+
+def fetch(
+    url: str,
+    *,
+    method: str = "GET",
+    body: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    allowed_hosts: frozenset[str],
+    allowed_path_prefixes: dict[str, tuple[str, ...]] | None = None,
+    allowed_mimes: frozenset[str] | None = None,
+    max_bytes: int = MAX_BYTES,
+    timeout: float = 30.0,
+    min_bytes_per_second: float | None = None,
+    max_redirects: int = MAX_REDIRECTS,
+    session: Session | None = None,
+) -> Response:
+    """Baixa URL HTTPS com IP fixado, validando cada redirecionamento.
+
+    `session` opcional: CookieJar efêmero por consulta (cookies fora dos recibos).
+    """
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or not 1 <= max_bytes <= 50 * 1024 * 1024:
+        raise ValueError("max_bytes inválido")
+    if not isinstance(max_redirects, int) or max_redirects < 0:
+        raise ValueError("max_redirects inválido")
+    method = method.upper()
+    if method not in {"GET", "HEAD", "POST"}:
+        raise ValueError("método HTTP não suportado")
+    mimes = DEFAULT_ALLOWED_MIMES if allowed_mimes is None else allowed_mimes
+    if not mimes or any(
+        not isinstance(m, str) or not re.fullmatch(r"[a-z0-9.+-]+/[a-z0-9.+-]+", m)
+        for m in mimes
+    ):
+        raise ValueError("allowed_mimes inválido")
+    if min_bytes_per_second is not None and not 1 <= min_bytes_per_second <= 1024 * 1024:
+        raise ValueError("taxa mínima inválida")
+    caller_headers = _normalize_caller_headers(headers)
+
+    # Prazo total inicia antes do rate limiter; a espera conta no prazo.
+    deadline = time.monotonic() + timeout
+    slots = _CAPTURE_SLOTS
+    if not slots.acquire(blocking=False):
+        raise Timeout("Limite de concorrência de captura atingido")
+    outcome: Queue = Queue(maxsize=1)
+
+    def worker() -> None:
+        try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Timeout("Prazo de captura esgotado")
+            host_hint, _ = validate_reference(
+                url, allowed_hosts, allowed_path_prefixes=allowed_path_prefixes
+            )
+            limiter = _rate_limiter(host_hint)
+            breaker = _circuit_breaker(host_hint)
+            breaker.before_call()
+            try:
+                limiter.acquire(timeout=max(0.0, deadline - time.monotonic()))
+                result = _fetch_once(
+                    url,
+                    method=method,
+                    body=body,
+                    caller_headers=caller_headers,
+                    allowed_hosts=allowed_hosts,
+                    allowed_path_prefixes=allowed_path_prefixes,
+                    allowed_mimes=mimes,
+                    max_bytes=max_bytes,
+                    max_redirects=max_redirects,
+                    deadline=deadline,
+                    **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
+                    session=session,
+                )
+                breaker.record_success()
+                outcome.put((result, None))
+            except Exception as exc:
+                if isinstance(exc, HTTPStatusError) and exc.status in {404,410}:
+                    breaker.record_success()
+                else:
+                    breaker.record_failure()
+                outcome.put((None, exc))
+        except Exception as exc:
+            outcome.put((None, exc))
+        finally:
+            slots.release()
+
+    try:
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+    except Exception:
+        slots.release()
+        raise
+
+    thread.join(timeout=max(0.0, deadline - time.monotonic()))
+    if thread.is_alive():
+        raise Timeout("Prazo de captura esgotado")
+    try:
+        result, error = outcome.get_nowait()
+    except Empty as exc:
+        raise Timeout("Prazo de captura esgotado") from exc
+    if error is not None:
+        raise error
+    return result

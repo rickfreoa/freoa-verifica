@@ -1,0 +1,80 @@
+{
+  "versao": 1,
+  "descricao": "Corpus semente FREOA Verifica — obras públicas oficiais",
+  "leis_principais_alteradores": [
+    {"tipo": "LEI", "numero": "6404", "ano": 1976, "rotulo": "LSA"},
+    {"tipo": "LEI", "numero": "6385", "ano": 1976, "rotulo": "Mercado de Capitais"},
+    {"tipo": "LEI", "numero": "10406", "ano": 2002, "rotulo": "Código Civil"},
+    {"tipo": "LEI", "numero": "13105", "ano": 2015, "rotulo": "CPC"},
+    {"tipo": "LEI", "numero": "11101", "ano": 2005, "rotulo": "Falências"},
+    {"tipo": "LEI", "numero": "13709", "ano": 2018, "rotulo": "LGPD"}
+  ],
+  "planalto": [
+    {"tipo": "CF", "numero": "1988", "ano": 1988, "rotulo": "Constituição Federal"},
+    {"tipo": "LEI", "numero": "6404", "ano": 1976, "rotulo": "Lei das S.A."},
+    {"tipo": "LEI", "numero": "6385", "ano": 1976, "rotulo": "Mercado de Capitais"},
+    {"tipo": "LEI", "numero": "10406", "ano": 2002, "rotulo": "Código Civil"},
+    {"tipo": "LEI", "numero": "13105", "ano": 2015, "rotulo": "Código de Processo Civil"},
+    {"tipo": "LEI", "numero": "11101", "ano": 2005, "rotulo": "Falências e Recuperação"},
+    {"tipo": "LEI", "numero": "9307", "ano": 1996, "rotulo": "Arbitragem"},
+    {"tipo": "LEI", "numero": "12846", "ano": 2013, "rotulo": "Anticorrupção"},
+    {"tipo": "LEI", "numero": "13709", "ano": 2018, "rotulo": "LGPD"},
+    {"tipo": "LEI", "numero": "14430", "ano": 2022, "rotulo": "Marco Legal da Securitização"},
+    {"tipo": "LEI", "numero": "10303", "ano": 2001, "rotulo": "Reforma LSA"},
+    {"tipo": "LEI", "numero": "14195", "ano": 2021, "rotulo": "Ambiente de Negócios"},
+    {"tipo": "LEI", "numero": "13874", "ano": 2019, "rotulo": "Liberdade Econômica"},
+    {"tipo": "LEI", "numero": "12529", "ano": 2011, "rotulo": "CADE / Defesa da Concorrência"},
+    {"tipo": "LEI", "numero": "11076", "ano": 2004, "rotulo": "CPR e títulos do agronegócio"},
+    {"tipo": "LEI", "numero": "12431", "ano": 2011, "rotulo": "Incentivos ao mercado de capitais"},
+    {"tipo": "LEI", "numero": "14801", "ano": 2024, "rotulo": "Debêntures de infraestrutura"},
+    {"tipo": "LEI", "numero": "8668", "ano": 1993, "rotulo": "Fundos de Investimento Imobiliário"},
+    {"tipo": "LEI", "numero": "7492", "ano": 1986, "rotulo": "Crimes contra o Sistema Financeiro"},
+    {"tipo": "LEI", "numero": "9613", "ano": 1998, "rotulo": "Lavagem de Dinheiro"},
+    {"tipo": "LEI", "numero": "13303", "ano": 2016, "rotulo": "Estatuto das Estatais"},
+    {"tipo": "LEI", "numero": "8078", "ano": 1990, "rotulo": "CDC"},
+    {"tipo": "LEI", "numero": "4728", "ano": 1965, "rotulo": "Mercado de Capitais (histórico)"},
+    {"tipo": "LEI", "numero": "6024", "ano": 1974, "rotulo": "Intervenção e Liquidação Extrajudicial"},
+    {"tipo": "LCP", "numero": "182", "ano": 2021, "rotulo": "Marco Legal das Startups"},
+    {"tipo": "DEL", "numero": "4657", "ano": 1942, "rotulo": "LINDB"}
+  ],
+  "cvm": {
+    "resolucoes": "todas",
+    "pareceres_orientacao": "todos",
+    "instrucoes_historicas": [358, 361, 400, 476, 480, 481, 555, 472, 578],
+    "preferir": "consolidado_docx"
+  },
+  "bcb_cmn": {
+    "especificas": [
+      {"tipo": "Resolução CMN", "numero": 4966},
+      {"tipo": "Resolução CMN", "numero": 5118}
+    ],
+    "recentes": {
+      "tipos": ["Resolução CMN", "Resolução BCB"],
+      "quantidade": 200
+    }
+  },
+  "jurisprudencia": {
+    "stj_espelhos": {
+      "orgaos": [
+        "espelhos-de-acordaos-corte-especial",
+        "espelhos-de-acordaos-segunda-secao",
+        "espelhos-de-acordaos-terceira-turma",
+        "espelhos-de-acordaos-quarta-turma"
+      ],
+      "meses_recentes": 12
+    },
+    "stj_precedentes_qualificados": false,
+    "cvm_colegiado_desde": 2023,
+    "tcu_acordaos": 2000,
+    "stf_temas_rg": {"de": 1, "ate": 1400},
+    "stf_sumulas": true
+  },
+  "atribuicoes": {
+    "stj": "CC BY — atribuição ao STJ Dados Abertos",
+    "cvm": "ODbL quando aplicável (metadados/índices); textos oficiais em domínio público",
+    "planalto": "domínio público (Lei 9.610/98, art. 8º, IV)",
+    "bcb": "domínio público / uso oficial",
+    "tcu": "domínio público / uso oficial",
+    "stf": "domínio público / uso oficial"
+  }
+}
