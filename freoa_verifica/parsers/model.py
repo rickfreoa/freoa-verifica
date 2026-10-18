@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 DOCUMENT_BLOCKING_CODES = frozenset({"TRUNCATED"})
 PROVISION_BLOCKING_CODES = frozenset(
-    {"DUPLICATE_CURRENT", "ORDER", "UNCERTAIN_CONTINUATION"}
+    {"DUPLICATE_CURRENT", "ORDER", "UNCERTAIN_CONTINUATION", "SCOPE_COLLISION"}
 )
 
 
@@ -50,6 +50,7 @@ class Redaction:
     annotations: list[Annotation] = field(default_factory=list)
     span: tuple[int, int] = (0, 0)  # offsets no texto extraído
     superseded_without_strike: bool = False
+    scope: str = ""
 
 
 @dataclass

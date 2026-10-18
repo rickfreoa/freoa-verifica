@@ -18,13 +18,14 @@ from freoa_verifica.parsers.model import (
     Redaction,
 )
 from freoa_verifica.parsers.paths import (
+    adct_scope_from_heading,
     annex_scope_from_heading,
     nest_supplement_scope,
     roman_to_int,
     supplement_scope_from_heading,
 )
 
-PARSER_VERSION = "1.2.2"
+PARSER_VERSION = "1.2.3"
 
 DEFAULT_MAX_INPUT_BYTES = 30 * 1024 * 1024
 DEFAULT_MAX_NESTING = 200
@@ -436,6 +437,7 @@ def _append_redaction(
             order=order,
             annotations=annotations,
             span=(start, end),
+            scope=ctx.scope,
         )
     )
     ctx.last_device_path = path
@@ -904,6 +906,9 @@ def parse_html_devices(
 
         # Anexos / suplementos
         scope = annex_scope_from_heading(full_plain)
+        # ADCT: só no corpo, depois do primeiro dispositivo (o sumário não abre escopo)
+        if scope is None and ctx.provisions and not ctx.scope:
+            scope = adct_scope_from_heading(full_plain)
         sup = supplement_scope_from_heading(full_plain)
         if scope or sup:
             if ctx.in_quote:
