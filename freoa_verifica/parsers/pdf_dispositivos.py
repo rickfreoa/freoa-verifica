@@ -81,17 +81,16 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
     marcar = _manter_cortes_ambiguos(frags, fora_por_pagina)
     # Imagem no corpo pode conter texto normativo que o pypdf não extrai (auditoria 1.1.0, rodada 9):
     # as linhas mantidas imediatamente acima e abaixo dela ficam marcadas.
-    # Timbre: a mesma imagem (mesmo conteúdo, sha256), na mesma posição, em ao menos metade das páginas (mín. 3),
-    # inteira na faixa de margem e sem texto mantido na mesma altura nem do lado de fora da faixa.
-    timbres = Counter((nome, round(b), round(t)) for imgs in imagens for b, t, nome in imgs if nome)
+    # Timbre: só imagem previamente identificada (data/timbres-cvm.json, pelo sha256 do conteúdo), inteira na
+    # faixa de margem e sem texto mantido na mesma altura nem do lado de fora da faixa (auditoria, rodada 15).
+    timbres = _timbres_conhecidos()
     for p, (parts, fora, imgs, h) in enumerate(zip(frags, fora_por_pagina, imagens, alturas)):
         ys = sorted({round(y) for y, t in parts if _norm(t) and round(y) not in fora})
         for base, topo, nome in imgs:
             acima = [y for y in ys if y >= topo]
             abaixo = [y for y in ys if y <= base]
             lado = [y for y in ys if base - 2 < y < topo + 2]  # linha que divide a altura com a imagem
-            repetido = nome is not None and timbres[(nome, round(base), round(topo))] >= minimo
-            if repetido and not lado and ((base >= _FAIXA_SUP * h and not acima) or (topo <= _FAIXA_INF * h and not abaixo)):
+            if nome in timbres and not lado and ((base >= _FAIXA_SUP * h and not acima) or (topo <= _FAIXA_INF * h and not abaixo)):
                 continue
             for y in ([min(acima)] if acima else []) + ([max(abaixo)] if abaixo else []) + lado:
                 marcar.add((p, y))
@@ -195,6 +194,16 @@ def _faixa_de_formulario_com_imagem(page, nome, cm) -> tuple[float, float] | Non
         xf, yf = m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]  # matriz do formulário
         ys.append(float(cm[1]) * xf + float(cm[3]) * yf + float(cm[5]))  # CTM externa
     return min(ys), max(ys)
+
+
+def _timbres_conhecidos() -> frozenset[str]:
+    import json
+    from pathlib import Path
+    caminho = Path(__file__).resolve().parent.parent / "data" / "timbres-cvm.json"
+    try:
+        return frozenset(json.loads(caminho.read_text(encoding="utf-8"))["timbres"])
+    except (OSError, ValueError, KeyError):
+        return frozenset()  # sem lista, nenhuma imagem é dispensada
 
 
 def _digest_imagem(page, nome) -> str | None:

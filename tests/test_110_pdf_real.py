@@ -193,9 +193,16 @@ def test_imagens_distintas_com_mesmo_nome_nao_sao_timbre():
     assert (res.text.status, res.text.reason_code) == ("unknown", "MARGEM_ADJACENTE")
 
 
-def test_timbre_identico_repetido_nao_bloqueia():
+@pytest.mark.parametrize("conhecido,esperado", [(True, "verified"), (False, "unknown")])
+def test_so_timbre_conhecido_nao_bloqueia(monkeypatch, conhecido, esperado):
+    # Auditor, rodada 15: imagem idêntica repetida na margem pode ser ressalva; só a lista de timbres dispensa.
+    import hashlib
+    from freoa_verifica.parsers import pdf_dispositivos
+    dado = b"\x07"
+    lista = frozenset({hashlib.sha256(dado).hexdigest()}) if conhecido else frozenset()
+    monkeypatch.setattr(pdf_dispositivos, "_timbres_conhecidos", lambda: lista)
     pags = [([(700, "RESOLUCAO CVM 999/2026")] if n == 1 else []) + [(300, f"Art. {n}o A divulgacao e obrigatoria.")]
             for n in (1, 2, 3)]
-    doc = parse_pdf_direto(_pdf_paginas_com_imagem([(l, 790, 40, b"\x07") for l in pags]))
+    doc = parse_pdf_direto(_pdf_paginas_com_imagem([(l, 790, 40, dado) for l in pags]))
     res = _verificar(doc, "art. 2 da Resolução CVM 999/2026", "A divulgacao e obrigatoria.")
-    assert res.text.status == "verified"
+    assert res.text.status == esperado
