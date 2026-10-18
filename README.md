@@ -31,6 +31,8 @@ fv doctor
 fv snapshot install                   # corpus semente (opcional, recomendado)
 ```
 
+No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verifica.ps1) faz tudo de uma vez: cria o ambiente em `%USERPROFILE%\freoa-verifica`, instala o pacote (o wheel da mesma pasta, se houver, ou o da release) e o acervo com conferência de checksum. Execute com `powershell -ExecutionPolicy Bypass -File .\instalar-freoa-verifica.ps1`.
+
 ### Como servidor para clientes compatíveis com MCP
 
 ```json
