@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, StrictStr
 
+from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP, EntradaInvalida, Sobrecarga
 from freoa_verifica.service import Verifica
 
@@ -118,7 +119,7 @@ def create_app(
     if modo == "remoto" and not expected:
         raise RuntimeError("recusado: modo remoto exige token (--token ou FV_API_TOKEN)")
 
-    svc = Verifica(home=home, registro=registro, exigir_acervo=True)
+    svc = Verifica(home=home, registro=registro, exigir_acervo=True, max_concorrencia=servidor_max_concorrencia())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

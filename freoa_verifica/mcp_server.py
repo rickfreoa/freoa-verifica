@@ -21,6 +21,7 @@ except ModuleNotFoundError:
     # mcp>=2 renomeou FastMCP → MCPServer
     from mcp.server.mcpserver import MCPServer as FastMCP
 
+from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP
 from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica.service import DOC_CLOSE, DOC_OPEN, Verifica
@@ -75,7 +76,7 @@ def _service(home: str | None = None, registro: str | None = None) -> Verifica:
     with _servicos_lock:
         svc = _servicos.get(chave)
         if svc is None:
-            svc = _servicos[chave] = Verifica(home=chave, registro=registro, exigir_acervo=True)
+            svc = _servicos[chave] = Verifica(home=chave, registro=registro, exigir_acervo=True, max_concorrencia=servidor_max_concorrencia())
         elif normalizar_registro(registro) != svc.registro:
             # C5: nunca gravar mais (nem aceitar em silêncio uma promessa de gravar menos) do que o serviço faz
             raise ValueError(

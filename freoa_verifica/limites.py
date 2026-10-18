@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from contextvars import ContextVar
 from typing import Any
@@ -65,3 +66,8 @@ def validar(args: dict[str, Any]) -> None:
             for t in valor:
                 if not isinstance(t, str) or len(t) > 256:
                     raise EntradaInvalida("tribunais: itens de texto de até 256 caracteres")
+
+
+def servidor_max_concorrencia() -> int:
+    """Limite de operações caras simultâneas nas entradas de servidor (REST, MCP)."""
+    return max(1, int(os.environ.get("FV_MAX_CONCORRENCIA") or 4))

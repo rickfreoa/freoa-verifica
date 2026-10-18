@@ -286,8 +286,11 @@ class Verifica:
         self._cv = threading.Condition()
         self._ops = 0
         self._excl_owner: int | None = None
-        n = max_concorrencia or int(os.environ.get("FV_MAX_CONCORRENCIA", "4"))
-        self._caro = threading.BoundedSemaphore(max(1, n))
+        # F02: o limite protege servidores expostos (REST/MCP passam max_concorrencia);
+        # uso em processo pela biblioteca ou pela CLI só é limitado se FV_MAX_CONCORRENCIA for definido.
+        env_n = os.environ.get("FV_MAX_CONCORRENCIA")
+        n = max_concorrencia or (int(env_n) if env_n else None)
+        self._caro = threading.BoundedSemaphore(max(1, n)) if n else None
         self._resolver = MemoryResolver()
         self._connectors: dict[str, Any] = {}
         self._last_health: dict[str, dict[str, Any]] = {}
@@ -305,6 +308,7 @@ class Verifica:
             finally:
                 self._local.prof -= 1
             return
+        caro = caro and self._caro is not None
         if caro and not self._caro.acquire(timeout=_ESPERA_CONCORRENCIA):
             raise Sobrecarga("operações simultâneas em excesso; tente novamente")
         try:

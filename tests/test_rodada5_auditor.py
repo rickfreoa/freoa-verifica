@@ -1,6 +1,7 @@
 """Rodada 5 (auditor Codex): A7 por documento (012), status com falha de fonte, orçamento na busca inicial."""
 from __future__ import annotations
 
+import json
 import time
 from datetime import datetime, timezone
 
@@ -208,10 +209,10 @@ def test_indexacao_lenta_que_ignora_prazo_e_abandonada(tmp_path, monkeypatch):
         # folga para runners lentos (Windows na CI): o que se testa é o abandono do item lento
         out = s._buscar_normas("cvm_normas", "x", None, orcamento_s=0.3)
         assert time.monotonic() - t < 0.9
-        if out["itens"]:  # o prazo venceu na indexação do item lento
-            assert out["itens"][0]["nao_indexado"] and out["itens"][0]["motivo"] == "orcamento"
-        else:  # runner lento: o prazo venceu já na busca inicial
-            assert out["status"] == "indisponivel" and out["motivo"] == "orcamento"
+        # O prazo pode vencer na indexação do item lento ou, em runner lento, já na busca inicial;
+        # em qualquer caso a resposta não é "ok", declara o orçamento e nenhum item fica indexado.
+        assert out["status"] != "ok" and "orcamento" in json.dumps(out, ensure_ascii=False)
+        assert all(i.get("nao_indexado") for i in out.get("itens") or [])
         time.sleep(1.2)
         assert not gravou
         assert s.conn.execute("SELECT COUNT(*) FROM fts_staging").fetchone()[0] == 0

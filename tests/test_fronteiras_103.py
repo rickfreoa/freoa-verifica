@@ -451,3 +451,16 @@ def test_purga_falha_antes_da_troca_deixa_o_original(tmp_path, monkeypatch):
     assert not (tmp_path / "verifica.sqlite3.purga-novo").exists() and not (tmp_path / "purgados").exists()
     assert {r[0] for r in svc.conn.execute("SELECT id FROM run")} == {"velha", "nova"}
     svc.close()
+
+
+def test_limite_de_concorrencia_so_nas_entradas_de_servidor(tmp_path, monkeypatch):
+    """F02: biblioteca e CLI não recusam uso legítimo em processo; REST e MCP limitam."""
+    monkeypatch.delenv("FV_MAX_CONCORRENCIA", raising=False)
+    with Verifica(home=tmp_path / "lib") as svc:
+        assert svc._caro is None
+    monkeypatch.setenv("FV_MAX_CONCORRENCIA", "2")
+    with Verifica(home=tmp_path / "env") as svc:
+        assert svc._caro is not None
+    from freoa_verifica.limites import servidor_max_concorrencia
+    monkeypatch.delenv("FV_MAX_CONCORRENCIA", raising=False)
+    assert servidor_max_concorrencia() == 4
