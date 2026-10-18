@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
+import time
+from contextvars import ContextVar
 from typing import Any
+
+# Prazo (time.monotonic) do orçamento da operação em curso; fetch e parse isolado o respeitam.
+PRAZO: ContextVar[float | None] = ContextVar("prazo_orcamento", default=None)
+
+
+def restante(timeout: float) -> float:
+    """min(restante do orçamento, timeout do perfil); 0 se o orçamento estourou."""
+    prazo = PRAZO.get()
+    return timeout if prazo is None else max(0.0, min(timeout, prazo - time.monotonic()))
 
 # Tetos de comprimento por nome de parâmetro (espelham o MCP).
 TETO_TEXTO = {

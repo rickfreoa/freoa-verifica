@@ -12,6 +12,7 @@ from freoa_verifica.connectors.challenge import (
     map_transport_error,
     unavailable_from_challenge,
 )
+from freoa_verifica.limites import restante
 from freoa_verifica.transport import (
     DEFAULT_USER_AGENT,
     HTTPStatusError,
@@ -48,6 +49,9 @@ def connector_fetch(
     expected_content: str | None = None,
 ) -> Response:
     """fetch + detecção de desafio; propaga Unavailable."""
+    timeout = restante(timeout)
+    if timeout <= 0:
+        raise Unavailable("orcamento")
     hdrs = dict(ua_header(user_agent))
     if headers:
         hdrs.update(headers)

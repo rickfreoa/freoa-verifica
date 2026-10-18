@@ -65,7 +65,7 @@ from freoa_verifica.verify import (
 )
 
 from freoa_verifica import acervo as _acervo
-from freoa_verifica.limites import EntradaInvalida, Sobrecarga, validar as _validar
+from freoa_verifica.limites import PRAZO, EntradaInvalida, Sobrecarga, validar as _validar
 from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica import derivados as _derivados
 from freoa_verifica.registro import politica_atual as _politica_atual
@@ -867,6 +867,7 @@ class Verifica:
         page = items[offset:offset + limite]
         truncado = len(items) > offset + limite or any(v.get("truncado") for v in fontes_status.values())
         return {
+            "status": "parcial" if truncado else "ok",  # decisão 0024
             "itens": page,
             "resultados": page,
             "fontes": fontes_status,
@@ -2195,7 +2196,17 @@ class Verifica:
                 itens.append({"titulo": c.title, "chave": c.key, "url": c.url, "trecho": c.snippet or "",
                               "capture_id": None, "metadados": c.metadata, "nao_indexado": True})
                 continue
-            item = self._index_candidate_legis(connector, c)
+            token = PRAZO.set(prazo)
+            try:
+                item = self._index_candidate_legis(connector, c)
+            finally:
+                PRAZO.reset(token)
+            if not item.get("capture_id") and time.monotonic() >= prazo:  # orçamento estourou no item
+                nao_indexados += 1
+                itens.append({"titulo": c.title, "chave": c.key, "url": c.url, "trecho": c.snippet or "",
+                              "capture_id": None, "metadados": c.metadata, "nao_indexado": True,
+                              "motivo": "orcamento"})
+                continue
             if not item.get("capture_id"):
                 falhas.append({"chave": c.key, "url": c.url, "status": "unavailable",
                                "motivo": item.get("motivo") or "captura_indisponivel"})
@@ -2209,11 +2220,12 @@ class Verifica:
                 "metadados": c.metadata,
             })
         status = ("parcial" if itens else "indisponivel") if falhas else "ok"
-        if nao_indexados and status == "ok":
+        truncado = bool(getattr(cands, "truncado", False))  # A9
+        if (nao_indexados or truncado) and status == "ok":  # decisão 0024
             status = "parcial"
         return {"status": status, "itens": itens, "total": getattr(cands, "total", len(cands)),
                 "falhas": falhas, "indexados": len(itens) - nao_indexados, "nao_indexados": nao_indexados,
-                "truncado": bool(getattr(cands, "truncado", False))}  # A9
+                "truncado": truncado}
 
     # ------------------------------------------------------------------
     # Evidência / fontes / sync

@@ -4,6 +4,7 @@ from dataclasses import asdict
 import json
 import subprocess
 import sys
+from freoa_verifica.limites import restante
 from freoa_verifica.parsers.model import Issue, ParsedDocument, document_from_dict
 
 _PROFILES = ("planalto", "cvm_docx", "bcb_json", "cvm_pdf")
@@ -21,6 +22,9 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float) -> ParsedDoc
     if profile not in _PROFILES:
         return _failure(profile, "perfil desconhecido")
     raw = data.encode("utf-8") if isinstance(data, str) else data
+    timeout = restante(timeout)
+    if timeout <= 0:
+        return _failure(profile, "orcamento esgotado")
     with subprocess.Popen(
         [sys.executable, "-m", "freoa_verifica.parsers.isolated", profile],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
