@@ -1,7 +1,7 @@
 # 0021 — Situação da obra (contrato C2)
 
 A situação cadastral de CVM, BCB e CMN vem de evidência própria capturada pelo
-transporte e fica em `work_status` (migração 006): `revogada`, `cancelada`,
+transporte e fica em `work_status` (migração 007): `revogada`, `cancelada`,
 `vigente_declarada`, `ilegivel` ou `nao_aplicavel`, com texto oficial, ato
 revogador, `data_efeito`, captura, hash e `lido_em`.
 

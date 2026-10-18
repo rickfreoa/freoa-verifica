@@ -95,7 +95,7 @@ def test_reopen_idempotent(db_path):
     row = c2.execute("SELECT id FROM source WHERE id='s1'").fetchone()
     assert row is not None
     versions = {row[0] for row in c2.execute("SELECT version FROM schema_version")}
-    assert versions == {1, 2, 3, 4, 5, 6}
+    assert versions == {1, 2, 3, 4, 5, 6, 7, 8}
     c2.close()
 
 

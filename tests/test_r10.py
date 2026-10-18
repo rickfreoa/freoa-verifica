@@ -58,7 +58,9 @@ def test_fallback_uses_bm25_and_does_not_replace_exhausted_and_page(corpus):
     assert normal['modo_busca'] == 'normal' and normal['cursor'] is None
     from freoa_verifica.service import _encode_cursor
     exhausted = corpus.pesquisar_jurisprudencia('acordos debentures', tribunais=['stj'], cursor=_encode_cursor(1))
-    assert exhausted['modo_busca'] == 'normal' and not exhausted['itens']
+    # Decisão 0025: o AND esgotado é completado pelo OR, sempre marcado como parcial.
+    assert exhausted['modo_busca'] == 'normal'
+    assert exhausted['itens'] and {i['correspondencia'] for i in exhausted['itens']} == {'parcial'}
     expanded = corpus.pesquisar_jurisprudencia('acordos inexistente', tribunais=['stj'])
     rows = corpus.conn.execute(
         "SELECT d.id FROM fts_decision f JOIN decision d ON d.official_id=f.official_id AND d.court=f.court "

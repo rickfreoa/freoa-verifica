@@ -14,6 +14,12 @@
 - Busca CVM: decodificação UTF-8 correta (consultas acentuadas), sem exigir a frase literal, `unavailable` quando a fonte informa total > 0 e nada é lido, um item por ato (anexos duplicados descartados) e espécie acompanhando o número ("Instrução CVM 358"). Busca CVM/BCB informa `truncado` pelo total da fonte.
 - BCB/CMN: "Resolução CMN 4.966" na consulta aciona o lookup exato por número.
 - PDF da CVM roda em processo isolado com limites de tempo, memória, páginas e texto (decisão 0026).
+- Busca (frente F-D, decisão 0025): consulta que é só classe e número (`REsp 2.210.785`, `Recurso Especial nº ...`) faz lookup exato no acervo; achado traz evidência, incidentes do mesmo processo vão em `relacionados` e ausência devolve `nao_confirmado_no_acervo` com a cobertura (tribunais, órgãos, período), sem outros processos.
+- Candidatos de legislação indexados ao vivo ficam em `fts_staging` (migração 008), fora do FTS canônico; só a busca que consulta fontes ao vivo os vê, marcados `candidato_ao_vivo`.
+- Fontes não consultadas (offline, limite atingido, sem busca textual como o Planalto) aparecem como `nao_consultada`; `truncado` e `total` por fonte são propagados quando o conector os informa.
+- Filtro `fonte` da busca local de legislação é aplicado antes do limite.
+- Ranking: MATCH de decisões restrito a ementa e inteiro teor, bm25 ponderado (ementa 5, inteiro teor 1), `pertinencia` e `correspondencia` em cada item, corte de dois terços dos termos e OR completando AND escasso (substitui "OR só com AND vazio" da 0010).
+- Tesauro jurídico `tesauro-1` (20 pares determinísticos, `freoa_verifica/data/tesauro-1.json`) expande a consulta por OR; a versão e as expansões saem na resposta.
 
 ## 1.0.2
 
