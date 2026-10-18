@@ -19,7 +19,7 @@ _log = logging.getLogger(__name__)
 # 2 = 1.0.3 (ADCT com escopo próprio, rubrica, FTS só com redações do modelo atual).
 # 3 = 1.1.0 (cvm-pdf-2 com dispositivos inferidos, tipo "Resolução" do BCB como CMN pelo preâmbulo,
 #     data de efeito declarada no BCB, situação estruturada de precedentes).
-# 4 = 1.2.0 (espécie declarada pela fonte prevalece: monocrática nunca rotulada como acórdão; decisão 0037).
+# 4 = 1.2.0 (espécie declarada pela fonte prevalece: monocrática nunca rotulada como acórdão; decisão 0038).
 DERIVED_VERSION = 4
 
 REASON = "ACERVO_DESATUALIZADO"
@@ -152,7 +152,7 @@ def _validar(origem: dict[str, int], novo: sqlite3.Connection) -> None:
 
 
 def reclassificar_monocraticas(conn: sqlite3.Connection) -> int:
-    """Monocrática gravada com rótulo de colegiado volta a E (decisão 0037). Só toca essa espécie."""
+    """Monocrática gravada com rótulo de colegiado volta a E (decisão 0038). Só toca essa espécie."""
     from freoa_verifica.authority import as_dict, classify_authority
 
     n = 0

@@ -27,7 +27,7 @@ coletores TJMG/TJRS sem API documentada. O relatório não os recomenda antes de
 
 ## Arquitetura das correções
 
-### P0 contrato de evidência (decisão 0037)
+### P0 contrato de evidência (decisão 0038)
 
 - `obter_decisao(id, parte, tribunal=None)`: busca por id interno; senão por
   `official_id` filtrado por tribunal quando informado; 0 linhas →
@@ -46,7 +46,7 @@ coletores TJMG/TJRS sem API documentada. O relatório não os recomenda antes de
   `_PERFIS_INTEIRO_TEOR`); comprimento deixa de decidir.
 - `DERIVED_VERSION` 4 (classificação recalculada); `fv acervo reconstruir` refaz.
 
-### P1 atualização (decisão 0038)
+### P1 atualização (decisão 0039)
 
 - Checkpoint STJ passa a incluir `last_modified`/`metadata_modified`/`size` do CKAN.
   Mudança de metadado invalida o checkpoint. Os dois meses mais recentes são

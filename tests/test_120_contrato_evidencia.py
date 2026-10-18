@@ -1,4 +1,4 @@
-"""1.2.0 (decisão 0037): a descrição da prova corresponde ao documento entregue (achados A1, A2, A3, A5, A12)."""
+"""1.2.0 (decisão 0038): a descrição da prova corresponde ao documento entregue (achados A1, A2, A3, A5, A12)."""
 import hashlib
 from types import SimpleNamespace
 

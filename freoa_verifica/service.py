@@ -181,12 +181,12 @@ def _decode_cursor(cursor: str | None) -> int:
 
 _KIND_ESPECIE = {"decisao_monocratica": "monocratica", "monocratica": "monocratica",
                  "repercussao_geral": "repercussao_geral"}
-# Perfis cujo `text` é o documento integral declarado pela fonte (decisão 0037); comprimento não decide.
+# Perfis cujo `text` é o documento integral declarado pela fonte (decisão 0038); comprimento não decide.
 _PERFIS_INTEIRO_TEOR = frozenset({"stf_pdf", "tjsp_pdf", "cvm_colegiado", "tjdft_inteiro_teor"})
 
 
 def _species_from_meta(court: str, class_name: str | None, organ: str | None, kind: str | None = None) -> str:
-    # Espécie declarada pela fonte prevalece sobre a inferência por classe/órgão (decisão 0037).
+    # Espécie declarada pela fonte prevalece sobre a inferência por classe/órgão (decisão 0038).
     if kind in _KIND_ESPECIE:
         return _KIND_ESPECIE[kind]
     cls = (class_name or "").lower()
@@ -2274,13 +2274,13 @@ class Verifica:
         if court:
             rows = [r for r in rows if r["court"] == court]
         if not rows:
-            # Identidade = tribunal + identificador oficial (decisão 0037): sem tribunal, colisão é ambiguidade.
+            # Identidade = tribunal + identificador oficial (decisão 0038): sem tribunal, colisão é ambiguidade.
             sql, args = "SELECT * FROM decision WHERE official_id=?", [id]
             if court:
                 sql, args = sql + " AND court=?", [id, court]
             rows = self.conn.execute(sql + " ORDER BY court, id", args).fetchall()
         if not rows:
-            # Ausência no banco local não é inexistência do julgado (decisão 0037).
+            # Ausência no banco local não é inexistência do julgado (decisão 0038).
             return {"status": "nao_encontrado_no_acervo", "escopo": "acervo_local", "id": id,
                     **({"tribunal": court} if court else {})}
         if len(rows) > 1:
@@ -2310,7 +2310,7 @@ class Verifica:
             **_situacao_precedente(row["authority_attrs_json"], _especie_gravada(row["authority_attrs_json"])),
         }
         if doc is None or not (doc["text"] or ""):
-            # Parte ausente nunca é substituída por outro documento sob o rótulo pedido (decisão 0037, A1).
+            # Parte ausente nunca é substituída por outro documento sob o rótulo pedido (decisão 0038, A1).
             return {**base, "status": "parte_indisponivel", "motivo": "PARTE_NAO_CAPTURADA",
                     "parte_entregue": None, "texto": None, "capture_id": None}
         text = doc["text"]

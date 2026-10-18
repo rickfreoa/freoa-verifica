@@ -582,7 +582,7 @@ def parse_pdf_direto(body: bytes) -> ParsedDocument:
             detail="dispositivos inferidos de PDF sem marcação estrutural; conferir no original",
             blocking_scope=None))
         issues.extend(local_issues)
-        if descartadas:  # transparência: o que saiu como cabeçalho/rodapé (decisão 0037)
+        if descartadas:  # transparência: o que saiu como cabeçalho/rodapé (decisão 0038)
             issues.append(Issue(code="MARGEM_DESCARTADA", path=None, blocking_scope=None,
                                 detail="; ".join(sorted(t for t in descartadas if not t.isdigit()))[:500]))
     from freoa_verifica.citation import extract
