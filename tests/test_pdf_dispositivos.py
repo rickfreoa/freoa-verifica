@@ -53,6 +53,21 @@ def test_repetida_na_faixa_mas_abaixo_de_texto_mantido_fica():
     assert ps == [f"Art. {n}º O prazo fica limitado a cem dias corridos." for n in (1, 2, 3)]
 
 
+def test_rodape_que_corta_paragrafo_antes_de_novo_artigo_fica():
+    # Auditor, rodada 4: corpo repetido na faixa inferior, última linha da página.
+    pags = [_Pagina([(800, CAB), (120, f"Art. {n}º O prazo fica limitado a"), (80, "cem dias corridos.")])
+            for n in (1, 2, 3)]
+    ps = paragrafos(textos_de_corpo(pags))
+    assert ps == [f"Art. {n}º O prazo fica limitado a cem dias corridos." for n in (1, 2, 3)]
+
+
+def test_cabecalho_entre_partes_do_mesmo_paragrafo_sai():
+    pags = [_Pagina([(800, CAB), (600, "Art. 1º O prazo fica"), (40, "1")]),
+            _Pagina([(800, CAB), (600, "limitado a cem dias."), (586, "Art. 2º Outro."), (40, "2")]),
+            _Pagina([(800, CAB), (600, "Art. 3º Fim."), (40, "3")])]
+    assert paragrafos(textos_de_corpo(pags)) == ["Art. 1º O prazo fica limitado a cem dias.", "Art. 2º Outro.", "Art. 3º Fim."]
+
+
 def test_sem_cabecalho_repetido_nada_sai():
     corpo = [["Art. 1º Um."], ["Art. 2º Dois."], ["Art. 3º Três."]]
     pags = _paginas(corpo, cabecalho=False, numero=False)

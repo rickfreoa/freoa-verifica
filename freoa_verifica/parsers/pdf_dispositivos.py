@@ -48,7 +48,7 @@ def textos_de_corpo(pages) -> list[str]:
                                   if _norm(t) and not (_FAIXA_INF * h < y < _FAIXA_SUP * h)})
     cont = Counter((y, t) for ls in linhas_por_pagina for y, t in ls.items())
     minimo = max(3, (len(frags) + 1) // 2)
-    out = []
+    fora_por_pagina = []
     for n, (parts, ls, h) in enumerate(zip(frags, linhas_por_pagina, alturas), 1):
         def repetida(y, ls=ls, n=n):
             return cont[(y, ls[y])] >= minimo or _numero_da_pagina(ls[y], n, len(frags))
@@ -62,8 +62,45 @@ def textos_de_corpo(pages) -> list[str]:
                 if not na_faixa(y) or y not in ls or not repetida(y):
                     break
                 fora.add(y)
-        out.append("".join(t for y, t in parts if round(y) not in fora))
-    return out
+        fora_por_pagina.append(fora)
+    _manter_cortes_ambiguos(frags, fora_por_pagina)
+    return ["".join(t for y, t in parts if round(y) not in fora) for parts, fora in zip(frags, fora_por_pagina)]
+
+
+_FECHO = re.compile(r"[.;:!?)\]”\"»]$|[;,]\s+(e|ou)$")  # "...; e" fecha inciso
+
+
+def _abre_paragrafo(linha: str) -> bool:
+    return _classify_line(linha) is not None or bool(_TITULO.match(linha)) or linha.startswith(_MARCA_NOTA)
+
+
+def _manter_cortes_ambiguos(frags, fora_por_pagina) -> None:
+    """Corte que separa um parágrafo aberto (sem pontuação final) de um novo dispositivo
+    (ou do fim do documento) não se distingue de texto normativo: o bloco é mantido.
+    Cabeçalho legítimo cai entre o fim e a continuação do mesmo parágrafo, ou após fecho."""
+    seq: list[tuple[int, int, str]] = []  # (página, y, linha) em ordem de leitura
+    for p, parts in enumerate(frags):
+        linhas: dict[int, str] = {}
+        for y, t in parts:
+            linhas[round(y)] = linhas.get(round(y), "") + t
+        seq += [(p, y, _norm(t)) for y, t in linhas.items() if _norm(t)]
+    def fora(k):
+        return seq[k][1] in fora_por_pagina[seq[k][0]]
+
+    i = 0
+    while i < len(seq):
+        if not fora(i):
+            i += 1
+            continue
+        j = i  # bloco de uma só página (rodapé e cabeçalho seguinte são blocos distintos)
+        while j < len(seq) and seq[j][0] == seq[i][0] and fora(j):
+            j += 1
+        antes = next((seq[k][2] for k in range(i - 1, -1, -1) if not fora(k)), None)
+        depois = next((seq[k][2] for k in range(j, len(seq)) if not fora(k)), None)
+        if antes is not None and not _FECHO.search(antes) and (depois is None or _abre_paragrafo(depois)):
+            for p, y, _ in seq[i:j]:
+                fora_por_pagina[p].discard(y)
+        i = j
 
 
 def _numero_da_pagina(linha: str, n: int, total: int) -> bool:
