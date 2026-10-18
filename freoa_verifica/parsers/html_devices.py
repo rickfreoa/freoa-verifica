@@ -393,6 +393,13 @@ class _Ctx:
     quote_label: str | None = None
     quote_chunks: list[str] = field(default_factory=list)
     last_amend_host: str | None = None
+    pending_rubrica: str | None = None
+
+
+def _is_rubrica(el, texto: str) -> bool:
+    """Linha curta e centrada, sem ponto final, que o Planalto usa como rubrica do artigo seguinte."""
+    return ((el.get("align") or "").lower() == "center" and 3 <= len(texto) <= 100
+            and not texto.endswith((".", ":", ";")) and not re.match(r"(?i)art\b", texto))
 
 
 def _prefix(ctx: _Ctx, path: str) -> str:
@@ -1083,6 +1090,13 @@ def parse_html_devices(
                 _exit_quote_mode(ctx)
                 # e processa normalmente
 
+        if kind is None and not annotations and _is_rubrica(el, full_plain):
+            ctx.pending_rubrica = full_plain  # a última linha centrada antes do "Art." vale
+            ctx.doc_parts.append(full_plain)
+            ctx.doc_len += len(full_plain) + 1
+            ctx.doc_parts.append("\n")
+            continue
+
         if kind is None:
             # Continuação sem rótulo → agrega ao dispositivo anterior
             if cleaned and ctx.last_device_path and not annotations:
@@ -1098,6 +1112,7 @@ def parse_html_devices(
             continue
 
         dtype, info = kind
+        rubrica, ctx.pending_rubrica = ctx.pending_rubrica, None
         rest = info.get("rest", "")
         body = rest
         if cleaned:
@@ -1116,6 +1131,9 @@ def parse_html_devices(
             ctx.par_path = None
             ctx.inc_path = None
             ctx.ali_path = None
+            if rubrica and not ctx.in_quote:
+                prov_art = _ensure_prov(ctx, path, label)
+                prov_art.rubrica = prov_art.rubrica or rubrica
             if mixed is not None:
                 struck_txt, live_txt = mixed
                 # Extrai corpo sem rótulo dos segmentos

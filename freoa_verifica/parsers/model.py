@@ -62,6 +62,7 @@ class Provision:
     redactions: list[Redaction] = field(default_factory=list)
     ambiguous: bool = False
     concurrent_redactions: list[Redaction] = field(default_factory=list)
+    rubrica: str | None = None  # linha centrada que antecede o artigo (ex.: "Dever de Lealdade")
 
     def current_redaction(self) -> Redaction:
         if self.ambiguous:
@@ -162,10 +163,12 @@ class ParsedDocument:
 
 def document_from_dict(raw: dict) -> ParsedDocument:
     """Reconstitui o modelo persistido sem inferir campos ausentes."""
-    from dataclasses import fields
+    from dataclasses import MISSING, fields
 
     def exact(cls, values):
-        if set(values) != {f.name for f in fields(cls)}:
+        obrigatorios = {f.name for f in fields(cls)
+                        if f.default is MISSING and f.default_factory is MISSING}
+        if not obrigatorios <= set(values) <= {f.name for f in fields(cls)}:
             raise ValueError("modelo incompleto")
         return cls(**values)
 

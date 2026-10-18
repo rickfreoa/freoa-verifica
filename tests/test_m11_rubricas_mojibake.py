@@ -114,3 +114,53 @@ def test_upsert_work_cvm_grava_rotulo_corrigido(tmp_path):
                            number="44", year=2021, label=_mojibake("Resolução CVM 44"))
     assert conn.execute("SELECT label FROM work WHERE id=?", (wid,)).fetchone()[0] == "Resolução CVM 44"
     conn.close()
+
+
+# --- rubrica capturada pelo parser (pendência de M11) ---
+
+def _lsa_completa(tmp_path, monkeypatch):
+    from freoa_verifica.aliases import WorkKey
+    from freoa_verifica.parsers.planalto import parse_planalto
+    from freoa_verifica.service import Verifica
+    from tests.fixture_util import load_fixture, load_meta
+
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    body = load_fixture("planalto_lei_6404_1976")
+    doc = parse_planalto(body, base_url="https://www.planalto.gov.br/ccivil_03/leis/")
+    svc = Verifica(home=tmp_path)
+    svc.indexar_obra(source_id="planalto", work_key=WorkKey("federal", "lei", "6404", 1976), document=doc,
+                     body=body, url=load_meta()["planalto_lei_6404_1976"]["url"],
+                     fetched_at="2026-10-18T00:00:00+00:00", work_date="1976-12-15", label="Lei nº 6.404/1976")
+    return svc, doc
+
+
+def test_parser_captura_rubrica_do_artigo(tmp_path, monkeypatch):
+    svc, doc = _lsa_completa(tmp_path, monkeypatch)
+    try:
+        assert doc.provision("art153").rubrica == "Dever de Diligência"
+        assert doc.provision("art155").rubrica == "Dever de Lealdade"
+        assert doc.provision("art155").current_text().startswith("O administrador deve servir com lealdade")
+    finally:
+        svc.close()
+
+
+def test_busca_por_rubrica_acha_art_155(tmp_path, monkeypatch):
+    svc, _ = _lsa_completa(tmp_path, monkeypatch)
+    try:
+        # o texto do art. 155 não contém "dever de lealdade": só a rubrica o encontra
+        assert "dever de lealdade" not in svc.obter_dispositivo(citacao="Lei 6.404/1976, art. 155")["texto"].lower()
+        out = svc.buscar_legislacao("dever de lealdade")
+        assert any(i.get("caminho", i.get("path")) == "art155" for i in out["itens"]), out["itens"][:3]
+    finally:
+        svc.close()
+
+
+def test_modelo_persistido_sem_rubrica_ainda_carrega():
+    from dataclasses import asdict
+    from freoa_verifica.parsers.model import ParsedDocument, Provision, Redaction, document_from_dict
+
+    doc = ParsedDocument("planalto", "1", "t", None, "", provisions=[Provision("art1", "Art. 1", "", [], [Redaction("x", False, 0)])])
+    legado = asdict(doc)
+    for p in legado["provisions"]:
+        p.pop("rubrica")
+    assert document_from_dict(legado).provisions[0].rubrica is None

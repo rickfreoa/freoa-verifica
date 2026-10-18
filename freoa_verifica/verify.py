@@ -746,8 +746,8 @@ def populate_from_parsed(
                 conn.execute("INSERT INTO redaction(id, provision_id, text, text_sha256) VALUES (?,?,?,?)",
                              (new_ulid(), pid, red.text, digest_text))
                 if not red.struck:
-                    conn.execute("INSERT INTO fts_redaction(text, work_label, path) VALUES (?,?,?)",
-                                 (red.text, label or work_key.number, prov.path))
+                    conn.execute("INSERT INTO fts_redaction(text, rubrica, work_label, path) VALUES (?,?,?,?)",
+                                 (red.text, prov.rubrica, label or work_key.number, prov.path))
 
     return ResolvedWork(
         work_id=work_id,
