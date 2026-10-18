@@ -1,27 +1,58 @@
-"""Estrutura inferida de PDF normativo (CVM): linhas do pypdf -> parágrafos -> html_devices.
+"""Estrutura inferida de PDF normativo (CVM): texto do pypdf -> parágrafos -> html_devices.
 
 O PDF não marca dispositivos; a estrutura é inferida pelos mesmos rótulos que o
-parser HTML reconhece (Art., §, Parágrafo único, incisos, alíneas). Só se descarta
-o que está na margem da página (oito primeiras e oito últimas linhas): linha
-repetida em metade ou mais das páginas, ou o número da própria página. Números e
-textos no corpo nunca são descartados.
+parser HTML reconhece (Art., §, Parágrafo único, incisos, alíneas).
+
+Cabeçalho e rodapé saem pela geometria, não pelo texto: só se descarta a linha que
+está na faixa superior ou inferior da página E se repete, com o mesmo texto e na
+mesma altura, em pelo menos metade das páginas (ou é o número da própria página
+nessa faixa). Sem coordenadas, nada é descartado.
 """
 from __future__ import annotations
 
 import html
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 
 from freoa_verifica.parsers.html_devices import _classify_line
 
-_MARGEM = 8  # cabeçalho da CVM: órgão, três endereços, sítio, epígrafe e número
-_SUMARIO = re.compile(r"^(CAP[IÍ]TULO|T[IÍ]TULO|SE[CÇ][AÃ]O|SUBSE[CÇ][AÃ]O|ANEXO)\b.*\.{5,}\s*\d{0,4}$", re.I)  # linha de sumário: pontilhado e página
+_FAIXA_SUP, _FAIXA_INF = 0.75, 0.12  # fração da altura; o cabeçalho da CVM desce até 0,79
+_SUMARIO = re.compile(r"^(CAP[IÍ]TULO|T[IÍ]TULO|SE[CÇ][AÃ]O|SUBSE[CÇ][AÃ]O|ANEXO)\b.*\.{5,}\s*\d{0,4}$", re.I)
 _TITULO = re.compile(r"^(CAP[IÍ]TULO|T[IÍ]TULO|LIVRO|SE[CÇ][AÃ]O|SUBSE[CÇ][AÃ]O|ANEXO)\b", re.I)
+_MARCA_NOTA = ("•", "\uf0b7", "\u25aa")
 
 
-def _margem(linhas: list[str]) -> set[int]:
-    idx = [i for i, l in enumerate(linhas) if l]
-    return set(idx[:_MARGEM] + idx[-_MARGEM:])
+def _norm(t: str) -> str:
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def textos_de_corpo(pages) -> list[str]:
+    """Texto de cada página sem cabeçalho/rodapé, decidido por posição e repetição."""
+    frags: list[list[tuple[float, str]]] = []
+    alturas: list[float] = []
+    for page in pages:
+        parts: list[tuple[float, str]] = []
+
+        def vis(text, cm, tm, _font, _size, parts=parts):
+            parts.append((float(tm[5]) * float(cm[3]) + float(cm[5]), text))
+
+        page.extract_text(visitor_text=vis)
+        frags.append(parts)
+        alturas.append(float(page.mediabox.height) or 1.0)
+    linhas_por_pagina = []
+    for parts, h in zip(frags, alturas):
+        linhas: dict[int, str] = defaultdict(str)
+        for y, t in parts:
+            linhas[round(y)] += t
+        linhas_por_pagina.append({y: _norm(t) for y, t in linhas.items()
+                                  if _norm(t) and not (_FAIXA_INF * h < y < _FAIXA_SUP * h)})
+    cont = Counter((y, t) for ls in linhas_por_pagina for y, t in ls.items())
+    minimo = max(3, (len(frags) + 1) // 2)
+    out = []
+    for n, (parts, ls) in enumerate(zip(frags, linhas_por_pagina), 1):
+        fora = {y for y, t in ls.items() if cont[(y, t)] >= minimo or _numero_da_pagina(t, n, len(frags))}
+        out.append("".join(t for y, t in parts if round(y) not in fora))
+    return out
 
 
 def _numero_da_pagina(linha: str, n: int, total: int) -> bool:
@@ -30,19 +61,13 @@ def _numero_da_pagina(linha: str, n: int, total: int) -> bool:
 
 
 def paragrafos(textos_pagina: list[str]) -> list[str]:
-    paginas = [[re.sub(r"\s+", " ", l).strip() for l in t.splitlines()] for t in textos_pagina]
-    margens = [_margem(p) for p in paginas]
-    cont = Counter(l for p, m in zip(paginas, margens) for l in {p[i] for i in m})
-    # Cabeçalho/rodapé é texto (nome do órgão, endereço); dispositivo e número sozinho nunca são.
-    lixo = {l for l, n in cont.items() if len(paginas) >= 3 and n >= max(3, len(paginas) // 2)
-            and len(re.findall(r"[^\W\d_]", l)) >= 8 and _classify_line(l) is None}
     out: list[str] = []
-    for n, (linhas, margem) in enumerate(zip(paginas, margens), 1):
-        for i, l in enumerate(linhas):
-            if not l or _SUMARIO.search(l) or (i in margem and (l in lixo or _numero_da_pagina(l, n, len(paginas)))):
+    for texto in textos_pagina:
+        for l in (_norm(x) for x in texto.splitlines()):
+            if not l or _SUMARIO.search(l):
                 continue
             # "• Inciso VI com redação dada pela..." é nota de alteração: parágrafo próprio, nunca texto do dispositivo.
-            if not out or _classify_line(l) is not None or _TITULO.match(l) or l.startswith(("•", "", "▪")):
+            if not out or _classify_line(l) is not None or _TITULO.match(l) or l.startswith(_MARCA_NOTA):
                 out.append(l)
             elif out[-1].endswith("-") and l[:1].islower():
                 out[-1] += l  # PDFs da CVM vêm do Word, sem hifenização: o hífen é do termo
@@ -51,7 +76,7 @@ def paragrafos(textos_pagina: list[str]) -> list[str]:
     return out
 
 
-_NOTA = re.compile(r"^[•▪]\s*(?:.+?\s)?(com\s+reda[cç][aã]o\s+dada|inclu[ií]d[oa]s?|revogad[oa]s?|acrescid[oa]s?|renumerad[oa]s?)\s+(pel[ao]s?\s+.+?)\.?$", re.I)
+_NOTA = re.compile(r"^[•\uf0b7\u25aa]\s*(?:.+?\s)?(com\s+reda[cç][aã]o\s+dada|inclu[ií]d[oa]s?|revogad[oa]s?|acrescid[oa]s?|renumerad[oa]s?)\s+(pel[ao]s?\s+.+?)\.?$", re.I)
 
 
 def _notas_como_anotacoes(ps: list[str]) -> list[str]:

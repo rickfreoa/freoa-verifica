@@ -534,10 +534,10 @@ def parse_pdf_direto(body: bytes) -> ParsedDocument:
         )
     ]
     from freoa_verifica.parsers.html_devices import parse_html_devices
-    from freoa_verifica.parsers.pdf_dispositivos import como_html
+    from freoa_verifica.parsers.pdf_dispositivos import como_html, textos_de_corpo
     from freoa_verifica.parsers.sentinel import run_sentinels
 
-    pagina_html = como_html(parts)
+    pagina_html = como_html(textos_de_corpo(reader.pages))
     _t, _e, _txt, provisions, local_issues, amendments, editorial = parse_html_devices(
         pagina_html, base_url="https://conteudo.cvm.gov.br/")
     if provisions:

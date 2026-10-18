@@ -14,6 +14,11 @@ from tests.test_c2_situacao import _bcb_body, _cit, _indexar_bcb, svc  # noqa: F
     ("Resolução CMN nº 5.019/2022 - Nova redação: art. 76, caput.", None, None),
     ("Resolução CMN nº 1/2020 - Revogação total.;#Resolução CMN nº 2/2021 - Revogação total.", None, None),
     ("Resolução CMN nº 5.100/2023 - Revogação parcial a partir de 1º/10/2023.", None, None),
+    # Auditor, rodada 2: segunda revogação em formato não reconhecido anula a unicidade.
+    ("Resolução CMN nº 5.295/2026 - Revogação total a partir de 1/6/2026.;#"
+     "Resolução CMN nº 5.100/2023 - Revogação total (a partir de 1/10/2023).", None, None),
+    ("Resolução CMN nº 5.019/2022 - Nova redação: art. 76.;#Resolução CMN nº 5.295/2026 - Revogação total.",
+     "Resolução CMN nº 5.295/2026", None),
 ])
 def test_revogacao_declarada(entrada, ato, efeito):
     assert situacao._revogacao_declarada(entrada) == (ato, efeito)

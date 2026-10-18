@@ -137,30 +137,20 @@ def run_bench(svc: Any, gold_path: str | Path) -> dict[str, Any]:
                         "trecho_oficial": str(oficial)[:500],
                         "trecho_gold": str(trecho)[:500],
                     }
-            # expectativa explícita no gold (não altera exclusão das métricas)
-            if expectativa.get("identity"):
-                ok = identity == expectativa["identity"] and (
-                    trecho is None or text == expectativa.get("text", text)
-                )
         else:  # mutante
-            # nunca deve ser text=verified (nem identity+text verified com trecho mutante)
-            falso_verified = text == "verified"
             if trecho is None:
                 # mutante só de identidade: identity não pode ser verified se number/path errado
-                exp_id = expectativa.get("identity")
-                if exp_id:
-                    ok = identity == exp_id
-                else:
-                    ok = identity != "verified"
+                ok = identity not in {"verified", "unavailable"}
             else:
-                ok = not falso_verified
-                if expectativa.get("text"):
-                    ok = text == expectativa["text"]
-            # Indisponibilidade não é recusa correta: o mutante não foi confrontado (1.1.0).
-            if "unavailable" in (identity, text) and not (expectativa.get("identity") or expectativa.get("text")):
-                ok = False
-        if expectativa.get("temporal"):
-            ok = ok and temporal == expectativa["temporal"]
+                ok = text != "verified" and "unavailable" not in (identity, text)
+        # Expectativa explícita: toda dimensão declarada é confrontada; indisponibilidade só vale
+        # quando esperada na própria dimensão (1.1.0, auditoria rodada 2).
+        declaradas = {k: expectativa[k] for k in ("identity", "text", "temporal") if expectativa.get(k)}
+        if declaradas:
+            obtidas = {"identity": identity, "text": text, "temporal": temporal}
+            ok = all(obtidas[k] == v for k, v in declaradas.items())
+            if tipo == "mutante" and "text" not in declaradas and trecho is not None:
+                ok = ok and text != "verified" and text != "unavailable"
 
         resultados.append(
             CasoResultado(

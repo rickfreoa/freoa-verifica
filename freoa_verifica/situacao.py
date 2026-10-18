@@ -134,10 +134,11 @@ _REVOGACAO = re.compile(
 def _revogacao_declarada(atualizacoes: Any) -> tuple[str | None, str | None]:
     """Decisão 0035: só a entrada única e inequívoca de "Revogação total [a partir de D/M/AAAA]" vale.
     Sem data declarada, o ato revogador é registrado e a data de efeito continua desconhecida."""
-    achados = [m for a in str(atualizacoes or "").split(";#") if (m := _REVOGACAO.match(a))]
-    if len(achados) != 1:
+    # Unicidade conta toda entrada que fale em revogação, em qualquer formato; só depois vem o padrão estrito.
+    mencoes = [a for a in str(atualizacoes or "").split(";#") if re.search(r"revoga", a, re.I)]
+    m = _REVOGACAO.match(mencoes[0]) if len(mencoes) == 1 else None
+    if m is None:
         return None, None
-    m = achados[0]
     efeito = None
     if m["a"]:
         try:
