@@ -164,7 +164,7 @@ def test_auxiliary_facades_authenticate(populated, attack, monkeypatch):
                 assert result.json()['reason_code']==expected
         server=create_mcp(home=str(s.home))
         from freoa_verifica import mcp_server
-        monkeypatch.setattr(mcp_server,'_svc',s)
+        monkeypatch.setitem(mcp_server._servicos, str(s.home), s)
         async def run():
             async with Client(server) as client:
                 for name,params in calls:
@@ -203,7 +203,7 @@ def test_decision_queries_authenticate(populated,attack,monkeypatch):
         for route,params in [(f'/v1/decisoes/{did}',{}),('/v1/jurisprudencia',{'q':'principal'})]:
             assert client.get(route,params=params,headers={'Authorization':'Bearer test-token'}).json()['reason_code']==expected
     server=create_mcp(home=str(s.home))
-    monkeypatch.setattr(mcp_server,'_svc',s)
+    monkeypatch.setitem(mcp_server._servicos, str(s.home), s)
     async def run():
         async with Client(server) as client:
             for name,params in calls:

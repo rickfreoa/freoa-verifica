@@ -184,7 +184,7 @@ def test_stf_textual_refuses_browser(monkeypatch):
 
 def test_mcp_schemas_limits(tmp_path, monkeypatch):
     from freoa_verifica import mcp_server as ms
-    monkeypatch.setattr(ms, "_svc", None)
+    monkeypatch.setattr(ms, "_servicos", {})
     mcp = ms.create_mcp(str(tmp_path))
     def check(schema):
         if schema.get("type") == "string":
@@ -206,7 +206,7 @@ def test_mcp_schemas_limits(tmp_path, monkeypatch):
     try:
         asyncio.run(run())
     finally:
-        ms._svc.close()
+        [v.close() for v in ms._servicos.values()]
 
 
 @pytest.mark.parametrize("case", ["normal", "revogado", "revogacao_parcial", "vide", "ambiguous", "future", "future_year", "capture_future", "incomplete"])
@@ -237,7 +237,7 @@ def test_paridade_json_adversarial(case, tmp_path, monkeypatch, capsys):
             svc.conn.execute("UPDATE parsed_document SET model_json=NULL WHERE capture_id=?", (rw.capture_id,))
             svc.conn.commit()
             svc._clear_caches()
-        monkeypatch.setattr(ms, "_svc", svc)
+        monkeypatch.setitem(ms._servicos, str(svc.home), svc)
         mcp = ms.create_mcp(str(tmp_path))
         app = create_app(str(tmp_path))
         try:
@@ -251,7 +251,7 @@ def test_paridade_json_adversarial(case, tmp_path, monkeypatch, capsys):
                 result = asyncio.run(mcp.call_tool("verificar_citacao", arguments))
                 assert not result.is_error
                 assert clean(result.structured_content) == expected
-                with TestClient(app) as client:
+                with TestClient(app, client=("127.0.0.1", 50000)) as client:
                     response = client.post("/v1/verificacoes", json=arguments)
                     assert response.status_code == 200
                     assert clean(response.json()) == expected
@@ -267,7 +267,7 @@ def test_paridade_json_adversarial(case, tmp_path, monkeypatch, capsys):
             result = asyncio.run(mcp.call_tool("verificar_texto", {"texto": text}))
             assert not result.is_error
             assert clean(result.structured_content) == expected_text
-            with TestClient(app) as client:
+            with TestClient(app, client=("127.0.0.1", 50000)) as client:
                 response = client.post("/v1/verificacoes/texto", json={"texto": text})
                 assert response.status_code == 200
                 assert clean(response.json()) == expected_text

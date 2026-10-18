@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.0.3 (em preparação)
+
+- Fronteiras remotas (decisão 0026): modo local/remoto explícito na API REST e no MCP HTTP; token obrigatório fora de loopback, verificado em toda requisição, inclusive ao carregar a fábrica ASGI diretamente.
+- Validação de entrada compartilhada na fachada (tipos e tetos), corpo HTTP limitado antes da leitura integral, semáforo para operações caras; entrada inválida devolve 422, excesso de corpo 413, sobrecarga 503.
+- Âncora textual: o intervalo devolvido é validado contra o trecho casado; sem prova, a âncora é recusada em vez de apontar caracteres errados (NFC, múltiplas composições).
+- Conexões SQLite com dono registrado, fechamento coordenado e falhas registradas em log; a instalação de snapshot e a purga esperam as operações ativas.
+- MCP: um serviço por home no mesmo processo.
+- Política de registro `sem_conteudo` (`--sem-registro`) e `fv runs purgar --antes DATA` (decisão 0030).
+- Snapshot publica identificadores das obras e das decisões e `derived_version`; `fv doctor`, o MCP e a API avisam `acervo_incompleto` quando o home está abaixo do manifesto instalado ou do mínimo embutido.
+- Release só publica após a suíte completa no mesmo commit, sem substituição de assets, com `requirements-lock.txt` anexado. Pendente: fixar Actions por SHA.
+
 ## 1.0.2
 
 - Extração de citações em duas camadas: regras estruturais (numeração decimal de cláusulas, siglas coladas a números, pertença a instrumentos particulares, fronteiras de arquivo e de campo técnico) e confiança explícita `exata`/`provavel`. Em `verificar_texto`, citações `provavel` recebem `requer_conferencia`; só `exata` recebe `encontrada` ou `inexistente`. Nos oito corpora adversariais independentes (779 frases), falsos definitivos caíram de 250 para 0 e o recall subiu de 70,9% para 93,7%.

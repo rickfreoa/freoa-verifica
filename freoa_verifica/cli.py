@@ -69,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="diretório de dados (padrão: FV_HOME ou pasta do sistema)",
     )
+    parser.add_argument(
+        "--sem-registro",
+        action="store_true",
+        help="não grava citação, trecho nem evidência textual nas execuções (registro sem_conteudo)",
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("busca", help="buscar legislação")
@@ -164,6 +169,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--http", action="store_true")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--token", default=None, help="bearer (obrigatório com host não local)")
 
     p = sub.add_parser("serve-api", help="iniciar API REST")
     p.add_argument("--host", default="127.0.0.1")
@@ -186,6 +192,12 @@ def build_parser() -> argparse.ArgumentParser:
     pf.add_argument("origem", nargs="?")
     _add_json_flag(pf)
 
+    p = sub.add_parser("runs", help="gerenciar execuções registradas")
+    runs = p.add_subparsers(dest="runs_cmd", required=True)
+    pp = runs.add_parser("purgar", help="reconstruir o banco sem execuções anteriores a DATA")
+    pp.add_argument("--antes", required=True, metavar="DATA", help="AAAA-MM-DD")
+    _add_json_flag(pp)
+
     return parser
 
 
@@ -198,20 +210,27 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     as_json = bool(getattr(args, "json", False))
+    registro = "sem_conteudo" if args.sem_registro else None
 
     if args.cmd == "serve-mcp":
         from freoa_verifica.mcp_server import run_server
 
-        run_server(http=args.http, host=args.host, port=args.port, home=args.home)
+        run_server(http=args.http, host=args.host, port=args.port, home=args.home,
+                   token=args.token, registro=registro)
         return
 
     if args.cmd == "serve-api":
         from freoa_verifica.rest import run_api
 
-        run_api(host=args.host, port=args.port, token=args.token, home=args.home)
+        run_api(host=args.host, port=args.port, token=args.token, home=args.home, registro=registro)
         return
 
-    with Verifica(home=args.home) as svc:
+    with Verifica(home=args.home, registro=registro) as svc:
+        if args.cmd == "runs":
+            data = svc.purgar_execucoes(args.antes)
+            _print_result(data, as_json=as_json, titulo="Purga de execuções")
+            raise SystemExit(0 if data.get("status") == "ok" else 1)
+
         if args.cmd == "busca":
             data = svc.buscar_legislacao(
                 args.q, fonte=args.fonte, data=args.data, limite=args.limite, cursor=args.cursor

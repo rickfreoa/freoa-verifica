@@ -613,6 +613,9 @@ def _persist(
     modo: str,
     result: VerificationResult,
 ) -> VerificationResult:
+    from freoa_verifica.registro import politica_atual
+
+    politica = politica_atual.get()
     request = {
         "citacao": citacao,
         "trecho": trecho,
@@ -621,7 +624,24 @@ def _persist(
     }
     request_json = json.dumps(request, ensure_ascii=False, sort_keys=True)
     request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
-    result_json = json.dumps(_result_to_json(result), ensure_ascii=False, sort_keys=True)
+    if politica == "sem_conteudo":
+        # Projeção persistida: status/reason_code por dimensão, hashes, política, algo_versions.
+        h = lambda v: None if v is None else hashlib.sha256(str(v).encode("utf-8")).hexdigest()  # noqa: E731
+        request_json = json.dumps(
+            {"registro": politica, **{f"{k}_sha256": h(v) for k, v in request.items()}},
+            sort_keys=True,
+        )
+        result_json = json.dumps(
+            {
+                "registro": politica,
+                **{d: {"status": getattr(result, d).status, "reason_code": getattr(result, d).reason_code}
+                   for d in ("identity", "text", "temporal", "support")},
+                "algo_versions": result.algo_versions,
+            },
+            ensure_ascii=False, sort_keys=True,
+        )
+    else:
+        result_json = json.dumps(_result_to_json(result), ensure_ascii=False, sort_keys=True)
     if conn is not None:
         run_id = new_ulid()
         conn.execute(

@@ -49,7 +49,13 @@ uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.2 freoa-verifica
 
 O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release que contenha o snapshot, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.
 
-Para uso remoto: `fv serve-mcp --http --port 8765` (streamable HTTP). API REST: `pip install "freoa-verifica[server]"` e `fv serve-api`.
+Para uso remoto: `fv serve-mcp --http --port 8765` (streamable HTTP). API REST: `pip install "freoa-verifica[server]"` e `fv serve-api`. Os dois recusam `--host` fora de loopback sem `--token` (MCP: também `FV_MCP_TOKEN`; REST: `FV_API_TOKEN`) e exigem `Authorization: Bearer` em toda requisição. Sem token, a API só atende cliente loopback direto (nunca atrás de proxy: use token e TLS no proxy). O corpo HTTP é limitado a 512 KiB.
+
+### O que fica armazenado
+
+Cada verificação grava uma execução (`run`) no banco local, imutável pelas operações usuais. Com o padrão `completo`, ela contém a citação, o trecho, a data, o modo, a citação reconhecida e o trecho oficial usado como evidência. Com `fv --sem-registro` (ou `FV_REGISTRO=sem_conteudo`, `Verifica(registro="sem_conteudo")`, `--sem-registro` em `freoa-verifica-mcp`), grava apenas: status e `reason_code` de cada dimensão, `algo_versions`, a política e os SHA-256 de citação, trecho, data e modo. Hashes de entradas curtas podem ser adivinhados por força bruta. As capturas oficiais (conteúdo público) são sempre armazenadas.
+
+Retenção: `fv runs purgar --antes AAAA-MM-DD` reconstrói o banco sem as execuções anteriores e move o original (com `-wal`/`-shm`) para `purgados/<data>/` no home, imprimindo os caminhos para você apagar. Backups e cópias externas do diretório de dados são responsabilidade do operador.
 
 ## Exemplos
 
