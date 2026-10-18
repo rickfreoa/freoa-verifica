@@ -82,8 +82,7 @@ def textos_de_corpo(pages, descartadas: set[str] | None = None) -> list[str]:
             acima = [y for y in ys if y >= topo]
             abaixo = [y for y in ys if y <= base]
             lado = [y for y in ys if base - 2 < y < topo + 2]  # linha que divide a altura com a imagem
-            if not lado and ((base >= _FAIXA_SUP * h and not acima) or (topo <= _FAIXA_INF * h and not abaixo)):
-                continue  # logotipo na margem, sem texto mantido do lado de fora nem na mesma altura
+            # Sem exceção para logotipo: nenhuma posição prova que a imagem não tem texto (rodada 11).
             for y in ([min(acima)] if acima else []) + ([max(abaixo)] if abaixo else []) + lado:
                 marcar.add((p, y))
             if not acima and p > 0:  # imagem no alto do corpo: fecho do dispositivo da página anterior
