@@ -974,6 +974,9 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
                 raise ValueError("snapshot_banco_invalido")
             if check.execute("PRAGMA foreign_key_check").fetchone():
                 raise ValueError("snapshot_relacoes_invalidas")
+            # C6: nunca publicar derivados abaixo da versão do código (sem rebaixamento silencioso).
+            if not derivados.compativel(check):
+                raise ValueError("derivados_abaixo_da_versao_atual")
         finally:
             check.close()
 
@@ -1003,6 +1006,8 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             "capturas": manifest.get("capturas"),
             "modo": "anexacao",
             "autenticidade": AUTHENTICITY_NOTE,
+            **({"aviso": "derivados do snapshot em versão anterior; reconstruídos para a versão atual "
+                         f"({derivados.DERIVED_VERSION}) antes de publicar"} if reconstruir else {}),
         }
     except Exception as exc:  # noqa: BLE001
         mutated = db_saved or blobs_saved or db_installed or blobs_installed

@@ -9,6 +9,7 @@ import argparse
 import hmac
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
     from mcp.server.mcpserver import MCPServer as FastMCP
 
 from freoa_verifica.limites import MAX_CORPO_HTTP
+from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica.service import DOC_CLOSE, DOC_OPEN, Verifica
 from freoa_verifica.store.db import data_home
 
@@ -41,7 +43,9 @@ Regras de uso:
 
 # Um serviço por home resolvido (F08): dois homes no mesmo processo não se misturam.
 _servicos: dict[str, Verifica] = {}
+_servicos_lock = threading.Lock()  # F08: lookup/criação/publicação atômicos
 _LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+_LOCAL_CLIENTES = _LOCAL_HOSTS
 
 Modo = Literal["literal", "normalizado"]
 Parte = Literal["ementa", "inteiro_teor", "voto", "certidao"]
@@ -68,9 +72,15 @@ Tribunais = Annotated[list[Tribunal], Field(max_length=5)]
 
 def _service(home: str | None = None, registro: str | None = None) -> Verifica:
     chave = str(Path(home).expanduser().resolve()) if home else str(data_home())
-    svc = _servicos.get(chave)
-    if svc is None:
-        svc = _servicos[chave] = Verifica(home=chave, registro=registro, exigir_acervo=True)
+    with _servicos_lock:
+        svc = _servicos.get(chave)
+        if svc is None:
+            svc = _servicos[chave] = Verifica(home=chave, registro=registro, exigir_acervo=True)
+        elif registro is not None and normalizar_registro(registro) != svc.registro:
+            # C5: nunca gravar mais (nem aceitar em silêncio uma promessa de gravar menos) do que o serviço faz
+            raise ValueError(
+                f"conflito de política de registro: serviço do home já usa {svc.registro!r}, "
+                f"pedido {normalizar_registro(registro)!r}")
     return svc
 
 
@@ -264,6 +274,28 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
     return mcp
 
 
+class _SoLoopback:
+    """ASGI do modo local sem token: só cliente loopback direto, sem cabeçalhos de encaminhamento (F01)."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            cliente = (scope.get("client") or (None,))[0]
+            hdrs = {k.lower() for k, _ in scope["headers"]}
+            if cliente not in _LOCAL_CLIENTES or hdrs & {b"x-forwarded-for", b"forwarded"}:
+                if scope["type"] == "websocket":
+                    return
+                body = b'{"title":"erro","status":403,"detail":"modo local aceita apenas cliente loopback direto"}'
+                await send({"type": "http.response.start", "status": 403, "headers": [
+                    (b"content-type", b"application/problem+json"),
+                    (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
+
+
 class _BearerMCP:
     """ASGI: exige Authorization: Bearer em toda requisição HTTP (inclusive rotas desconhecidas)."""
 
@@ -292,7 +324,7 @@ def build_http_app(mcp: FastMCP, *, host: str, token: str | None):
     if host not in _LOCAL_HOSTS and not token:
         raise RuntimeError("recusado: host não local exige token (--token ou FV_MCP_TOKEN)")
     app = mcp.streamable_http_app(host=host, max_request_body_size=MAX_CORPO_HTTP)
-    return _BearerMCP(app, token) if token else app
+    return _BearerMCP(app, token) if token else _SoLoopback(app)
 
 
 def run_server(

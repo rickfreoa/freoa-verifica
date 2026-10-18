@@ -26,11 +26,8 @@ def normalizar(valor: str | None) -> str:
 
 
 def _fsync_arquivo(caminho: Path) -> None:
-    fd = os.open(str(caminho), os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    with open(caminho, "r+b") as fh:  # Windows: fsync exige descritor gravável
+        os.fsync(fh.fileno())
 
 
 def _fsync_pasta(pasta: Path) -> None:

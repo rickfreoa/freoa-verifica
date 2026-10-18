@@ -692,8 +692,14 @@ def populate_from_parsed(
     work_date: str | None = None,
     label: str | None = None,
     home=None,
+    fts_alvo: str = "fts_redaction",
 ) -> ResolvedWork:
-    """Persiste obra parseada no repositório e devolve ResolvedWork."""
+    """Persiste obra parseada no repositório e devolve ResolvedWork.
+
+    `fts_alvo="fts_staging"`: candidato ao vivo (A7) é indexado direto no staging, nunca no canônico.
+    """
+    if fts_alvo not in ("fts_redaction", "fts_staging"):
+        raise ValueError(f"fts_alvo inválido: {fts_alvo}")
     from freoa_verifica.transport import Response
 
     from freoa_verifica.identity import validate_identity
@@ -745,7 +751,12 @@ def populate_from_parsed(
                     continue
                 conn.execute("INSERT INTO redaction(id, provision_id, text, text_sha256) VALUES (?,?,?,?)",
                              (new_ulid(), pid, red.text, digest_text))
-                if not red.struck:
+                if red.struck:
+                    continue
+                if fts_alvo == "fts_staging":
+                    conn.execute("INSERT INTO fts_staging(text, work_label, path) VALUES (?,?,?)",
+                                 (red.text, label or work_key.number, prov.path))
+                else:
                     conn.execute("INSERT INTO fts_redaction(text, rubrica, work_label, path) VALUES (?,?,?,?)",
                                  (red.text, prov.rubrica, label or work_key.number, prov.path))
 

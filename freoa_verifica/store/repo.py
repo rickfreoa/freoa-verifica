@@ -573,6 +573,24 @@ def persist_parsed_document(
 def sincronizar_derivados(
     conn: sqlite3.Connection, *, capture_id: str, work_id: str, document: Any, extract_id: str | None,
 ) -> None:
+    """Atômico: DML e DDL de triggers num só SAVEPOINT, sem commit intermediário (C6).
+
+    Falha ou morte do processo desfaz tudo, inclusive a suspensão das triggers (DDL é transacional no SQLite).
+    """
+    conn.execute("SAVEPOINT sync_derivados")
+    try:
+        _sincronizar_derivados(conn, capture_id=capture_id, work_id=work_id, document=document,
+                               extract_id=extract_id)
+    except BaseException:
+        conn.execute("ROLLBACK TO sync_derivados")
+        conn.execute("RELEASE sync_derivados")
+        raise
+    conn.execute("RELEASE sync_derivados")
+
+
+def _sincronizar_derivados(
+    conn: sqlite3.Connection, *, capture_id: str, work_id: str, document: Any, extract_id: str | None,
+) -> None:
     """Regrava provisions, redações e ocorrências da captura a partir do modelo (C6).
 
     Remove antes os derivados antigos da captura: ocorrências de suas extrações e as redações e
@@ -624,23 +642,18 @@ def sincronizar_derivados(
             continue
         orfas.append((r["rid"], r["pid"]))
     if orfas:
-        conn.commit()
         for n, _ in triggers:
             conn.execute(f'DROP TRIGGER "{n}"')
-        try:
-            for rid, _ in orfas:
-                conn.execute("DELETE FROM event WHERE redaction_id=?", (rid,))
-                conn.execute("DELETE FROM redaction WHERE id=?", (rid,))
-            for pid in {p for _, p in orfas}:
-                if not conn.execute("SELECT 1 FROM redaction WHERE provision_id=?", (pid,)).fetchone():
-                    conn.execute("DELETE FROM event WHERE provision_id=?", (pid,))
-                    conn.execute("UPDATE provision SET parent_id=NULL WHERE parent_id=?", (pid,))
-                    conn.execute("DELETE FROM provision WHERE id=?", (pid,))
-            conn.commit()
-        finally:
-            for _, q in triggers:
-                conn.execute(q)
-            conn.commit()
+        for rid, _ in orfas:
+            conn.execute("DELETE FROM event WHERE redaction_id=?", (rid,))
+            conn.execute("DELETE FROM redaction WHERE id=?", (rid,))
+        for pid in {p for _, p in orfas}:
+            if not conn.execute("SELECT 1 FROM redaction WHERE provision_id=?", (pid,)).fetchone():
+                conn.execute("DELETE FROM event WHERE provision_id=?", (pid,))
+                conn.execute("UPDATE provision SET parent_id=NULL WHERE parent_id=?", (pid,))
+                conn.execute("DELETE FROM provision WHERE id=?", (pid,))
+        for _, q in triggers:
+            conn.execute(q)
 
 
 def get_parsed_document(
