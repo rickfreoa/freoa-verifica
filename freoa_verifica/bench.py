@@ -110,9 +110,10 @@ def run_bench(svc: Any, gold_path: str | Path) -> dict[str, Any]:
             continue
 
         # positivo / mutante
-        res = svc.verificar_citacao(citacao, trecho=trecho)
+        res = svc.verificar_citacao(citacao, trecho=trecho, **({"data": caso["data"]} if caso.get("data") else {}))
         identity = _dim(res, "identity")
         text = _dim(res, "text")
+        temporal = _dim(res, "temporal")
         gold_suspeito = None
 
         if tipo == "positivo":
@@ -136,25 +137,21 @@ def run_bench(svc: Any, gold_path: str | Path) -> dict[str, Any]:
                         "trecho_oficial": str(oficial)[:500],
                         "trecho_gold": str(trecho)[:500],
                     }
-            # expectativa explícita no gold (não altera exclusão das métricas)
-            if expectativa.get("identity"):
-                ok = identity == expectativa["identity"] and (
-                    trecho is None or text == expectativa.get("text", text)
-                )
-        else:  # mutante
-            # nunca deve ser text=verified (nem identity+text verified com trecho mutante)
-            falso_verified = text == "verified"
-            if trecho is None:
-                # mutante só de identidade: identity não pode ser verified se number/path errado
-                exp_id = expectativa.get("identity")
-                if exp_id:
-                    ok = identity == exp_id
-                else:
-                    ok = identity != "verified"
-            else:
-                ok = not falso_verified
-                if expectativa.get("text"):
-                    ok = text == expectativa["text"]
+        # Obrigação de base por dimensão; a expectativa declarada substitui só a da própria
+        # dimensão e nunca apaga as demais (auditoria 1.1.0, rodadas 2 e 3).
+        if tipo == "positivo":
+            base = {"identity": lambda v: v == "verified"}
+            if trecho is not None:
+                base["text"] = lambda v: v == "verified"
+        elif trecho is None:
+            base = {"identity": lambda v: v not in {"verified", "unavailable"}}
+        else:
+            base = {"identity": lambda v: v != "unavailable", "text": lambda v: v not in {"verified", "unavailable"}}
+        for k in ("identity", "text", "temporal"):
+            if expectativa.get(k):
+                base[k] = (lambda esperado: (lambda v: v == esperado))(expectativa[k])
+        obtidas = {"identity": identity, "text": text, "temporal": temporal}
+        ok = all(pred(obtidas[k]) for k, pred in base.items())
 
         resultados.append(
             CasoResultado(

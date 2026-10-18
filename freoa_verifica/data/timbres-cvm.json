@@ -1,0 +1,8 @@
+{
+  "descricao": "Imagens de timbre da CVM (sha256 dos dados do XObject), identificadas no acervo oficial em 18/10/2026 por repetição na margem de muitos atos distintos. Só estas são dispensadas da marca MARGEM_ADJACENTE (decisão 0037).",
+  "timbres": {
+    "0f1d555a14cbc981895eeaff7aaedcdf8260fe1ca75398de79b1e9f668f31fa6": "margem de 136 atos (ex.: inst480consolid.pdf, inst555consolid.pdf, resol004.pdf)",
+    "a86f2c864313e30bc24c62524350f54bd294e35e84073c04f47f911b3f018caf": "margem de 24 atos (ex.: inst358consolid.pdf, inst481consolid.pdf, resol002.pdf)",
+    "8916d94dce300d035d00441a4b85096df123bd6206b3409e99b45e0bc52c7851": "margem de 4 atos (resol204.pdf, resol206.pdf, resol220.pdf, resol225.pdf)"
+  }
+}

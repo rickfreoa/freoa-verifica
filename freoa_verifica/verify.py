@@ -488,6 +488,8 @@ def verificar(
 
     # --- text ---
     uncertain = any(i.code == "UNCERTAIN_CONTINUATION" for i in blocking)
+    # 0037: fecho do dispositivo pode ter saído com a margem do PDF; nenhum confronto conclui.
+    margem = any(i.code == "MARGEM_ADJACENTE" for i in blocking)
     if trecho is None:
         text_dim = Dimension("not_assessed", "SEM_TRECHO")
     elif prov is None:
@@ -525,7 +527,9 @@ def verificar(
                 red.text,
                 span=(cmp.start, cmp.end) if cmp.start is not None else None,
             )
-            if cmp.status == "match":
+            if margem:
+                text_dim = Dimension("unknown", "MARGEM_ADJACENTE", [ev])
+            elif cmp.status == "match":
                 if uncertain:
                     text_dim = Dimension("unknown", "UNCERTAIN_CONTINUATION", [ev])
                 else:

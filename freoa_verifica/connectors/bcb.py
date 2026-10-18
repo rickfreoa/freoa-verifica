@@ -262,7 +262,7 @@ class BcbConnector(Connector):
             f"https://www.bcb.gov.br/api/conteudo/app/normativos/{endpoint}?"
             + urlencode({"p1": tipo, "p2": numero})
         )
-        return connector_fetch(
+        resp = connector_fetch(
             url,
             hosts=self.hosts,
             path_prefixes=self.path_prefixes,
@@ -270,6 +270,18 @@ class BcbConnector(Connector):
             user_agent=self.user_agent,
             timeout=60.0,
         )
+        if tipo == "Resolução CMN" and _sem_conteudo(resp.body):
+            # Resoluções do CMN anteriores a 2020 estão no BCB como tipo "Resolução".
+            resp = self.fetch(Candidate(self.id, f"bcb:Resolução:{numero}", f"Resolução {numero}",
+                                        metadata={"tipo": "Resolução", "numero": numero}))
+        return resp
 
     def parse(self, resp: Response):
         return parse_bcb_json(resp.body)
+
+
+def _sem_conteudo(body: bytes) -> bool:
+    try:
+        return not (json.loads(body.decode("utf-8")).get("conteudo") or [])
+    except (ValueError, AttributeError):
+        return False

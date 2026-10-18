@@ -24,7 +24,8 @@ except ModuleNotFoundError:
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP
 from freoa_verifica.registro import normalizar as normalizar_registro
-from freoa_verifica.service import DOC_CLOSE, DOC_OPEN, Verifica
+from freoa_verifica.sanitizacao import Protegido, envolver
+from freoa_verifica.service import DOC_CLOSE, DOC_OPEN, Verifica  # noqa: F401
 from freoa_verifica.store.db import data_home
 
 _INSTRUCTIONS = """\
@@ -85,12 +86,7 @@ def _service(home: str | None = None, registro: str | None = None) -> Verifica:
     return svc
 
 
-def _wrap_oficial(texto: str | None) -> str | None:
-    if texto is None:
-        return None
-    if DOC_OPEN in texto:
-        return texto
-    return f"{DOC_OPEN}\n{texto}\n{DOC_CLOSE}"
+_wrap_oficial = envolver  # sempre envolve e neutraliza delimitadores internos
 
 
 def _wrap_result_text(data: dict[str, Any], keys: tuple[str, ...] = ("texto",)) -> dict[str, Any]:
@@ -110,7 +106,7 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
     registro = normalizar_registro(registro)  # política efetiva fixada na criação (argumento > ambiente > padrão)
 
     def svc_() -> Verifica:
-        return _service(home, registro)
+        return Protegido(_service(home, registro))  # type: ignore[return-value]
 
     aviso = svc_().acervo_status()
     if aviso:

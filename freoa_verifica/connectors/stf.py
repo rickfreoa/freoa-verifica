@@ -36,10 +36,16 @@ _PREFIXES = {
         "/jurisprudenciaRepercussao/",
         "/util/",
         "/arquivo/",
+        "/jurisprudencia/sumariosumulas.asp",
     ),
     "sistemas.stf.jus.br": ("/repgeral/",),
     "jurisprudencia.stf.jus.br": ("/api/",),
 }
+
+# base do sumário oficial -> (classe, espécie); detalhe = mesma página com &sumula=<id>
+SUMULA_BASES = {30: ("Súmula", "sumula"), 26: ("Súmula Vinculante", "sumula_vinculante")}
+_SUMARIO = "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp"
+_SUMULA_RE = re.compile(r"^(Súmula(?: Vinculante)?)\s+(\d+)\s*(?:\((\w+)\))?$")
 
 _MAINTENANCE = re.compile(r"em\s+manuten[cç][aã]o|sistema\s+indispon[ií]vel|maintenance", re.I)
 
@@ -54,7 +60,7 @@ class StfConnector(Connector):
     mimes = _MIMES
     user_agent = "browser"
     coverage = {
-        "colecoes": ["processos", "decisoes", "repercussao_geral", "sumulas"],
+        "colecoes": ["processos", "decisoes", "repercussao_geral", "sumulas", "sumulas_vinculantes"],
         "periodo": "acervo portal",
         "busca_textual": False,  # WAF em jurisprudencia.stf.jus.br
         "ementa": True,
@@ -173,6 +179,8 @@ class StfConnector(Connector):
         )
 
     def parse(self, resp: Response) -> ParsedDecision:
+        if "sumariosumulas.asp" in (resp.final_url or ""):
+            return _parse_sumula(resp)
         if resp.body[:4] == b"%PDF":
             return ParsedDecision(
                 profile="stf_pdf",
@@ -234,6 +242,36 @@ class StfConnector(Connector):
         )
         return _parse_aba_decisoes(resp.body, base=url)
 
+    def list_sumulas(self, base: int) -> list[Candidate]:
+        """Sumário oficial (HTML) -> um candidato por súmula; o enunciado vem da página de detalhe."""
+        classe, _ = SUMULA_BASES[base]
+        url = f"{_SUMARIO}?base={base}"
+        resp = connector_fetch(
+            url,
+            hosts=self.hosts,
+            path_prefixes=self.path_prefixes,
+            mimes=self.mimes,
+            user_agent=self.user_agent,
+            timeout=60.0,
+        )
+        tree = lxml_html.fromstring(resp.body)
+        out = []
+        for a in tree.xpath('//div[@class="sumarioSumulas"]//div[contains(@class,"sumula-item")]/a[@href]'):
+            m = _SUMULA_RE.match(_texto(a))
+            sid = re.search(r"[?&]sumula=(\d+)", a.get("href") or "")
+            if not m or not sid or m.group(1) != classe:
+                raise Unavailable("resposta_inesperada")
+            numero = int(m.group(2))
+            detalhe = f"{url}&sumula={sid.group(1)}"
+            out.append(Candidate(
+                source_id=self.id, key=f"{'sv' if base == 26 else 'sumula'}:{numero}",
+                title=f"{classe} {numero}", url=detalhe,
+                metadata={"court": "STF", "classe": classe, "numero": numero, "download_url": detalhe,
+                          "observacao": m.group(3), "kind": SUMULA_BASES[base][1]}))
+        if not out:
+            raise Unavailable("resposta_inesperada")
+        return out
+
     def resolve_tema(self, tema: int) -> list[Candidate]:
         url = f"https://sistemas.stf.jus.br/repgeral/votacao?tema={int(tema)}"
         resp = connector_fetch(
@@ -264,6 +302,35 @@ class StfConnector(Connector):
                     'numero':leading.get('numeroProcesso'),'incidente':incidente,
                     'relator':leading.get('relator'),'kind':'repercussao_geral','raw':leading}))
         return candidates
+
+
+def _texto(el) -> str:
+    # nbsp e espaço de largura zero (ex.: "cance&#8203;lada") aparecem no HTML oficial
+    return " ".join(el.text_content().replace("\u200b", "").replace("\xa0", " ").split())
+
+
+def _parse_sumula(resp: Response) -> ParsedDecision:
+    tree = lxml_html.fromstring(resp.body)
+    titulo = tree.xpath('//div[@class="titulo"]')
+    corpo = tree.xpath('//div[@class="titulo"][1]/following-sibling::div[@class="parCOM"][1]')
+    m = _SUMULA_RE.match(_texto(titulo[0])) if titulo else None
+    if not m or not corpo or not _texto(corpo[0]):
+        raise Unavailable("resposta_inesperada")
+    classe, numero, obs = m.group(1), int(m.group(2)), m.group(3)
+    rotulo = f"{classe} {numero}" + (f" ({obs})" if obs else "")
+    return ParsedDecision(
+        profile="stf_sumula",
+        kind=SUMULA_BASES[26 if classe.endswith("Vinculante") else 30][1],
+        court="STF",
+        official_id=f"{classe} {numero}",
+        ementa=f"{rotulo}. {_texto(corpo[0])}",
+        text=_texto(corpo[0]),
+        class_name=classe,
+        metadata={"numero": numero, "observacao": obs, "processo": numero,
+                  # sem observação oficial a situação é desconhecida, nunca "vigente" por silêncio
+                  "situacao_precedente": {"valor": obs if obs in ("cancelada", "superada", "revisada") else "desconhecida",
+                                          "texto_oficial": obs}},
+    )
 
 
 def _parse_processo(key: Any) -> tuple[str | None, int | None]:
@@ -334,15 +401,9 @@ def _parse_aba_decisoes(body: bytes, *, base: str) -> list[dict[str, Any]]:
 
 
 def _pdf_text(body: bytes) -> str:
-    try:
-        import io
+    from freoa_verifica.parsers.isolated import texto_pdf_isolado
 
-        from pypdf import PdfReader
-
-        reader = PdfReader(io.BytesIO(body))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
-    except Exception:
-        return ""
+    return texto_pdf_isolado(body)
 
 
 def _object(value):

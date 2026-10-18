@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.1.0 (18/10/2026)
+
+- Texto coletado é dado, nunca instrução (sanitização de saída): o envelope `DOCUMENTO OFICIAL` é sempre aplicado e os delimitadores que apareçam dentro do próprio documento são neutralizados (antes, um documento que contivesse o delimitador de abertura saía sem envelope e podia "fechá-lo"); toda resposta MCP e REST passa por triagem de padrões de prompt injection (portados do `freoa-document-sanitizer` do FREOA) e de caracteres invisíveis/bidi, sinalizados em `alertas_conteudo` sem alterar o texto oficial. Token REST comparado em tempo constante.
+- PDFs de decisões do STF e do TJSP passam a ser lidos no processo isolado (antes, no processo do servidor); falha, excesso ou timeout viram `unavailable(pdf_nao_processado)`, nunca texto vazio.
+- Normas da CVM em PDF ganham dispositivos endereçáveis (`cvm-pdf-2`): cabeçalho e rodapé saem por geometria e repetição (só o bloco contíguo a partir da borda da página), sumário é descartado, as notas "• ... com redação dada / incluído / revogado pela Resolução CVM nº X" viram anotações do dispositivo (redação vigente, anterior e revogação), e o texto que outra norma "passa a vigorar com a seguinte redação" até "(N.R.)" fica como citação. Dispositivo junto a margem descartada fica unknown/MARGEM_ADJACENTE; duplicidades remanescentes ficam `ambiguous`, sem `verified`. Issue `ESTRUTURA_INFERIDA_PDF`. Na Resolução CVM 175 (parte geral): 143 artigos, 801 dispositivos, 6 ambíguos.
+- Data de efeito declarada pelo BCB (decisão 0035): entrada única "Revogação total a partir de D/M/AAAA" em `Atualizacoes` vira `data_efeito`; antes dela, o ato responde vigente com `REVOGACAO_POSTERIOR`; depois, `OBRA_REVOGADA_NA_FONTE`. Sem data declarada, registra-se só o ato revogador e a data continua desconhecida.
+- Situação cadastral: falha de transporte na releitura não apaga leitura autêntica anterior (ela envelhece sozinha em 30 dias); `ressincronizar` informa `falhas_com_leitura_preservada`. Ritmo do BCB reduzido a 0,2 req/s por host (`FV_RATE_LIMIT_BCB`).
+- Jurisprudência (decisão 0036): `fv sync` ingere os precedentes qualificados do STJ (Tema e IAC, autoridade B) e as súmulas e súmulas vinculantes do STF (portal oficial, autoridade A), com situação estruturada; precedente cancelado ou superado sai com `PRECEDENTE_NAO_VIGENTE_NA_FONTE`. Semente STJ ampliada a sete órgãos não criminais e 24 meses.
+- `fv bench`: o caso pode declarar `data`; toda dimensão declarada em `expectativa` é confrontada sem apagar as obrigações das demais; indisponibilidade só conta como acerto quando esperada na própria dimensão.
+- Publicação no PyPI por Trusted Publishing preparada no workflow de release (desligada até o cadastro do publicador e `PYPI_PUBLICAR=true`).
+
 ## 1.0.3 (18/10/2026)
 
 - Monotonia estrutural (decisão 0034): captura de texto compilado que perde dispositivos do modelo canônico não é promovida (`PERDA_ESTRUTURAL` em `divergentes` de reprocessar, reconstruir e instalar snapshot); `pode_negar` não nega caminho de captura canônica anterior (`ESTRUTURA_DIVERGENTE_ENTRE_CAPTURAS`).

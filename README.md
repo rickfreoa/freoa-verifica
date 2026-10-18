@@ -24,9 +24,9 @@ Em `verificar_texto`, associações com confiança `provavel` recebem `requer_co
 Requer Python 3.11 ou superior.
 
 ```bash
-pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.3/freoa_verifica-1.0.3-py3-none-any.whl"
+pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.1.0/freoa_verifica-1.1.0-py3-none-any.whl"
 # ou a partir do código-fonte:
-pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.0.3"
+pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.1.0"
 fv doctor
 fv snapshot install                   # corpus semente (opcional, recomendado)
 ```
@@ -46,7 +46,7 @@ No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verif
 Alternativa sem instalação permanente:
 
 ```bash
-uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.0.3 freoa-verifica-mcp
+uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.1.0 freoa-verifica-mcp
 ```
 
 O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release que contenha o snapshot, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.
@@ -83,6 +83,17 @@ A apuração de 18/10/2026 está em [docs/FONTES.md](docs/FONTES.md). O acervo �
 - Suporte da fonte a uma proposição jurídica não é avaliado. Não há tratamento sistemático demonstrado de precedentes superados. Busca local vazia não prova inexistência.
 
 `fv fontes` informa a cobertura declarada e o estado de acesso dos conectores. Falha, WAF ou CAPTCHA produzem indisponibilidade com motivo.
+
+## Versão 1.1.0: lacunas fechadas e saída protegida
+
+A 1.1.0 ataca as lacunas que impediam o uso no lugar do JusRatio, sob dezessete rodadas de auditoria independente do código e um conjunto-ouro montado sem acesso ao código:
+
+- **Normas da CVM em PDF** passam a ter artigos, parágrafos, incisos e alíneas endereçáveis, com histórico extraído das notas da própria CVM ([decisão 0037](docs/decisoes/0037-estrutura-inferida-de-pdf-da-cvm.md)). Onde o parser detecta conteúdo que não consegue ler ou separar com segurança (margem descartada, imagem no corpo, redações antigas sem rasura), a resposta é `unknown` ou `ambiguous`, não `verified`; PDFs escaneados, OCR, recortes e camadas ocultas não são tratados ([limites](docs/decisoes/0037-estrutura-inferida-de-pdf-da-cvm.md)).
+- **Precedentes qualificados do STJ e súmulas do STF**, com situação estruturada (vigente, cancelada, superada, revisada, desconhecida) e alerta quando o precedente não está vigente na fonte ([decisão 0036](docs/decisoes/0036-precedentes-e-sumulas.md)).
+- **Data de efeito de revogações declarada pelo BCB** ([decisão 0035](docs/decisoes/0035-data-de-efeito-declarada-pelo-bcb.md)); resoluções do CMN anteriores a 2020 e circulares do BCB passam a ser reconhecidas.
+- **Texto coletado é dado, nunca instrução**: envelope que o texto coletado não consegue fechar, triagem de padrões de injeção e de caracteres invisíveis em toda resposta MCP e REST (`alertas_conteudo`), PDFs de decisões lidos em processo isolado.
+
+Limites que continuam valendo estão em [docs/FONTES.md](docs/FONTES.md#110-o-que-mudou-na-cobertura-e-na-prova). A ferramenta ainda não cobre STJ anterior a 2022, busca textual livre do STF, tribunais estaduais além de consultas pontuais, nem garante atualização contínua; ausência no acervo local nunca prova inexistência.
 
 ## Versão 1.0.3: correções da auditoria de 18/10/2026
 
