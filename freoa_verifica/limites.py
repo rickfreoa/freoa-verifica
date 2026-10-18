@@ -8,6 +8,13 @@ from typing import Any
 
 # Prazo (time.monotonic) do orçamento da operação em curso; fetch e parse isolado o respeitam.
 PRAZO: ContextVar[float | None] = ContextVar("prazo_orcamento", default=None)
+# Evento de cancelamento da thread abandonada por `_com_prazo`: gravações verificam antes de confirmar.
+CANCELADO: ContextVar[Any] = ContextVar("cancelado_orcamento", default=None)
+
+
+def cancelado() -> bool:
+    ev = CANCELADO.get()
+    return bool(ev is not None and ev.is_set())
 
 
 def restante(timeout: float) -> float:

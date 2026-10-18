@@ -847,6 +847,9 @@ def pack_snapshot(directory: Path, archive: Path) -> str:
 
 def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
     origem = Path(origem)
+    if derivados.origem_nao_publicada(svc.conn):  # a instalação anexa ao banco local: não parte de banco limpo
+        return {"status": "erro", "motivo": derivados.REASON_NAO_PUBLICADA,
+                "orientacao": "instale o snapshot em home novo"}
     manifest_path = origem / "MANIFEST.json"
     sha_path = origem / "MANIFEST.sha256"
     if not manifest_path.is_file():

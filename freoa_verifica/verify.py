@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from freoa_verifica.citation import Citation, extract, parse_one
 from freoa_verifica.ids import new_ulid
+from freoa_verifica.limites import cancelado
 from freoa_verifica.parsers.model import (
     AmbiguousProvision,
     ParsedDocument,
@@ -759,6 +760,9 @@ def populate_from_parsed(
                 else:
                     conn.execute("INSERT INTO fts_redaction(text, rubrica, work_label, path) VALUES (?,?,?,?)",
                                  (red.text, prov.rubrica, label or work_key.number, prov.path))
+        if cancelado():  # orçamento estourou: levanta dentro do `with conn` e desfaz a transação
+            from freoa_verifica.connectors.base import Unavailable
+            raise Unavailable("orcamento")
 
     return ResolvedWork(
         work_id=work_id,

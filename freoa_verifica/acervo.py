@@ -90,6 +90,10 @@ def status(conn: sqlite3.Connection, home: Path) -> dict[str, Any] | None:
 
     if not compativel(conn):
         motivos.append("derivados_desatualizados")
+    from freoa_verifica.derivados import REASON_NAO_PUBLICADA, origem_nao_publicada
+
+    if origem_nao_publicada(conn):
+        motivos.append(REASON_NAO_PUBLICADA)
     if not motivos:
         return None
     return {

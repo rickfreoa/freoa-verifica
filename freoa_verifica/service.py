@@ -65,7 +65,7 @@ from freoa_verifica.verify import (
 )
 
 from freoa_verifica import acervo as _acervo
-from freoa_verifica.limites import PRAZO, EntradaInvalida, Sobrecarga, validar as _validar
+from freoa_verifica.limites import CANCELADO, PRAZO, EntradaInvalida, cancelado, Sobrecarga, validar as _validar
 from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica import derivados as _derivados
 from freoa_verifica.registro import politica_atual as _politica_atual
@@ -219,10 +219,11 @@ def _com_prazo(prazo: float, fn, *args, **kwargs):
     restam = prazo - time.monotonic()
     if restam <= 0:
         raise Unavailable("orcamento")
-    ctx, box = contextvars.copy_context(), {}
+    ctx, box, cancel = contextvars.copy_context(), {}, threading.Event()
 
     def corpo():
         PRAZO.set(prazo)
+        CANCELADO.set(cancel)
         try:
             box["v"] = fn(*args, **kwargs)
         except BaseException as exc:  # noqa: BLE001
@@ -231,6 +232,7 @@ def _com_prazo(prazo: float, fn, *args, **kwargs):
     t.start()
     t.join(restam)
     if t.is_alive():
+        cancel.set()  # a thread abandonada não confirma gravação (verify.populate_from_parsed / indexar_obra)
         raise Unavailable("orcamento")
     if "e" in box:
         raise box["e"]
@@ -453,6 +455,8 @@ class Verifica:
         label: str | None = None,
         fts_alvo: str = "fts_redaction",
     ) -> ResolvedWork:
+        if cancelado():
+            raise Unavailable("orcamento")
         declared = validate_identity(work_key, document, work_date)
         if not work_key.year and declared and declared.year:
             work_key = declared
@@ -470,6 +474,8 @@ class Verifica:
             home=self.home,
             fts_alvo=fts_alvo,
         )
+        if cancelado():
+            raise Unavailable("orcamento")
         if rw.capture_id:
             repo.persist_parsed_document(
                 self.conn,
@@ -2274,11 +2280,10 @@ class Verifica:
                 itens.append({"titulo": c.title, "chave": c.key, "url": c.url, "trecho": c.snippet or "",
                               "capture_id": None, "metadados": c.metadata, "nao_indexado": True})
                 continue
-            token = PRAZO.set(prazo)
             try:
-                item = self._index_candidate_legis(connector, c)
-            finally:
-                PRAZO.reset(token)
+                item = _com_prazo(prazo, self._index_candidate_legis, connector, c)
+            except Unavailable:  # abandonada: nada parcial é confirmado (CANCELADO)
+                item = {"capture_id": None, "motivo": "orcamento"}
             if not item.get("capture_id") and time.monotonic() >= prazo:  # orçamento estourou no item
                 nao_indexados += 1
                 itens.append({"titulo": c.title, "chave": c.key, "url": c.url, "trecho": c.snippet or "",

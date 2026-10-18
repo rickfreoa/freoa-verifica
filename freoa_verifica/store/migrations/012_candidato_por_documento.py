@@ -10,6 +10,9 @@ def migrar(conn):
         return
     if not staging:
         return
+    from freoa_verifica.derivados import marcar_origem_nao_publicada
+
+    marcar_origem_nao_publicada(conn)  # antes de marcar: o critério é "staging sem nenhuma marca"
     canon = {tuple(r) for r in conn.execute("SELECT text, path, work_label FROM fts_redaction")}
     rows = conn.execute(
         "SELECT pd.capture_id, pd.model_json, COALESCE(w.label, w.number) FROM parsed_document pd "

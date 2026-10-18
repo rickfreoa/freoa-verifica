@@ -106,3 +106,108 @@ def test_orcamento_cobre_a_busca_inicial(tmp_path, monkeypatch):
         out = s._buscar_normas("cvm_normas", "x", None, orcamento_s=0.03)
         assert time.monotonic() - t < 0.2
         assert out["status"] == "indisponivel" and out["motivo"] == "orcamento"
+
+
+# ---- rodada 6 ----
+import json as _json
+import sqlite3 as _sq
+from freoa_verifica import derivados as _der
+from freoa_verifica.store import db as _db
+
+
+def _home_esquema9(tmp_path, *, marca=False):
+    """Home de build não publicado (esquema 8/9) com candidato subconjunto do canônico, sem marca."""
+    con = _sq.connect(tmp_path / "verifica.sqlite3")
+    con.row_factory = _sq.Row
+    for v, sql in _db._migration_files():
+        if v <= 9:
+            for st in _db.split_sql_statements(sql):
+                con.execute(st)
+    con.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))")
+    for v in range(1, 10):
+        con.execute("INSERT OR IGNORE INTO schema_version(version) VALUES (?)", (v,))
+    con.execute("INSERT INTO fts_staging(text, work_label, path) VALUES ('texto A','Lei 1','art. 1')")
+    con.commit()
+    con.close()
+
+
+def test_esquema9_com_staging_sem_marca_recusa_reconstruir(tmp_path):
+    _home_esquema9(tmp_path)
+    antes = (tmp_path / "verifica.sqlite3").read_bytes()
+    with Verifica(tmp_path) as s:
+        out = s.reconstruir_acervo()
+        assert out["status"] == "erro" and out["motivo"] == "ACERVO_DE_VERSAO_NAO_PUBLICADA"
+        assert _der.REASON_NAO_PUBLICADA in s.acervo_status()["motivos"]
+        assert s.snapshot_install(tmp_path / "nada")["motivo"] == "ACERVO_DE_VERSAO_NAO_PUBLICADA"
+    assert not list(tmp_path.glob(".reconstruir-*")) and len(antes) > 0
+
+
+def test_home_v102_sem_staging_reconstroi(tmp_path):
+    con = _sq.connect(tmp_path / "verifica.sqlite3")
+    for v, sql in _db._migration_files():
+        if v <= 5:
+            for st in _db.split_sql_statements(sql):
+                con.execute(st)
+    con.execute("CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))")
+    for v in range(1, 6):
+        con.execute("INSERT INTO schema_version(version) VALUES (?)", (v,))
+    con.commit()
+    con.close()
+    with Verifica(tmp_path) as s:
+        assert not _der.origem_nao_publicada(s.conn)
+        r = s.reconstruir_acervo(); assert r.get("motivo") != "ACERVO_DE_VERSAO_NAO_PUBLICADA", r
+
+
+def test_captura_candidata_nao_substitui_canonica(tmp_path):
+    with Verifica(tmp_path) as s:
+        c = s.conn
+        c.execute("INSERT INTO work(id,jurisdiction,authority,kind,number,year,label) VALUES ('w','br','federal','lei','1',2000,'Lei 1')")
+        for cid, quando, cand, txt in (("c1", "2026-01-01", 0, "texto canonico completo"), ("c2", "2026-02-01", 1, "subconjunto")):
+            c.execute("INSERT INTO capture(id,source_id,url,final_url,sha256,fetched_at,status,headers_json,mime) VALUES (?,?,?,?,?,?,?,?,?)",
+                      (cid, "s", "u", "u", cid, quando, 200, "{}", "x")) if False else None
+        # usa o caminho normal: indexa canônica e depois candidata
+        from freoa_verifica.aliases import WorkKey
+        from freoa_verifica.parsers.model import ParsedDocument, Provision, Redaction
+        def doc(t):
+            return ParsedDocument(profile="x", parser_version="t", title="t", ementa=None, text="t", provisions=[Provision(path="art. 1", label="Art. 1", scope="main", redactions=[Redaction(text=t, struck=False, order=0)])])
+        c.execute("DELETE FROM work")
+        s.indexar_obra(source_id="s", work_key=WorkKey("federal", "lei", "1", 2000), document=doc("texto canonico completo"),
+                       body=b"a", url="u1", fetched_at="2026-01-01T00:00:00+00:00", label="Lei 1")
+        s.indexar_obra(source_id="s", work_key=WorkKey("federal", "lei", "1", 2000), document=doc("subconjunto"),
+                       body=b"b", url="u2", fetched_at="2026-02-01T00:00:00+00:00", label="Lei 1", fts_alvo="fts_staging")
+        _der.reindexar_fts(c)
+        textos = [r[0] for r in c.execute("SELECT text FROM fts_redaction")]
+        assert textos == ["texto canonico completo"]
+
+
+def test_indexacao_lenta_que_ignora_prazo_e_abandonada(tmp_path, monkeypatch):
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+
+    class C:
+        def search(self, q, **kw):
+            from freoa_verifica.connectors.base import Candidate
+            return [Candidate(source_id="cvm_normas", key="1", title="Lei 1", url="u", snippet="s", metadata={})]
+    with Verifica(tmp_path) as s:
+        monkeypatch.setattr(s, "_get", lambda _id: C())
+        gravou = []
+
+        def lento(connector, cand):
+            time.sleep(0.3)  # ignora PRAZO
+            from freoa_verifica.aliases import WorkKey
+            from freoa_verifica.parsers.model import ParsedDocument, Provision, Redaction
+            try:
+                s.indexar_obra(source_id="s", work_key=WorkKey("federal", "lei", "1", 2000),
+                               document=ParsedDocument(profile="x", parser_version="t", title="t", ementa=None, text="t", provisions=[Provision(path="art. 1", label="Art. 1", scope="main", redactions=[Redaction(text="zzz", struck=False, order=0)])]),
+                               body=b"a", url="u", label="Lei 1", fts_alvo="fts_staging")
+                gravou.append(1)
+            except Exception:  # noqa: BLE001
+                pass
+            return {"capture_id": "x", "trecho": ""}
+        monkeypatch.setattr(s, "_index_candidate_legis", lento)
+        t = time.monotonic()
+        out = s._buscar_normas("cvm_normas", "x", None, orcamento_s=0.05)
+        assert time.monotonic() - t < 0.2
+        assert out["itens"][0]["nao_indexado"] and out["itens"][0]["motivo"] == "orcamento"
+        time.sleep(0.5)
+        assert not gravou
+        assert s.conn.execute("SELECT COUNT(*) FROM fts_staging").fetchone()[0] == 0

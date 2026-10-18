@@ -20,6 +20,7 @@ _log = logging.getLogger(__name__)
 DERIVED_VERSION = 2
 
 REASON = "ACERVO_DESATUALIZADO"
+REASON_NAO_PUBLICADA = "ACERVO_DE_VERSAO_NAO_PUBLICADA"
 
 
 def versao(conn: sqlite3.Connection) -> int | None:
@@ -36,6 +37,24 @@ def definir(conn: sqlite3.Connection, valor: int | None) -> None:
     else:
         conn.execute("INSERT INTO meta(key, value) VALUES ('derived_version', ?) "
                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(valor),))
+
+
+def origem_nao_publicada(conn: sqlite3.Connection) -> bool:
+    try:
+        return conn.execute("SELECT 1 FROM meta WHERE key='acervo_origem_nao_publicada'").fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+
+def marcar_origem_nao_publicada(conn: sqlite3.Connection) -> None:
+    """Esquema 8/9 (nunca publicado) com staging e nenhum candidato marcado: não há como separar candidato de
+    canônico. shortcut: o histórico de schema_version não distingue 8/9 de 12; usa-se o estado (staging sem marca)."""
+    try:
+        if (conn.execute("SELECT 1 FROM fts_staging LIMIT 1").fetchone()
+                and not conn.execute("SELECT 1 FROM parsed_document WHERE candidato_ao_vivo=1 LIMIT 1").fetchone()):
+            conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('acervo_origem_nao_publicada', '1')")
+    except sqlite3.Error:
+        pass
 
 
 def compativel(conn: sqlite3.Connection) -> bool:
@@ -170,6 +189,9 @@ def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
     """Reconstrói os derivados numa cópia e troca o banco só depois de validar (idempotente)."""
     if svc._read_only:
         return {"status": "erro", "motivo": "somente_leitura"}
+    if origem_nao_publicada(svc.conn):
+        return {"status": "erro", "motivo": REASON_NAO_PUBLICADA, "original_intacto": True,
+                "orientacao": "este home vem de build de desenvolvimento não publicado; use `fv snapshot install` em home novo"}
     home: Path = svc.home
     db = home / "verifica.sqlite3"
     pasta = home / f".reconstruir-{new_ulid()}"
