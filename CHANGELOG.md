@@ -10,6 +10,10 @@
 - Data do ato alterador extraída da epígrafe já capturada quando o Senado não fornece a data; só preenche a data completa, nunca inventa, e data inválida fica sem valor (M8).
 - Coluna `rubrica` no índice FTS de redações (migração 006, preserva as linhas existentes); o parser ainda não captura a rubrica de artigo, então a coluna fica vazia até essa captura existir (M11, pendente).
 - Rótulos CVM com mojibake (UTF-8 lido como latin-1) são corrigidos ao gravar e ao instalar snapshot, só quando a reversão é UTF-8 válido e reduz caracteres suspeitos (M11).
+- Situação da obra (C2, decisão 0021): tabela `work_status` alimentada pela página do ato CVM (sempre capturada) e pelos campos `Revogado`/`Cancelado` do BCB/CMN. Ato revogado ou cancelado deixa de sair `vigente_na_fonte` (`OBRA_REVOGADA_NA_FONTE`, inclusive em citação só da obra); data passada sem `data_efeito` é `unknown REVOGACAO_DATA_DESCONHECIDA`; revogação futura preserva a análise e marca `REVOGACAO_POSTERIOR`; situação ilegível ou com mais de 30 dias nunca é vigente. A página do ato CVM deixou de presumir vigência. `Verifica.ressincronizar_situacao()` relê o acervo.
+- Busca CVM: decodificação UTF-8 correta (consultas acentuadas), sem exigir a frase literal, `unavailable` quando a fonte informa total > 0 e nada é lido, um item por ato (anexos duplicados descartados) e espécie acompanhando o número ("Instrução CVM 358"). Busca CVM/BCB informa `truncado` pelo total da fonte.
+- BCB/CMN: "Resolução CMN 4.966" na consulta aciona o lookup exato por número.
+- PDF da CVM roda em processo isolado com limites de tempo, memória, páginas e texto (decisão 0026).
 
 ## 1.0.2
 

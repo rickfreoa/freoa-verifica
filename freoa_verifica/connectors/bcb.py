@@ -32,6 +32,27 @@ _JSON_MIMES = frozenset(
 
 MAX_ROWS = 500
 
+_TIPO_NUM = re.compile(
+    r"(?i)\b(resolu[cç][aã]o\s+(?:cmn|bcb|conjunta)|carta\s+circular|circular|"
+    r"instru[cç][aã]o\s+normativa(?:\s+bcb)?|comunicado)\s*(?:n[ºo°.]+\s*)?(\d[\d.]*)"
+)
+_TIPOS = {"resolucao cmn": "Resolução CMN", "resolucao bcb": "Resolução BCB",
+          "resolucao conjunta": "Resolução Conjunta", "carta circular": "Carta Circular",
+          "circular": "Circular", "instrucao normativa": "Instrução Normativa BCB",
+          "instrucao normativa bcb": "Instrução Normativa BCB", "comunicado": "Comunicado"}
+
+
+def tipo_numero_da_consulta(q: str) -> tuple[str | None, str | None]:
+    """M4: "Resolução CMN 4.966" na consulta aciona o lookup exato por número."""
+    m = _TIPO_NUM.search(q or "")
+    if not m:
+        return None, None
+    import unicodedata
+    chave = unicodedata.normalize("NFKD", re.sub(r"\s+", " ", m.group(1).lower()))
+    chave = "".join(c for c in chave if not unicodedata.combining(c))
+    num = m.group(2).replace(".", "")
+    return _TIPOS.get(chave), (num or None)
+
 
 def _clean_numero(raw: Any) -> str:
     if raw is None:
@@ -105,6 +126,9 @@ class BcbConnector(Connector):
         terms = (q or "").strip()
         tipo = filtros.get("tipo")
         numero = filtros.get("numero")
+        if numero is None and terms:
+            tipo_q, numero = tipo_numero_da_consulta(terms)
+            tipo = tipo or tipo_q
         rowlimit = min(MAX_ROWS, max(1, int(filtros.get("limite") or filtros.get("rowlimit") or 15)))
         startrow = max(0, int(filtros.get("startrow") or 0))
         parts = ["ContentType:normativo", "AND", "contentSource:normativos"]
@@ -185,6 +209,7 @@ class BcbConnector(Connector):
                         "data": row.get("data"),
                         "revogado": row.get("RevogadoOWSBOOL") == "1",
                         "listItemId": row.get("listItemId"),
+                        "total_fonte": total,
                     },
                 )
             )
