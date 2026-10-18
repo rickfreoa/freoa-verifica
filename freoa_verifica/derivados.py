@@ -17,7 +17,9 @@ _log = logging.getLogger(__name__)
 
 # Incrementar quando parsers, modelo serializado ou derivados mudam de forma incompatível.
 # 2 = 1.0.3 (ADCT com escopo próprio, rubrica, FTS só com redações do modelo atual).
-DERIVED_VERSION = 2
+# 3 = 1.1.0 (cvm-pdf-2 com dispositivos inferidos, tipo "Resolução" do BCB como CMN pelo preâmbulo,
+#     data de efeito declarada no BCB, situação estruturada de precedentes).
+DERIVED_VERSION = 3
 
 REASON = "ACERVO_DESATUALIZADO"
 REASON_NAO_PUBLICADA = "ACERVO_DE_VERSAO_NAO_PUBLICADA"
