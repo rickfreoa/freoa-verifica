@@ -326,7 +326,10 @@ def _parse_sumula(resp: Response) -> ParsedDecision:
         ementa=f"{rotulo}. {_texto(corpo[0])}",
         text=_texto(corpo[0]),
         class_name=classe,
-        metadata={"numero": numero, "observacao": obs, "processo": numero},
+        metadata={"numero": numero, "observacao": obs, "processo": numero,
+                  # sem observação oficial a situação é desconhecida, nunca "vigente" por silêncio
+                  "situacao_precedente": {"valor": obs if obs in ("cancelada", "superada", "revisada") else "desconhecida",
+                                          "texto_oficial": obs}},
     )
 
 

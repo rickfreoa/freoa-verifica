@@ -8,6 +8,7 @@ import json
 import hashlib
 import re
 import sqlite3
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -326,12 +327,10 @@ class StjConnector(Connector):
 
     def parse_candidate(self, resp: Response, candidate: Candidate) -> ParsedDecision:
         if resp.mime == "text/csv":
-            para = candidate.metadata.get("processosParadigma") or []
-            for row in _csv_rows(resp.body):
-                item = _precedente_item(row, para)
-                if item and item["id"] == candidate.key:
-                    return self._decision(item)
-            raise Unavailable("stj_documento_ausente_no_recurso")
+            item = _precedentes_do_csv(resp.body).get(candidate.key)  # mesma política do sync: a última linha vale
+            if item is None:
+                raise Unavailable("stj_documento_ausente_no_recurso")
+            return self._decision(item)
         return self.parse(resp, key=candidate.key)
 
     def parse(self, resp: Response, *, key: str | None = None) -> ParsedDecision:
@@ -388,6 +387,8 @@ class StjConnector(Connector):
                 "numeroRegistro": item.get("numeroRegistro"),
                 "numeroProcesso": item.get("numeroProcesso"),
                 "referenciasLegislativas": item.get("referenciasLegislativas"),
+                "situacao_precedente": item.get("situacao_precedente"),
+                "divergencia_na_fonte": item.get("divergenciaNaFonte"),
                 "tema": item.get("tema"),
             },
         )
@@ -563,17 +564,15 @@ class StjConnector(Connector):
             if (row.get("leadingCase") or "").strip() == "S" and (row.get("Processo") or "").strip():
                 para.setdefault(row["sequencialPrecedente"].strip(), []).append(row["Processo"].strip())
         temas = got["Temas.csv"]
-        items: dict[str, dict[str, Any]] = {}
-        for row in _csv_rows(temas.body):
-            item = _precedente_item(row, para.get((row.get("sequencialPrecedente") or "").strip(), []))
-            if item:
-                items[item["id"]] = item  # shortcut: linhas repetidas no CSV -> a última vale
         n = 0
-        for key, item in items.items():
+        for key, item in _precedentes_do_csv(temas.body).items():
             if max_itens is not None and n >= max_itens:
                 break
             self._put(conn, rows_by_key, key, {
-                **item, "_resource_sha256": temas.sha256, "_resource_url": temas.final_url,
+                **item,
+                # não autenticados: vêm de Processos.csv e nunca entram no texto probatório
+                "processosParadigmaNaoAutenticados": para.get(item["_seq"], []),
+                "_resource_sha256": temas.sha256, "_resource_url": temas.final_url,
                 "_resource_fetched_at": temas.fetched_at, "_resource_kind": "csv",
                 "_processos_sha256": got["Processos.csv"].sha256})
             n += 1
@@ -601,7 +600,40 @@ def _csv_rows(body: bytes) -> list[dict[str, str]]:
     return list(csv.DictReader(io.StringIO(body.decode("utf-8-sig"), newline="")))
 
 
-def _precedente_item(row: dict[str, str], paradigmas: list[str]) -> dict[str, Any] | None:
+def _situacao_estruturada(texto: str) -> dict[str, Any]:
+    n = "".join(c for c in unicodedata.normalize("NFD", texto.lower()) if not unicodedata.combining(c))
+    if "cancel" in n:
+        valor = "cancelada"
+    elif "revis" in n:
+        valor = "revisada"
+    elif "supera" in n:
+        valor = "superada"
+    elif n.startswith(("transito em julgado", "acordao publicado")):
+        valor = "vigente"
+    else:  # afetado, em julgamento, sobrestado, vazio...: não é vigência demonstrada
+        valor = "desconhecida"
+    return {"valor": valor, "texto_oficial": texto or None}
+
+
+def _precedentes_do_csv(body: bytes) -> dict[str, dict[str, Any]]:
+    """Linhas repetidas da mesma chave: a última vale; divergência de tese/situação fica declarada."""
+    items: dict[str, dict[str, Any]] = {}
+    for row in _csv_rows(body):
+        item = _precedente_item(row)
+        if not item:
+            continue
+        anterior = items.get(item["id"])
+        if anterior and ((anterior["teseFirmada"], anterior["situacao"]) != (item["teseFirmada"], item["situacao"])
+                         or anterior.get("divergenciaNaFonte")):
+            item["divergenciaNaFonte"] = True
+        items[item["id"]] = item
+    for item in items.values():
+        if item.get("divergenciaNaFonte"):
+            item["ementa"] += "\nDivergência na fonte: linhas repetidas com tese ou situação distintas; prevalece a última."
+    return items
+
+
+def _precedente_item(row: dict[str, str]) -> dict[str, Any] | None:
     tipo = _TIPOS_PRECEDENTE.get((row.get("tipoPrecedente") or "").strip())
     numero = (row.get("numeroPrecedente") or "").strip()
     if not tipo or not numero:
@@ -616,8 +648,6 @@ def _precedente_item(row: dict[str, str], paradigmas: list[str]) -> dict[str, An
                           ("Tese firmada", "teseFirmada"), ("Súmula originada", "sumulaOriginada")):
         if f(campo):
             partes.append(f"{rotulo}: {f(campo)}")
-    if paradigmas:
-        partes.append("Processos paradigma: " + "; ".join(paradigmas))
     return {
         "id": f"{'tema' if species == 'repetitivo' else 'iac'}:{numero}",
         "tipoDeDecisao": species,
@@ -627,7 +657,9 @@ def _precedente_item(row: dict[str, str], paradigmas: list[str]) -> dict[str, An
         "nomeOrgaoJulgador": f("orgaoJulgador"),
         "dataDecisao": f("dataJulgamento") or None,
         "situacao": f("situacao"),
-        "processosParadigma": paradigmas,
+        "teseFirmada": f("teseFirmada"),
+        "situacao_precedente": _situacao_estruturada(f("situacao")),
+        "_seq": (row.get("sequencialPrecedente") or "").strip(),
     }
 
 
