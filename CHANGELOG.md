@@ -1,6 +1,6 @@
 # Histórico de versões
 
-## 1.0.3 (em preparação)
+## 1.0.3 (18/10/2026)
 
 - Monotonia estrutural (decisão 0034): captura de texto compilado que perde dispositivos do modelo canônico não é promovida (`PERDA_ESTRUTURAL` em `divergentes` de reprocessar, reconstruir e instalar snapshot); `pode_negar` não nega caminho de captura canônica anterior (`ESTRUTURA_DIVERGENTE_ENTRE_CAPTURAS`).
 - ADCT com escopo próprio (`adct/artN`) no parser do Planalto (`parser_version` 1.2.3), sentinela `SCOPE_COLLISION` contra substituição entre escopos e extração de "art. N do ADCT" (decisão 0022).
