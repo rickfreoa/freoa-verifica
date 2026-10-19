@@ -72,7 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sem-registro",
         action="store_true",
-        help="não grava citação, trecho nem evidência textual nas execuções (registro sem_conteudo)",
+        help="registro sem_conteudo (já é o padrão desde a 1.2.0; mantida por compatibilidade)",
+    )
+    parser.add_argument(
+        "--registro-completo",
+        action="store_true",
+        help="grava citação, trecho e evidência textual nas execuções (padrão: sem_conteudo; também FV_REGISTRO=completo)",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -205,6 +210,8 @@ def build_parser() -> argparse.ArgumentParser:
     runs = p.add_subparsers(dest="runs_cmd", required=True)
     pp = runs.add_parser("purgar", help="reconstruir o banco sem execuções anteriores a DATA")
     pp.add_argument("--antes", required=True, metavar="DATA", help="AAAA-MM-DD")
+    pp.add_argument("--apagar-original", action="store_true",
+                    help="apaga o banco original (movido para purgados/) após a troca bem-sucedida; sem a opção, o original fica para exclusão manual")
     _add_json_flag(pp)
 
     return parser
@@ -219,7 +226,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     as_json = bool(getattr(args, "json", False))
-    registro = "sem_conteudo" if args.sem_registro else None
+    if args.sem_registro and args.registro_completo:
+        parser.error("--sem-registro e --registro-completo são excludentes")
+    registro = "completo" if args.registro_completo else ("sem_conteudo" if args.sem_registro else None)
 
     if args.cmd == "serve-mcp":
         from freoa_verifica.mcp_server import run_server
@@ -236,7 +245,7 @@ def main(argv: list[str] | None = None) -> None:
 
     with Verifica(home=args.home, registro=registro) as svc:
         if args.cmd == "runs":
-            data = svc.purgar_execucoes(args.antes)
+            data = svc.purgar_execucoes(args.antes, apagar_original=args.apagar_original)
             _print_result(data, as_json=as_json, titulo="Purga de execuções")
             raise SystemExit(0 if data.get("status") == "ok" else 1)
 

@@ -39,11 +39,11 @@ def test_mcp_reuso_com_politica_diferente_e_recusado_e_nada_vaza(tmp_path):
     marker = "ZXPRIVATECITATION761994"
     m.create_mcp(home=str(tmp_path), registro="completo")
     try:
-        _indexar(m._service(str(tmp_path)), _doc([_prov("art1")]))
+        _indexar(m._service(str(tmp_path), "completo"), _doc([_prov("art1")]))
         with pytest.raises(ValueError, match="conflito de política"):
             m.create_mcp(home=str(tmp_path), registro="sem_conteudo")
-        # reuso sem pedir política explícita segue a do serviço
-        server = m.create_mcp(home=str(tmp_path))
+        # reuso com a mesma política (explícita: o padrão agora é sem_conteudo, decisão 0040)
+        server = m.create_mcp(home=str(tmp_path), registro="completo")
         asyncio.run(server.call_tool("verificar_citacao", {"citacao": "art. 1 da Lei 6.404/1976"}))
     finally:
         _fechar_mcp(tmp_path)
@@ -51,9 +51,9 @@ def test_mcp_reuso_com_politica_diferente_e_recusado_e_nada_vaza(tmp_path):
 
 def test_mcp_ambiente_diferente_do_servico_e_conflito(tmp_path, monkeypatch):
     monkeypatch.delenv("FV_REGISTRO", raising=False)
-    m.create_mcp(home=str(tmp_path))
+    m.create_mcp(home=str(tmp_path))  # padrão: sem_conteudo
     try:
-        monkeypatch.setenv("FV_REGISTRO", "sem_conteudo")
+        monkeypatch.setenv("FV_REGISTRO", "completo")
         with pytest.raises(ValueError, match="conflito de política"):
             m.create_mcp(home=str(tmp_path))
     finally:

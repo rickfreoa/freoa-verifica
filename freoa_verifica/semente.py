@@ -9,7 +9,7 @@ import re
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
@@ -47,6 +47,9 @@ def load_corpus() -> dict[str, Any]:
     root = resources.files("freoa_verifica").joinpath("data")
     raw = root.joinpath("corpus_semente.json").read_text(encoding="utf-8")
     return json.loads(raw)
+
+
+_REVALIDAR_DIAS = 30
 
 
 def _now() -> str:
@@ -194,6 +197,15 @@ class SementeSync:
     def _sleep(self) -> None:
         if self.rate_delay > 0:
             time.sleep(self.rate_delay)
+
+    def _vencido(self, fonte: str, chave: str) -> bool:
+        """Checkpoint com mais de _REVALIDAR_DIAS: súmulas/SV do STF são recapturadas (decisão 0039)."""
+        row = self.state.get(fonte, chave)
+        try:
+            t = datetime.fromisoformat(row["updated_at"])
+        except (TypeError, ValueError, KeyError):
+            return True
+        return datetime.now(timezone.utc) - (t if t.tzinfo else t.replace(tzinfo=timezone.utc)) > timedelta(days=_REVALIDAR_DIAS)
 
     def _mark_indisponivel(self, fonte: str, chave: str, motivo: str) -> None:
         self._failed[fonte, chave] = motivo
@@ -882,14 +894,18 @@ class SementeSync:
                     self._mark_indisponivel("stf", lista, getattr(exc, "reason", str(exc))[:200])
                     continue
                 for cand in cands[: self.max_itens]:
-                    if self.state.done("stf", cand.key):
+                    if self.state.done("stf", cand.key) and not self._vencido("stf", cand.key):
                         self._stats("stf").pulados += 1
                         continue
                     try:
                         self._sleep()
                         item = self.svc._index_candidate_juris(conn_obj, cand)
                         if item and item.get("capture_id"):
-                            self.state.set("stf", cand.key, "parseado")
+                            # A reingestão substitui o documento; o sha registra a mudança na fonte.
+                            sha = self.svc.conn.execute("SELECT sha256 FROM capture WHERE id=?",
+                                                        (item["capture_id"],)).fetchone()
+                            self.state.set("stf", cand.key, "parseado",
+                                           payload={"sha256": sha[0] if sha else None})
                             self._stats("stf").parseados += 1
                             self._stats("stf").capturados += 1
                         else:

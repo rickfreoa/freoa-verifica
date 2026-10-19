@@ -2615,8 +2615,12 @@ class Verifica:
         checks.append({"nome": "acervo", "status": "alerta" if aviso else "ok",
                        "detalhe": aviso or "atende ao manifesto/mínimo"})
         ok = all(c["status"] in {"ok", "alerta"} for c in checks)
+        from freoa_verifica.connectors.stj import resumo_atualizacao
+
+        stj_atual = resumo_atualizacao(self.conn)
         return {"status": "ok" if ok else "falha", "verificacoes": checks,
-                **({"acervo_incompleto": aviso} if aviso else {})}
+                **({"acervo_incompleto": aviso} if aviso else {}),
+                **({"stj_atualizacao": stj_atual} if stj_atual else {})}
 
     # ------------------------------------------------------------------
     # Snapshot
@@ -2644,7 +2648,7 @@ class Verifica:
         """Reconstrói os derivados do home numa cópia e troca o banco só se tudo validar (C6)."""
         return _derivados.reconstruir(self, com_situacao=com_situacao)
 
-    def purgar_execucoes(self, antes: str) -> dict[str, Any]:
+    def purgar_execucoes(self, antes: str, apagar_original: bool = False) -> dict[str, Any]:
         """Reconstrói o banco sem as execuções anteriores a `antes` (AAAA-MM-DD)."""
         from freoa_verifica import registro as reg
 
@@ -2654,7 +2658,7 @@ class Verifica:
             with self.exclusivo():
                 self._close_all_conns(strict=True)
                 try:
-                    return reg.purgar(self.home, antes)
+                    return reg.purgar(self.home, antes, apagar_original)
                 finally:
                     self._clear_caches()
         except (ValueError, TimeoutError, RuntimeError, OSError) as exc:

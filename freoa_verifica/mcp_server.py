@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import json
 import os
 import sys
 import threading
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
     # mcp>=2 renomeou FastMCP → MCPServer
     from mcp.server.mcpserver import MCPServer as FastMCP
 
+from freoa_verifica.fronteira import origens_permitidas, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP
 from freoa_verifica.registro import normalizar as normalizar_registro
@@ -286,10 +288,13 @@ class _SoLoopback:
         if scope["type"] in ("http", "websocket"):
             cliente = (scope.get("client") or (None,))[0]
             hdrs = {k.lower() for k, _ in scope["headers"]}
-            if cliente not in _LOCAL_CLIENTES or hdrs & {b"x-forwarded-for", b"forwarded"}:
+            motivo = None if (cliente in _LOCAL_CLIENTES and not hdrs & {b"x-forwarded-for", b"forwarded"}) \
+                else "modo local aceita apenas cliente loopback direto"
+            motivo = motivo or validar(scope["headers"], com_token=False)
+            if motivo:
                 if scope["type"] == "websocket":
                     return
-                body = b'{"title":"erro","status":403,"detail":"modo local aceita apenas cliente loopback direto"}'
+                body = json.dumps({"title": "erro", "status": 403, "detail": motivo}).encode()
                 await send({"type": "http.response.start", "status": 403, "headers": [
                     (b"content-type", b"application/problem+json"),
                     (b"content-length", str(len(body)).encode())]})
@@ -303,9 +308,18 @@ class _BearerMCP:
 
     def __init__(self, app, token: str) -> None:
         self.app, self.token = app, token
+        self.extras = origens_permitidas()
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] == "http":
+            motivo = validar(scope["headers"], com_token=True, extras=self.extras)
+            if motivo:
+                body = json.dumps({"title": "erro", "status": 403, "detail": motivo}).encode()
+                await send({"type": "http.response.start", "status": 403, "headers": [
+                    (b"content-type", b"application/problem+json"),
+                    (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return
             auth = dict(scope["headers"]).get(b"authorization", b"").decode("latin-1")
             scheme, _, cred = auth.partition(" ")
             if scheme.lower() != "bearer" or not hmac.compare_digest(cred.strip(), self.token):
@@ -357,10 +371,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--home", default=None)
     parser.add_argument("--token", default=None, help="bearer (obrigatório com host não local)")
-    parser.add_argument("--sem-registro", action="store_true", help="não grava entradas (registro sem_conteudo)")
+    parser.add_argument("--sem-registro", action="store_true", help="registro sem_conteudo (já é o padrão; mantida por compatibilidade)")
+    parser.add_argument("--registro-completo", action="store_true", help="grava as entradas nas execuções (padrão: sem_conteudo)")
     args = parser.parse_args(argv)
+    if args.sem_registro and args.registro_completo:
+        parser.error("--sem-registro e --registro-completo são excludentes")
     run_server(http=args.http, host=args.host, port=args.port, home=args.home, token=args.token,
-               registro="sem_conteudo" if args.sem_registro else None)
+               registro="completo" if args.registro_completo else ("sem_conteudo" if args.sem_registro else None))
 
 
 if __name__ == "__main__":
