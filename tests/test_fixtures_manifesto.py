@@ -144,3 +144,12 @@ def test_load_fixture_recusa_caminho_fora(monkeypatch):
 
 def test_load_fixture_le_pelo_manifesto():
     assert load_fixture("challenge_aws_waf_sample") == (FIXTURES_DIR / "challenge_aws_waf_sample.html").read_bytes()
+
+
+def test_tjdft_sem_metadados_observados():
+    """A06: status e content_type dos registros TJDFT vieram de mocks de teste, não de captura preservada."""
+    tjdft = {k: e for k, e in load_meta().items() if k.startswith("tjdft_")}
+    assert len(tjdft) == 5
+    for chave, e in tjdft.items():
+        assert (e["status"], e["content_type"], e["origem_metadados"]) == (None, None, "desconhecida"), chave
+    assert validar_inventario() == []
