@@ -322,7 +322,7 @@ def test_c5_registro_via_cli_e_ambiente(tmp_path, monkeypatch):
 def test_c5_purga_preserva_triggers_e_move_original(tmp_path, capsys):
     from freoa_verifica.cli import main
 
-    with Verifica(home=tmp_path) as svc:
+    with Verifica(home=tmp_path, registro="completo") as svc:  # padrão agora é sem_conteudo (decisão 0040)
         svc.verificar_citacao(f"art. 254-A da Lei 6.404/76 {MARCADOR}")
     with pytest.raises(SystemExit) as e:
         main(["--home", str(tmp_path), "runs", "purgar", "--antes", "2000-01-01", "--json"])

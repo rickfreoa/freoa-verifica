@@ -1,6 +1,6 @@
 # 0030 - Registro de entradas
 
-Politica `registro` em `{completo, sem_conteudo}` na configuracao do servico (`Verifica(registro=...)`, `FV_REGISTRO`, `fv --sem-registro`, `create_app(registro=)`, `create_mcp(registro=)`, `--sem-registro` no `freoa-verifica-mcp`). Padrao: `completo` (comportamento anterior).
+Politica `registro` em `{completo, sem_conteudo}` na configuracao do servico (`Verifica(registro=...)`, `FV_REGISTRO`, `fv --sem-registro`, `create_app(registro=)`, `create_mcp(registro=)`, `--sem-registro` no `freoa-verifica-mcp`). Padrao: `completo` (comportamento anterior; substituido por `sem_conteudo` na decisao 0040).
 
 Com `sem_conteudo`, `verify._persist` grava exatamente: status e `reason_code` de cada dimensao, `algo_versions`, a politica e os SHA-256 de citacao, trecho, data e modo. Nao grava citacao, trecho, `citation.raw`, evidencia textual (nem `trecho_oficial`, caminho ou URL). O resultado devolvido ao chamador nao muda; so o recibo persistido e reduzido.
 

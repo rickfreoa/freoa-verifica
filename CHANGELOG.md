@@ -4,6 +4,7 @@
 
 - Atualização sem limpar checkpoint (decisão 0039): recursos mensais do STJ são revalidados (dois meses mais recentes e capturas com mais de 30 dias; metadado CKAN alterado invalida o checkpoint), `fv doctor` informa `stj_atualizacao`; súmulas e SV do STF são recapturadas após 30 dias.
 - REST e MCP HTTP sem token validam `Host` (127.0.0.1, localhost, [::1]) e `Origin` com parsing estrito; `Origin` externo é recusado também com token, salvo `FV_API_ORIGENS` (decisão 0040). Cliente local que envie outro `Host` (proxy, túnel) precisa usar token.
+- Registro minimizado por padrão (decisão 0040): `sem_conteudo` passa a ser o padrão (`completo` só com `--registro-completo`/`FV_REGISTRO=completo`); hashes de entrada viram HMAC-SHA256 com segredo por home (`registro.key`, prefixo `hmac1:`); `fv runs purgar --apagar-original`. Execuções antigas gravadas em `completo` ficam até a purga.
 
 ## 1.1.0 (18/10/2026)
 

@@ -371,10 +371,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--home", default=None)
     parser.add_argument("--token", default=None, help="bearer (obrigatório com host não local)")
-    parser.add_argument("--sem-registro", action="store_true", help="não grava entradas (registro sem_conteudo)")
+    parser.add_argument("--sem-registro", action="store_true", help="registro sem_conteudo (já é o padrão; mantida por compatibilidade)")
+    parser.add_argument("--registro-completo", action="store_true", help="grava as entradas nas execuções (padrão: sem_conteudo)")
     args = parser.parse_args(argv)
+    if args.sem_registro and args.registro_completo:
+        parser.error("--sem-registro e --registro-completo são excludentes")
     run_server(http=args.http, host=args.host, port=args.port, home=args.home, token=args.token,
-               registro="sem_conteudo" if args.sem_registro else None)
+               registro="completo" if args.registro_completo else ("sem_conteudo" if args.sem_registro else None))
 
 
 if __name__ == "__main__":

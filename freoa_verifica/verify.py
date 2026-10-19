@@ -655,15 +655,17 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
 
     Política `sem_conteudo` (C5): só hashes, política e dimensões; sem citação, trecho nem evidência.
     """
-    from freoa_verifica.registro import politica_atual
+    from freoa_verifica.registro import hmac_entrada, politica_atual
 
     request = {"citacao": citacao, "trecho": trecho, "data": data, "modo": modo}
     request_json = json.dumps(request, ensure_ascii=False, sort_keys=True)
     request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
     if politica_atual.get() == "sem_conteudo":
-        h = lambda v: None if v is None else hashlib.sha256(str(v).encode("utf-8")).hexdigest()  # noqa: E731
+        # Entrada do usuário: HMAC com segredo do home (sha256 puro de entrada curta é adivinhável).
+        request_hash = hmac_entrada(conn, "request", request_json)
+        h = lambda k, v: None if v is None else hmac_entrada(conn, k, str(v))  # noqa: E731
         request_json = json.dumps(
-            {"registro": "sem_conteudo", **{f"{k}_sha256": h(v) for k, v in request.items()}},
+            {"registro": "sem_conteudo", **{f"{k}_sha256": h(k, v) for k, v in request.items()}},
             sort_keys=True,
         )
         result_json = json.dumps(
