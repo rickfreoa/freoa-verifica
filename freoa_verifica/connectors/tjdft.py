@@ -111,6 +111,8 @@ class TjdftConnector(Connector):
         "periodo": "acervo da API pública de jurisprudência",
         "busca_textual": True,
         "busca_textual_ao_vivo": True,
+        # O acervo local do TJDFT é só a semente temática: a busca filtrada pelo tribunal consulta a API oficial.
+        "consultar_ao_vivo_sempre": True,
         "ementa": True,
         "inteiro_teor": "somente quando o registro o traz íntegro (decisões monocráticas e da presidência); acórdão sem íntegra pela API",
         "atualizacao": "sob demanda; semente temática",

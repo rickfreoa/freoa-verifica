@@ -250,3 +250,15 @@ def test_monocratica_com_inteiro_teor_nao_grava_texto_como_ementa(svc, conn):
         "SELECT dd.kind FROM decision_document dd JOIN decision d ON d.id=dd.decision_id WHERE d.official_id=?", (mono.key,))]
     assert kinds == ["inteiro_teor"]
     assert svc.obter_decisao(mono.key, tribunal="tjdft")["status"] == "parte_indisponivel"  # não há ementa
+
+
+def test_busca_filtrada_pelo_tjdft_consulta_a_api_mesmo_com_acervo_local(svc, conn, monkeypatch):
+    data = _load("frase_exata")
+    for cand in _search(conn, data):  # acervo local já tem resultados
+        svc._index_candidate_juris(conn, cand)
+    monkeypatch.delenv("FV_OFFLINE")
+    conn.state["calls"].clear()
+    conn.state["resp"] = _resp(_load("acordo_acionistas"))
+    svc._connectors["tjdft"] = conn
+    r = svc.pesquisar_jurisprudencia("apuração de haveres", tribunais=["tjdft"], limite=1)
+    assert conn.state["calls"] and r["fontes"]["tjdft"]["status"] == "ok"

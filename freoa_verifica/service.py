@@ -2183,12 +2183,15 @@ class Verifica:
             # quem só os tem espalhados no inteiro teor; a ordem bm25 desempata. Determinístico.
             from freoa_verifica.search import consulta_fts, pertinencia
             variantes = consulta_fts(q)[1]
-            def cobertura_ementa(r):
-                h, n = pertinencia(variantes, r.get("ementa") or "")
-                return h / n
+            def forca(r):
+                # Termos na ementa contam inteiros; só no inteiro teor (sem ementa ou fora dela), pela metade.
+                if r.get("ementa"):
+                    h, n = pertinencia(variantes, r["ementa"])
+                    return max(h / n, 0.5 * (r.get("pertinencia") or 0))
+                return 0.5 * (r.get("pertinencia") or 0)
             linhas = sorted(enumerate(res["linhas"]),
-                            key=lambda p: (p[1].get("correspondencia") != "todos_os_termos",
-                                           -round(cobertura_ementa(p[1]), 2), p[0]))
+                            key=lambda p: (-round(forca(p[1]), 2),
+                                           p[1].get("correspondencia") != "todos_os_termos", p[0]))
             return [r for _, r in linhas][offset:offset + limite + 1]
 
         local = local_page()
@@ -2213,10 +2216,16 @@ class Verifica:
                 fontes_status[cid] = {"status": "unavailable", "motivo": "fonte_nao_suportada", "parcial": False}
             elif offline:
                 fontes_status[cid] = {"status": "unavailable", "motivo": "offline", "parcial": False}
-        if len(items) < limite and tribunais_norm and not offline:
+        # Fonte cujo acervo local é só semente (TJDFT) é consultada ao vivo quando pedida explicitamente.
+        sempre_ao_vivo = {id_map.get(t, t) for t in (tribunais_norm if tribunais is not None else [])
+                          if id_map.get(t, t) in registry()
+                          and getattr(registry()[id_map.get(t, t)], "coverage", {}).get("consultar_ao_vivo_sempre")}
+        if (len(items) < limite or sempre_ao_vivo) and tribunais_norm and not offline:
             for t in tribunais_norm:
                 cid = id_map.get(t, t)
                 if cid not in registry():
+                    continue
+                if len(items) >= limite and cid not in sempre_ao_vivo:
                     continue
                 try:
                     conn_obj = self._get(cid)
@@ -2241,7 +2250,7 @@ class Verifica:
                         ):
                             items.append(item)
                             got += 1
-                        if len(items) >= limite:
+                        if len(items) >= limite and cid not in sempre_ao_vivo:
                             break
                     fontes_status[cid] = {
                         "status": "ok",
