@@ -1,5 +1,12 @@
 # Histórico de versões
 
+
+## 1.3.0 (em prepara??o)
+
+- ?ntegras do STJ: parser isolado do pacote oficial de ?ntegras, com v?nculo ao espelho por
+  registro, classe composta e n?mero; ambiguidade sem escolha; limites de ZIP; hash dos bytes
+  brutos (decis?o 0044). Ainda n?o ligado ao acervo nem ao snapshot.
+
 ## 1.2.0 (19/10/2026)
 
 Responde à avaliação externa de 18/10/2026 (achados A1–A12; plano em `docs/PLANO-1.2.0.md`).
