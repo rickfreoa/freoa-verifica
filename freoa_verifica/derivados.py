@@ -172,15 +172,19 @@ def reclassificar_autoridade(conn: sqlite3.Connection) -> int:
             old = {}
         gravada = ((old.get("attributes") or {}).get("species") if isinstance(old.get("attributes"), dict)
                    else old.get("species"))
+        # Monocrática declarada na ingestão (atributo gravado) prevalece sobre `kind` legado de acórdão;
+        # o kind é corrigido junto (auditoria 1.2.0).
+        if gravada == "monocratica":
+            kind = "decisao_monocratica"
         species = _species_from_meta(court or "", cls, organ, kind)
         if species != "monocratica" and gravada in _ESPECIES_GRAVADAS:
             species = gravada
         auth = classify_authority(species=species, court=court or "", class_name=cls, organ=organ)
         attrs = {**old, **as_dict(auth)}
-        if auth.label != label or attrs != old:
-            conn.execute("UPDATE decision SET authority_label=?, authority_attrs_json=? WHERE id=?",
-                         (auth.label, json.dumps(attrs, ensure_ascii=False), did))
-            n += 1
+        if auth.label != label or attrs != old or (gravada == "monocratica"):
+            conn.execute("UPDATE decision SET authority_label=?, authority_attrs_json=?, kind=? WHERE id=?",
+                         (auth.label, json.dumps(attrs, ensure_ascii=False), kind, did))
+            n += 1 if (auth.label != label or attrs != old) else 0
     return n
 
 

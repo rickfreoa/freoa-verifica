@@ -92,3 +92,29 @@ def test_dispositivo_posposto_so_na_citacao_avulsa():
     for intacto in ("Lei 6.404/1976 art. 117 do contrato", "Lei 6.404/1976 art. 117 e o contrato social",
                     "Resolução CVM 44/2021, art. 2º"):
         assert d(intacto) == intacto
+
+
+# Parecer do Codex, rodada 3.
+def test_reconstrucao_nao_promove_monocratica_legada(svc):
+    did = _indexar(svc, "STJ", "901", text="", ementa="decisão individual", kind="monocratica")
+    svc.conn.execute("UPDATE decision SET kind='acordao' WHERE id=?", (did,))  # kind legado
+    derivados.reclassificar_autoridade(svc.conn)
+    row = svc.conn.execute("SELECT kind, authority_label FROM decision WHERE id=?", (did,)).fetchone()
+    assert tuple(row) == ("decisao_monocratica", "E")
+
+
+def test_tjdft_fragmento_e_falha_documental_nao_sao_inteiro_teor():
+    rec = _mono()
+    frag = {**rec, "inteiroTeor": rec["inteiroTeor"][:1100]}
+    assert tjdft.inteiro_teor_valido(frag) is None
+    mut = {**rec, "inteiroTeor": f"Processo {rec['processo']} Gabinete do Desembargador "
+           + "Não foi possível obter o inteiro teor. " * 55}
+    assert tjdft.inteiro_teor_valido(mut) is None
+    assert tjdft.inteiro_teor_valido(rec)
+
+
+def test_tribunal_explicito_variantes():
+    assert [c.decision.court for c in extract("AI 123.456 / TJDFT") if c.decision] == ["tjdft"]
+    assert [c.decision.court for c in extract("HC 123.456 do tjsp") if c.decision] == ["tjsp"]
+    assert [(c.decision.class_, c.decision.court) for c in extract("REsp 1.234.567/DF e RE 123.456 do STF")
+            if c.decision] == [("REsp", "stj"), ("RE", "stf")]
