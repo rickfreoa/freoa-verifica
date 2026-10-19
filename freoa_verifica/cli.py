@@ -376,7 +376,9 @@ def main(argv: list[str] | None = None) -> None:
                 data = svc.snapshot_install(arquivo, url=args.url, aceitar_nao_vinculado=args.aceitar_nao_vinculado)
             else:
                 data = svc.snapshot_info(args.origem)
-            raise SystemExit(_print_result(data, as_json=as_json, titulo="Snapshot"))
+            codigo = _print_result(data, as_json=as_json, titulo="Snapshot")
+            # Recusa ou falha de instalação não sai com sucesso (auditoria 1.2.0, L3).
+            raise SystemExit(codigo or (1 if isinstance(data, dict) and data.get("status") == "erro" else 0))
 
         if args.cmd == "acervo":
             if args.acervo_cmd == "ressincronizar-situacao":

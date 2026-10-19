@@ -28,7 +28,7 @@ try {
     $proveniencia = "PROVENIENCIA NAO VERIFICADA (instale o GitHub CLI para verificar)"
     if ($gh) {
         $etapa = "verificar proveniencia"
-        Invoke-NativeChecked $etapa $gh.Source @("attestation", "verify", $wheel, "--repo", $repo) | Out-Host
+        Invoke-NativeChecked $etapa $gh.Source @("attestation", "verify", $wheel, "--repo", $repo, "--signer-workflow", "$repo/.github/workflows/release.yml", "--source-ref", "refs/tags/v$versao", "--deny-self-hosted-runners") | Out-Host
         $proveniencia = "VERIFICADA: gh attestation verify"
     } else { Write-Warning $proveniencia }
     @{ versao = $versao; proveniencia = $proveniencia; concluida = $false } |
@@ -47,7 +47,7 @@ try {
     }
     if ($gh -and $temLock) {
         $etapa = "verificar lock"
-        Invoke-NativeChecked $etapa $gh.Source @("attestation", "verify", $lock, "--repo", $repo) | Out-Host
+        Invoke-NativeChecked $etapa $gh.Source @("attestation", "verify", $lock, "--repo", $repo, "--signer-workflow", "$repo/.github/workflows/release.yml", "--source-ref", "refs/tags/v$versao", "--deny-self-hosted-runners") | Out-Host
     }
     $etapa = "criar venv"
     if (-not (Test-Path "$destino\.venv")) {

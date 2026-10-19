@@ -131,7 +131,7 @@ def test_cli_requires_explicit_exception(verifica_populada, tmp_path, capsys):
     args = ["--home", str(tmp_path / "cli"), "snapshot", "install", str(export), "--json"]
     with pytest.raises(SystemExit) as exit:
         main(args)
-    assert exit.value.code == 0  # CLI expõe o estado no JSON; instalador o confere.
+    assert exit.value.code == 1  # recusa não sai com sucesso; o JSON traz o motivo
     assert json.loads(capsys.readouterr().out)["motivo"] == "SNAPSHOT_NAO_VINCULADO"
     with pytest.raises(SystemExit) as exit:
         main(args + ["--aceitar-nao-vinculado"])

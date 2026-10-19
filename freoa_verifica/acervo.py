@@ -53,7 +53,8 @@ def manifest_fields(conn: sqlite3.Connection, db_sha256: str | None = None) -> d
 
 def save_installed(home: Path, manifest: dict[str, Any]) -> None:
     keys = ("obras", "decisoes", "derived_version", "obras_ids", "obras_ids_sha256",
-            "decisoes_ids_sha256", "db_sha256", "vinculado", "snapshot_sha256", "snapshot_derived_version")
+            "decisoes_ids_sha256", "db_sha256", "vinculado", "snapshot_sha256", "snapshot_derived_version",
+            "vinculo_motivo")
     (Path(home) / MANIFESTO_LOCAL).write_text(
         json.dumps({k: manifest.get(k) for k in keys}, ensure_ascii=False, sort_keys=True),
         encoding="utf-8",
@@ -108,6 +109,6 @@ def status(conn: sqlite3.Connection, home: Path) -> dict[str, Any] | None:
 def installed_provenance(home: Path) -> dict[str, Any]:
     try:
         data = json.loads((Path(home) / MANIFESTO_LOCAL).read_text(encoding="utf-8"))
-        return {k: data.get(k) for k in ("vinculado", "snapshot_sha256", "snapshot_derived_version")}
+        return {k: data.get(k) for k in ("vinculado", "snapshot_sha256", "snapshot_derived_version", "vinculo_motivo")}
     except (OSError, ValueError, AttributeError):
         return {"vinculado": False}

@@ -272,7 +272,8 @@ class PlanaltoConnector(Connector):
         raise Unavailable(last_err.reason if last_err else "sem_url")
 
     def parse(self, resp: Response):
-        return parse_planalto(resp.body, base_url=resp.final_url)
+        from freoa_verifica.parsers.isolated import parse_ou_indisponivel
+        return parse_ou_indisponivel("planalto", resp.body, 300.0, base_url=resp.final_url)
 
     def resolve_alterador_date(self, tipo: str, numero: int | str, ano: int) -> str | None:
         """Resolve data completa via Senado quando o Planalto cita só o ano."""

@@ -25,7 +25,18 @@ def _failure(profile: str, detail: str) -> ParsedDocument:
         Issue("TRUNCATED", None, detail, blocking_scope="document"),
     ])
 
-def parse_isolated(profile: str, data: bytes | str, timeout: float) -> ParsedDocument:
+def parse_ou_indisponivel(profile: str, data: bytes | str, timeout: float, *, base_url: str | None = None) -> ParsedDocument:
+    """Falha do filho (não a quarentena legítima do parser) vira Unavailable declarada."""
+    from freoa_verifica.connectors.base import Unavailable
+
+    doc = parse_isolated(profile, data, timeout, base_url=base_url)
+    if doc.parser_version == "0":  # marca de _failure
+        detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "falha")
+        raise Unavailable(f"{profile}_nao_processado: {detalhe}"[:200])
+    return doc
+
+
+def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url: str | None = None) -> ParsedDocument:
     """Executa em filho; timeout, falha ou saida invalida geram quarentena."""
     if profile not in _PROFILES:
         return _failure(profile, "perfil desconhecido")
@@ -39,8 +50,11 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float) -> ParsedDoc
         return _failure(profile, "orcamento esgotado")
     try:
         with subprocess.Popen(
-            [sys.executable, "-m", "freoa_verifica.parsers.isolated", profile],
+            # -P: o diretório corrente não entra no sys.path do filho antes dos limites.
+            [sys.executable, "-P", "-m", "freoa_verifica.parsers.isolated", profile, *([base_url] if base_url else [])],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            # Grupo próprio: timeout e excesso matam também descendentes que herdem os pipes.
+            **({"start_new_session": True} if os.name == "posix" else {}),
         ) as proc:
             output, stderr, exceeded = _bounded_io(proc, raw, timeout)
             if exceeded:
@@ -65,7 +79,10 @@ def _bounded_io(proc, raw: bytes, timeout: float):
     def kill(reason):
         failures.append(reason)
         try:
-            proc.kill()
+            if os.name == "posix":
+                os.killpg(proc.pid, 9)
+            else:
+                proc.kill()  # Job Object com KILL_ON_JOB_CLOSE e ACTIVE_PROCESS=1 cobre descendentes
         except OSError:
             pass
 
@@ -104,7 +121,12 @@ def _bounded_io(proc, raw: bytes, timeout: float):
         proc.wait()
     finally:
         for thread in threads:
-            thread.join()
+            thread.join(timeout=5)
+        if any(t.is_alive() for t in threads):
+            # Descendente segurando os pipes: mata o grupo e encerra como falha (não espera indefinidamente).
+            kill("descendente_reteve_pipes")
+            for thread in threads:
+                thread.join(timeout=5)
     return buffers[0], buffers[1], failures[0] if failures else None
 
 
@@ -216,7 +238,11 @@ def _main() -> None:
     from freoa_verifica.connectors.cvm_normas import parse_pdf_direto
     parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto)))
     try:
-        document = parsers[sys.argv[1]](sys.stdin.buffer.read())
+        body = sys.stdin.buffer.read()
+        if sys.argv[1] == "planalto" and len(sys.argv) > 2:
+            document = parse_planalto(body, base_url=sys.argv[2])
+        else:
+            document = parsers[sys.argv[1]](body)
     except MemoryError:
         sys.stderr.write("memoria_excedida\n")
         sys.exit(3)

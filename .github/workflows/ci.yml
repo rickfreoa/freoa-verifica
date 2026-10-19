@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_call:  # reutilizado por release.yml (mesmo commit)
 
+permissions:
+  contents: read
+
 jobs:
   test:
     strategy:

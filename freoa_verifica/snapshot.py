@@ -664,7 +664,9 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
 def _snapshots_oficiais() -> list[dict[str, Any]]:
     from importlib.resources import files
     from freoa_verifica import __version__
-    version = lambda v: tuple(int(n) for n in v.split("."))
+    import re
+    # Só os números iniciais: "1.2.0rc1" e "1.2.0.dev0" contam como 1.2.0.
+    version = lambda v: tuple(int(n) for n in re.findall(r"\d+", re.match(r"[\d.]+", v).group(0).strip(".")))
     entries = json.loads(files("freoa_verifica").joinpath("data/snapshots-oficiais.json").read_text(encoding="utf-8"))
     return [e for e in entries if version(e["versao_pacote_min"]) <= version(__version__)]
 
@@ -888,6 +890,16 @@ def pack_snapshot(directory: Path, archive: Path) -> str:
     return digest
 
 
+def _vinculo_acumulado(home: Path, novo: dict[str, Any]) -> dict[str, Any]:
+    try:
+        anterior = json.loads((Path(home) / acervo.MANIFESTO_LOCAL).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return dict(novo)  # home sem instalação anterior registrada
+    if isinstance(anterior, dict) and anterior.get("vinculado") is False and novo.get("vinculado"):
+        return {**novo, "vinculado": False, "vinculo_motivo": "ACERVO_CONTEM_SNAPSHOT_NAO_VINCULADO"}
+    return dict(novo)
+
+
 def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) -> dict[str, Any]:
     origem = Path(origem)
     if derivados.origem_nao_publicada(svc.conn):  # a instalação anexa ao banco local: não parte de banco limpo
@@ -1045,8 +1057,10 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
         svc._db_path = db_dst
         svc._clear_caches()
         svc.conn = connect(db_dst)
-        # O manifesto de origem não pode autoafirmar vínculo com o wheel.
-        manifest.update(vinculo or {"vinculado": False})
+        # O manifesto de origem não pode autoafirmar vínculo com o wheel. Instalação é anexação:
+        # um snapshot não vinculado anterior continua no banco, logo o "não vinculado" é permanente.
+        vinculo = _vinculo_acumulado(svc.home, vinculo or {"vinculado": False})
+        manifest.update(vinculo)
         manifest["snapshot_derived_version"] = manifest.get("snapshot_derived_version") or manifest.get("derived_version")
         manifest["derived_version"] = acervo.derived_version(svc.conn)
         acervo.save_installed(svc.home, manifest)
