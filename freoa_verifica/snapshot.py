@@ -661,16 +661,35 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
         conn.close()
 
 
+def _snapshots_oficiais() -> list[dict[str, Any]]:
+    from importlib.resources import files
+    from freoa_verifica import __version__
+    version = lambda v: tuple(int(n) for n in v.split("."))
+    entries = json.loads(files("freoa_verifica").joinpath("data/snapshots-oficiais.json").read_text(encoding="utf-8"))
+    return [e for e in entries if version(e["versao_pacote_min"]) <= version(__version__)]
+
+
+def _vincular(digest: str | None, aceitar: bool) -> dict[str, Any]:
+    official = next((e for e in _snapshots_oficiais() if e["sha256"] == digest), None)
+    if official is None and not aceitar:
+        raise ValueError("SNAPSHOT_NAO_VINCULADO")
+    # Um snapshot oficial com derived_version anterior NÃO é compatível por
+    # autenticidade: exige reconstrução no staging antes de publicar (C6).
+    return {"vinculado": official is not None, "snapshot_sha256": digest,
+            "snapshot_derived_version": official["derived_version"] if official else None}
+
+
 def install_snapshot(
     svc: Any,
     origem: str | Path | None = None,
     *,
     url: str | None = None,
+    aceitar_nao_vinculado: bool = False,
 ) -> dict[str, Any]:
     """Instala o snapshot com acesso exclusivo: espera as operações ativas terminarem."""
     try:
         with svc.exclusivo():
-            return _install_snapshot(svc, origem, url=url)
+            return _install_snapshot(svc, origem, url=url, aceitar_nao_vinculado=aceitar_nao_vinculado)
     except TimeoutError as exc:
         return {"status": "erro", "motivo": str(exc)}
 
@@ -680,28 +699,44 @@ def _install_snapshot(
     origem: str | Path | None = None,
     *,
     url: str | None = None,
+    aceitar_nao_vinculado: bool = False,
 ) -> dict[str, Any]:
     staging_download: Path | None = None
+    vinculo: dict[str, Any] = {}
     try:
+        if derivados.origem_nao_publicada(svc.conn):
+            return {"status": "erro", "motivo": derivados.REASON_NAO_PUBLICADA,
+                    "orientacao": "instale o snapshot em home novo"}
         if url:
-            origem_path = _download_release(url, staging_dir=_staging_root(svc.home))
+            origem_path = _download_release(url, staging_dir=_staging_root(svc.home),
+                                            aceitar_nao_vinculado=aceitar_nao_vinculado, vinculo=vinculo)
             staging_download = origem_path
         elif origem is not None:
             origem_path = Path(origem)
             if origem_path.is_file():
+                # Autenticar e extrair a mesma cópia privada; o arquivo fornecido
+                # pode ser substituído pelo chamador durante a instalação.
+                staging_download = _new_staging(prefix="fv-snap-local-", home=svc.home)
+                captured = staging_download / ("asset.zip" if origem_path.name.endswith(".zip") else "asset.tar.gz")
+                shutil.copyfile(origem_path, captured)
+                digest = _sha256_file(captured)
+                vinculo.update(_vincular(digest, aceitar_nao_vinculado))
                 checksum = Path(str(origem_path) + ".sha256")
                 if checksum.exists():
                     expected = checksum.read_text(encoding="utf-8").split()
-                    if not expected or expected[0] != _sha256_file(origem_path):
+                    if not expected or expected[0].lower() != digest:
                         raise ValueError("asset_integridade")
-                staging_download = _new_staging(prefix="fv-snap-local-", home=svc.home)
-                _extract_archive(origem_path, staging_download)
-                origem_path = staging_download
+                extracted = staging_download / "snap"
+                extracted.mkdir()
+                _extract_archive(captured, extracted)
+                origem_path = extracted
+            else:
+                vinculo.update(_vincular(None, aceitar_nao_vinculado))
         else:
-            origem_path = _download_latest_release(staging_dir=_staging_root(svc.home))
+            origem_path = _download_latest_release(staging_dir=_staging_root(svc.home), vinculo=vinculo)
             staging_download = origem_path
 
-        return _install_from_dir(svc, origem_path)
+        return _install_from_dir(svc, origem_path, vinculo=vinculo)
     except Unavailable as exc:
         return {"status": "erro", "motivo": exc.reason}
     except (ValueError, OSError, RuntimeError, tarfile.TarError) as exc:
@@ -711,7 +746,7 @@ def _install_snapshot(
             shutil.rmtree(staging_download, ignore_errors=True)
 
 
-def _download_latest_release(*, staging_dir: str | Path | None = None) -> Path:
+def _download_latest_release(*, staging_dir: str | Path | None = None, vinculo: dict | None = None) -> Path:
     """Baixa asset da última release via API GitHub (hosts permitidos)."""
     from freoa_verifica.connectors.httputil import connector_fetch
 
@@ -732,13 +767,15 @@ def _download_latest_release(*, staging_dir: str | Path | None = None) -> Path:
         assets = release.get("assets") or []
         for asset in assets:
             name = str(asset.get("name") or "")
-            if re.fullmatch(r"freoa-verifica-snapshot-[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz", name):
+            official = next((e for e in _snapshots_oficiais() if e["arquivo"] == name), None)
+            digest = asset.get("digest")
+            if official and (not digest or digest == "sha256:" + official["sha256"]):
                 return asset["browser_download_url"]
         return None
 
     chosen = choose(data)
     if chosen:
-        return _download_release(chosen, staging_dir=staging_dir)
+        return _download_release(chosen, staging_dir=staging_dir, vinculo=vinculo)
     # A API lista as releases da mais recente para a mais antiga.
     page = 1
     while True:
@@ -754,13 +791,14 @@ def _download_latest_release(*, staging_dir: str | Path | None = None) -> Path:
         for release in releases:
             chosen = choose(release)
             if chosen:
-                return _download_release(chosen, staging_dir=staging_dir)
+                return _download_release(chosen, staging_dir=staging_dir, vinculo=vinculo)
         if len(releases) < 100:
             raise RuntimeError("release_sem_assets")
         page += 1
 
 
-def _download_release(url: str, *, staging_dir: str | Path | None = None) -> Path:
+def _download_release(url: str, *, staging_dir: str | Path | None = None,
+                      aceitar_nao_vinculado: bool = False, vinculo: dict | None = None) -> Path:
     from freoa_verifica.connectors.httputil import connector_fetch
 
     parsed = urlparse(url)
@@ -782,6 +820,9 @@ def _download_release(url: str, *, staging_dir: str | Path | None = None) -> Pat
         ).body.decode("utf-8").split()
         if not checksum or not re.fullmatch(r"[0-9a-fA-F]{64}", checksum[0]) or checksum[0].lower() != resp.sha256:
             raise ValueError("asset_integridade")
+        binding = _vincular(_sha256_file(raw), aceitar_nao_vinculado)
+        if vinculo is not None:
+            vinculo.update(binding)
         out = staging / "snap"
         out.mkdir()
         _extract_archive(raw, out)
@@ -847,7 +888,7 @@ def pack_snapshot(directory: Path, archive: Path) -> str:
     return digest
 
 
-def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
+def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) -> dict[str, Any]:
     origem = Path(origem)
     if derivados.origem_nao_publicada(svc.conn):  # a instalação anexa ao banco local: não parte de banco limpo
         return {"status": "erro", "motivo": derivados.REASON_NAO_PUBLICADA,
@@ -1004,6 +1045,10 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
         svc._db_path = db_dst
         svc._clear_caches()
         svc.conn = connect(db_dst)
+        # O manifesto de origem não pode autoafirmar vínculo com o wheel.
+        manifest.update(vinculo or {"vinculado": False})
+        manifest["snapshot_derived_version"] = manifest.get("snapshot_derived_version") or manifest.get("derived_version")
+        manifest["derived_version"] = acervo.derived_version(svc.conn)
         acervo.save_installed(svc.home, manifest)
         return {
             "status": "ok",
@@ -1012,6 +1057,7 @@ def _install_from_dir(svc: Any, origem: Path) -> dict[str, Any]:
             "obras": manifest.get("obras"),
             "capturas": manifest.get("capturas"),
             "modo": "anexacao",
+            **(vinculo or {"vinculado": False}),
             "divergentes": divergentes,
             "autenticidade": AUTHENTICITY_NOTE,
             **({"aviso": "derivados do snapshot em versão anterior; reconstruídos para a versão atual "
@@ -1055,6 +1101,11 @@ def snapshot_info(svc: Any, origem: str | Path | None = None) -> dict[str, Any]:
     if origem is None:
         return {
             "home": str(svc.home),
+            "instalado": (svc.home / acervo.MANIFESTO_LOCAL).is_file(),
+            "vinculado": acervo.installed_provenance(svc.home).get("vinculado", False),
+            "proveniencia": acervo.installed_provenance(svc.home),
+            "derived_version": derivados.versao(svc.conn),
+            "derived_version_atual": derivados.DERIVED_VERSION,
             "obras": svc.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0],
             "capturas": svc.conn.execute("SELECT COUNT(*) FROM capture").fetchone()[0],
             "decisoes": svc.conn.execute("SELECT COUNT(*) FROM decision").fetchone()[0],

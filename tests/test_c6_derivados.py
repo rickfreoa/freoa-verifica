@@ -163,20 +163,20 @@ def test_snapshot_instalado_e_reinstalado_igual_ao_home_novo(tmp_path, novo):
     assert novo.snapshot_export(dest)["status"] == "ok"
     # home vazio recebe o snapshot duas vezes
     with Verifica(home=tmp_path / "alvo") as alvo:
-        assert alvo.snapshot_install(dest)["status"] == "ok"
+        assert alvo.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "ok"
         assert _respostas(alvo) == esperado
-        assert alvo.snapshot_install(dest)["status"] == "ok"
+        assert alvo.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "ok"
         assert _respostas(alvo) == esperado
         assert alvo.conn.execute("SELECT COUNT(*) FROM fts_redaction WHERE path='art60' AND work_label='Constituição Federal'").fetchone()[0] == 1
         assert derivados.versao(alvo.conn) == derivados.DERIVED_VERSION
     # home v1.0.2 recebe o snapshot (derivados mais novos substituem os locais)
     leg = _home_legado(tmp_path)
     try:
-        out = leg.snapshot_install(dest)
+        out = leg.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert out["status"] == "ok", out
         assert derivados.versao(leg.conn) == derivados.DERIVED_VERSION
         assert _respostas(leg) == esperado
-        assert leg.snapshot_install(dest)["status"] == "ok"
+        assert leg.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "ok"
         assert _respostas(leg) == esperado
         assert leg.acervo_status() is None
     finally:
@@ -251,12 +251,12 @@ def test_snapshot_v102_instala_reconstroi_e_reinstala(tmp_path, novo):
     finally:
         legado.close()
     with Verifica(home=tmp_path / "alvo") as alvo:
-        out = alvo.snapshot_install(dest)
+        out = alvo.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert out["status"] == "ok", out
         assert derivados.versao(alvo.conn) == derivados.DERIVED_VERSION
         assert _respostas(alvo) == esperado
         assert esperado[0][2][0] == "verified" and esperado[1][3][0] != "verified"
-        assert alvo.snapshot_install(dest)["status"] == "ok"
+        assert alvo.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "ok"
         assert derivados.versao(alvo.conn) == derivados.DERIVED_VERSION
         assert _respostas(alvo) == esperado
 
@@ -271,7 +271,7 @@ def test_snapshot_de_esquema_futuro_ou_nao_prefixo_e_recusado(tmp_path, novo):
         manifest["esquema_minimo"] = max(esquema)
         _regravar(dest, manifest)
         with Verifica(home=tmp_path / f"alvo{len(esquema)}") as alvo:
-            out = alvo.snapshot_install(dest)
+            out = alvo.snapshot_install(dest, aceitar_nao_vinculado=True)
             assert out["status"] == "erro" and out["motivo"] == "esquema_incompativel", out
 
 
@@ -317,8 +317,8 @@ def test_sem_privilegio_de_symlink_snapshot_v102_reinstala_e_reconstroi(tmp_path
     finally:
         legado.close()
     with Verifica(home=tmp_path / "alvo") as alvo:
-        assert alvo.snapshot_install(dest)["status"] == "ok"
-        assert alvo.snapshot_install(dest)["status"] == "ok"
+        assert alvo.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "ok"
+        assert alvo.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "ok"
         assert _respostas(alvo) == esperado
         out = alvo.reconstruir_acervo()
         assert out["status"] == "ok", out
@@ -339,7 +339,7 @@ def test_erro_no_meio_da_instalacao_faz_rollback_e_preserva_o_home(tmp_path, nov
             raise OSError("falha injetada após a troca")
 
         monkeypatch.setattr(acervo, "save_installed", falha)
-        out = alvo.snapshot_install(dest)
+        out = alvo.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert out["status"] == "erro" and out["rollback"] is True, out
         assert alvo.conn.execute("SELECT COUNT(*) FROM capture").fetchone()[0] == antes
         assert sorted(p.name for p in (alvo.home / "blobs").rglob("*") if p.is_file()) == blobs_antes

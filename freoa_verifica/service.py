@@ -2610,6 +2610,10 @@ class Verifica:
                 checks.append(
                     {"nome": f"fonte:{cid}", "status": "falha", "detalhe": str(exc)[:200]}
                 )
+        provenance = _acervo.installed_provenance(self.home)
+        checks.append({"nome": "snapshot_proveniencia",
+                       "status": "ok" if provenance.get("vinculado") else "alerta",
+                       "detalhe": provenance})
         aviso = self.acervo_status()
         checks.append({"nome": "acervo", "status": "alerta" if aviso else "ok",
                        "detalhe": aviso or "atende ao manifesto/mínimo"})
@@ -2664,10 +2668,11 @@ class Verifica:
         origem: str | Path | None = None,
         *,
         url: str | None = None,
+        aceitar_nao_vinculado: bool = False,
     ) -> dict[str, Any]:
         from freoa_verifica import snapshot as snap
 
-        return snap.install_snapshot(self, origem, url=url)
+        return snap.install_snapshot(self, origem, url=url, aceitar_nao_vinculado=aceitar_nao_vinculado)
 
     def snapshot_info(self, origem: str | Path | None = None) -> dict[str, Any]:
         from freoa_verifica import snapshot as snap

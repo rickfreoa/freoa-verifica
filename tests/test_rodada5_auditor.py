@@ -139,7 +139,7 @@ def test_esquema9_com_staging_sem_marca_recusa_reconstruir(tmp_path):
         out = s.reconstruir_acervo()
         assert out["status"] == "erro" and out["motivo"] == "ACERVO_DE_VERSAO_NAO_PUBLICADA"
         assert _der.REASON_NAO_PUBLICADA in s.acervo_status()["motivos"]
-        assert s.snapshot_install(tmp_path / "nada")["motivo"] == "ACERVO_DE_VERSAO_NAO_PUBLICADA"
+        assert s.snapshot_install(tmp_path / "nada", aceitar_nao_vinculado=True)["motivo"] == "ACERVO_DE_VERSAO_NAO_PUBLICADA"
     assert not list(tmp_path.glob(".reconstruir-*")) and len(antes) > 0
 
 
