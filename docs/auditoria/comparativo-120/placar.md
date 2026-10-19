@@ -40,10 +40,10 @@
 | D7 | tematico | sim | ✔ | ✔ | juiz cego |
 | D8 | tematico | sim | ✘ | ✔ | juiz cego |
 | E4 | tematico | sim | ✔ | ✔ | juiz cego |
-| E5 | tematico | sim | ✘ | ✔ | juiz cego |
+| E5 | tematico | sim | ✔ | ✔ | juiz cego |
 | E6 | tematico | sim | ✔ | ✔ | juiz cego |
 
-**geral**: 42 casos — FREOA 33/42, JusRatio 38/42
-**acervo**: 35 casos — FREOA 33/35, JusRatio 35/35
-**precisão temática (resultados 'sim')**: FREOA 15/35, JusRatio 23/35
+**geral**: 42 casos — FREOA 34/42, JusRatio 38/42
+**acervo**: 35 casos — FREOA 34/35, JusRatio 35/35
+**precisão temática (resultados 'sim')**: FREOA 21/35, JusRatio 25/35
 **confirmações indevidas**: FREOA 0, JusRatio 0 (nenhum sistema apresentou outro item como o pedido)

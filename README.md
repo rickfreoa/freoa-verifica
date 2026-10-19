@@ -99,7 +99,21 @@ Suporte de uma fonte a uma tese não é avaliado; a classificação A–E é do 
 
 Conjunto-ouro de 44 casos montado sem leitura do código, com a resposta fixada pela fonte oficial (dois casos excluídos por não serem decisões), executado nos dois sistemas com as mesmas consultas. Metodologia, saídas brutas, juiz cego da pertinência temática e placar em [docs/auditoria/comparativo-120/](docs/auditoria/comparativo-120/).
 
-<<PLACAR>>
+| | FREOA 1.2.0 | JusRatio |
+|---|---|---|
+| Casos dentro do acervo do FREOA (35) | 34 | 35 |
+| Não temáticos: dispositivos, normas, súmulas, números de processo (28) | 28 | 28 |
+| Todos os casos, inclusive fora do acervo do FREOA (42) | 34 | 38 |
+| Resultados temáticos úteis, juiz cego (pertinente ou parcial, 35) | 33 | 33 |
+| Resultados temáticos estritamente pertinentes (35) | 21 | 25 |
+| Item apresentado como se fosse outro | 0 | 0 |
+
+Dentro do acervo, a única perda do FREOA é temática (legitimidade do sócio excluído): a decisão que a fonte
+oficial indica como pertinente não está no acervo. Fora dele (súmulas do STJ, REsp e acórdão do TCU fora do
+recorte, PAS de 2016 da CVM), o FREOA se abstém e declara a cobertura; o JusRatio localiza. Nas buscas temáticas,
+o JusRatio ainda traz mais resultados estritamente pertinentes. Nas verificações, o FREOA entrega o que o JusRatio
+não entrega: captura oficial com hash, dispositivo exato, vigência, negativa provada (art. 312 e 300-B da LSA) e
+recusa de número CNJ com dígito inválido. Amostra pequena: o resultado não sustenta inferência estatística.
 
 ## Arquitetura
 

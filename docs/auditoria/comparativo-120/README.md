@@ -23,7 +23,23 @@
 
 ## Resultado
 
-Ver `placar.md` (gerado por `python pontuar.py`).
+Ver `placar.md` (gerado por `python pontuar.py`). Resumo da rodada final, sobre o snapshot 1.2.0 distribuído
+(sha256 `926a6eb7…`) instalado em diretório novo:
+
+| | FREOA 1.2.0 | JusRatio |
+|---|---|---|
+| Casos dentro do acervo do FREOA (35) | 34 | 35 |
+| Não temáticos: dispositivos, normas, súmulas, números de processo (28) | 28 | 28 |
+| Todos os casos, inclusive fora do acervo do FREOA (42) | 34 | 38 |
+| Resultados temáticos úteis, juiz cego (pertinente ou parcial, 35) | 33 | 33 |
+| Resultados temáticos estritamente pertinentes (35) | 21 | 25 |
+| Item apresentado como se fosse outro | 0 | 0 |
+
+A rodada temática final só foi julgada depois de três ajustes de ranking motivados pelas rodadas anteriores
+(IDF na complementação, ementa antes de termos espalhados no inteiro teor, consulta ao vivo do TJDFT com
+locuções entre aspas). Cada rodada teve juiz cego novo; os vereditos anteriores ficam no histórico do git.
+Como a busca ao vivo do TJDFT indexa candidatos no acervo local, a ordem dos casos influencia resultados
+posteriores (D8 passou a incluir um acórdão do TJDFT capturado na E5): é o comportamento real do produto.
 
 ## Leitura
 
