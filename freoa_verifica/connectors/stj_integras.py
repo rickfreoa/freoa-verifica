@@ -20,8 +20,8 @@ MAX_ENTRADAS = 5000
 MAX_DESCOMPACTADO = 200 * 1024 * 1024
 MAX_POR_ENTRADA = 5 * 1024 * 1024
 MAX_RAZAO = 100.0
-_NOME = re.compile(r"^(\d{1,15})\.txt$")
-_REGISTRO = re.compile(r"^\d{12}$")
+_NOME = re.compile(r"([0-9]{1,15})\.txt")  # fullmatch: sem \n final nem d?gitos Unicode
+_REGISTRO = re.compile(r"[0-9]{12}")
 
 
 class IntegrasInvalidas(ValueError):
@@ -37,7 +37,7 @@ class Integra:
     data_publicacao: str | None
     ministro: str | None
     texto: str
-    sha256_texto: str
+    sha256_texto: str  # dos bytes brutos do arquivo no ZIP oficial
     metadados: dict[str, Any]
 
     @property
@@ -72,8 +72,8 @@ def ler_metadados(body: bytes) -> list[dict[str, Any]]:
     return [d for d in data if isinstance(d, dict)]
 
 
-def ler_textos(raw: bytes) -> dict[str, str]:
-    """SeqDocumento -> texto, com limites de entradas, tamanho, razão de compressão e nomes."""
+def ler_textos(raw: bytes) -> dict[str, tuple[str | None, str]]:
+    """SeqDocumento -> (texto ou None se n?o UTF-8, sha256 dos bytes), com limites de entradas, tamanho, razão de compressão e nomes."""
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile as exc:
@@ -82,12 +82,12 @@ def ler_textos(raw: bytes) -> dict[str, str]:
         infos = zf.infolist()
         if len(infos) > MAX_ENTRADAS:
             raise IntegrasInvalidas("zip_entradas_excedidas")
-        total = 0
-        out: dict[str, str] = {}
+        total = lidos = 0
+        out: dict[str, tuple[str | None, str]] = {}
         for info in infos:
             if info.is_dir():
                 continue
-            m = _NOME.match(info.filename)
+            m = _NOME.fullmatch(info.filename)
             if not m:  # recusa caminhos, barras e nomes fora do padrão (inclui zip-slip)
                 raise IntegrasInvalidas(f"zip_nome_inesperado: {info.filename[:80]}")
             if info.file_size > MAX_POR_ENTRADA:
@@ -95,65 +95,115 @@ def ler_textos(raw: bytes) -> dict[str, str]:
             total += info.file_size
             if total > MAX_DESCOMPACTADO:
                 raise IntegrasInvalidas("zip_descompactado_excedido")
-            if info.compress_size and info.file_size / info.compress_size > MAX_RAZAO:
+            if info.file_size and (not info.compress_size or info.file_size / info.compress_size > MAX_RAZAO):
                 raise IntegrasInvalidas("zip_razao_compressao")
-            with zf.open(info) as fh:
-                data = fh.read(MAX_POR_ENTRADA + 1)
+            if info.flag_bits & 0x1:
+                raise IntegrasInvalidas("zip_criptografado")
+            try:
+                with zf.open(info) as fh:  # cabe?alho pode mentir: conta os bytes lidos
+                    data = fh.read(MAX_POR_ENTRADA + 1)
+            except (zipfile.BadZipFile, EOFError, NotImplementedError, RuntimeError, OSError) as exc:
+                raise IntegrasInvalidas(f"zip_leitura: {type(exc).__name__}") from exc
+            except Exception as exc:  # zlib.error e afins
+                raise IntegrasInvalidas(f"zip_leitura: {type(exc).__name__}") from exc
             if len(data) > MAX_POR_ENTRADA:
                 raise IntegrasInvalidas("zip_entrada_grande")
+            lidos += len(data)
+            if lidos > MAX_DESCOMPACTADO:
+                raise IntegrasInvalidas("zip_descompactado_excedido")
             seq = m.group(1)
             if seq in out:
                 raise IntegrasInvalidas("zip_seq_repetido")
-            out[seq] = _decodificar(data)
+            out[seq] = (_decodificar(data), hashlib.sha256(data).hexdigest())
         return out
 
 
-def _decodificar(data: bytes) -> str:
-    for enc in ("utf-8-sig", "cp1252"):
-        try:
-            return data.decode(enc)
-        except UnicodeDecodeError:
-            continue
-    return data.decode("latin-1")
+def _decodificar(data: bytes) -> str | None:
+    """UTF-8 estrito (formato observado); falha n?o ? mascarada: o documento ? descartado."""
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None
+
+
+_CONECTIVOS = frozenset({"NO", "NA", "NOS", "NAS", "EM", "DO", "DA", "DOS", "DAS"})
+
+
+def classe_tokens(sigla: str) -> tuple[str, ...]:
+    """'AgInt no REsp' -> ('AGINT','RESP'); conectivos variam entre fontes e n?o distinguem graus."""
+    return tuple(t for t in _sem_acento(sigla).split() if t not in _CONECTIVOS)
+
+
+def _classe_da_integra(md: Mapping[str, Any]) -> tuple[tuple[str, ...], str] | None:
+    """(tokens da classe composta, n?mero) a partir de `recurso` + `processo` ('REsp 2066740')."""
+    m = re.match(r"^\s*(.+?)\s+(\d+)\s*$", str(md.get("processo") or ""))
+    if not m:
+        return None
+    return classe_tokens(f"{md.get('recurso') or ''} {m.group(1)}"), m.group(2)
 
 
 def combinar(metadados_body: bytes, zip_body: bytes,
-             espelhos_por_registro: Mapping[str, Iterable[str]]) -> Resultado:
-    """Une metadados e textos e vincula cada acórdão ao espelho pelo número de registro.
+             espelhos_por_registro: Mapping[str, Iterable[tuple[str, str, str]]]) -> Resultado:
+    """Une metadados e textos e vincula cada ac?rd?o a um espelho do acervo.
 
-    `espelhos_por_registro`: numeroRegistro (12 dígitos) -> chaves de espelhos do acervo.
-    Um espelho: vínculo. Vários: ambíguo (nunca escolhe). Nenhum: descarte contado.
+    `espelhos_por_registro`: numeroRegistro -> (chave, siglaClasse, numeroProcesso) dos espelhos.
+    O registro abriga v?rios ac?rd?os (REsp, AgInt no REsp, EDcl...): o v?nculo exige registro,
+    classe composta e n?mero iguais. Um candidato: v?nculo. V?rios: amb?guo. Nenhum: descarte.
     """
     textos = ler_textos(zip_body)
     res = Resultado()
-    vistos: set[str] = set()
-    for md in ler_metadados(metadados_body):
-        seq = str(md.get("SeqDocumento") or "").strip()
-        if not seq.isdigit():
-            res.descartar("sem_seq")
+    metas = ler_metadados(metadados_body)
+    por_seq: dict[str, list[dict[str, Any]]] = {}
+    for md in metas:
+        por_seq.setdefault(str(md.get("SeqDocumento") or "").strip(), []).append(md)
+    candidatos: list[tuple[Integra, tuple]] = []
+    for seq, grupo in por_seq.items():
+        if not (seq.isascii() and seq.isdecimal()):
+            for _ in grupo:
+                res.descartar("sem_seq")
             continue
-        if seq in vistos:
-            res.descartar("seq_repetido_nos_metadados")
+        if any(g != grupo[0] for g in grupo):  # mesmo Seq com dados diferentes: nenhum vale
+            for _ in grupo:
+                res.descartar("seq_repetido_divergente")
             continue
-        vistos.add(seq)
-        tipo = _sem_acento(str(md.get("tipoDocumento") or ""))
-        if tipo != "ACORDAO":
+        md = grupo[0]
+        if _sem_acento(str(md.get("tipoDocumento") or "")) != "ACORDAO":
             res.descartar("monocratica_fora_desta_versao")
             continue
-        registro = re.sub(r"\D", "", str(md.get("numeroRegistro") or ""))
-        if not _REGISTRO.match(registro):
+        registro = str(md.get("numeroRegistro") or "").strip()
+        if not isinstance(md.get("numeroRegistro"), str) or not _REGISTRO.fullmatch(registro):
             res.descartar("registro_invalido")
             continue
-        texto = textos.get(seq)
-        if texto is None or not texto.strip():
+        classe = _classe_da_integra(md)
+        if classe is None:
+            res.descartar("processo_invalido")
+            continue
+        if seq not in textos:
             res.descartar("texto_ausente_no_zip")
+            continue
+        texto, sha_bytes = textos[seq]
+        if texto is None:
+            res.descartar("texto_nao_utf8")
+            continue
+        if not texto.strip():
+            res.descartar("texto_vazio")
             continue
         integra = Integra(
             seq=seq, numero_registro=registro, processo=str(md.get("processo") or "").strip(),
             tipo="acordao", data_publicacao=md.get("dataPublicacao"), ministro=md.get("NM_MINISTRO"),
-            texto=texto, sha256_texto=hashlib.sha256(texto.encode("utf-8")).hexdigest(), metadados=dict(md))
-        chaves = sorted(set(espelhos_por_registro.get(registro, ())))
-        if not chaves:
+            texto=texto, sha256_texto=sha_bytes, metadados=dict(md))
+        candidatos.append((integra, (registro, *classe)))
+    repetidas: dict[tuple, int] = {}
+    for _, ident in candidatos:
+        repetidas[ident] = repetidas.get(ident, 0) + 1
+    for integra, ident in candidatos:
+        registro, tokens, numero = ident
+        chaves = sorted({k for k, sigla, num in espelhos_por_registro.get(registro, ())
+                         if classe_tokens(sigla or "") == tokens
+                         and str(num or "").strip().lstrip("0") == numero.lstrip("0")})
+        if repetidas[ident] > 1:  # duas ?ntegras para o mesmo ac?rd?o no dia: n?o escolhe
+            res.ambiguas.append((integra, chaves))
+        elif not chaves:
             res.descartar("fora_do_recorte_ou_sem_espelho")
         elif len(chaves) == 1:
             res.vinculadas.append((integra, chaves[0]))

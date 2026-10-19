@@ -19,9 +19,10 @@ Os metadados não trazem órgão julgador.
 3. Inteiro teor por declaração da coleção oficial (0038), nunca por comprimento. O hash da
    prova é do texto bruto; a limpeza de `<br>` serve só à leitura e à busca.
 4. Decisões monocráticas ficam fora nesta versão e são contadas.
-5. Limites do ZIP: 5.000 entradas, 200 MB descompactados, 5 MB por entrada, razão 100;
-   nome fora de `^\d+\.txt$` recusa o recurso inteiro (cobre zip-slip).
-6. A cobertura textual do ZIP é parcial; `texto_ausente_no_zip` é descarte esperado e não
+6. Limites do ZIP: 5.000 entradas, 200 MB descompactados, 5 MB por entrada, razão 100;
+   nome fora de `[0-9]+.txt` (fullmatch) recusa o recurso inteiro (cobre zip-slip); bytes
+   contados na leitura, n?o no cabe?alho; entrada cifrada ou ileg?vel recusa o recurso.
+7. A cobertura textual do ZIP é parcial; `texto_ausente_no_zip` é descarte esperado e não
    pode ser lido como falha da fonte.
 
 ## Ligação pendente (1.3.0)
@@ -30,3 +31,12 @@ Capturar ZIP e metadados pelo transporte comum (recibo com sha256), gravar
 `decision_document(kind='inteiro_teor', capture_id=<zip>)` na decisão do espelho, janela
 padrão de 90 dias com checkpoint por recurso (0039), atualizar `coverage` do conector e
 FONTES.md, e só então novo snapshot, após auditoria independente.
+
+## Limites conhecidos
+
+- `recurso = "EDcl"` n?o revela a cadeia inteira; cadeias distintas compat?veis caem em
+  `ambiguous`.
+- A data de publica??o n?o entra no v?nculo: o espelho a traz em texto livre ("DJEN DATA:")
+  e o ac?rd?o pode ser republicado. Avaliar como desempate na liga??o ao acervo.
+- O texto do `.txt` n?o ? conferido contra os metadados (sem cabe?alho estruturado).
+- Republica??o com sha256 diferente deve ser tratada como conflito pelo chamador.
