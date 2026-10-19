@@ -24,3 +24,8 @@ não verificada sem registro claro.
    (certificado da attestation, quando presente) e o digest do snapshot instalado em `instalacao.json`.
 4. `fv doctor` ganha as verificações `snapshot_digest` (instalado × lista embutida da versão) e `attestation`
    (`attestation_verificada` de `instalacao.json`); divergência ou ausência é `alerta`, não falha.
+
+## Emenda FIX1 (auditoria do bloco 1)
+
+1. `instalacao.json` registra `versao`, `sha256_wheel` (do arquivo baixado, ao qual a attestation se refere), `digest_snapshot`, `attestation_verificada` e `concluida`. O instalador grava `concluida: true` (com o `digest_snapshot` instalado) só depois do `doctor` offline; antes disso o registro é parcial (`concluida: false`, `digest_snapshot: null`).
+2. A verificação `attestation` do `doctor` só é `ok` se `concluida` for `true`, `versao` for a do pacote em execução, a attestation estiver verificada e, havendo snapshot instalado, `digest_snapshot` coincidir com o digest instalado. Qualquer outro caso é `alerta` com a lista de `motivos`; registro ausente ou ilegível também. O `doctor` não recalcula `sha256_wheel` (a wheel instalada não é retida); o valor é exibido para conferência manual.

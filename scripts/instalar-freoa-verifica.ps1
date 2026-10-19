@@ -47,7 +47,10 @@ try {
         # Commit da release, conforme o certificado da attestation; ausente se o formato mudar.
         try { $commit = (($att | Out-String) | ConvertFrom-Json)[0].verificationResult.signature.certificate.sourceRepositoryDigest } catch { $commit = $null }
     }
-    @{ versao = $versao; proveniencia = $proveniencia; attestation_verificada = $verificada; commit = $commit; concluida = $false } |
+    # O registro liga a attestation ao arquivo baixado (sha256_wheel); só `concluida: true` ao final atesta a instalação.
+    $shaWheel = (Get-FileHash -LiteralPath $wheel -Algorithm SHA256).Hash.ToLowerInvariant()
+    @{ versao = $versao; sha256_wheel = $shaWheel; digest_snapshot = $null; proveniencia = $proveniencia
+       attestation_verificada = $verificada; commit = $commit; concluida = $false } |
         ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $registroDir "instalacao.json")
 
     $lock = Join-Path $destino "requirements-lock.txt"
@@ -111,8 +114,8 @@ try {
     if ($doctor.status -ne "ok" -or -not $doctor.verificacoes -or
         @($doctor.verificacoes | Where-Object { $_.status -notin @("ok", "alerta") }).Count -gt 0 -or
         $doctor.acervo_incompleto) { throw "diagnostico bloqueante" }
-    @{ versao = $versao; proveniencia = $proveniencia; attestation_verificada = $verificada; commit = $commit
-       snapshot_sha256 = $info.proveniencia.snapshot_sha256; concluida = $true } |
+    @{ versao = $versao; sha256_wheel = $shaWheel; digest_snapshot = $info.proveniencia.snapshot_sha256
+       proveniencia = $proveniencia; attestation_verificada = $verificada; commit = $commit; concluida = $true } |
         ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $registroDir "instalacao.json")
     Write-Host "Pronto. Comandos em: $destino\.venv\Scripts (fv.exe e freoa-verifica-mcp.exe)."
 } catch {

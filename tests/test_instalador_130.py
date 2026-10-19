@@ -1,4 +1,5 @@
 """D2: attestation obrigatória e versão parametrizada no instalador."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -50,6 +51,15 @@ def test_default_version_matches_package():
     assert re.search(r'\[string\]\$Versao = "([^"]+)"', text).group(1) == freoa_verifica.__version__
 
 
+def test_registro_final_so_ao_fim_com_digest_do_snapshot():
+    texto = SCRIPT.read_text(encoding="utf-8-sig")
+    assert texto.count("concluida = $true") == 1
+    final = texto.index("concluida = $true")
+    assert texto.index('$etapa = "doctor offline"') < final
+    assert "digest_snapshot = $info.proveniencia.snapshot_sha256" in texto[final - 300:final + 100]
+    assert "sha256_wheel = $shaWheel" in texto[final - 300:final + 100]
+
+
 @pytest.mark.skipif(os.name != "nt", reason="PowerShell Windows")
 def test_without_gh_aborts_by_default(tmp_path):
     run, output, record = rodar(tmp_path)
@@ -91,3 +101,6 @@ def test_verified_attestation_records_true_version_and_commit(tmp_path):
     assert record["versao"] == freoa_verifica.__version__
     assert record["commit"] == "abc123"
     assert record["proveniencia"] == "VERIFICADA: gh attestation verify"
+    # registro parcial (instalação interrompida): ligado ao arquivo baixado, ainda sem digest nem conclusão
+    assert record["sha256_wheel"] == hashlib.sha256(b"wheel falso").hexdigest()
+    assert record["digest_snapshot"] is None and record["concluida"] is False

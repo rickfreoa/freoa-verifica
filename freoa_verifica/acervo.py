@@ -122,16 +122,35 @@ def verificar_digest_instalado(provenance: dict[str, Any]) -> dict[str, Any]:
             "detalhe": {**detalhe, "confere": ok}}
 
 
-def attestation_instalacao() -> dict[str, Any]:
-    """`attestation_verificada` gravada pelo instalador em instalacao.json (ausente: instalação fora do instalador)."""
+def attestation_instalacao(provenance: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Registro do instalador (instalacao.json) confrontado com esta instalação.
+
+    `ok` exige instalação concluída, versão igual à do pacote, attestation verificada e, havendo snapshot
+    instalado, o mesmo digest gravado pelo instalador. Ausente ou divergente é `alerta`.
+    """
+    from freoa_verifica import __version__
+
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
     try:
         data = json.loads((Path(base) / "freoa-verifica" / "instalacao.json").read_text(encoding="utf-8-sig"))
-        valor = data.get("attestation_verificada")
-    except (OSError, ValueError, AttributeError):
-        valor = None
-    return {"nome": "attestation", "status": "ok" if valor is True else "alerta",
-            "detalhe": {"attestation_verificada": valor}}
+        if not isinstance(data, dict):
+            raise ValueError
+    except (OSError, ValueError):
+        return {"nome": "attestation", "status": "alerta",
+                "detalhe": {"attestation_verificada": None, "motivos": ["sem_registro_do_instalador"]}}
+    motivos = []
+    if data.get("concluida") is not True:
+        motivos.append("instalacao_nao_concluida")
+    if data.get("versao") != __version__:
+        motivos.append("versao_divergente")
+    if data.get("attestation_verificada") is not True:
+        motivos.append("attestation_nao_verificada")
+    instalado = (provenance or {}).get("snapshot_sha256")
+    if provenance is not None and instalado and data.get("digest_snapshot") != instalado:
+        motivos.append("digest_snapshot_divergente")
+    detalhe = {k: data.get(k) for k in ("attestation_verificada", "versao", "concluida", "sha256_wheel", "digest_snapshot")}
+    return {"nome": "attestation", "status": "alerta" if motivos else "ok",
+            "detalhe": {**detalhe, "versao_instalada": __version__, "motivos": motivos}}
 
 
 def installed_provenance(home: Path) -> dict[str, Any]:
