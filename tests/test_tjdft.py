@@ -2,7 +2,6 @@
 import copy
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 
@@ -11,13 +10,13 @@ from freoa_verifica.connectors.base import Candidate, Unavailable
 from freoa_verifica.courts import normalize_court
 from freoa_verifica.service import Verifica
 from freoa_verifica.transport import Response
+from tests.fixture_util import load_fixture
 
-FX = Path(__file__).parent / "fixtures" / "tjdft"
 URL = "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
 
 
 def _load(name):
-    return json.loads((FX / f"{name}.json").read_text(encoding="utf-8"))
+    return json.loads(load_fixture(f"tjdft_{name}").decode("utf-8"))
 
 
 def _resp(data, status=200):
