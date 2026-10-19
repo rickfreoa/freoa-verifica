@@ -187,3 +187,10 @@ def test_idf_ordena_termo_raro_primeiro_na_complementacao(svc):
     _indexar(svc, "STJ", "RARO", text="", ementa="legitimidade do sócio excluído para apuração")
     itens = svc.pesquisar_jurisprudencia("legitimidade socio excluido apuracao haveres", limite=3)["itens"]
     assert itens[0]["classe_numero"].endswith("RARO")
+
+
+def test_resultado_sem_ementa_mostra_trecho_pertinente_rotulado(svc):
+    from freoa_verifica.service import _trecho_pertinente
+    corpo = "Poder Judiciário cabeçalho. " * 30 + "Trata-se de exclusão de sócio de sociedade limitada."
+    trecho, cortado = _trecho_pertinente(corpo, "exclusao de socio", 200)
+    assert "exclusão de sócio" in trecho and cortado

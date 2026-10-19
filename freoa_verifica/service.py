@@ -152,6 +152,18 @@ def _highlight(text: str, q: str, max_chars: int = 280) -> str:
     return snippet
 
 
+def _trecho_pertinente(text: str, q: str, max_chars: int) -> tuple[str, bool]:
+    """Janela do texto em torno do primeiro termo da consulta (sem acento/caixa); sem termo, o início."""
+    import unicodedata
+    fold = "".join((unicodedata.normalize("NFKD", ch)[:1] or ch).lower() for ch in text)  # mesmo comprimento
+    termos = [unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode().lower()
+              for t in re.findall(r"\w{4,}", q or "")]
+    achados = [i for t in termos if t and (i := fold.find(t)) >= 0]
+    inicio = max(0, min(achados) - 80) if achados else 0
+    trecho = text[inicio:inicio + max_chars]
+    return trecho, inicio > 0 or inicio + max_chars < len(text)
+
+
 def _citation_to_dict(c: Citation | None) -> dict[str, Any] | None:
     if c is None:
         return None
@@ -2169,7 +2181,7 @@ class Verifica:
         local = local_page()
         items: list[dict[str, Any]] = []
         def append_local(rows):
-            items.extend(self._decisao_item(row) for row in rows)
+            items.extend(self._decisao_item(row, q) for row in rows)
         append_local(local)
 
         id_map = {
@@ -2259,13 +2271,15 @@ class Verifica:
             "rules_version": AUTHORITY_RULES_VERSION,
         }
 
-    def _decisao_item(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _decisao_item(self, row: dict[str, Any], q: str | None = None) -> dict[str, Any]:
         text = row.get("ementa") or row.get("inteiro_teor") or ""
-        # Sem ementa, o início do inteiro teor sai como `trecho_inteiro_teor`, nunca sob o rótulo `ementa` (0038).
+        # Sem ementa, um trecho do inteiro teor (em torno do termo pesquisado) sai como `trecho_inteiro_teor`,
+        # nunca sob o rótulo `ementa` (0038).
         ementa, trunc = _truncate(text, _EMENTA_MAX)
         trecho_it = None
         if not row.get("ementa") and text:
-            trecho_it, ementa = ementa, None
+            trecho_it, trunc = _trecho_pertinente(text, q or "", _EMENTA_MAX)
+            ementa = None
         court = row.get("court") or ""
         class_name = row.get("class") or ""
         auth = classify_authority(
