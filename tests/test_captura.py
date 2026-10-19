@@ -11,7 +11,7 @@ import pytest
 
 from freoa_verifica import __version__, captura
 from freoa_verifica.connectors import httputil, tjdft
-from freoa_verifica.transport import Response
+from freoa_verifica.transport import Response, Timeout
 
 RAIZ = Path(__file__).resolve().parents[1]
 CORPO = '{"hits":{"value":0},"registros":[],"nota":"  espaços   preservados é"}'.encode("utf-8")
@@ -24,6 +24,12 @@ def _resp(url, body=CORPO, status=200):
         body=body, sha256=hashlib.sha256(body).hexdigest(), fetched_at="2026-10-19T00:00:00+00:00",
         redirects=[], mime="application/json", size=len(body),
     )
+
+
+@pytest.fixture(autouse=True)
+def _fora_do_repositorio(monkeypatch):
+    """O tmp_path do pytest fica dentro do checkout; a recusa do repositório é testada à parte."""
+    monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
 
 
 @pytest.fixture
@@ -99,12 +105,12 @@ def test_user_agent_identificado_e_invalido(envios, tmp_path):
 def test_falha_vira_unavailable_sem_arquivo_de_corpo(monkeypatch, tmp_path, modo):
     def fake(url, **kw):
         if modo == "excecao":
-            raise TimeoutError("lento")
+            raise Timeout("lento")
         return _resp(url, b"", status=503)
 
     monkeypatch.setattr(httputil, "transport_fetch", fake)
     reg = captura.capturar("tjdft", CONSULTA, destino=tmp_path, sonda=True, chave="f")
-    assert reg.unavailable and reg.motivo and reg.categoria
+    assert reg.unavailable and reg.motivo and reg.categoria == "fonte_fora" and reg.evidencia
     assert not (tmp_path / "f.json").exists()
     assert json.loads((tmp_path / "f.captura.json").read_text(encoding="utf-8"))["unavailable"] is True
 
