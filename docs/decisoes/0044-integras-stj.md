@@ -23,7 +23,9 @@ Sessão Virtual de 29/09/2026 a 06/10/2026".
    com graus intermediários livres.
 3. Entre os candidatos, o vínculo exige prova do julgamento individual lida do texto: órgão
    igual ao do espelho (abreviações CE, S1, S2, S3 normalizadas) e data de julgamento do
-   espelho dentro da sessão declarada. Sem a fórmula de abertura, ou com mais de uma, o
+   espelho dentro da sessão declarada e a ementa do espelho (ao menos 120 caracteres
+   normalizados, até 400 conferidos) reproduzida no texto da íntegra. Órgão e sessão sozinhos
+   não individualizam o julgamento (Codex, 2ª rodada, B1). Sem a fórmula de abertura, ou com mais de uma, o
    documento fica pendente (`sem_prova_do_julgamento`); candidatos sem compatibilidade de
    órgão e data dão `julgamento_divergente_do_espelho`. Nunca há recuo para o único espelho
    do registro.
@@ -51,6 +53,15 @@ Capturar ZIP e metadados pelo transporte comum (recibo com sha256), gravar
 `decision_document(kind='inteiro_teor', capture_id=<zip>)` na decisão do espelho, janela
 padrão de 90 dias com checkpoint por recurso (0039), atualizar `coverage` do conector e
 FONTES.md, e só então novo snapshot, após auditoria independente.
+
+## Abertos antes da ligação (Codex, 2ª rodada)
+
+- I2: a fórmula de abertura é procurada nos 3.000 primeiros caracteres sem delimitar a
+  abertura efetiva; intervalo incompleto recua para data única; datas não são validadas
+  pelo calendário.
+- I3: a leitura manual não confronta método, flags, CRC e tamanhos do cabeçalho local nem o
+  data descriptor e o extra ZIP64 com o diretório central.
+- M1: textos do ZIP sem metadado não são contados.
 
 ## Limites conhecidos
 
