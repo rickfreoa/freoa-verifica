@@ -63,3 +63,10 @@ Adiado para 1.4.0: coleta integral (F4; nenhum adaptador com total exato comprov
 5. PR para `main`, CI verde nas oito combinações, merge, tag `v1.3.0` sobre o commit auditado. `release.yml` passa a criar a release como **rascunho** (`gh release create --draft`), com wheel, sdist, lock, `SHA256SUMS` e attestation produzidos pela CI.
 6. Auditoria dos bytes da CI: baixar os assets do rascunho, conferir attestation (`gh attestation verify`), conteúdo da wheel (sem `tests/`, digest do snapshot embutido igual ao auditado) e instalar a wheel baixada em ambiente limpo com o snapshot vinculado. Anexar ao rascunho exatamente o snapshot auditado e seu `.sha256`; só então publicar o rascunho (`gh release edit --draft=false`). Os bytes publicados são os auditados, por identidade, não por reconstrução.
 7. Instalar pelo instalador oficial: attestation verificada, digest esperado, vínculo, derivados atuais, `doctor`, smoke de `pesquisar_jurisprudencia` com bloco de cobertura.
+
+## Ajustes de execução (decididos pelo supervisor, 19/10/2026)
+
+- Antigravity indisponível (cota individual esgotada por cerca de 98 h, erro 429 registrado). O papel de pesquisador de fontes passa ao Haiku, nas mesmas condições: somente o instrumento E2, sem ler o verificador.
+- O sandbox do Cursor CLI não é suportado no Windows. O Cursor roda com `--auto-review` (classificador do servidor aprova chamadas seguras), sem `--force`. A trilha S2 passou ao Sonnet; o Cursor fica com G1/G3.
+- Agentes Claude rodam com lista fechada de ferramentas (edição, pytest, scripts do repositório, git local sem push).
+- Cursor também indisponível (limite de uso do plano até 30/10/2026, inclusive no modelo `auto`, erro registrado). G1/G3 passam ao Sonnet. Codex permanece exclusivamente auditor, para preservar a separação de papéis.
