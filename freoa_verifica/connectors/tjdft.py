@@ -84,20 +84,35 @@ def _locucoes() -> list[str]:
 
 
 def consulta_oficial(q: str) -> str:
-    """A API do TJDFT ranqueia mal termos soltos e bem frases entre aspas: locuções conhecidas (casadas sem acento)
-    vão entre aspas na grafia canônica; o restante segue como digitado. Consulta já com aspas não é tocada."""
+    """A API do TJDFT ranqueia mal termos soltos e bem frases entre aspas: locuções conhecidas (casadas sem acento
+    e sem caixa) vão entre aspas na grafia canônica; todo o resto da consulta segue como digitado, sem descarte
+    (negações e restrições incluídas). Consulta já com aspas não é tocada."""
     if '"' in q:
         return q
-    resto, frases = f" {_norm(q)} ", []
+    # Dobra caractere a caractere com mapa para o original (o resto é recortado do texto digitado).
+    dobrado, mapa = [], []
+    for i, ch in enumerate(q):
+        for c in unicodedata.normalize("NFKD", ch):
+            if not unicodedata.combining(c):
+                dobrado.append(c.lower())
+                mapa.append(i)
+    fold = "".join(dobrado)
+    usados = [False] * len(q)
+    frases = []
     for loc in _locucoes():
-        alvo = f" {_norm(loc)} "
-        if alvo in resto:
-            frases.append(f'"{loc}"')
-            resto = resto.replace(alvo, " ")
+        alvo = _norm(loc)
+        for m in re.finditer(r"(?<!\w)" + re.escape(alvo) + r"(?!\w)", fold):
+            ini, fim = mapa[m.start()], mapa[m.end() - 1]
+            if any(usados[ini:fim + 1]):
+                continue
+            for k in range(ini, fim + 1):
+                usados[k] = True
+            if f'"{loc}"' not in frases:
+                frases.append(f'"{loc}"')
     if not frases:
         return q
-    sobra = [w for w in resto.split() if len(w) > 3]
-    return " ".join(frases + sobra)
+    resto = "".join(" " if usados[k] else ch for k, ch in enumerate(q))
+    return " ".join(frases + resto.split())
 
 
 def inteiro_teor_valido(rec: dict[str, Any]) -> str | None:

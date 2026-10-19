@@ -77,6 +77,7 @@ _ESPERA_CLOSE = 30.0
 from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E402,F401
 
 _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
+_JANELA_REORDENACAO = 50  # só os 50 primeiros candidatos são reordenados; além deles vale a ordem bm25
 _SIGLAS_TRIBUNAL_FILTRO = frozenset({"STJ", "STF", "TCU", "TJDFT", "TJSP", "CVM"})
 _JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "tjdft", "cvm_colegiado")
 _DEFAULT_TEXT_LIMIT = 4000
@@ -155,10 +156,17 @@ def _highlight(text: str, q: str, max_chars: int = 280) -> str:
 def _trecho_pertinente(text: str, q: str, max_chars: int) -> tuple[str, bool]:
     """Janela do texto em torno do primeiro termo da consulta (sem acento/caixa); sem termo, o início."""
     import unicodedata
-    fold = "".join((unicodedata.normalize("NFKD", ch)[:1] or ch).lower() for ch in text)  # mesmo comprimento
-    termos = [unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode().lower()
-              for t in re.findall(r"\w{4,}", q or "")]
-    achados = [i for t in termos if t and (i := fold.find(t)) >= 0]
+    # Texto dobrado (sem acento, minúsculo) com mapa para o índice do original: NFD e ligaduras inclusive.
+    dobrado, mapa = [], []
+    for i, ch in enumerate(text):
+        for c in unicodedata.normalize("NFKD", ch):
+            if not unicodedata.combining(c):
+                dobrado.append(c.lower())
+                mapa.append(i)
+    fold = "".join(dobrado)
+    termos = ["".join(c for c in unicodedata.normalize("NFKD", t) if not unicodedata.combining(c)).lower()
+              for t in re.findall(r"\w{4,}", unicodedata.normalize("NFC", q or ""))]
+    achados = [mapa[i] for t in termos if t and (i := fold.find(t)) >= 0]
     inicio = max(0, min(achados) - 80) if achados else 0
     trecho = text[inicio:inicio + max_chars]
     return trecho, inicio > 0 or inicio + max_chars < len(text)
@@ -2172,11 +2180,13 @@ class Verifica:
             # AND primeiro; menos de offset+limite resultados completam com OR marcado (decisão 0025).
             # Candidatos além da página: a reordenação abaixo precisa de margem para promover quem tem a
             # consulta coberta pela ementa (comparativo 1.2.0).
-            alvo = max(offset + limite + 1, 50)
+            # Universo estável entre páginas: sempre ao menos 50 candidatos, completados por OR até o alvo, para que
+            # a reordenação dos 50 primeiros seja idêntica em qualquer página (auditoria 1.2.0, paginação).
+            alvo = max(offset + limite + 1, _JANELA_REORDENACAO)
             res = buscar_and_or(
                 q, buscar, lambda r: f"{r.get('ementa') or ''} {r.get('inteiro_teor') or ''}",
                 lambda r: r.get("decision_id") or r.get("official_id"),
-                alvo, offset + limite, colunas="ementa inteiro_teor", peso=self._peso_idf())
+                alvo, alvo, colunas="ementa inteiro_teor", peso=self._peso_idf())
             modo_busca = "ampliada" if res["fts"] and not res["and"] else "normal"
             tesauro_info = res["tesauro"]
             # Mesma correspondência: primeiro quem tem os termos na ementa (o resumo oficial do julgado), depois
@@ -2189,10 +2199,11 @@ class Verifica:
                     h, n = pertinencia(variantes, r["ementa"])
                     return max(h / n, 0.5 * (r.get("pertinencia") or 0))
                 return 0.5 * (r.get("pertinencia") or 0)
-            linhas = sorted(enumerate(res["linhas"]),
+            cabeca = sorted(enumerate(res["linhas"][:_JANELA_REORDENACAO]),
                             key=lambda p: (-round(forca(p[1]), 2),
                                            p[1].get("correspondencia") != "todos_os_termos", p[0]))
-            return [r for _, r in linhas][offset:offset + limite + 1]
+            ordenadas = [r for _, r in cabeca] + res["linhas"][_JANELA_REORDENACAO:]
+            return ordenadas[offset:offset + limite + 1]
 
         local = local_page()
         items: list[dict[str, Any]] = []

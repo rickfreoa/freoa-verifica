@@ -204,3 +204,43 @@ def test_ementa_que_cobre_a_consulta_vem_antes_de_termos_espalhados(svc):
     _indexar(svc, "TJDFT", "ACORD", text="", ementa="Exclusão de sócio. Sociedade limitada. Falta grave.")
     itens = svc.pesquisar_jurisprudencia("exclusao de socio sociedade limitada", tribunais=["tjdft"])["itens"]
     assert itens[0]["classe_numero"].endswith("ACORD")
+
+
+# Parecer do Codex, rodada 7.
+def test_paginacao_estavel_sem_perda_nem_repeticao(svc):
+    for n in range(60):
+        _indexar(svc, "STJ", f"IT{n}", text=f"Relatório longo. apuração de haveres no caso {n}. " * 30, ementa="",
+                 profile="stf_pdf", metadata={"documento": "inteiro_teor"})
+    for n in range(10):
+        _indexar(svc, "STJ", f"EM{n}", text="", ementa=f"Apuração de haveres. Dissolução parcial {n}.")
+    vistos, cursor, paginas = [], None, 0
+    while True:
+        r = svc.pesquisar_jurisprudencia("apuracao de haveres", tribunais=["stj"], limite=10, cursor=cursor)
+        vistos += [i["id"] for i in r["itens"]]
+        paginas += 1
+        cursor = r.get("cursor")
+        if not cursor or paginas > 10:
+            break
+    assert len(vistos) == len(set(vistos)) == 70
+
+
+def test_paginacao_nao_encerra_antes_com_complemento_or(svc):
+    for n in range(10):
+        _indexar(svc, "STJ", f"A{n}", text="", ementa=f"debêntures conversíveis emitidas {n}")
+    for n in range(5):
+        _indexar(svc, "STJ", f"P{n}", text="", ementa=f"debêntures conversíveis {n}")
+    r = svc.pesquisar_jurisprudencia("debentures conversiveis emitidas", tribunais=["stj"], limite=10)
+    assert r["truncado"] is True and r["cursor"]
+    assert len(svc.pesquisar_jurisprudencia("debentures conversiveis emitidas", tribunais=["stj"], limite=20)["itens"]) == 15
+
+
+def test_consulta_oficial_preserva_restricoes_e_negacoes():
+    assert tjdft.consulta_oficial("sociedade limitada sem CDC") == '"sociedade limitada" sem CDC'
+    assert tjdft.consulta_oficial("nao ha dolo sociedade limitada") == '"sociedade limitada" nao ha dolo'
+    assert tjdft.consulta_oficial("sociedade limitada art 50 CC") == '"sociedade limitada" art 50 CC'
+
+
+def test_trecho_com_unicode_decomposto_e_ligadura():
+    from freoa_verifica.service import _trecho_pertinente
+    assert "exclusão" in _trecho_pertinente("cabeçalho " * 30 + "a exclusão de sócio", "exclusão", 200)[0]
+    assert "ﬁcial" in _trecho_pertinente("cabeçalho " * 30 + "oﬁcial", "oficial", 200)[0]
