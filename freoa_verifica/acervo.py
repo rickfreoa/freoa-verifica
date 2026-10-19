@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -104,6 +105,33 @@ def status(conn: sqlite3.Connection, home: Path) -> dict[str, Any] | None:
         "obras": len(obras),
         "decisoes": len(decisoes),
     }
+
+
+def verificar_digest_instalado(provenance: dict[str, Any]) -> dict[str, Any]:
+    """Compara o digest do snapshot instalado com o da lista embutida para esta versão do pacote."""
+    from freoa_verifica import __version__
+    from freoa_verifica.snapshot import _da_versao_instalada, _snapshots_oficiais
+
+    digest = provenance.get("snapshot_sha256")
+    esperados = [e["sha256"] for e in _snapshots_oficiais() if _da_versao_instalada(e)]
+    detalhe = {"versao": __version__, "instalado": digest, "esperados": esperados}
+    if not digest:
+        return {"nome": "snapshot_digest", "status": "alerta", "detalhe": {**detalhe, "motivo": "sem snapshot instalado"}}
+    ok = digest in esperados
+    return {"nome": "snapshot_digest", "status": "ok" if ok else "alerta",
+            "detalhe": {**detalhe, "confere": ok}}
+
+
+def attestation_instalacao() -> dict[str, Any]:
+    """`attestation_verificada` gravada pelo instalador em instalacao.json (ausente: instalação fora do instalador)."""
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
+    try:
+        data = json.loads((Path(base) / "freoa-verifica" / "instalacao.json").read_text(encoding="utf-8-sig"))
+        valor = data.get("attestation_verificada")
+    except (OSError, ValueError, AttributeError):
+        valor = None
+    return {"nome": "attestation", "status": "ok" if valor is True else "alerta",
+            "detalhe": {"attestation_verificada": valor}}
 
 
 def installed_provenance(home: Path) -> dict[str, Any]:
