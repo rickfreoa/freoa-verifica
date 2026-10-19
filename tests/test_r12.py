@@ -113,23 +113,6 @@ def test_remission_does_not_inherit_identity(prosa_service, case):
     assert len(rows) == len(case["expected"])
 
 
-def test_latest_snapshot_after_wheel_only_release(monkeypatch):
-    from types import SimpleNamespace
-    from freoa_verifica import snapshot
-    from freoa_verifica.connectors import httputil
-
-    url = "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.0.0/freoa-verifica-snapshot-20261018.tar.gz"
-    def fetch(request, **kwargs):
-        latest = {"tag_name": "v1.0.2", "assets": [{"name": "freoa_verifica-1.0.2-py3-none-any.whl"}]}
-        payload = latest if request.endswith("/latest") else [latest, {"tag_name": "v1.0.1", "assets": []},
-                   {"tag_name": "v1.0.0", "assets": [{"name": "freoa-verifica-snapshot-20261018.tar.gz", "browser_download_url": url}]}]
-        return SimpleNamespace(body=json.dumps(payload).encode())
-    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": 'freoa-verifica-snapshot-20261018.tar.gz', "sha256": '0' * 64, "derived_version": 3}])
-    monkeypatch.setattr(httputil, "connector_fetch", fetch)
-    monkeypatch.setattr(snapshot, "_download_release", lambda found, **kwargs: found)
-    assert snapshot._download_latest_release() == url
-
-
 def test_read_only_verification_preserves_database(prosa_service, monkeypatch):
     import hashlib
     import sqlite3

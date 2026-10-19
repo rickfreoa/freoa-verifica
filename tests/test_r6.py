@@ -246,7 +246,7 @@ def test_install_latest_snapshot_without_arguments(populated,tmp_path,monkeypatc
     calls=[]
     def fetch(request,**kwargs):
         calls.append(request)
-        if request.endswith('/latest'):
+        if '/releases/tags/v' in request:
             return SimpleNamespace(body=json.dumps({'assets':[
                 {'name':'freoa_verifica-1.0.0.tar.gz','browser_download_url':url+'-sdist'},
                 {'name':archive.name,'browser_download_url':url}]}).encode())
@@ -260,4 +260,5 @@ def test_install_latest_snapshot_without_arguments(populated,tmp_path,monkeypatc
     with Verifica(tmp_path/'latest') as target:
         assert target.snapshot_install()['status']=='ok'
         assert target.verificar_citacao('art. 87 da Lei 8765/1999')['identity']['status']=='verified'
-    assert calls==['https://api.github.com/repos/rickfreoa/freoa-verifica/releases/latest',url,url+'.sha256']
+    from freoa_verifica import __version__
+    assert calls==[f'https://api.github.com/repos/rickfreoa/freoa-verifica/releases/tags/v{__version__}',url,url+'.sha256']

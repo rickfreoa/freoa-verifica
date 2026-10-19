@@ -58,7 +58,7 @@ def route(export, mode, tmp_path, monkeypatch):
     from freoa_verifica.connectors import httputil
     url = "https://github.com/rickfreoa/freoa-verifica/releases/download/v1/" + archive.name
     def fetch(address, **kw):
-        if address.endswith("/latest"):
+        if "/releases/tags/v" in address:
             return SimpleNamespace(body=json.dumps({"assets": [{"name": archive.name,
                 "browser_download_url": url}]}).encode())
         if address.endswith(".sha256"):

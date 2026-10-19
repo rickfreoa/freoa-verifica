@@ -673,10 +673,25 @@ def _snapshots_oficiais() -> list[dict[str, Any]]:
     return [e for e in entries if version(e["versao_pacote_min"]) <= version(__version__)]
 
 
+def _da_versao_instalada(entry: dict[str, Any]) -> bool:
+    """Entrada publicada para esta versão do pacote (sem `versao_pacote_min`, vale: lista sintética de teste)."""
+    from freoa_verifica import __version__
+    minimo = entry.get("versao_pacote_min")
+    if minimo is None:
+        return True
+    numeros = lambda v: tuple(int(n) for n in re.findall(r"\d+", re.match(r"[\d.]+", v).group(0).strip(".")))
+    return numeros(minimo) == numeros(__version__)
+
+
 def _vincular(digest: str | None, aceitar: bool) -> dict[str, Any]:
     official = next((e for e in _snapshots_oficiais() if e["sha256"] == digest), None)
     if official is None and not aceitar:
         raise ValueError("SNAPSHOT_NAO_VINCULADO")
+    if official is not None and not _da_versao_instalada(official):
+        # Digest conhecido, mas de outra versão: não é o snapshot desta release.
+        if not aceitar:
+            raise ValueError("SNAPSHOT_OUTRA_VERSAO")
+        official = None
     # Um snapshot oficial com derived_version anterior NÃO é compatível por
     # autenticidade: exige reconstrução no staging antes de publicar (C6).
     return {"vinculado": official is not None, "snapshot_sha256": digest,
@@ -751,12 +766,13 @@ def _install_snapshot(
 
 
 def _download_latest_release(*, staging_dir: str | Path | None = None, vinculo: dict | None = None) -> Path:
-    """Baixa asset da última release via API GitHub (hosts permitidos)."""
+    """Baixa o asset da release `v<__version__>` via API GitHub (hosts permitidos); nunca de release anterior."""
+    from freoa_verifica import __version__
     from freoa_verifica.connectors.httputil import connector_fetch
 
-    api = "https://api.github.com/repos/rickfreoa/freoa-verifica/releases/latest"
+    tag = f"v{__version__}"
     resp = connector_fetch(
-        api,
+        f"https://api.github.com/repos/rickfreoa/freoa-verifica/releases/tags/{tag}",
         hosts=GITHUB_HOSTS,
         path_prefixes=GITHUB_PREFIXES,
         mimes=GITHUB_MIMES,
@@ -764,41 +780,18 @@ def _download_latest_release(*, staging_dir: str | Path | None = None, vinculo: 
         timeout=60.0,
         max_bytes=5 * 1024 * 1024,
     )
-    data = json.loads(resp.body.decode("utf-8"))
-    def choose(release):
-        if release.get("draft") or release.get("prerelease"):
-            return None
-        assets = release.get("assets") or []
-        for asset in assets:
-            name = str(asset.get("name") or "")
-            official = next((e for e in _snapshots_oficiais() if e["arquivo"] == name), None)
-            digest = asset.get("digest")
-            if official and (not digest or digest == "sha256:" + official["sha256"]):
-                return asset["browser_download_url"]
-        return None
-
-    chosen = choose(data)
-    if chosen:
-        return _download_release(chosen, staging_dir=staging_dir, vinculo=vinculo)
-    # A API lista as releases da mais recente para a mais antiga.
-    page = 1
-    while True:
-        resp = connector_fetch(
-            api.removesuffix("/latest") + f"?per_page=100&page={page}",
-            hosts=GITHUB_HOSTS, path_prefixes=GITHUB_PREFIXES,
-            mimes=GITHUB_MIMES, user_agent="identified", timeout=60.0,
-            max_bytes=5 * 1024 * 1024,
-        )
-        releases = json.loads(resp.body.decode("utf-8"))
-        if not isinstance(releases, list):
-            raise RuntimeError("releases_resposta_inesperada")
-        for release in releases:
-            chosen = choose(release)
-            if chosen:
-                return _download_release(chosen, staging_dir=staging_dir, vinculo=vinculo)
-        if len(releases) < 100:
-            raise RuntimeError("release_sem_assets")
-        page += 1
+    release = json.loads(resp.body.decode("utf-8"))
+    if not isinstance(release, dict):
+        raise RuntimeError("releases_resposta_inesperada")
+    if release.get("draft") or release.get("prerelease"):
+        raise RuntimeError(f"release_nao_publicada:{tag}")
+    oficiais = [e for e in _snapshots_oficiais() if _da_versao_instalada(e)]
+    for asset in release.get("assets") or []:
+        official = next((e for e in oficiais if e["arquivo"] == str(asset.get("name") or "")), None)
+        digest = asset.get("digest")
+        if official and (not digest or digest == "sha256:" + official["sha256"]):
+            return _download_release(asset["browser_download_url"], staging_dir=staging_dir, vinculo=vinculo)
+    raise RuntimeError(f"release_sem_asset_da_versao:{tag}")
 
 
 def _download_release(url: str, *, staging_dir: str | Path | None = None,

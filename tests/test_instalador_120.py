@@ -73,7 +73,7 @@ function Invoke-WebRequest {
     param($Uri, $OutFile, [switch]$UseBasicParsing)
     Set-Content -LiteralPath $OutFile -Value '# lock sintetico'
 }
-& $Installer
+& $Installer -SemAttestation
 exit $LASTEXITCODE
 """, encoding="utf-8-sig")
     env = dict(os.environ, USERPROFILE=str(tmp_path / "user"), LOCALAPPDATA=str(tmp_path / "local"))
@@ -84,6 +84,7 @@ exit $LASTEXITCODE
     assert run.returncode != 0 and "Pronto" not in output
     assert "FALHOU na etapa: criar venv" in output and "exit=23" in output
     record = json.loads((tmp_path / "local/freoa-verifica/instalacao.json").read_text(encoding="utf-8-sig"))
-    expected = "PROVENIENCIA NAO VERIFICADA (instale o GitHub CLI para verificar)"
+    expected = "PROVENIENCIA NAO VERIFICADA (-SemAttestation)"
     assert expected in output and record["proveniencia"] == expected
+    assert record["attestation_verificada"] is False
     assert record["concluida"] is False

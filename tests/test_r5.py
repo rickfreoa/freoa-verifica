@@ -188,7 +188,7 @@ def test_latest_download_authenticates_checksum(tmp_path,monkeypatch):
     calls=[]
     def fetch(url,**kwargs):
         calls.append(url)
-        if url.endswith('/latest'):
+        if '/releases/tags/v' in url:
             data=json.dumps({'assets':[{'name':name,'browser_download_url':'https://github.com/rickfreoa/freoa-verifica/releases/download/v1/'+name}]}).encode()
         elif url.endswith('.sha256'): data=(hashlib.sha256(body).hexdigest()+'  '+name).encode()
         else: data=body
