@@ -2222,6 +2222,8 @@ class Verifica:
         }
         offline = os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
         fontes_status: dict[str, dict[str, Any]] = {}
+        filtros_por_fonte: dict[str, dict[str, str]] = {}
+        filtros_nao_aplicados: list[dict[str, str]] = []
         for t in tribunais_norm:
             cid = id_map.get(t, t)
             if cid not in registry():
@@ -2251,6 +2253,14 @@ class Verifica:
                         filtros["desde"] = desde
                     if ate:
                         filtros["ate"] = ate
+                    aplicados = getattr(conn_obj, "filtros", {})
+                    filtros_por_fonte[cid] = {f: aplicados.get(f, "nao_suportado") for f in filtros}
+                    for f in filtros:
+                        if f not in aplicados:
+                            # Nunca em silêncio: a fonte devolve sem o filtro; o serviço só o aplica (SQL) ao recuperado.
+                            filtros_nao_aplicados.append({
+                                "fonte": cid, "filtro": f,
+                                "compensacao": "filtro_local_sobre_o_recuperado"})
                     cands = conn_obj.search(q, **filtros)
                     got = 0
                     for cand in cands:
@@ -2291,11 +2301,15 @@ class Verifica:
             append_local(local_page())
         page = items[:limite]
         truncado = len(items) > limite
+        for cid, aplicados in filtros_por_fonte.items():
+            if cid in fontes_status:
+                fontes_status[cid]["filtros"] = aplicados
         return {
             **_status_com_falhas("parcial" if truncado else "ok", _falhas_de_fonte(fontes_status), len(page)),
             "itens": page,
             "resultados": page,
             "fontes": fontes_status,
+            "filtros_nao_aplicados": filtros_nao_aplicados,  # experimental (docs/FILTROS.md)
             "total_parcial": offset + len(items),
             "truncado": truncado,
             "cursor": _encode_cursor(offset + limite) if truncado else None,

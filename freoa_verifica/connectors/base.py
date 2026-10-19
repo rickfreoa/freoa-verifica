@@ -126,6 +126,9 @@ class Connector(ABC):
     mimes: ClassVar[frozenset[str]]
     user_agent: ClassVar[UserAgentMode] = "browser"
     coverage: ClassVar[dict[str, Any]] = {}
+    # Filtros públicos que a busca ao vivo aplica na origem: "remoto" (parâmetro da fonte) ou "local"
+    # (no próprio conector, sobre o recuperado). Ausente = não aplicado (docs/FILTROS.md).
+    filtros: ClassVar[dict[str, str]] = {}
 
     @abstractmethod
     def health(self) -> HealthReport:

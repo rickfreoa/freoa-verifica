@@ -40,6 +40,12 @@ MAX_PAGINA = 2000
 MAX_LIMITE = 100
 
 
+def _data_br(iso: Any) -> str | None:
+    """AAAA-MM-DD -> DD/MM/AAAA (formato do formulário e-SAJ); outra forma não é enviada."""
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", str(iso or ""))
+    return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else None
+
+
 @register
 class TjspConnector(Connector):
     id = "tjsp"
@@ -48,6 +54,7 @@ class TjspConnector(Connector):
     path_prefixes = _PREFIXES
     mimes = _MIMES
     user_agent = "browser"
+    filtros = {"desde": "remoto", "ate": "remoto"}  # datas de julgamento (0053)
     coverage = {
         "colecoes": ["acordãos_cjsg"],
         "periodo": "acervo e-SAJ",
@@ -108,10 +115,12 @@ class TjspConnector(Connector):
         if filtros.get("numero_processo"):
             fields["dados.nuProcesso"] = filtros["numero_processo"]
             fields["dados.buscaInteiroTeor"] = ""
-        if filtros.get("dt_inicio"):
-            fields["dados.dtJulgamentoInicio"] = filtros["dt_inicio"]
-        if filtros.get("dt_fim"):
-            fields["dados.dtJulgamentoFim"] = filtros["dt_fim"]
+        dt_inicio = filtros.get("dt_inicio") or _data_br(filtros.get("desde"))
+        dt_fim = filtros.get("dt_fim") or _data_br(filtros.get("ate"))
+        if dt_inicio:
+            fields["dados.dtJulgamentoInicio"] = dt_inicio
+        if dt_fim:
+            fields["dados.dtJulgamentoFim"] = dt_fim
         post_url = _BASE + "resultadoCompleta.do"
         init = connector_fetch(
             post_url,

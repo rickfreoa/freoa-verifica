@@ -107,6 +107,7 @@ _DEFAULT_DB = Path.home() / ".cache" / "freoa-verifica" / "stj_fts.sqlite"
 class StjConnector(Connector):
     id = "stj"
     authority = "Superior Tribunal de Justiça"
+    filtros = {"desde": "local", "ate": "local"}  # SQL sobre o índice local (0053)
     hosts = frozenset(
         {
             "dadosabertos.web.stj.jus.br",
@@ -246,20 +247,23 @@ class StjConnector(Connector):
         conn = sqlite3.connect(str(self.db_path))
         try:
             conn.row_factory = sqlite3.Row
+            conn.create_function("fv_dia", 1, _dia_iso, deterministic=True)
+            where, params = "fts_stj MATCH ?", [_fts_query(q)]
+            for dia, op in ((filtros.get("desde"), ">="), (filtros.get("ate"), "<=")):
+                if dia:
+                    where += f" AND fv_dia(decision_date) {op} ?"
+                    params.append(dia)
             # marcador estrutural de zero: COUNT do FTS
-            cur = conn.execute(
-                "SELECT COUNT(*) AS n FROM fts_stj WHERE fts_stj MATCH ?",
-                (_fts_query(q),),
-            )
+            cur = conn.execute(f"SELECT COUNT(*) AS n FROM fts_stj WHERE {where}", params)
             n = int(cur.fetchone()["n"])
             if n == 0:
                 return []
             rows = conn.execute(
                 """
                 SELECT key, title, ementa, organ, rapporteur, decision_date, class_name, payload
-                FROM fts_stj WHERE fts_stj MATCH ? LIMIT ?
+                FROM fts_stj WHERE """ + where + """ LIMIT ?
                 """,
-                (_fts_query(q), limite),
+                (*params, limite),
             ).fetchall()
         finally:
             conn.close()
@@ -769,6 +773,16 @@ def _monthly_name(name: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _dia_iso(value: Any) -> str | None:
+    """AAAAMMDD, AAAA-MM-DD[...] ou DD/MM/AAAA -> AAAA-MM-DD; sem data reconhecível, None (fora da janela)."""
+    s = str(value or "").strip()
+    m = re.match(r"(\d{4})-?(\d{2})-?(\d{2})", s) or re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", s)
+    if not m:
+        return None
+    a, b, c = m.groups()
+    return f"{a}-{b}-{c}" if len(a) == 4 else f"{c}-{b}-{a}"
 
 
 def _iso_from_yyyymmdd(value: Any) -> str | None:

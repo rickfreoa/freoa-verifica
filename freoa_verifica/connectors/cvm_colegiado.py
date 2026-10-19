@@ -57,6 +57,7 @@ class CvmColegiadoConnector(Connector):
     path_prefixes = _PREFIXES
     mimes = _MIMES
     user_agent = "browser"
+    filtros = {"desde": "remoto"}  # só o ano de `desde` (granularidade anual); `ate` não chega à fonte (0053)
     coverage = {
         "colecoes": ["decisoes_colegiado", "atas"],
         "periodo": "2002–presente",
