@@ -35,28 +35,67 @@ PREFIXO_HMAC = "hmac1:"  # versão do esquema; hashes antigos são sha256 puro (
 _chaves_efemeras: dict[str, bytes] = {}
 
 
-def chave_do_home(home: Path) -> bytes:
-    """Segredo de 32 bytes do home (`<home>/registro.key`), criado atomicamente com O_EXCL e modo 0o600.
+_cache_chaves: dict[str, tuple[bytes, tuple[int, int, int]]] = {}  # home -> (chave, (ino, size, mtime_ns))
+META_IMPRESSAO = "registro_chave_sha256_16"
 
-    Windows: o modo POSIX não se aplica; a proteção vem da ACL herdada da pasta do perfil
-    (%LOCALAPPDATA%). Chave corrompida nunca é regenerada em silêncio: os hashes antigos
-    deixariam de casar, então o serviço recusa gravar.
+
+def _impressao(chave: bytes) -> str:
+    return hashlib.sha256(chave).hexdigest()[:16]
+
+
+def _assinatura(caminho: Path) -> tuple[int, int, int]:
+    st = caminho.stat()
+    return (st.st_ino, st.st_size, st.st_mtime_ns)
+
+
+def _chave_ausente_com_historico(conn: sqlite3.Connection | None) -> bool:
+    if conn is None:
+        return False
+    if conn.execute("SELECT 1 FROM meta WHERE key=?", (META_IMPRESSAO,)).fetchone():
+        return True
+    return conn.execute("SELECT 1 FROM run WHERE request_hash LIKE 'hmac1:%' LIMIT 1").fetchone() is not None
+
+
+def chave_do_home(home: Path, conn: sqlite3.Connection | None = None) -> bytes:
+    """Segredo de 32 bytes do home (`<home>/registro.key`), criado atomicamente e com modo 0o600.
+
+    Criação: grava em arquivo temporário no mesmo diretório (sincronizado) e `os.link` para o nome
+    final; EEXIST (outro processo ganhou) lê o existente. Nunca existe estado de 0 byte. Com `conn`,
+    a impressão digital (sha256, 16 hex) fica em `meta`; chave ausente com runs `hmac1:` ou impressão
+    em `meta` é erro CHAVE_REGISTRO_AUSENTE (não se regenera em silêncio). Cache por home no processo,
+    revalidado por stat (arquivo apagado, trocado ou corrompido não passa despercebido).
+    Windows: o modo POSIX não se aplica; a proteção vem da ACL herdada da pasta do perfil.
     """
     caminho = Path(home) / ARQUIVO_CHAVE
     try:
-        fd = os.open(str(caminho), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        for _ in range(50):  # outro processo pode estar entre o open e o write
-            chave = caminho.read_bytes()
-            if len(chave) == 32:
-                return chave
-            time.sleep(0.02)
+        em_cache = _cache_chaves.get(str(caminho))
+        if em_cache and em_cache[1] == _assinatura(caminho):
+            return em_cache[0]
+    except FileNotFoundError:
+        pass
+    if not caminho.exists():
+        if _chave_ausente_com_historico(conn):
+            raise RuntimeError(
+                f"CHAVE_REGISTRO_AUSENTE: {caminho} sumiu mas o home tem registros com HMAC; "
+                "restaure a chave original (uma nova invalidaria os hashes gravados)")
+        tmp = caminho.with_name(f"{ARQUIVO_CHAVE}.{secrets.token_hex(8)}.tmp")
+        fd = os.open(str(tmp), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(secrets.token_bytes(32))
+            fh.flush()
+            os.fsync(fh.fileno())
+        try:
+            os.link(tmp, caminho)
+        except FileExistsError:
+            pass
+        finally:
+            tmp.unlink(missing_ok=True)
+    chave = caminho.read_bytes()
+    if len(chave) != 32:
         raise RuntimeError(f"{caminho} corrompida (esperado 32 bytes); remova-a ciente de que hashes antigos deixam de casar")
-    chave = secrets.token_bytes(32)
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(chave)
-        fh.flush()
-        os.fsync(fh.fileno())
+    if conn is not None:
+        conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_IMPRESSAO, _impressao(chave)))
+    _cache_chaves[str(caminho)] = (chave, _assinatura(caminho))
     return chave
 
 
@@ -72,9 +111,16 @@ def hmac_entrada(conn: sqlite3.Connection, campo: str, valor: str) -> str:
     oficial, capturas) segue sha256 puro: é verificável por qualquer pessoa.
     """
     home = _home_da_conexao(conn)
-    chave = chave_do_home(home) if home else _chaves_efemeras.setdefault(str(id(conn)), secrets.token_bytes(32))
+    chave = chave_do_home(home, conn) if home else _chaves_efemeras.setdefault(str(id(conn)), secrets.token_bytes(32))
     mac = hmac.new(chave, campo.encode("utf-8") + b"\0" + valor.encode("utf-8"), hashlib.sha256)
     return PREFIXO_HMAC + mac.hexdigest()
+
+
+def checkpoint_truncate(conn: sqlite3.Connection) -> None:
+    """`wal_checkpoint(TRUNCATE)` que recusa quando o checkpoint não completou (busy != 0)."""
+    busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+    if busy:
+        raise RuntimeError("wal_checkpoint_ocupado: há leitor/escritor ativo no banco")
 
 
 def _fsync_arquivo(caminho: Path) -> None:
@@ -132,7 +178,7 @@ def purgar(home: Path, antes: str, apagar_original: bool = False) -> dict[str, A
     novo.unlink(missing_ok=True)
     src = sqlite3.connect(str(db))
     try:
-        src.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        checkpoint_truncate(src)
         dst = sqlite3.connect(str(novo))
         try:
             src.backup(dst)
@@ -169,12 +215,30 @@ def purgar(home: Path, antes: str, apagar_original: bool = False) -> dict[str, A
             movidos.append(str(pasta / f.name))
     os.replace(novo, db)
     _fsync_pasta(home)
-    if apagar_original:
-        for m in movidos:
-            Path(m).unlink(missing_ok=True)
-        pasta.rmdir()
+    # A7: o registro da purga é gravado ANTES de apagar o original; depois da troca nada levanta exceção.
     registro = {"em": agora.isoformat(), "antes": antes, "removidas": n, "restantes": restantes,
-                "original_movido_para": [] if apagar_original else movidos, "original_apagado": apagar_original}
+                "original_movido_para": movidos, "original_apagado": False, "apagar_original_pedido": apagar_original}
     with (home / "purgas.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(registro, ensure_ascii=False) + "\n")
-    return {"status": "ok", **registro, "apagar_manualmente": [] if apagar_original else movidos}
+        fh.flush()
+        os.fsync(fh.fileno())
+    apagados: list[str] = []
+    falhas: list[dict[str, str]] = []
+    if apagar_original:
+        for m in movidos:
+            try:
+                Path(m).unlink(missing_ok=True)
+                apagados.append(m)
+            except OSError as exc:
+                falhas.append({"arquivo": m, "erro": str(exc)[:120]})
+        try:
+            pasta.rmdir()
+        except OSError as exc:
+            if not falhas:
+                falhas.append({"arquivo": str(pasta), "erro": str(exc)[:120]})
+        registro.update(original_apagado=not falhas, original_movido_para=[f["arquivo"] for f in falhas])
+        with (home / "purgas.jsonl").open("a", encoding="utf-8") as fh:  # desfecho da exclusão
+            fh.write(json.dumps({"em": agora.isoformat(), "evento": "original_apagado", "apagados": apagados,
+                                 "falhas": falhas}, ensure_ascii=False) + "\n")
+    return {"status": "ok", **registro, "apagados": apagados, "falhas": falhas,
+            "apagar_manualmente": [f["arquivo"] for f in falhas] if apagar_original else movidos}

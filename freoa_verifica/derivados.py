@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from freoa_verifica.ids import new_ulid
+from freoa_verifica.registro import checkpoint_truncate
 from freoa_verifica.parsers.model import document_from_dict
 
 _log = logging.getLogger(__name__)
@@ -256,10 +257,10 @@ def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
     db = home / "verifica.sqlite3"
     pasta = home / f".reconstruir-{new_ulid()}"
     try:
-        with svc.exclusivo():
+        with svc.exclusivo_home():
             for velha in home.glob(".reconstruir-*"):  # restos de execução interrompida
                 shutil.rmtree(velha, ignore_errors=True)
-            svc.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            checkpoint_truncate(svc.conn)
             pasta.mkdir()
             # Blobs espelhados por hardlink (sem symlink: exige privilégio no Windows).
             if (home / "blobs").exists():

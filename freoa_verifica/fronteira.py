@@ -6,6 +6,7 @@ Função única, usada pelo REST e pelo MCP HTTP. Opera sobre os cabeçalhos bru
 
 from __future__ import annotations
 
+import hmac
 import os
 import re
 from collections.abc import Iterable
@@ -28,10 +29,33 @@ def origem_local(valor: str) -> bool:
     return _porta_ok(_RE_ORIGEM.fullmatch(valor.lower()))
 
 
+_RE_ORIGEM_EXTRA = re.compile(
+    r"[a-z][a-z0-9+.\-]*://(?:[a-z0-9](?:[a-z0-9.\-]*[a-z0-9])?|\[[0-9a-f:.]+\])(?::([0-9]{1,5}))?")
+
+
 def origens_permitidas(env: str | None = None) -> frozenset[str]:
-    """FV_API_ORIGENS: origens exatas, separadas por vírgula, aceitas além das locais (modo com token)."""
+    """FV_API_ORIGENS: origens exatas (esquema://host[:porta]), separadas por vírgula, aceitas além das locais
+    (modo com token). Normaliza (strip, minúsculas, sem `/` final); formato inválido é erro na inicialização.
+    Não é CORS: serve a clientes não-navegador que enviam `Origin`; não há resposta a preflight.
+    """
     raw = os.environ.get("FV_API_ORIGENS", "") if env is None else env
-    return frozenset(o.strip() for o in raw.split(",") if o.strip())
+    saida = set()
+    for o in raw.split(","):
+        o = o.strip().lower().rstrip("/")
+        if not o:
+            continue
+        if not _porta_ok(_RE_ORIGEM_EXTRA.fullmatch(o)):
+            raise ValueError(f"FV_API_ORIGENS inválida: {o!r} (use esquema://host[:porta], sem caminho)")
+        saida.add(o)
+    return frozenset(saida)
+
+
+def token_ok(recebido: str, esperado: str) -> bool:
+    """Comparação em bytes em tempo constante; caractere não-ASCII no token recebido não levanta."""
+    return hmac.compare_digest(recebido.encode("utf-8", "surrogateescape"), esperado.encode("utf-8", "surrogateescape"))
+
+
+MOTIVO_ENCAMINHADO = "cabeçalho de encaminhamento (X-Forwarded-For/Forwarded) recusado sem token"
 
 
 def validar(headers: Iterable[tuple[bytes, bytes]], *, com_token: bool,
@@ -40,10 +64,12 @@ def validar(headers: Iterable[tuple[bytes, bytes]], *, com_token: bool,
     vistos: dict[bytes, list[str]] = {}
     for k, v in headers:
         vistos.setdefault(k.lower(), []).append(v.decode("latin-1"))
+    if not com_token and (vistos.keys() & {b"x-forwarded-for", b"forwarded"}):
+        return MOTIVO_ENCAMINHADO
     origem = vistos.get(b"origin", [])
     if len(origem) > 1:
         return "Origin duplicado"
-    if origem and not origem_local(origem[0]) and not (com_token and origem[0] in extras):
+    if origem and not origem_local(origem[0]) and not (com_token and origem[0].strip().lower() in extras):
         return "Origin não permitida"
     if com_token:
         return None
