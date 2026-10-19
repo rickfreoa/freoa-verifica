@@ -102,7 +102,7 @@ def test_staging_without_system_temp(verifica_populada, tmp_path, monkeypatch):
     monkeypatch.setattr(tempfile, "gettempdir", forbidden)
     archive = tmp_path / "snapshot.tar.gz"
     assert snapshot.export_snapshot(svc.conn, svc.home, archive)["status"] == "ok"
-    assert snapshot.install_snapshot(svc, archive)["status"] == "ok"
+    assert snapshot.install_snapshot(svc, archive, aceitar_nao_vinculado=True)["status"] == "ok"
     root = tmp_path / "staging-root"
     assert not list(root.iterdir())
 

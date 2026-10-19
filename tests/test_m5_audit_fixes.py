@@ -229,7 +229,7 @@ def test_snapshot_valida_hashes_e_staging(verifica_populada, tmp_path):
     home2 = tmp_path / "home2"
     home2.mkdir()
     with Verifica(home=home2) as svc2:
-        inst = svc2.snapshot_install(dest)
+        inst = svc2.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert inst["status"] == "ok"
 
 

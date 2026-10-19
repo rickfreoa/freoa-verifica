@@ -193,6 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("origem", nargs="?", default=None)
     pi.add_argument("--arquivo", default=None, help="caminho local do snapshot")
     pi.add_argument("--url", default=None, help="URL de asset de release GitHub")
+    pi.add_argument("--aceitar-nao-vinculado", action="store_true")
     _add_json_flag(pi)
     pf = snap.add_parser("info")
     pf.add_argument("origem", nargs="?")
@@ -372,7 +373,7 @@ def main(argv: list[str] | None = None) -> None:
                 data = svc.snapshot_export(dest)
             elif args.snap_cmd == "install":
                 arquivo = args.arquivo or args.origem
-                data = svc.snapshot_install(arquivo, url=args.url)
+                data = svc.snapshot_install(arquivo, url=args.url, aceitar_nao_vinculado=args.aceitar_nao_vinculado)
             else:
                 data = svc.snapshot_info(args.origem)
             raise SystemExit(_print_result(data, as_json=as_json, titulo="Snapshot"))

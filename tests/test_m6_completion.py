@@ -105,7 +105,7 @@ def test_snapshot_same_work_remaps_and_reopens(verifica_populada, tmp_path):
         local_rw = local.indexar_obra(source_id="planalto", work_key=rw.work_key, document=doc,
                                      body=b"local", url="https://www.planalto.gov.br/local")
         assert local_rw.work_id != rw.work_id
-        result = local.snapshot_install(dest)
+        result = local.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert result["status"] == "ok", result
         assert local.conn.execute("PRAGMA foreign_key_check").fetchone() is None
         assert local.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0] == 1
@@ -127,7 +127,7 @@ def test_snapshot_rollback_on_blob_copy_failure(verifica_populada, tmp_path, mon
                 raise OSError("simulated failure")
             return original(src, dst, *args, **kwargs)
         monkeypatch.setattr(snapshot.shutil, "copy2", fail)
-        result = local.snapshot_install(dest)
+        result = local.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert result["status"] == "erro" and not result["rollback"]
         assert local.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0] == 0
         assert local.conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
@@ -139,10 +139,10 @@ def test_snapshot_zip_and_traversal(verifica_populada, tmp_path):
     assert svc.snapshot_export(dest)["status"] == "ok"
     archive = Path(shutil.make_archive(str(tmp_path / "snapshot-bundle"), "zip", dest))
     with Verifica(tmp_path / "zip-home") as local:
-        assert local.snapshot_install(archive)["status"] == "ok"
+        assert local.snapshot_install(archive, aceitar_nao_vinculado=True)["status"] == "ok"
         with zipfile.ZipFile(archive, "a") as z:
             z.writestr("../outside", b"forbidden")
-        assert local.snapshot_install(archive)["status"] == "erro"
+        assert local.snapshot_install(archive, aceitar_nao_vinculado=True)["status"] == "erro"
         assert not (tmp_path / "outside").exists()
 
 

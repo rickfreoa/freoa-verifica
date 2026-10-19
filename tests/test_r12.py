@@ -124,6 +124,7 @@ def test_latest_snapshot_after_wheel_only_release(monkeypatch):
         payload = latest if request.endswith("/latest") else [latest, {"tag_name": "v1.0.1", "assets": []},
                    {"tag_name": "v1.0.0", "assets": [{"name": "freoa-verifica-snapshot-20261018.tar.gz", "browser_download_url": url}]}]
         return SimpleNamespace(body=json.dumps(payload).encode())
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": 'freoa-verifica-snapshot-20261018.tar.gz', "sha256": '0' * 64, "derived_version": 3}])
     monkeypatch.setattr(httputil, "connector_fetch", fetch)
     monkeypatch.setattr(snapshot, "_download_release", lambda found, **kwargs: found)
     assert snapshot._download_latest_release() == url

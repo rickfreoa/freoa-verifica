@@ -303,7 +303,7 @@ def test_candidato_ao_vivo_sobrevive_a_reconstrucao_e_snapshot(tmp_path):
         assert s.snapshot_export(tmp_path / "snap")["status"] == "ok"
     with Verifica(tmp_path / "b") as s:
         _indexar(s, _doc())
-        assert s.snapshot_install(tmp_path / "snap")["status"] == "ok"
+        assert s.snapshot_install(tmp_path / "snap", aceitar_nao_vinculado=True)["status"] == "ok"
         assert s.conn.execute("select count(*) from fts_redaction where text like '%zebrafish%'").fetchone()[0] == 0
         assert s.conn.execute("select count(*) from fts_staging").fetchone()[0] >= 1
 
@@ -319,7 +319,7 @@ def test_snapshot_antigo_nao_rebaixa_derived_version(tmp_path):
     with Verifica(tmp_path / "new") as s:
         _indexar(s, _doc())
         assert derivados.versao(s.conn) == derivados.DERIVED_VERSION
-        out = s.snapshot_install(tmp_path / "snap")
+        out = s.snapshot_install(tmp_path / "snap", aceitar_nao_vinculado=True)
         assert out["status"] == "ok" and "aviso" in out
         assert derivados.versao(s.conn) == derivados.DERIVED_VERSION
         assert derivados.compativel(s.conn)

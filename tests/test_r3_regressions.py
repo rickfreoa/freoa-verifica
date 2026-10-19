@@ -132,7 +132,7 @@ def test_snapshot_inventory_complete(verifica_populada, tmp_path, mutation):
     else:
         (dest / (".hidden" if mutation == "extra_hidden" else "blobs/extra")).write_bytes(b"extra")
     before = svc.conn.execute("SELECT COUNT(*) FROM capture").fetchone()[0]
-    assert svc.snapshot_install(dest)["status"] == "erro"
+    assert svc.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "erro"
     assert svc.conn.execute("SELECT COUNT(*) FROM capture").fetchone()[0] == before
 
 
