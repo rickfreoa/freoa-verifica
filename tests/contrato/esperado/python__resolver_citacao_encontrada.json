@@ -1,0 +1,39 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "resolver_citacao_encontrada",
+    "commit": "239bef6",
+    "entrada": {
+      "citacao": "art. 254-A da Lei 6.404/76"
+    },
+    "ferramenta": "resolver_citacao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "caminho": "art254-A",
+    "capture_id": "<ulid>",
+    "citacao": "art. 254-A da Lei 6.404/76",
+    "parseada": {
+      "confidence": "exata",
+      "decision": null,
+      "flags": [],
+      "kind": "norma",
+      "path": "art254-A",
+      "raw": "art. 254-A da Lei 6.404/76",
+      "span": [
+        0,
+        26
+      ],
+      "work": {
+        "authority": "federal",
+        "kind": "lei",
+        "number": "6404",
+        "year": 1976
+      }
+    },
+    "status": "encontrada",
+    "url_oficial": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm",
+    "work_id": "<ulid>"
+  }
+}

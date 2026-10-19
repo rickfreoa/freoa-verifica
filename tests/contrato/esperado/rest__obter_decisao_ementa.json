@@ -1,0 +1,36 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "obter_decisao_ementa",
+    "commit": "239bef6",
+    "entrada": {
+      "id": "@stj_inteiro"
+    },
+    "ferramenta": "obter_decisao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "autoridade_label": "D",
+    "capture_id": "<ulid>",
+    "classe": "REsp",
+    "cursor": null,
+    "id": "<ulid>",
+    "max_chars": 8000,
+    "numero": "900001",
+    "offset": 0,
+    "orgao": "Terceira Turma",
+    "parte": "ementa",
+    "parte_entregue": "ementa",
+    "parte_solicitada": "ementa",
+    "partes_disponiveis": [
+      "ementa",
+      "inteiro_teor"
+    ],
+    "relator": "Relator",
+    "status": "encontrada",
+    "texto": "Ementa sintética do acordão.",
+    "tribunal": "STJ",
+    "truncado": false
+  }
+}

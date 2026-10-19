@@ -1,0 +1,55 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "obter_dispositivo",
+    "commit": "239bef6",
+    "entrada": {
+      "citacao": "art. 254-A da Lei 6.404/76"
+    },
+    "ferramenta": "obter_dispositivo",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "anotacoes": [
+      {
+        "act_date": null,
+        "act_ref": "Lei nº 10.303, de 2001",
+        "kind": "incluido",
+        "raw": "(Incluído pela Lei nº 10.303, de 2001)"
+      }
+    ],
+    "caminho": "art254-A",
+    "evidencia": {
+      "capture_id": "<ulid>",
+      "fetched_at": "<instante>",
+      "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+      "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+    },
+    "redacao_anterior_ausente_na_fonte": false,
+    "redacoes_anteriores": [],
+    "situacao_obra": null,
+    "status": "encontrada",
+    "texto": "A alienação, direta ou indireta, do controle de companhia aberta somente poderá ser contratada sob a condição, suspensiva ou resolutiva, de que o adquirente se obrigue a fazer oferta pública de aquisição das ações com direito a voto de propriedade dos demais acionistas da companhia, de modo a lhes assegurar o preço no mínimo igual a 80% (oitenta por cento) do valor pago por ação com direito a voto, integrante do bloco de controle.",
+    "texto_atual": null,
+    "truncado": false,
+    "vigencia": {
+      "flags": [
+        "data_ano_nao_resolvida"
+      ],
+      "intervalo": {
+        "fim": null,
+        "inicio": null
+      },
+      "reason_code": null,
+      "regras": [
+        "R1",
+        "R2",
+        "R6",
+        "R4"
+      ],
+      "status": "vigente_na_fonte"
+    },
+    "work_id": "<ulid>"
+  }
+}

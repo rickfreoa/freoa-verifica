@@ -1,0 +1,92 @@
+{
+  "_proveniencia": {
+    "adaptador": "mcp",
+    "caso": "verificar_citacao_trecho_divergente",
+    "commit": "239bef6",
+    "entrada": {
+      "citacao": "art. 254-A da Lei 6.404/76",
+      "trecho": "trecho que não consta do artigo"
+    },
+    "ferramenta": "verificar_citacao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "algo_versions": {
+      "citation": "citation-3",
+      "temporal": "temporal-1",
+      "textcmp": "textcmp-1",
+      "verify": "verify-r5-1"
+    },
+    "citation": {
+      "confidence": "exata",
+      "decision": null,
+      "flags": [],
+      "kind": "norma",
+      "path": "art254-A",
+      "raw": "art. 254-A da Lei 6.404/76",
+      "span": [
+        0,
+        26
+      ],
+      "work": {
+        "authority": "federal",
+        "kind": "lei",
+        "number": "6404",
+        "year": 1976
+      }
+    },
+    "identity": {
+      "evidence": [
+        {
+          "capture_id": "<ulid>",
+          "fetched_at": "<instante>",
+          "path": "art254-A",
+          "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+          "span": null,
+          "trecho_oficial": null,
+          "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+        }
+      ],
+      "reason_code": "OBRA_E_CAMINHO_OK",
+      "status": "verified"
+    },
+    "proposicao": null,
+    "run_id": "<ulid>",
+    "support": {
+      "evidence": [],
+      "reason_code": "SUPPORT_NOT_IN_M3",
+      "status": "not_assessed"
+    },
+    "temporal": {
+      "evidence": [
+        {
+          "capture_id": "<ulid>",
+          "fetched_at": "<instante>",
+          "path": "art254-A",
+          "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+          "span": null,
+          "trecho_oficial": null,
+          "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+        }
+      ],
+      "reason_code": "R1,R2,R6,R4",
+      "status": "vigente_na_fonte"
+    },
+    "text": {
+      "evidence": [
+        {
+          "capture_id": "<ulid>",
+          "fetched_at": "<instante>",
+          "path": "art254-A",
+          "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+          "span": null,
+          "trecho_oficial": "A alienação, direta ou indireta, do controle de companhia aberta somente poderá ser contratada sob a condição, suspensiva ou resolutiva, de que o adquirente se obrigue a fazer oferta pública de aquisição das ações com direito a voto de propriedade dos demais acionistas da companhia, de modo a lhes assegurar o preço no mínimo igual a 80% (oitenta por cento) do valor pago por ação com direito a voto, integrante do bloco de controle.",
+          "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+        }
+      ],
+      "reason_code": "TEXTO_DIVERGENTE",
+      "status": "divergent"
+    }
+  }
+}

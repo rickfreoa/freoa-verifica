@@ -1,0 +1,80 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "buscar_legislacao_local",
+    "commit": "239bef6",
+    "entrada": {
+      "limite": 5,
+      "q": "alienação"
+    },
+    "ferramenta": "buscar_legislacao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "consulta": "alienação",
+    "cursor": null,
+    "data": null,
+    "fontes": {
+      "bcb": {
+        "motivo": "offline",
+        "parcial": false,
+        "status": "nao_consultada"
+      },
+      "cvm_normas": {
+        "motivo": "offline",
+        "parcial": false,
+        "status": "nao_consultada"
+      },
+      "planalto": {
+        "motivo": "offline",
+        "parcial": false,
+        "status": "nao_consultada"
+      },
+      "senado": {
+        "motivo": "offline",
+        "parcial": false,
+        "status": "nao_consultada"
+      }
+    },
+    "itens": [
+      {
+        "caminho": "art254-A",
+        "candidato_ao_vivo": false,
+        "capture_id": null,
+        "correspondencia": "todos_os_termos",
+        "obra": "Lei nº 6.404/1976",
+        "pertinencia": 1.0,
+        "rotulo": "Lei nº 6.404/1976",
+        "trecho": "A «alienação», direta ou indireta, do controle de companhia aberta somente poderá ser contratada sob a condição, suspensiva ou resolutiva, de que o adquirente se obrigue a fazer oferta pública de aquisição das ações com direito a voto de propriedade dos demais acionistas da companh",
+        "url_oficial": null,
+        "vigencia": null,
+        "work_id": "<ulid>"
+      }
+    ],
+    "modo_busca": "normal",
+    "resultados": [
+      {
+        "caminho": "art254-A",
+        "candidato_ao_vivo": false,
+        "capture_id": null,
+        "correspondencia": "todos_os_termos",
+        "obra": "Lei nº 6.404/1976",
+        "pertinencia": 1.0,
+        "rotulo": "Lei nº 6.404/1976",
+        "trecho": "A «alienação», direta ou indireta, do controle de companhia aberta somente poderá ser contratada sob a condição, suspensiva ou resolutiva, de que o adquirente se obrigue a fazer oferta pública de aquisição das ações com direito a voto de propriedade dos demais acionistas da companh",
+        "url_oficial": null,
+        "vigencia": null,
+        "work_id": "<ulid>"
+      }
+    ],
+    "status": "ok",
+    "tesauro": {
+      "expansoes": [],
+      "versao": "tesauro-1"
+    },
+    "total": 1,
+    "total_parcial": 1,
+    "truncado": false
+  }
+}

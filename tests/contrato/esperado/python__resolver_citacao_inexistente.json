@@ -1,0 +1,38 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "resolver_citacao_inexistente",
+    "commit": "239bef6",
+    "entrada": {
+      "citacao": "art. 1 da Lei 99.999/2099"
+    },
+    "ferramenta": "resolver_citacao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "caminho": null,
+    "citacao": "art. 1 da Lei 99.999/2099",
+    "motivo": "COBERTURA",
+    "parseada": {
+      "confidence": "exata",
+      "decision": null,
+      "flags": [],
+      "kind": "norma",
+      "path": "art1",
+      "raw": "art. 1 da Lei 99.999/2099",
+      "span": [
+        0,
+        25
+      ],
+      "work": {
+        "authority": "federal",
+        "kind": "lei",
+        "number": "99999",
+        "year": 2099
+      }
+    },
+    "status": "indisponivel",
+    "work_id": null
+  }
+}

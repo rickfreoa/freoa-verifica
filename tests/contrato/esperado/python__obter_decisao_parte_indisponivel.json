@@ -1,0 +1,33 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "obter_decisao_parte_indisponivel",
+    "commit": "239bef6",
+    "entrada": {
+      "id": "@stj_ementa",
+      "parte": "inteiro_teor"
+    },
+    "ferramenta": "obter_decisao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "autoridade_label": "D",
+    "capture_id": null,
+    "classe": "REsp",
+    "id": "<ulid>",
+    "motivo": "PARTE_NAO_CAPTURADA",
+    "numero": "900002",
+    "orgao": "Terceira Turma",
+    "parte": "inteiro_teor",
+    "parte_entregue": null,
+    "parte_solicitada": "inteiro_teor",
+    "partes_disponiveis": [
+      "ementa"
+    ],
+    "relator": "Relator",
+    "status": "parte_indisponivel",
+    "texto": null,
+    "tribunal": "STJ"
+  }
+}
