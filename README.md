@@ -12,7 +12,8 @@ Modelos de linguagem citam bem e conferem mal. O problema não está em encontra
 | O trecho citado é literal? | `verificar_citacao` | confronto textual versionado, diff quando divergente |
 | Qual redação vigorava em certa data? | `historico_dispositivo` | redações sucessivas, atos alteradores, regras aplicadas |
 | As citações deste parecer existem? | `verificar_texto` | status por citação: encontrada, inexistente, ambígua, indisponível |
-| O que decidiram STJ, STF, TJSP, TCU e o Colegiado da CVM? | `pesquisar_jurisprudencia` | ementa, metadados, nível de prova, atributos de autoridade |
+| O que decidiram STJ, STF, TJDFT, TJSP, TCU e o Colegiado da CVM? | `pesquisar_jurisprudencia` | ementa, metadados, nível de prova, atributos de autoridade |
+| Qual o texto desta decisão? | `obter_decisao` | parte pedida e parte entregue declaradas; parte ausente é `parte_indisponivel`, nunca outro documento |
 | Quais normas da CVM e do CMN/BCB tratam do tema? | `buscar_normas_cvm`, `buscar_normas_bcb` | ato, situação, texto consolidado oficial |
 
 Estados possíveis em cada dimensão: `verified`, `divergent`, `not_found`, `ambiguous`, `unavailable`, `unknown`, `not_assessed`. Falha de rede nunca vira "não encontrado"; silêncio da fonte nunca vira "vigente".
@@ -24,14 +25,14 @@ Em `verificar_texto`, associações com confiança `provavel` recebem `requer_co
 Requer Python 3.11 ou superior.
 
 ```bash
-pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.1.0/freoa_verifica-1.1.0-py3-none-any.whl"
+pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.2.0/freoa_verifica-1.2.0-py3-none-any.whl"
 # ou a partir do código-fonte:
-pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.1.0"
+pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.2.0"
 fv doctor
 fv snapshot install                   # corpus semente (opcional, recomendado)
 ```
 
-No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verifica.ps1) faz tudo de uma vez: cria o ambiente em `%USERPROFILE%\freoa-verifica`, instala o pacote (o wheel da mesma pasta, se houver, ou o da release) e o acervo com conferência de checksum. Execute com `powershell -ExecutionPolicy Bypass -File .\instalar-freoa-verifica.ps1`.
+No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verifica.ps1) faz tudo de uma vez: cria o ambiente em `%USERPROFILE%\freoa-verifica`, confere a attestation do wheel e do lock com o GitHub CLI (`gh`), quando instalado, e registra quando não pôde conferir; instala o pacote e o acervo vinculado; e só declara sucesso depois de conferir versão, acervo e `fv doctor`. Qualquer etapa que falhe interrompe a instalação com o nome da etapa. Um acervo anterior sem vínculo comprovado é preservado ao lado (`<home>.pre-1.2.0-<data>`), e o snapshot vai para um diretório limpo. Execute com `powershell -ExecutionPolicy Bypass -File .\instalar-freoa-verifica.ps1`.
 
 ### Como servidor para clientes compatíveis com MCP
 
@@ -46,10 +47,10 @@ No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verif
 Alternativa sem instalação permanente:
 
 ```bash
-uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.1.0 freoa-verifica-mcp
+uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.2.0 freoa-verifica-mcp
 ```
 
-O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD.tar.gz`, acompanhado de `.sha256`. `fv snapshot install` consulta a última release que contenha o snapshot, baixa ambos e confere o hash externo e o inventário interno antes da instalação. Para um pacote local: `fv snapshot install --arquivo freoa-verifica-snapshot-AAAAMMDD.tar.gz`. Os pacotes da release têm attestation de build do GitHub, verificável com ``gh attestation verify``; o snapshot é conferido pelo ``.sha256`` publicado na mesma release.
+O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD-<versão>.tar.gz`, acompanhado de `.sha256`. O pacote traz a lista dos snapshots oficiais (`freoa_verifica/data/snapshots-oficiais.json`, coberta pela attestation do wheel); `fv snapshot install` escolhe a release mais recente cujo snapshot conste dessa lista e recusa qualquer outro (`SNAPSHOT_NAO_VINCULADO`), salvo com `--aceitar-nao-vinculado`. Nesse caso, o acervo fica marcado `vinculado: false` de forma permanente, visível em `fv snapshot info` e `fv doctor`. Para um pacote local: `fv snapshot install --arquivo <arquivo>.tar.gz`.
 
 Para uso remoto: `fv serve-mcp --http --port 8765` (streamable HTTP). API REST: `pip install "freoa-verifica[server]"` e `fv serve-api`. Os dois recusam `--host` fora de loopback sem `--token` (MCP: também `FV_MCP_TOKEN`; REST: `FV_API_TOKEN`) e exigem `Authorization: Bearer` em toda requisição. Sem token, a API só atende cliente loopback direto (nunca atrás de proxy: use token e TLS no proxy). Sem token, `Host` deve ser `127.0.0.1`, `localhost` ou `[::1]` (porta opcional) e `Origin`, quando presente, também local (defesa contra DNS rebinding); com token, `Origin` externo é recusado salvo se listado em `FV_API_ORIGENS` (`esquema://host[:porta]`, separadas por vírgula; formato inválido impede a inicialização). Não é CORS: a lista serve a clientes não-navegador que enviam `Origin`; não há resposta a preflight. Purga, instalação de snapshot e reconstrução recusam (`HOME_EM_USO_POR_OUTRO_PROCESSO`) se outro processo (servidor MCP/REST) estiver com o home aberto. O corpo HTTP é limitado a 512 KiB.
 
@@ -67,67 +68,39 @@ fv historico "art. 2º, XVI, da Resolução CVM 160"
 fv verifica "art. 116, parágrafo único, da LSA" --trecho "O acionista controlador deve usar o poder com o fim de fazer a companhia realizar o seu objeto"
 fv verifica-texto parecer.md
 fv juris "acordo de acionistas execução específica" --tribunais stj tjsp
+fv juris "0713166-62.2018.8.07.0000"          # número CNJ: só o próprio processo
+fv decisao <id> --parte inteiro_teor --tribunal tjdft
 ```
 
-## Cobertura e limites
+`fv busca` e `fv juris`: busca local com flexão mínima por prefixos (mínimo de quatro letras), frases entre aspas exatas e ampliação AND→OR sinalizada por `modo_busca: "ampliada"` (ver seção Busca de `docs/ARQUITETURA.md`).
 
-A apuração de 18/10/2026 está em [docs/FONTES.md](docs/FONTES.md). O acervo é um recorte, sem garantia de completude histórica ou atualização contínua.
+Para consultar normas no acervo instalado em somente leitura, defina `FV_READ_ONLY=1` antes de executar `fv verifica` ou `fv verifica-texto`. Esse modo não grava recibos de execução, não executa migrações ou reparos e não captura documentos ausentes. O banco deve estar previamente instalado e atualizado.
 
-- STJ: Corte Especial, Segunda Seção, Terceira e Quarta Turmas; julgamentos de 10/06/2024 a 26/08/2026 no recorte medido. Espelhos e ementas não substituem inteiro teor. SCON/consulta pública apresentaram barreira de acesso.
-- TCU: 2.000 itens percorridos, 1.800 identificadores distintos; julgamentos de 26/08/2026 a 14/10/2026. Sumários são tratados como ementas; ausência nesse recorte não demonstra inexistência.
-- CVM Colegiado: semente de 40 decisões entre 19/12/2023 e 18/09/2026; processo, ata e item decisório são identidades distintas. Normas CVM dependem do documento e da associação segura das notas editoriais.
-- STF: consulta por processo; 1.399 temas como metadados. Tema ou processo identificado não prova julgamento capturado. Busca textual sob WAF permanece indisponível.
-- TJSP: consultas medidas sem julgamento identificado; formulário com CAPTCHA. STF, TJSP e STJ podem ficar indisponíveis por barreiras oficiais, sem contorno.
-- DataJud confirma processo público, não julgamento. Os demais tribunais e segmentos não têm cobertura jurisprudencial demonstrada.
-- Legislação: redações anteriores somente quando presentes na fonte capturada. História integral não garantida; data do ato não equivale a início da vigência. Identidade, texto e tempo são apresentados separadamente; tempo pode permanecer `unknown` com texto literal conferido.
-- Suporte da fonte a uma proposição jurídica não é avaliado. Não há tratamento sistemático demonstrado de precedentes superados. Busca local vazia não prova inexistência.
+verificar_texto pressupõe texto jurídico; siglas em textos de outra natureza podem ser lidas como citações. Campos técnicos explicitamente rotulados exigem conferência; a forma jurídica usual `CC, art. 114` permanece exata sem esses marcadores. Veja a decisão [0020](docs/decisoes/0020-rotulos-e-contextos-tecnicos.md).
 
-`fv fontes` informa a cobertura declarada e o estado de acesso dos conectores. Falha, WAF ou CAPTCHA produzem indisponibilidade com motivo.
+## Estado atual (1.2.0)
 
-## Versão 1.1.0: lacunas fechadas e saída protegida
+Cobertura medida e limites, fonte a fonte, em [docs/FONTES.md](docs/FONTES.md). Histórico de mudanças no [CHANGELOG](CHANGELOG.md).
 
-A 1.1.0 ataca as lacunas que impediam o uso no lugar do JusRatio, sob dezessete rodadas de auditoria independente do código e um conjunto-ouro montado sem acesso ao código:
+| Fonte | O que o acervo e as consultas ao vivo entregam | Limite principal |
+|---|---|---|
+| Legislação federal (Planalto) | dispositivo com texto, redações e vigência na fonte | história anterior só quando presente na página capturada |
+| CVM e CMN/BCB | normas com dispositivos e situação (revogação bloqueia vigência) | PDF da CVM com estrutura inferida; Circulares antigas sem texto no JSON oficial |
+| STJ | espelhos de acórdãos (ementa) de quatro órgãos, 06/2024 a 08/2026 | sem íntegras; fora do recorte = `nao_confirmado_no_acervo` |
+| STF | súmulas e súmulas vinculantes com situação; temas como metadados | busca textual livre sob WAF |
+| TJDFT | API oficial: busca ao vivo, número CNJ exato, semente temática societária; decisões individuais com texto integral validado | acórdãos só com ementa (a API não traz a íntegra) |
+| TCU | acórdãos de 2026 no recorte instalado | sem busca ao vivo; números fora do recorte não são achados |
+| CVM Colegiado | 40 decisões (12/2023 a 09/2026) | sem cobertura histórica |
+| TJSP, demais tribunais | consultas pontuais; DataJud confirma processo, não julgamento | barreiras oficiais (CAPTCHA) não são contornadas |
 
-- **Normas da CVM em PDF** passam a ter artigos, parágrafos, incisos e alíneas endereçáveis, com histórico extraído das notas da própria CVM ([decisão 0037](docs/decisoes/0037-estrutura-inferida-de-pdf-da-cvm.md)). Onde o parser detecta conteúdo que não consegue ler ou separar com segurança (margem descartada, imagem no corpo, redações antigas sem rasura), a resposta é `unknown` ou `ambiguous`, não `verified`; PDFs escaneados, OCR, recortes e camadas ocultas não são tratados ([limites](docs/decisoes/0037-estrutura-inferida-de-pdf-da-cvm.md)).
-- **Precedentes qualificados do STJ e súmulas do STF**, com situação estruturada (vigente, cancelada, superada, revisada, desconhecida) e alerta quando o precedente não está vigente na fonte ([decisão 0036](docs/decisoes/0036-precedentes-e-sumulas.md)).
-- **Data de efeito de revogações declarada pelo BCB** ([decisão 0035](docs/decisoes/0035-data-de-efeito-declarada-pelo-bcb.md)); resoluções do CMN anteriores a 2020 e circulares do BCB passam a ser reconhecidas.
-- **Texto coletado é dado, nunca instrução**: envelope que o texto coletado não consegue fechar, triagem de padrões de injeção e de caracteres invisíveis em toda resposta MCP e REST (`alertas_conteudo`), PDFs de decisões lidos em processo isolado.
+Suporte de uma fonte a uma tese não é avaliado; a classificação A–E é do produto e não garante aplicabilidade; ausência no acervo nunca prova inexistência. A triagem de conteúdo (`alertas_conteudo`, envelope `DOCUMENTO OFICIAL`) sinaliza padrões de instrução e caracteres invisíveis no texto coletado; é delimitação e triagem, não garantia de que o modelo cliente resista a injeção.
 
-Limites que continuam valendo estão em [docs/FONTES.md](docs/FONTES.md#110-o-que-mudou-na-cobertura-e-na-prova). A ferramenta ainda não cobre STJ anterior a 2022, busca textual livre do STF, tribunais estaduais além de consultas pontuais, nem garante atualização contínua; ausência no acervo local nunca prova inexistência.
+## Comparativo com o JusRatio (19/10/2026)
 
-## Versão 1.0.3: correções da auditoria de 18/10/2026
+Conjunto-ouro de 44 casos montado sem leitura do código, com a resposta fixada pela fonte oficial (dois casos excluídos por não serem decisões), executado nos dois sistemas com as mesmas consultas. Metodologia, saídas brutas, juiz cego da pertinência temática e placar em [docs/auditoria/comparativo-120/](docs/auditoria/comparativo-120/).
 
-A v1.0.2 emitia `verified` e `vigente_na_fonte` em dois casos de alcance sistêmico: o ADCT gravado nos caminhos da Constituição e atos CVM/BCB/CMN revogados tratados como vigentes. A v1.0.3 corrige ambos e os demais defeitos dos relatórios em [docs/auditoria/](docs/auditoria/), sob o plano [docs/PLANO-1.0.3.md](docs/PLANO-1.0.3.md), aprovado pelo auditor independente após três rodadas, e com quatro rodadas de auditoria do código integrado.
+<<PLACAR>>
 
-- O ADCT tem escopo próprio (`adct/artN`) e é citável.
-- A situação cadastral oficial dos atos infralegais é capturada como evidência própria; revogação ou cancelamento bloqueiam vigência; situação ilegível nunca vira vigente.
-- "Inexistente" exige obra capturada, íntegra e estruturada; obra fora do acervo é lacuna de cobertura; PDF sem estrutura é `DOCUMENTO_SEM_ESTRUTURA`.
-- Data sem redação histórica não confronta a redação atual.
-- Associação provável nunca produz conclusão definitiva, em nenhuma entrada.
-- O recibo é gravado depois de todos os rebaixamentos e coincide com a resposta.
-- Respostas parciais se declaram (truncamento, fontes não consultadas, remissões não resolvidas, candidatos não indexados).
-- Modo remoto exige token em REST e MCP; limites de entrada na fachada; PDF e DOCX da CVM em processo isolado.
-- O registro padrão (`sem_conteudo`) não persiste o conteúdo consultado e usa HMAC por home nas entradas; `fv runs purgar` descarta execuções antigas.
-- `fv acervo reconstruir` atualiza homes antigos; a instalação de snapshot de versão anterior reconstrói os derivados.
-
-Limites que permanecem: a cobertura de jurisprudência continua concentrada em 2025 e 2026 (STJ) e sem STF; artigos de normas CVM publicadas só em PDF não são estruturados; a data de efeito das revogações não é informada pelas fontes, de modo que consultas a datas passadas de atos revogados respondem `unknown`; o conjunto de aceite das 34 consultas foi montado pelo mantenedor e não é independente.
-
-## Resultados de avaliação
-
-Medições de 18/10/2026, com conjuntos montados por quem não escreveu o código e oráculo extraído diretamente dos documentos oficiais capturados. As auditorias adversariais foram três rodadas sucessivas, cada uma com consultas novas; os defeitos que encontraram (nota editorial aceita como texto, evidência ausente aceita, traversal no snapshot, ano de normas CVM, negativa temporal indevida) foram corrigidos e reverificados antes desta versão.
-
-| Conjunto | Resultado |
-|---|---|
-| Benchmark independente (116 casos): positivos com identidade e texto verificados | 56/56 |
-| Benchmark independente: mutantes com falso `verified` (dígito, negação, dispositivo vizinho, redação revogada, ano ou norma inexistente) | 0/40 |
-| Auditorias adversariais com consultas novas: positivos verificados | 48/49 (uma abstenção conservadora) |
-| Auditorias adversariais: mutantes com falso `verified` | 0/143 |
-| Decisões reais identificadas (com consulta às fontes) | 6/15 |
-| Decisões inventadas rejeitadas com prova oficial | 2/5 |
-
-Extrator de citações em prosa (v1.0.2), oito corpora adversariais independentes com 779 frases e expectativas congeladas: falsos `encontrada`/`inexistente` 0 (eram 250 na v1.0.1); erros em citações `exata` 0/424; recall 93,7%; nenhum status definitivo nos 181 controles sem norma.
-
-Os números de decisões mostram o limite atual: sem consulta pública universal por número no STJ e no STF, a ferramenta informa "não confirmado no acervo" em vez de afirmar inexistência. A reconstrução histórica integral de redações não está demonstrada; quando falta a história anterior, a dimensão temporal permanece `unknown`.
 ## Arquitetura
 
 Transporte com proteção contra SSRF e limites rígidos; conectores por fonte; parsers por perfil editorial com sentinelas que recusam colisão de endereços; armazenamento SQLite com bytes originais endereçados por hash e evidência imutável; motor temporal por eventos; uma fachada única servida por CLI, MCP e REST. Detalhes em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
@@ -139,8 +112,3 @@ Código sob **AGPL-3.0-or-later**, com licença comercial disponível. Dados der
 O FREOA Verifica confere fontes; não emite parecer. A interpretação jurídica permanece com quem a assina.
 
 Autor: Ricardo Peres Freoa.
-`fv busca` e `fv juris`: busca local com flexão mínima por prefixos (mínimo de quatro letras), frases entre aspas exatas e ampliação AND→OR sinalizada por `modo_busca: "ampliada"` (ver seção Busca de `docs/ARQUITETURA.md`).
-
-Para consultar normas no acervo instalado em somente leitura, defina `FV_READ_ONLY=1` antes de executar `fv verifica` ou `fv verifica-texto`. Esse modo não grava recibos de execução, não executa migrações ou reparos e não captura documentos ausentes. O banco deve estar previamente instalado e atualizado.
-
-verificar_texto pressupõe texto jurídico; siglas em textos de outra natureza podem ser lidas como citações. Campos técnicos explicitamente rotulados exigem conferência; a forma jurídica usual `CC, art. 114` permanece exata sem esses marcadores. Veja a decisão [0020](docs/decisoes/0020-rotulos-e-contextos-tecnicos.md).
