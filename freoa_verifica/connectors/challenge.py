@@ -11,6 +11,7 @@ from freoa_verifica.transport import (
     ChallengeDetected,
     EmptyBody,
     HTTPStatusError,
+    RespostaInvalida,
     Timeout,
     TransportError,
     TransporteLento,
@@ -143,6 +144,13 @@ def map_transport_error(exc: BaseException, url: str | None = None) -> Unavailab
         return Unavailable(f"http_{exc.status}", None, ev)
     if isinstance(exc, EmptyBody):
         return Unavailable("corpo_vazio", "resposta_inesperada", {"status": status or 200, **base})
+    if isinstance(exc, RespostaInvalida):
+        # Resposta recebida, mas inválida (MIME, framing, tamanho): não é indisponibilidade da fonte.
+        nome = type(exc).__name__
+        ev = {"marcador": f"transporte:{nome}", **base}
+        if status:
+            ev["status"] = status
+        return Unavailable(f"transporte_{nome}", "resposta_inesperada", ev)
     if isinstance(exc, (Timeout, TransporteLento)) or type(exc) is TransportError:
         # Falha de conexão, TLS ou leitura registrada pelo transporte.
         nome = type(exc).__name__

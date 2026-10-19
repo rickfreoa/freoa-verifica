@@ -79,7 +79,11 @@ class BlockedHost(TransportError):
     """Host, porta, caminho ou endereço IP recusado pela política."""
 
 
-class TooLarge(TransportError):
+class RespostaInvalida(TransportError):
+    """Resposta HTTP recebida, mas inválida (MIME, framing, codificação): não é falha de conexão."""
+
+
+class TooLarge(RespostaInvalida):
     """Corpo declarado ou baixado acima do limite."""
 
 
@@ -680,24 +684,24 @@ def _fetch_once(
                 )
             encoding = response.getheader("Content-Encoding")
             if encoding is not None and encoding.strip().lower() != "identity":
-                raise TransportError(
+                raise RespostaInvalida(
                     "Apenas Content-Encoding identity é suportado",
                     http=_failure_http(response),
                 )
             raw_type = response.getheader("Content-Type", "") or ""
             if "," in raw_type:
-                raise TransportError(
+                raise RespostaInvalida(
                     "Content-Type ambíguo", http=_failure_http(response)
                 )
             mime = raw_type.split(";", 1)[0].strip().lower()
             if not mime or not _mime_allowed(mime, allowed_mimes):
-                raise TransportError(
+                raise RespostaInvalida(
                     f"MIME não permitido: {mime or '(ausente)'}",
                     http=_failure_http(response),
                 )
             transfer_encoding = response.getheader("Transfer-Encoding")
             if transfer_encoding is not None and transfer_encoding.strip().lower() != "chunked":
-                raise TransportError(
+                raise RespostaInvalida(
                     "Transfer-Encoding não suportado",
                     http=_failure_http(response),
                 )
@@ -705,7 +709,7 @@ def _fetch_once(
             declared_size = None
             if declared is not None:
                 if len(declared) > 20 or not re.fullmatch(r"[0-9]+", declared):
-                    raise TransportError(
+                    raise RespostaInvalida(
                         "Content-Length inválido", http=_failure_http(response)
                     )
                 declared_size = int(declared)
@@ -715,7 +719,7 @@ def _fetch_once(
                         http=_failure_http(response),
                     )
                 if transfer_encoding is not None:
-                    raise TransportError(
+                    raise RespostaInvalida(
                         "Cabeçalhos de framing conflitantes",
                         http=_failure_http(response),
                     )
@@ -773,7 +777,7 @@ def _fetch_once(
                     "Prazo de captura esgotado", http=_failure_http(response)
                 )
             if declared_size is not None and size != declared_size:
-                raise TransportError(
+                raise RespostaInvalida(
                     "Content-Length difere dos bytes recebidos",
                     http=_failure_http(response),
                 )
