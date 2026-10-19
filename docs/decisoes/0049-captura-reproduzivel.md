@@ -1,4 +1,4 @@
-# 0044 — Captura reproduzível e instrumento de sonda
+# 0049 — Captura reproduzível e instrumento de sonda
 
 Data: 19/10/2026 · Versão: 1.3.0 · Origem: plano 1.3.0, trilha B (E2)
 
