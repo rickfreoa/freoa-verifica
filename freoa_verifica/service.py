@@ -2011,7 +2011,7 @@ class Verifica:
             # Sigla de tribunal solta na consulta ("exclusão de sócio TJDFT") é filtro, não termo: como termo
             # casaria o cabeçalho "Tribunal de Justiça do Distrito Federal" de qualquer decisão (comparativo 1.2.0).
             # Só fora de aspas: frase exata é preservada como o usuário escreveu.
-            partes = re.split(r'("[^"]*")', q)
+            partes = re.split(r'("[^"]*(?:"|$))', q)  # aspa sem fechamento protege até o fim
             fora = [p for p in partes if not p.startswith('"')]
             siglas = [t for p in fora for t in re.findall(r"(?<![\w/])([A-Za-z]{2,6})(?![\w/])", p)
                       if t.upper() in _SIGLAS_TRIBUNAL_FILTRO]
@@ -2019,7 +2019,7 @@ class Verifica:
                 padrao = r"(?<![\w/])(?:" + "|".join(map(re.escape, siglas)) + r")(?![\w/])"
                 resto = "".join(p if p.startswith('"') else re.sub(padrao, " ", p) for p in partes).strip()
                 filtro_da_consulta = sorted({s.lower() for s in siglas})
-                if not resto:
+                if not re.search(r"\w", resto):
                     return {"status": "entrada_insuficiente", "motivo": "CONSULTA_SO_COM_SIGLA_DE_TRIBUNAL",
                             "consulta": q, "filtro_tribunal_da_consulta": filtro_da_consulta,
                             "itens": [], "resultados": [], "truncado": False, "cursor": None}

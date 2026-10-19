@@ -176,6 +176,9 @@ def test_sigla_de_tribunal_na_consulta_vira_filtro(svc):
     _indexar(svc, "TCU", "T2", text="", ementa="responsabilidade civil STJ em parecer", cls="Acórdão", organ="Plenário")
     frase = svc.pesquisar_jurisprudencia('"responsabilidade civil STJ"')
     assert "filtro_tribunal_da_consulta" not in frase and any(i["tribunal"] == "TCU" for i in frase["itens"])
+    aberta = svc.pesquisar_jurisprudencia('de "responsabilidade civil STJ')
+    assert "filtro_tribunal_da_consulta" not in aberta
+    assert svc.pesquisar_jurisprudencia("STJ,")["status"] == "entrada_insuficiente"
 
 
 def test_idf_ordena_termo_raro_primeiro_na_complementacao(svc):
