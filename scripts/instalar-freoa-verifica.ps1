@@ -1,4 +1,9 @@
-﻿# Instala FREOA Verifica 1.2.0; Python 3.11+.
+﻿# Instala FREOA Verifica; Python 3.11+. O padrão de -Versao é o __version__ do repositório na release.
+# A attestation é obrigatória; -SemAttestation pula a verificação e grava attestation_verificada: false.
+param(
+    [string]$Versao = "1.2.0",
+    [switch]$SemAttestation
+)
 $ErrorActionPreference = "Stop"
 
 function Invoke-NativeChecked {
@@ -14,7 +19,7 @@ function Invoke-NativeChecked {
 
 $etapa = "preparar"
 try {
-    $versao = "1.2.0"
+    $versao = $Versao
     $repo = "rickfreoa/freoa-verifica"
     $base = "https://github.com/$repo/releases/download/v$versao"
     $destino = Join-Path $env:USERPROFILE "freoa-verifica"
@@ -27,14 +32,22 @@ try {
     if (Test-Path $local) { Copy-Item -LiteralPath $local -Destination $wheel -Force }
     else { Invoke-WebRequest "$base/$wheelNome" -OutFile $wheel -UseBasicParsing }
 
+    $etapa = "verificar proveniencia"
     $gh = Get-Command gh -ErrorAction SilentlyContinue
-    $proveniencia = "PROVENIENCIA NAO VERIFICADA (instale o GitHub CLI para verificar)"
-    if ($gh) {
-        $etapa = "verificar proveniencia"
-        Invoke-NativeChecked $etapa $gh.Source @("attestation", "verify", $wheel, "--repo", $repo, "--signer-workflow", "$repo/.github/workflows/release.yml", "--source-ref", "refs/tags/v$versao", "--deny-self-hosted-runners") | Out-Host
+    $verificada = $false
+    $commit = $null
+    if ($SemAttestation) {
+        $proveniencia = "PROVENIENCIA NAO VERIFICADA (-SemAttestation)"
+        Write-Warning $proveniencia
+    } else {
+        if (-not $gh) { throw "GitHub CLI (gh) ausente: attestation obrigatoria (use -SemAttestation para prosseguir sem verificar)" }
+        $att = Invoke-NativeChecked $etapa $gh.Source @("attestation", "verify", $wheel, "--repo", $repo, "--signer-workflow", "$repo/.github/workflows/release.yml", "--source-ref", "refs/tags/v$versao", "--deny-self-hosted-runners", "--format", "json")
+        $verificada = $true
         $proveniencia = "VERIFICADA: gh attestation verify"
-    } else { Write-Warning $proveniencia }
-    @{ versao = $versao; proveniencia = $proveniencia; concluida = $false } |
+        # Commit da release, conforme o certificado da attestation; ausente se o formato mudar.
+        try { $commit = (($att | Out-String) | ConvertFrom-Json)[0].verificationResult.signature.certificate.sourceRepositoryDigest } catch { $commit = $null }
+    }
+    @{ versao = $versao; proveniencia = $proveniencia; attestation_verificada = $verificada; commit = $commit; concluida = $false } |
         ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $registroDir "instalacao.json")
 
     $lock = Join-Path $destino "requirements-lock.txt"
@@ -48,7 +61,7 @@ try {
             Write-Warning "requirements-lock.txt ausente nesta release"
         } else { throw }
     }
-    if ($gh -and $temLock) {
+    if ($verificada -and $temLock) {
         $etapa = "verificar lock"
         Invoke-NativeChecked $etapa $gh.Source @("attestation", "verify", $lock, "--repo", $repo, "--signer-workflow", "$repo/.github/workflows/release.yml", "--source-ref", "refs/tags/v$versao", "--deny-self-hosted-runners") | Out-Host
     }
@@ -64,7 +77,7 @@ try {
     Invoke-NativeChecked $etapa $python $pipArgs | Out-Host
     $etapa = "validar versao"
     $v = (Invoke-NativeChecked $etapa $fv @("--version")) -join "`n"
-    if ($v -notmatch '(?<![0-9.])1\.2\.0(?![0-9.])') { throw "versao inesperada: $v" }
+    if ($v -notmatch ('(?<![0-9.])' + [regex]::Escape($versao) + '(?![0-9.])')) { throw "versao inesperada: $v" }
     # Instalação de snapshot é anexação: acervo anterior sem vínculo comprovado (1.1, ou instalado com
     # --aceitar-nao-vinculado) contaminaria o novo. Ele é preservado ao lado e o snapshot vai para home limpo.
     $etapa = "preservar acervo anterior"
@@ -98,7 +111,8 @@ try {
     if ($doctor.status -ne "ok" -or -not $doctor.verificacoes -or
         @($doctor.verificacoes | Where-Object { $_.status -notin @("ok", "alerta") }).Count -gt 0 -or
         $doctor.acervo_incompleto) { throw "diagnostico bloqueante" }
-    @{ versao = $versao; proveniencia = $proveniencia; concluida = $true } |
+    @{ versao = $versao; proveniencia = $proveniencia; attestation_verificada = $verificada; commit = $commit
+       snapshot_sha256 = $info.proveniencia.snapshot_sha256; concluida = $true } |
         ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $registroDir "instalacao.json")
     Write-Host "Pronto. Comandos em: $destino\.venv\Scripts (fv.exe e freoa-verifica-mcp.exe)."
 } catch {
