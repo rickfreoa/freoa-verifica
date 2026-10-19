@@ -24,6 +24,13 @@ Python 3.14, nada impedia mascarar um gate com `continue-on-error`/`|| true`, e 
    wheel e um sdist (sem `tests/` na wheel) e publica esses bytes por Trusted Publishing, só com
    `vars.PYPI_PUBLICAR == 'true'`.
 
+## Emenda FIX1 (auditoria do bloco 1)
+
+- O meta-teste do item 4 reconhece também `|| :` no fim da linha e `; true`/`; :` ao fim (a fronteira `\b`
+  não alcançava `:`).
+- `scripts/ruff_catraca.py --atualizar` só reduz a baseline: recusa achado novo e aumento de contagem.
+  A baseline nasce com `--inicializar`, que recusa se ela já existe.
+
 ## Consequências
 
 - O publicador pendente em pypi.org passa a apontar para o workflow `pypi.yml`, não `release.yml`.

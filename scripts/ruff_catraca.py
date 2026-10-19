@@ -6,7 +6,8 @@ registrada; achado resolvido sai da baseline com --atualizar.
 
 Uso:
     python scripts/ruff_catraca.py              # confere
-    python scripts/ruff_catraca.py --atualizar  # regrava a baseline (só para reduzi-la)
+    python scripts/ruff_catraca.py --atualizar  # regrava a baseline só para reduzi-la; recusa novos e aumentos
+    python scripts/ruff_catraca.py --inicializar  # cria a baseline; só quando ela não existe
 """
 
 from __future__ import annotations
@@ -55,19 +56,32 @@ def rodar_ruff() -> list[dict]:
     return json.loads(p.stdout or "[]")
 
 
-def main() -> int:
+def gravar_baseline(atual: Counter) -> None:
+    linhas = [{"arquivo": a, "regra": r, "mensagem": m, "n": n} for (a, r, m), n in sorted(atual.items())]
+    BASELINE.write_text(json.dumps(linhas, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    print(f"baseline gravada: {sum(atual.values())} achados em {len(linhas)} chaves")
+
+
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--atualizar", action="store_true")
-    args = ap.parse_args()
-    atual = contar(rodar_ruff())
-    if args.atualizar:
-        linhas = [{"arquivo": a, "regra": r, "mensagem": m, "n": n} for (a, r, m), n in sorted(atual.items())]
-        BASELINE.write_text(json.dumps(linhas, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        print(f"baseline gravada: {sum(atual.values())} achados em {len(linhas)} chaves")
+    modo = ap.add_mutually_exclusive_group()
+    modo.add_argument("--atualizar", action="store_true", help="reduz a baseline; recusa achado novo ou aumento")
+    modo.add_argument("--inicializar", action="store_true", help="cria a baseline; recusa se ela já existe")
+    args = ap.parse_args(argv)
+    if args.inicializar:
+        if BASELINE.exists():
+            print(f"RECUSADO: {BASELINE.name} já existe; use --atualizar para reduzi-la")
+            return 1
+        gravar_baseline(contar(rodar_ruff()))
         return 0
+    atual = contar(rodar_ruff())
     excesso = excedentes(atual, carregar_baseline())
     for linha in excesso:
         print("NOVO:", linha)
+    if args.atualizar and not excesso:
+        gravar_baseline(atual)
+    elif args.atualizar:
+        print("RECUSADO: --atualizar só reduz a baseline")
     return 1 if excesso else 0
 
 
