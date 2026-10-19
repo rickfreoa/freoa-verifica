@@ -70,7 +70,7 @@ def verifica_populada(tmp_path, monkeypatch, _lsa_art254a):
         document=doc,
         body=body,
         url=entry["url"],
-        fetched_at=entry.get("fetched_at"),
+        fetched_at=entry.get("capturado_em"),
         work_date=WORK_DATE_LSA,
         label="Lei nº 6.404/1976",
     )

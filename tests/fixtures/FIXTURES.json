@@ -1,384 +1,640 @@
 {
  "bcb_busca_cmn_4966": {
   "bytes": 1621,
+  "capturado_em": "2026-10-17T21:40:06.617309+00:00",
+  "categoria": "captura_real",
   "content_type": "application/json; charset=utf-8",
-  "fetched_at": "2026-10-17T21:40:06.617309+00:00",
   "file": "bcb_busca_cmn_4966.json",
-  "final_url": "https://www.bcb.gov.br/api/search/app/normativos/buscanormativos?querytext=ContentType:normativo%20AND%20contentSource:normativos%20AND%20TipodoNormativoOWSCHCS=%22Resolu%C3%A7%C3%A3o%20CMN%22%20AND%20NumeroOWSNMBR:4966&rowlimit=2&startrow=0&sortlist=Data1OWSDATE:descending",
+  "origem_metadados": "manifesto_original",
   "sha256": "cf0b4dc1a392b41a62bb28e1f44f9c26f3809d3720a03e089ba2d13e30c7935e",
   "status": 200,
-  "url": "https://www.bcb.gov.br/api/search/app/normativos/buscanormativos?querytext=ContentType:normativo%20AND%20contentSource:normativos%20AND%20TipodoNormativoOWSCHCS=%22Resolu%C3%A7%C3%A3o%20CMN%22%20AND%20NumeroOWSNMBR:4966&rowlimit=2&startrow=0&sortlist=Data1OWSDATE:descending"
+  "url": "https://www.bcb.gov.br/api/search/app/normativos/buscanormativos?querytext=ContentType:normativo%20AND%20contentSource:normativos%20AND%20TipodoNormativoOWSCHCS=%22Resolu%C3%A7%C3%A3o%20CMN%22%20AND%20NumeroOWSNMBR:4966&rowlimit=2&startrow=0&sortlist=Data1OWSDATE:descending",
+  "url_final": "https://www.bcb.gov.br/api/search/app/normativos/buscanormativos?querytext=ContentType:normativo%20AND%20contentSource:normativos%20AND%20TipodoNormativoOWSCHCS=%22Resolu%C3%A7%C3%A3o%20CMN%22%20AND%20NumeroOWSNMBR:4966&rowlimit=2&startrow=0&sortlist=Data1OWSDATE:descending"
  },
  "bcb_res_cmn_4966": {
   "bytes": 306588,
+  "capturado_em": "2026-10-17T20:46:14.255143+00:00",
+  "categoria": "captura_real",
   "content_type": "application/json; charset=utf-8",
-  "fetched_at": "2026-10-17T20:46:14.255143+00:00",
   "file": "bcb_res_cmn_4966.json",
-  "final_url": "https://www.bcb.gov.br/api/conteudo/app/normativos/exibenormativo?p1=Resolu%C3%A7%C3%A3o%20CMN&p2=4966",
+  "origem_metadados": "manifesto_original",
   "sha256": "8d2ac4d5dde4b1277564739854138c8154ea838e84396832c8fad7669b09358c",
   "status": 200,
-  "url": "https://www.bcb.gov.br/api/conteudo/app/normativos/exibenormativo?p1=Resolu%C3%A7%C3%A3o%20CMN&p2=4966"
+  "url": "https://www.bcb.gov.br/api/conteudo/app/normativos/exibenormativo?p1=Resolu%C3%A7%C3%A3o%20CMN&p2=4966",
+  "url_final": "https://www.bcb.gov.br/api/conteudo/app/normativos/exibenormativo?p1=Resolu%C3%A7%C3%A3o%20CMN&p2=4966"
+ },
+ "bench_mini": {
+  "bytes": 753,
+  "categoria": "sintetica",
+  "file": "bench_mini.jsonl",
+  "gerador": "manual",
+  "proposito": "gabarito mínimo do bench offline (tests/test_m6_semente_bench.py)",
+  "sha256": "3f0ecff71184ca96d8a3b1d65e85ff26683288cf44747ef7352b3738dfcb7829"
  },
  "challenge_aws_waf_sample": {
   "bytes": 92,
+  "capturado_em": "2026-10-17T21:40:38.269354+00:00",
+  "categoria": "sintetica",
   "content_type": "text/html",
-  "fetched_at": "2026-10-17T21:40:38.269354+00:00",
   "file": "challenge_aws_waf_sample.html",
-  "final_url": "synthetic://challenge",
+  "gerador": "manual",
+  "proposito": "página sintética de desafio AWS WAF para testar a detecção de desafio (tests/test_challenge.py)",
   "sha256": "ac0cda0e6aaecba98bc41426c7b594549d0d53ed3c126ac747eb1a0797a5d644",
   "status": 200,
-  "url": "synthetic://challenge"
+  "url": "synthetic://challenge",
+  "url_final": "synthetic://challenge"
  },
  "cvm_decisoes_feed": {
   "bytes": 16528,
+  "capturado_em": "2026-10-17T21:40:07.253455+00:00",
+  "categoria": "captura_real",
   "content_type": "text/xml;charset=UTF-8",
-  "fetched_at": "2026-10-17T21:40:07.253455+00:00",
   "file": "cvm_decisoes_feed.xml",
-  "final_url": "https://conteudo.cvm.gov.br/feed/decisoes.xml",
+  "origem_metadados": "manifesto_original",
   "sha256": "73f8a19cc4e0f512e024d6709e69d19a9e1a7155326545f3906ab0f1cef6d187",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/feed/decisoes.xml"
+  "url": "https://conteudo.cvm.gov.br/feed/decisoes.xml",
+  "url_final": "https://conteudo.cvm.gov.br/feed/decisoes.xml"
  },
  "cvm_decisoes_index": {
   "bytes": 71697,
+  "capturado_em": "2026-10-17T20:46:12.722296+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T20:46:12.722296+00:00",
   "file": "cvm_decisoes_index.html",
-  "final_url": "https://conteudo.cvm.gov.br/decisoes/index.html",
+  "origem_metadados": "manifesto_original",
   "sha256": "bc1754dd0e826dce9f0b431c1bab0e451d0ddcdeb50e2fb53429b6a89b7a1051",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/decisoes/index.html"
+  "url": "https://conteudo.cvm.gov.br/decisoes/index.html",
+  "url_final": "https://conteudo.cvm.gov.br/decisoes/index.html"
+ },
+ "cvm_index_recaptcha_real": {
+  "bytes": 77882,
+  "capturado_em": "2026-10-18T01:01:14.914531+00:00",
+  "categoria": "captura_real",
+  "content_type": null,
+  "file": "cvm_index_recaptcha_real.html",
+  "headers": {},
+  "name": "cvm-resolucoes",
+  "origem_metadados": "desconhecida",
+  "seconds": 0.8166286000050604,
+  "sha256": "764665ae86fc0d25fb2abc6a5c2e793bb2c5c8d3309bb3f4642b9dba79f39146",
+  "status": 200,
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes.html",
+  "url_final": null
  },
  "cvm_index_resolucoes": {
   "bytes": 77882,
+  "capturado_em": "2026-10-17T20:46:11.473150+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T20:46:11.473150+00:00",
   "file": "cvm_index_resolucoes.html",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes.html",
+  "origem_metadados": "manifesto_original",
   "sha256": "764665ae86fc0d25fb2abc6a5c2e793bb2c5c8d3309bb3f4642b9dba79f39146",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes.html"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes.html",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes.html"
  },
  "cvm_resol_044": {
   "bytes": 62922,
+  "capturado_em": "2026-10-17T20:46:08.896810+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T20:46:08.896810+00:00",
   "file": "cvm_resol_044.html",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol044.html",
+  "origem_metadados": "manifesto_original",
   "sha256": "dc2f9bdd8b7409e10c64a67335e3f230367d045656531c1be8041e9459a6443a",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol044.html"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol044.html",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol044.html"
  },
  "cvm_resol_044_consolid_docx": {
   "bytes": 95654,
+  "capturado_em": "2026-10-17T20:46:55.470858+00:00",
+  "categoria": "captura_real",
   "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "fetched_at": "2026-10-17T20:46:55.470858+00:00",
   "file": "cvm_resol_044_consolid_docx.docx",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol044consolid.docx",
+  "origem_metadados": "manifesto_original",
   "sha256": "946d5e0f70f92ae95a69eadf1cb8506100bf173b8f76ea4c970fe8f3d17c6903",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol044consolid.docx"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol044consolid.docx",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol044consolid.docx"
  },
  "cvm_resol_080": {
   "bytes": 63224,
+  "capturado_em": "2026-10-17T20:46:10.525384+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T20:46:10.525384+00:00",
   "file": "cvm_resol_080.html",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol080.html",
+  "origem_metadados": "manifesto_original",
   "sha256": "a876cbabcc1295a3ccd0ce60fe7f3bb261ee0d5053119439b812d9197299a70d",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol080.html"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol080.html",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol080.html"
  },
  "cvm_resol_080_consolid_docx": {
   "bytes": 306577,
+  "capturado_em": "2026-10-17T20:47:01.475601+00:00",
+  "categoria": "captura_real",
   "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "fetched_at": "2026-10-17T20:47:01.475601+00:00",
   "file": "cvm_resol_080_consolid_docx.docx",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol080consolid.docx",
+  "origem_metadados": "manifesto_original",
   "sha256": "fe12399cd1b8cdc667c87a9a65b2f319b714d87178b1170ca3acf1f5fad76824",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol080consolid.docx"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol080consolid.docx",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/001/resol080consolid.docx"
  },
  "cvm_resol_080_page": {
   "bytes": 62863,
+  "capturado_em": "2026-10-17T21:40:07.033445+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T21:40:07.033445+00:00",
   "file": "cvm_resol_080_page.html",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol080.html",
+  "origem_metadados": "manifesto_original",
   "sha256": "3645a76efbaecfe98e54b79b5846766dc714e0f348904c7ae1e1490227c28776",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol080.html"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol080.html",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol080.html"
  },
  "cvm_resol_160": {
   "bytes": 64024,
+  "capturado_em": "2026-10-17T20:46:09.277962+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T20:46:09.277962+00:00",
   "file": "cvm_resol_160.html",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.html",
+  "origem_metadados": "manifesto_original",
   "sha256": "b98c8b2358a50b0670ac43b0c9cd2140a25e66daa5743421103751df5ec8c305",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.html"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.html",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.html"
  },
  "cvm_resol_160_consolid_docx": {
   "bytes": 451392,
+  "capturado_em": "2026-10-17T20:46:57.591523+00:00",
+  "categoria": "captura_real",
   "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "fetched_at": "2026-10-17T20:46:57.591523+00:00",
   "file": "cvm_resol_160_consolid_docx.docx",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/100/resol160consolid.docx",
+  "origem_metadados": "manifesto_original",
   "sha256": "abdacb19193642be33de9dc59212a2f8036e8c42d7e8b78acda9b1373ff22b57",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/100/resol160consolid.docx"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/100/resol160consolid.docx",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/100/resol160consolid.docx"
  },
  "cvm_resol_175": {
   "bytes": 66094,
+  "capturado_em": "2026-10-17T20:46:09.695174+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T20:46:09.695174+00:00",
   "file": "cvm_resol_175.html",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol175.html",
+  "origem_metadados": "manifesto_original",
   "sha256": "551f4059dc6369c239a3668d78bf571fd22beaee6690ef6e0f2b56a8e4f95e29",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol175.html"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol175.html",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol175.html"
  },
  "cvm_resol_175_consolid_docx": {
   "bytes": 761488,
+  "capturado_em": "2026-10-17T20:47:00.112896+00:00",
+  "categoria": "captura_real",
   "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "fetched_at": "2026-10-17T20:47:00.112896+00:00",
   "file": "cvm_resol_175_consolid_docx.docx",
-  "final_url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/100/resol175consolid.docx",
+  "origem_metadados": "manifesto_original",
   "sha256": "c1bc7c2bf6fa1a245c3340aaf42fb87422f76f27f08a13387e8971c712986824",
   "status": 200,
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/100/resol175consolid.docx"
+  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/100/resol175consolid.docx",
+  "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes/anexos/100/resol175consolid.docx"
  },
  "datajud_tjsp_sample": {
   "bytes": 97544,
+  "capturado_em": "2026-10-17T21:40:38.266286+00:00",
+  "categoria": "captura_real",
   "content_type": "application/json",
-  "fetched_at": "2026-10-17T21:40:38.266286+00:00",
   "file": "datajud_tjsp_sample.json",
-  "final_url": "https://api-publica.datajud.cnj.jus.br/api_publica_tjsp/_search",
+  "origem_metadados": "manifesto_original",
   "sha256": "d6df1fde990e8138c1f28fb3a53d0320b5e3ebb02a22e618474e816c5a95ea83",
   "status": 200,
-  "url": "https://api-publica.datajud.cnj.jus.br/api_publica_tjsp/_search"
+  "url": "https://api-publica.datajud.cnj.jus.br/api_publica_tjsp/_search",
+  "url_final": "https://api-publica.datajud.cnj.jus.br/api_publica_tjsp/_search"
  },
  "planalto_lei_10303_2001": {
   "bytes": 104183,
+  "capturado_em": "2026-10-17T20:46:08.268794+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-17T20:46:08.268794+00:00",
   "file": "planalto_lei_10303_2001.html",
-  "final_url": "https://www.planalto.gov.br/ccivil_03/leis/leis_2001/l10303.htm",
+  "origem_metadados": "manifesto_original",
   "sha256": "c6efc7df49b493c4fbc7bd473bf69f3998f2a7dad6d0462c5650c079d8ce8e0f",
   "status": 200,
-  "url": "https://www.planalto.gov.br/ccivil_03/leis/leis_2001/l10303.htm"
+  "url": "https://www.planalto.gov.br/ccivil_03/leis/leis_2001/l10303.htm",
+  "url_final": "https://www.planalto.gov.br/ccivil_03/leis/leis_2001/l10303.htm"
  },
  "planalto_lei_10406_2002": {
   "bytes": 923899,
+  "capturado_em": "2026-10-17T20:46:07.907585+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-17T20:46:07.907585+00:00",
   "file": "planalto_lei_10406_2002.html",
-  "final_url": "https://www.planalto.gov.br/ccivil_03/leis/2002/l10406compilada.htm",
+  "origem_metadados": "manifesto_original",
   "sha256": "821becd0ac36a2e9be76dd347920ab21144a8dcfbbaa43c825aac2ddba5769af",
   "status": 200,
-  "url": "https://www.planalto.gov.br/ccivil_03/leis/2002/l10406compilada.htm"
+  "url": "https://www.planalto.gov.br/ccivil_03/leis/2002/l10406compilada.htm",
+  "url_final": "https://www.planalto.gov.br/ccivil_03/leis/2002/l10406compilada.htm"
  },
  "planalto_lei_14195_2021": {
   "bytes": 285424,
+  "capturado_em": "2026-10-17T20:46:08.503107+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-17T20:46:08.503107+00:00",
   "file": "planalto_lei_14195_2021.html",
-  "final_url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14195.htm",
+  "origem_metadados": "manifesto_original",
   "sha256": "2b50a2e6c40e12d51605acd6bc6b55ad6b9be4852f12863b4465b5fe9bc3df46",
   "status": 200,
-  "url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14195.htm"
+  "url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14195.htm",
+  "url_final": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14195.htm"
  },
  "planalto_lei_14430_2022": {
   "bytes": 139938,
+  "capturado_em": "2026-10-17T20:46:08.091482+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-17T20:46:08.091482+00:00",
   "file": "planalto_lei_14430_2022.html",
-  "final_url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/lei/l14430.htm",
+  "origem_metadados": "manifesto_original",
   "sha256": "d0a9657da9eac219ec2eebc3a895a5cfd8712376de64200f41e5929fd726b7a6",
   "status": 200,
-  "url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/lei/l14430.htm"
+  "url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/lei/l14430.htm",
+  "url_final": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/lei/l14430.htm"
  },
  "planalto_lei_6385_1976": {
   "bytes": 94583,
+  "capturado_em": "2026-10-17T20:46:06.960362+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-17T20:46:06.960362+00:00",
   "file": "planalto_lei_6385_1976.html",
-  "final_url": "https://www.planalto.gov.br/ccivil_03/leis/l6385compilada.htm",
+  "origem_metadados": "manifesto_original",
   "sha256": "032bb2d4762d1378076df803e708227951d6b87b219dd296001e6a7daee3cee4",
   "status": 200,
-  "url": "https://www.planalto.gov.br/ccivil_03/leis/l6385compilada.htm"
+  "url": "https://www.planalto.gov.br/ccivil_03/leis/l6385compilada.htm",
+  "url_final": "https://www.planalto.gov.br/ccivil_03/leis/l6385compilada.htm"
  },
  "planalto_lei_6404_1976": {
   "bytes": 757607,
+  "capturado_em": "2026-10-17T20:46:06.787313+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-17T20:46:06.787313+00:00",
   "file": "planalto_lei_6404_1976.html",
-  "final_url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm",
+  "origem_metadados": "manifesto_original",
   "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
   "status": 200,
-  "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+  "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm",
+  "url_final": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+ },
+ "prosa_audit_final10": {
+  "bytes": 17937,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final10.jsonl",
+  "gerador": "manual",
+  "proposito": "corpus adversarial de extração de citações, rodada 10 (tests/test_r17.py)",
+  "sha256": "7e7975e9b921cd10a247aa58245828cba046b9064f0033d488900136bd057a45"
+ },
+ "prosa_audit_final10_preregistration": {
+  "bytes": 872,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final10_preregistration.json",
+  "gerador": "manual",
+  "proposito": "preregistro (hash e critérios) do corpus da rodada 10 (tests/test_r17.py)",
+  "sha256": "27e5b3552d52432b5702c125dea23b6b84b2fc28de83cca6db6ce2b2ec7c9dcd"
+ },
+ "prosa_audit_final11": {
+  "bytes": 16943,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final11.jsonl",
+  "gerador": "manual",
+  "proposito": "corpus adversarial de extração de citações, rodada 11 (tests/test_r18.py)",
+  "sha256": "6ee10ba551b9b297d1dde76790ac5a2f6ab3b3f3d91a78a96057f4ddfd1a91f0"
+ },
+ "prosa_audit_final11_preregistration": {
+  "bytes": 855,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final11_preregistration.json",
+  "gerador": "manual",
+  "proposito": "preregistro (hash e critérios) do corpus da rodada 11 (tests/test_r18.py)",
+  "sha256": "eacc452510ca254a8e9f09b23a966d0aedf283e9868190c736992fcd2112abd5"
+ },
+ "prosa_audit_final12": {
+  "bytes": 18698,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final12.jsonl",
+  "gerador": "manual",
+  "proposito": "corpus adversarial de extração de citações, rodada 12 (tests/test_r19.py)",
+  "sha256": "8a2c5b5a9dede5414c08c66dda9ea4b636c6470d4915b1f312b2e21df0d2553d"
+ },
+ "prosa_audit_final12_preregistration": {
+  "bytes": 998,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final12_preregistration.json",
+  "gerador": "manual",
+  "proposito": "preregistro (hash e critérios) do corpus da rodada 12 (tests/test_r19.py)",
+  "sha256": "044bb3e48d2a58df72578aea02abed4cb1474de5171e21f9eccdb77c3f2c4832"
+ },
+ "prosa_audit_final6": {
+  "bytes": 11601,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final6.jsonl",
+  "gerador": "manual",
+  "proposito": "corpus adversarial de extração de citações, rodada 6 (tests/test_r13.py)",
+  "sha256": "baff753e2d058033f9905a3ea578d52a89eb5ca864da8dff3a2e9dbb3a10c911"
+ },
+ "prosa_audit_final7": {
+  "bytes": 12263,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final7.jsonl",
+  "gerador": "manual",
+  "proposito": "corpus adversarial de extração de citações, rodada 7 (tests/test_r14.py)",
+  "sha256": "daa189c8b2279fff1d4c5791d8cc0f2dd1fc5895d2272ea80ccdfc9428bb74a5"
+ },
+ "prosa_audit_final8": {
+  "bytes": 13384,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final8.jsonl",
+  "gerador": "manual",
+  "proposito": "corpus adversarial de extração de citações, rodada 8 (tests/test_r15.py)",
+  "sha256": "3521ae25a0003646319231965e077ec9b0a0900605aa2282e8c2732312ab904f"
+ },
+ "prosa_audit_final9": {
+  "bytes": 14525,
+  "categoria": "sintetica",
+  "file": "prosa_audit_final9.jsonl",
+  "gerador": "manual",
+  "proposito": "corpus adversarial de extração de citações, rodada 9 (tests/test_r16.py)",
+  "sha256": "58c4ce440eed4e206adf5f1dd2116deca736050a60669d21f73bbf93eefe092e"
+ },
+ "prosa_extracao_r12": {
+  "bytes": 60196,
+  "categoria": "sintetica",
+  "file": "prosa_extracao_r12.json",
+  "gerador": "manual",
+  "proposito": "casos de extração de citação da rodada 12 (tests/test_r12.py)",
+  "sha256": "8415a2c67ff85783712a6e789782e1f6a5daed9da9da72b002222e95295db5e1"
+ },
+ "prosa_r15_canonical": {
+  "bytes": 238422,
+  "categoria": "sintetica",
+  "file": "prosa_r15_canonical.jsonl",
+  "gerador": "manual",
+  "proposito": "corpus canônico de citações da rodada 15 (tests/test_r15.py)",
+  "sha256": "4912b607c1a1a64404c22a3c08e99ed632d79f50e6ddf784a32f797dcca58d96"
+ },
+ "prosa_r15_expectations": {
+  "bytes": 3858,
+  "categoria": "sintetica",
+  "file": "prosa_r15_expectations.json",
+  "gerador": "manual",
+  "proposito": "gabarito por caso do corpus da rodada 15 (tests/test_r15.py)",
+  "sha256": "aa843aa06f29fd69f7bc099cf9f534030c02a59c13e3362a9511cead730b8b43"
  },
  "senado_lei_10303_2001": {
   "bytes": 853,
+  "capturado_em": "2026-10-17T21:40:05.852022+00:00",
+  "categoria": "captura_real",
   "content_type": "application/json",
-  "fetched_at": "2026-10-17T21:40:05.852022+00:00",
   "file": "senado_lei_10303_2001.json",
-  "final_url": "https://legis.senado.leg.br/dadosabertos/legislacao/lista?tipo=LEI&numero=10303&ano=2001",
+  "origem_metadados": "manifesto_original",
   "sha256": "08cfc8147a944e5d7c27be17f86295126fb6206187f9126568bf96d154258815",
   "status": 200,
-  "url": "https://legis.senado.leg.br/dadosabertos/legislacao/lista?tipo=LEI&numero=10303&ano=2001"
+  "url": "https://legis.senado.leg.br/dadosabertos/legislacao/lista?tipo=LEI&numero=10303&ano=2001",
+  "url_final": "https://legis.senado.leg.br/dadosabertos/legislacao/lista?tipo=LEI&numero=10303&ano=2001"
  },
  "stf_adi_7000_decisoes": {
   "bytes": 4312,
+  "capturado_em": "2026-10-17T21:40:08.023618+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-17T21:40:08.023618+00:00",
   "file": "stf_adi_7000_decisoes.html",
-  "final_url": "https://portal.stf.jus.br/processos/abaDecisoes.asp?incidente=6255858",
+  "origem_metadados": "manifesto_original",
   "sha256": "05b0a9e34005d5cfd8737956f01fa3d8a2f575d4bfc9fedf68310554eb527c3e",
   "status": 200,
-  "url": "https://portal.stf.jus.br/processos/abaDecisoes.asp?incidente=6255858"
- },
- "stf_tema_1000": {
-  "bytes": 4087,
-  "content_type": "application/json;charset=UTF-8",
-  "fetched_at": "2026-10-17T21:40:08.343853+00:00",
-  "file": "stf_tema_1000.json",
-  "final_url": "https://sistemas.stf.jus.br/repgeral/votacao?tema=1000",
-  "sha256": "4796505ad6b3da721a9c1cc122561994f9b35d885c8f24b4486c6e82a17ad0b7",
-  "status": 200,
-  "url": "https://sistemas.stf.jus.br/repgeral/votacao?tema=1000"
- },
- "stj_espelhos_amostra": {
-  "bytes": 4709,
-  "content_type": "application/json",
-  "fetched_at": "2026-10-17T21:41:49.366140+00:00",
-  "file": "stj_espelhos_amostra.json",
-  "final_url": "https://dadosabertos.web.stj.jus.br/dataset/a927747a-2fc9-46f7-be25-c3f12e7d560c/resource/f3eeebe9-48ef-4879-a0bf-c2ee71386695/download/20260831.json",
-  "sha256": "322e9cca4d7cef0f05fafa71c70649230d557d8a09dd988904bde22a227a270b",
-  "status": 200,
-  "url": "https://dadosabertos.web.stj.jus.br/dataset/a927747a-2fc9-46f7-be25-c3f12e7d560c/resource/f3eeebe9-48ef-4879-a0bf-c2ee71386695/download/20260831.json"
- },
- "stj_package_primeira_turma": {
-  "bytes": 42159,
-  "content_type": "application/json;charset=utf-8",
-  "fetched_at": "2026-10-17T21:41:10.308641+00:00",
-  "file": "stj_package_primeira_turma.json",
-  "final_url": "https://dadosabertos.web.stj.jus.br/api/3/action/package_show?id=espelhos-de-acordaos-primeira-turma",
-  "sha256": "9db5f0bc2b19ce3352427065678395b6ddae619e048702cfcc53d744e2d88450",
-  "status": 200,
-  "url": "https://dadosabertos.web.stj.jus.br/api/3/action/package_show?id=espelhos-de-acordaos-primeira-turma"
- },
- "tcu_acordaos_amostra": {
-  "bytes": 46731,
-  "content_type": "text/html",
-  "fetched_at": "2026-10-17T20:46:14.604650+00:00",
-  "file": "tcu_acordaos_amostra.html",
-  "final_url": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=5",
-  "sha256": "4080f9ce6facf5e2b5d761b5364f44b965c6aaa487c4e038a7664524b4f2270d",
-  "status": 200,
-  "url": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=5"
- },
- "tcu_acordaos_page0": {
-  "bytes": 2621,
-  "content_type": "application/json;charset=UTF-8",
-  "fetched_at": "2026-10-17T21:40:07.675396+00:00",
-  "file": "tcu_acordaos_page0.json",
-  "final_url": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=2",
-  "sha256": "ab46c0ab5a8f7b69864b5fdd447be51ca4ff5ec73bad2cef1e8f59626b08f2c5",
-  "status": 200,
-  "url": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=2"
- },
- "tjsp_busca_acordo_acionistas": {
-  "bytes": 171195,
-  "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T21:40:39.636995+00:00",
-  "file": "tjsp_busca_acordo_acionistas.html",
-  "final_url": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId=",
-  "sha256": "902e343a5171ecb632ebdf2151e5c777d5903e42c6cf592398a451436639c705",
-  "status": 200,
-  "url": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId="
- },
- "tjsp_busca_negativa": {
-  "bytes": 352,
-  "content_type": "text/html;charset=UTF-8",
-  "fetched_at": "2026-10-17T21:40:40.136005+00:00",
-  "file": "tjsp_busca_negativa.html",
-  "final_url": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId=",
-  "sha256": "25602f953942807977b18921cda773c66e8aa245f6e174a93ce072c1e7acbfc9",
-  "status": 200,
-  "url": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId="
- },
- "cvm_index_recaptcha_real": {
-  "name": "cvm-resolucoes",
-  "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes.html",
-  "headers": {},
-  "status": 200,
-  "sha256": "764665ae86fc0d25fb2abc6a5c2e793bb2c5c8d3309bb3f4642b9dba79f39146",
-  "bytes": 77882,
-  "fetched_at": "2026-10-18T01:01:14.914531+00:00",
-  "seconds": 0.8166286000050604,
-  "file": "cvm_index_recaptcha_real.html"
+  "url": "https://portal.stf.jus.br/processos/abaDecisoes.asp?incidente=6255858",
+  "url_final": "https://portal.stf.jus.br/processos/abaDecisoes.asp?incidente=6255858"
  },
  "stf_sumula_3_detalhe": {
   "bytes": 529,
+  "capturado_em": "2026-10-18T19:12:00+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-18T19:12:00+00:00",
   "file": "stf_sumula_3_detalhe.html",
-  "final_url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30&sumula=1306",
   "nota": "recorte do HTML oficial até o enunciado; sha256 é do recorte",
+  "origem_metadados": "manifesto_original",
   "sha256": "3fd6e985f86466c6566b38e661b535a63205efe4ea9b1f8e0132d345219014fc",
   "status": 200,
-  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30&sumula=1306"
- }, "stf_sumula_vinculante_9_detalhe": {
+  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30&sumula=1306",
+  "url_final": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30&sumula=1306"
+ },
+ "stf_sumula_vinculante_9_detalhe": {
   "bytes": 666,
+  "capturado_em": "2026-10-18T19:12:00+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-18T19:12:00+00:00",
   "file": "stf_sumula_vinculante_9_detalhe.html",
-  "final_url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26&sumula=1212",
   "nota": "recorte do HTML oficial até o enunciado; sha256 é do recorte",
+  "origem_metadados": "manifesto_original",
   "sha256": "4144735955d49a229477e56898fa94aa06dd0e186c790d7afa44b99eda0149b5",
   "status": 200,
-  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26&sumula=1212"
- }, "stf_sumulas_sumario": {
+  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26&sumula=1212",
+  "url_final": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26&sumula=1212"
+ },
+ "stf_sumulas_sumario": {
   "bytes": 1025,
+  "capturado_em": "2026-10-18T19:12:00+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-18T19:12:00+00:00",
   "file": "stf_sumulas_sumario.html",
-  "final_url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30",
   "nota": "recorte do HTML oficial (cinco primeiras súmulas); sha256 é do recorte",
+  "origem_metadados": "manifesto_original",
   "sha256": "73a91a79437eb028da8eb778a8b2127cb263d2497248841c05ccdb8a707fe6ef",
   "status": 200,
-  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30"
- }, "stf_sumulas_vinculantes_sumario": {
+  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30",
+  "url_final": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=30"
+ },
+ "stf_sumulas_vinculantes_sumario": {
   "bytes": 1605,
+  "capturado_em": "2026-10-18T19:12:00+00:00",
+  "categoria": "captura_real",
   "content_type": "text/html",
-  "fetched_at": "2026-10-18T19:12:00+00:00",
   "file": "stf_sumulas_vinculantes_sumario.html",
-  "final_url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26",
   "nota": "recorte do HTML oficial (nove primeiras súmulas vinculantes); sha256 é do recorte",
+  "origem_metadados": "manifesto_original",
   "sha256": "af0eac240c2183573085d191ef68678901a0b855ce123f83cb2e6f982ae05a97",
   "status": 200,
-  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26"
- }, "stj_precedentes_processos": {
+  "url": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26",
+  "url_final": "https://portal.stf.jus.br/jurisprudencia/sumariosumulas.asp?base=26"
+ },
+ "stf_tema_1000": {
+  "bytes": 4087,
+  "capturado_em": "2026-10-17T21:40:08.343853+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/json;charset=UTF-8",
+  "file": "stf_tema_1000.json",
+  "origem_metadados": "manifesto_original",
+  "sha256": "4796505ad6b3da721a9c1cc122561994f9b35d885c8f24b4486c6e82a17ad0b7",
+  "status": 200,
+  "url": "https://sistemas.stf.jus.br/repgeral/votacao?tema=1000",
+  "url_final": "https://sistemas.stf.jus.br/repgeral/votacao?tema=1000"
+ },
+ "stj_espelhos_amostra": {
+  "bytes": 4709,
+  "capturado_em": "2026-10-17T21:41:49.366140+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "stj_espelhos_amostra.json",
+  "origem_metadados": "manifesto_original",
+  "sha256": "322e9cca4d7cef0f05fafa71c70649230d557d8a09dd988904bde22a227a270b",
+  "status": 200,
+  "url": "https://dadosabertos.web.stj.jus.br/dataset/a927747a-2fc9-46f7-be25-c3f12e7d560c/resource/f3eeebe9-48ef-4879-a0bf-c2ee71386695/download/20260831.json",
+  "url_final": "https://dadosabertos.web.stj.jus.br/dataset/a927747a-2fc9-46f7-be25-c3f12e7d560c/resource/f3eeebe9-48ef-4879-a0bf-c2ee71386695/download/20260831.json"
+ },
+ "stj_package_primeira_turma": {
+  "bytes": 42159,
+  "capturado_em": "2026-10-17T21:41:10.308641+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/json;charset=utf-8",
+  "file": "stj_package_primeira_turma.json",
+  "origem_metadados": "manifesto_original",
+  "sha256": "9db5f0bc2b19ce3352427065678395b6ddae619e048702cfcc53d744e2d88450",
+  "status": 200,
+  "url": "https://dadosabertos.web.stj.jus.br/api/3/action/package_show?id=espelhos-de-acordaos-primeira-turma",
+  "url_final": "https://dadosabertos.web.stj.jus.br/api/3/action/package_show?id=espelhos-de-acordaos-primeira-turma"
+ },
+ "stj_precedentes_processos": {
   "bytes": 1627,
+  "capturado_em": "2026-10-18T19:12:00+00:00",
+  "categoria": "captura_real",
   "content_type": "text/csv",
-  "fetched_at": "2026-10-18T19:12:00+00:00",
   "file": "stj_precedentes_processos.csv",
-  "final_url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/7ed21202-0049-4fcb-aa7c-48d810d3c499/download/processos.csv",
   "nota": "linhas reais de Processos.csv correspondentes; recorte, sha256 é do recorte",
+  "origem_metadados": "manifesto_original",
   "sha256": "80424122a8b12759a6c67130db174758931b21924abb1f5646eaa1157d68a565",
   "status": 200,
-  "url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/7ed21202-0049-4fcb-aa7c-48d810d3c499/download/processos.csv"
- }, "stj_precedentes_temas": {
+  "url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/7ed21202-0049-4fcb-aa7c-48d810d3c499/download/processos.csv",
+  "url_final": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/7ed21202-0049-4fcb-aa7c-48d810d3c499/download/processos.csv"
+ },
+ "stj_precedentes_temas": {
   "bytes": 6885,
+  "capturado_em": "2026-10-18T19:12:00+00:00",
+  "categoria": "captura_real",
   "content_type": "text/csv",
-  "fetched_at": "2026-10-18T19:12:00+00:00",
   "file": "stj_precedentes_temas.csv",
-  "final_url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/df29da13-7d6b-41ba-ad96-cd1a5bbd191c/download/temas.csv",
   "nota": "5 linhas reais de Temas.csv (CKAN precedentes-qualificados); recorte, sha256 é do recorte",
+  "origem_metadados": "manifesto_original",
   "sha256": "2d359343ddcb5cb9d390a21c8090a33071b1ceff3753e0488b1c7a252ef3b777",
   "status": 200,
-  "url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/df29da13-7d6b-41ba-ad96-cd1a5bbd191c/download/temas.csv"
+  "url": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/df29da13-7d6b-41ba-ad96-cd1a5bbd191c/download/temas.csv",
+  "url_final": "https://dadosabertos.web.stj.jus.br/dataset/4238da2f-c07b-4c1a-b345-4402accacdcf/resource/df29da13-7d6b-41ba-ad96-cd1a5bbd191c/download/temas.csv"
+ },
+ "tcu_acordaos_amostra": {
+  "bytes": 46731,
+  "capturado_em": "2026-10-17T20:46:14.604650+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "tcu_acordaos_amostra.html",
+  "origem_metadados": "manifesto_original",
+  "sha256": "4080f9ce6facf5e2b5d761b5364f44b965c6aaa487c4e038a7664524b4f2270d",
+  "status": 200,
+  "url": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=5",
+  "url_final": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=5"
+ },
+ "tcu_acordaos_page0": {
+  "bytes": 2621,
+  "capturado_em": "2026-10-17T21:40:07.675396+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/json;charset=UTF-8",
+  "file": "tcu_acordaos_page0.json",
+  "origem_metadados": "manifesto_original",
+  "sha256": "ab46c0ab5a8f7b69864b5fdd447be51ca4ff5ec73bad2cef1e8f59626b08f2c5",
+  "status": 200,
+  "url": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=2",
+  "url_final": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=2"
+ },
+ "tjdft_acordo_acionistas": {
+  "bytes": 42798,
+  "capturado_em": "2026-10-18",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "tjdft/acordo_acionistas.json",
+  "origem_metadados": "commit 8d4428f; decisão 0041 (captura inteira); status e content_type do cabeçalho de tests/test_tjdft.py",
+  "sha256": "d80d41a0de878fd3de447899209ed1ad89a4fa11fab013ca2cfdac437b80c981",
+  "status": 200,
+  "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+  "url_final": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
+ },
+ "tjdft_frase_exata": {
+  "bytes": 42756,
+  "capturado_em": "2026-10-18",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "tjdft/frase_exata.json",
+  "origem_metadados": "commit 8d4428f; decisão 0041 (captura inteira); status e content_type do cabeçalho de tests/test_tjdft.py",
+  "sha256": "5737646f1d3aa710574e1227117ec7777c00651d45a9ef9a289f4efd6a534fe0",
+  "status": 200,
+  "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+  "url_final": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
+ },
+ "tjdft_monocratica": {
+  "bytes": 125151,
+  "capturado_em": "2026-10-18",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "tjdft/monocratica.json",
+  "origem_metadados": "commit 8d4428f; decisão 0041 (captura inteira); status e content_type do cabeçalho de tests/test_tjdft.py",
+  "sha256": "391932e2c788b12c65cd0b6178259aab2b1efe83e764e7d0c600f0008a8ce8ec",
+  "status": 200,
+  "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+  "url_final": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
+ },
+ "tjdft_processo": {
+  "bytes": 20911,
+  "capturado_em": "2026-10-18",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "tjdft/processo.json",
+  "origem_metadados": "commit 8d4428f; decisão 0041 (captura inteira); status e content_type do cabeçalho de tests/test_tjdft.py",
+  "sha256": "43d28b0e25b2f2cabc498e7498f7f0ff105c7c44c417e9a22dcf13d3e59d5294",
+  "status": 200,
+  "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+  "url_final": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
+ },
+ "tjdft_vazio": {
+  "bytes": 196,
+  "capturado_em": "2026-10-18",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "tjdft/vazio.json",
+  "origem_metadados": "commit 8d4428f; decisão 0041 (captura inteira); status e content_type do cabeçalho de tests/test_tjdft.py",
+  "sha256": "eb1f142c0d7ce78fa1445ad8d28ed4dccb196a2b2589400902747ff2b0a6a7df",
+  "status": 204,
+  "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+  "url_final": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
+ },
+ "tjsp_busca_acordo_acionistas": {
+  "bytes": 171195,
+  "capturado_em": "2026-10-17T21:40:39.636995+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html;charset=UTF-8",
+  "file": "tjsp_busca_acordo_acionistas.html",
+  "origem_metadados": "manifesto_original",
+  "sha256": "902e343a5171ecb632ebdf2151e5c777d5903e42c6cf592398a451436639c705",
+  "status": 200,
+  "url": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId=",
+  "url_final": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId="
+ },
+ "tjsp_busca_negativa": {
+  "bytes": 352,
+  "capturado_em": "2026-10-17T21:40:40.136005+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html;charset=UTF-8",
+  "file": "tjsp_busca_negativa.html",
+  "origem_metadados": "manifesto_original",
+  "sha256": "25602f953942807977b18921cda773c66e8aa245f6e174a93ce072c1e7acbfc9",
+  "status": 200,
+  "url": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId=",
+  "url_final": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId="
  }
 }

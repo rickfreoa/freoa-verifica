@@ -40,7 +40,7 @@ def env(tmp_path, monkeypatch):
         document=doc_lsa,
         body=body_lsa,
         url=entry["url"],
-        fetched_at=entry.get("fetched_at"),
+        fetched_at=entry.get("capturado_em"),
         work_date=WORK_DATE_LSA,
         label="Lei nº 6.404/1976",
     )
@@ -57,7 +57,7 @@ def env(tmp_path, monkeypatch):
         document=doc_160,
         body=body_160,
         url=entry160["url"],
-        fetched_at=entry160.get("fetched_at"),
+        fetched_at=entry160.get("capturado_em"),
         work_date=WORK_DATE_RCVM160,
         label="Resolução CVM nº 160/2022",
     )
