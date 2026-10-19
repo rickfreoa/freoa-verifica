@@ -230,9 +230,9 @@ class TjdftConnector(Connector):
         text = inteiro_teor_valido(rec)
         # Em decisões individuais o campo "ementa" da API é o próprio texto da decisão (começa pelo cabeçalho):
         # não é ementa. Com o texto integral validado, ele vai só para inteiro_teor (comparativo 1.2.0).
-        ementa = rec.get("ementa") or None
-        if text and rec.get("base") != "acordaos":
-            ementa = None
+        # Sem texto integral validado, a decisão individual fica sem documento (só metadados), em vez de
+        # gravar o texto decisório sob o rótulo de ementa (auditoria 1.2.0).
+        ementa = rec.get("ementa") or None if rec.get("base") == "acordaos" else None
         meta = {k: rec.get(k) for k in ("uuid", "processo", "base", "subbase", "codigoClasseCnj")}
         if text:
             meta["documento"] = "inteiro_teor"

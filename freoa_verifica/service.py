@@ -2010,11 +2010,19 @@ class Verifica:
         if tribunais is None:
             # Sigla de tribunal solta na consulta ("exclusão de sócio TJDFT") é filtro, não termo: como termo
             # casaria o cabeçalho "Tribunal de Justiça do Distrito Federal" de qualquer decisão (comparativo 1.2.0).
-            siglas = [t for t in re.findall(r"(?<![\w/])([A-Za-z]{2,6})(?![\w/])", q)
+            # Só fora de aspas: frase exata é preservada como o usuário escreveu.
+            partes = re.split(r'("[^"]*")', q)
+            fora = [p for p in partes if not p.startswith('"')]
+            siglas = [t for p in fora for t in re.findall(r"(?<![\w/])([A-Za-z]{2,6})(?![\w/])", p)
                       if t.upper() in _SIGLAS_TRIBUNAL_FILTRO]
-            resto = re.sub(r"(?<![\w/])(?:" + "|".join(map(re.escape, siglas)) + r")(?![\w/])", " ", q).strip() if siglas else q
-            if siglas and resto:
+            if siglas:
+                padrao = r"(?<![\w/])(?:" + "|".join(map(re.escape, siglas)) + r")(?![\w/])"
+                resto = "".join(p if p.startswith('"') else re.sub(padrao, " ", p) for p in partes).strip()
                 filtro_da_consulta = sorted({s.lower() for s in siglas})
+                if not resto:
+                    return {"status": "entrada_insuficiente", "motivo": "CONSULTA_SO_COM_SIGLA_DE_TRIBUNAL",
+                            "consulta": q, "filtro_tribunal_da_consulta": filtro_da_consulta,
+                            "itens": [], "resultados": [], "truncado": False, "cursor": None}
                 q, tribunais = " ".join(resto.split()), filtro_da_consulta
         out = self._juris_textual(q, tribunais, desde, ate, autoridade_min, limite, cursor)
         if filtro_da_consulta:
@@ -2253,7 +2261,11 @@ class Verifica:
 
     def _decisao_item(self, row: dict[str, Any]) -> dict[str, Any]:
         text = row.get("ementa") or row.get("inteiro_teor") or ""
+        # Sem ementa, o início do inteiro teor sai como `trecho_inteiro_teor`, nunca sob o rótulo `ementa` (0038).
         ementa, trunc = _truncate(text, _EMENTA_MAX)
+        trecho_it = None
+        if not row.get("ementa") and text:
+            trecho_it, ementa = ementa, None
         court = row.get("court") or ""
         class_name = row.get("class") or ""
         auth = classify_authority(
@@ -2272,6 +2284,7 @@ class Verifica:
             "datas": {"julgamento": row.get("judgment_date"),
                       "publicacao": row.get("publication_date")},
             "ementa": ementa,
+            **({"trecho_inteiro_teor": trecho_it} if trecho_it else {}),
             "autoridade": authority_as_dict(auth),
             "rotulo_autoridade": auth.label, "regra_autoridade": auth.rule,
             "rules_version": AUTHORITY_RULES_VERSION,

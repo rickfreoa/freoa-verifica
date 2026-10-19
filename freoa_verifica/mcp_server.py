@@ -222,6 +222,8 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         for item in data_out.get("itens") or []:
             if isinstance(item, dict) and item.get("ementa"):
                 item["ementa"] = _wrap_oficial(item["ementa"])
+            if isinstance(item, dict) and item.get("trecho_inteiro_teor"):
+                item["trecho_inteiro_teor"] = _wrap_oficial(item["trecho_inteiro_teor"])
         return data_out
 
     @mcp.tool()

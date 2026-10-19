@@ -170,7 +170,12 @@ def test_sigla_de_tribunal_na_consulta_vira_filtro(svc):
              cls="Acórdão", organ="Plenário")
     r = svc.pesquisar_jurisprudencia("exclusão de sócio STJ")
     assert r["filtro_tribunal_da_consulta"] == ["stj"] and {i["tribunal"] for i in r["itens"]} == {"STJ"}
-    assert svc.pesquisar_jurisprudencia("STJ")["itens"] == [] or True  # só a sigla: segue como termo
+    so_sigla = svc.pesquisar_jurisprudencia("STJ")
+    assert so_sigla["status"] == "entrada_insuficiente" and so_sigla["itens"] == []
+    # Dentro de aspas a sigla é parte da frase exata.
+    _indexar(svc, "TCU", "T2", text="", ementa="responsabilidade civil STJ em parecer", cls="Acórdão", organ="Plenário")
+    frase = svc.pesquisar_jurisprudencia('"responsabilidade civil STJ"')
+    assert "filtro_tribunal_da_consulta" not in frase and any(i["tribunal"] == "TCU" for i in frase["itens"])
 
 
 def test_idf_ordena_termo_raro_primeiro_na_complementacao(svc):
