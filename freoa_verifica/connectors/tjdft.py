@@ -228,6 +228,11 @@ class TjdftConnector(Connector):
         if kind is None:
             raise Unavailable("tjdft_especie_desconhecida")
         text = inteiro_teor_valido(rec)
+        # Em decisões individuais o campo "ementa" da API é o próprio texto da decisão (começa pelo cabeçalho):
+        # não é ementa. Com o texto integral validado, ele vai só para inteiro_teor (comparativo 1.2.0).
+        ementa = rec.get("ementa") or None
+        if text and rec.get("base") != "acordaos":
+            ementa = None
         meta = {k: rec.get(k) for k in ("uuid", "processo", "base", "subbase", "codigoClasseCnj")}
         if text:
             meta["documento"] = "inteiro_teor"
@@ -236,7 +241,7 @@ class TjdftConnector(Connector):
             kind=kind,
             court="TJDFT",
             official_id=str(rec["identificador"]),
-            ementa=rec.get("ementa") or None,
+            ementa=ementa,
             text=text or "",
             judgment_date=_iso(rec.get("dataJulgamento")),
             publication_date=_iso(rec.get("dataPublicacao")),
@@ -262,7 +267,7 @@ def _cand(source_id: str, rec: dict[str, Any]) -> Candidate:
     uuid, ident = rec.get("uuid"), rec.get("identificador")
     if not uuid or ident in (None, ""):
         raise Unavailable("tjdft_registro_sem_identidade")
-    ementa = rec.get("ementa") or ""
+    ementa = (rec.get("ementa") or "") if rec.get("base") == "acordaos" else ""
     processo = rec.get("processo")
     return Candidate(
         source_id=source_id,

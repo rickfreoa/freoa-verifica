@@ -239,3 +239,14 @@ def test_cnj_fonte_sem_o_processo_nao_devolve_outros(svc, conn, monkeypatch):
     svc._connectors["tjdft"] = conn
     r = svc.pesquisar_jurisprudencia("0713166-62.2018.8.07.0000")
     assert r["status"] == "nao_encontrado_na_fonte" and r["itens"] == []
+
+
+def test_monocratica_com_inteiro_teor_nao_grava_texto_como_ementa(svc, conn):
+    data = _load("monocratica")
+    cands = _search(conn, data)
+    mono = next(c for c in cands if c.metadata["uuid"] == data["registros"][0]["uuid"])
+    svc._index_candidate_juris(conn, mono)
+    kinds = [r[0] for r in svc.conn.execute(
+        "SELECT dd.kind FROM decision_document dd JOIN decision d ON d.id=dd.decision_id WHERE d.official_id=?", (mono.key,))]
+    assert kinds == ["inteiro_teor"]
+    assert svc.obter_decisao(mono.key, tribunal="tjdft")["status"] == "parte_indisponivel"  # não há ementa
