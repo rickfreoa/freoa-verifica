@@ -8,7 +8,8 @@ O snapshot contém somente fontes públicas e deve ser conferido separadamente.
    `v1.0.0`) após a autorização de publicação.
 2. O workflow `release.yml`, disparado pela tag `v*`, constrói wheel e sdist,
    gera checksums, executa o smoke test, produz attestation de proveniência dos
-   pacotes e os publica na release GitHub da mesma tag.
+   pacotes e os anexa a uma release GitHub da mesma tag criada como **rascunho**
+   (ver "Sequência de release").
 3. Gere o corpus com o pacote dessa versão e um diretório de dados dedicado:
 
    ```sh
@@ -36,3 +37,28 @@ O snapshot contém somente fontes públicas e deve ser conferido separadamente.
 A ausência de snapshot ou checksum é uma falha explícita. A attestation gerada pelo
 workflow cobre wheel/sdist; o snapshot gerado separadamente não herda essa prova.
 Checksums provam integridade, e a origem depende do canal da release.
+
+## Sequência de release
+
+1. Congelar código funcional e versão na integração; registrar o commit.
+2. Instalar a wheel local em ambiente limpo; reconstruir o acervo sobre cópia do corpus candidato, exportar o
+   snapshot e instalá-lo de forma **experimental** (`--aceitar-nao-vinculado`) em home descartável; conferir
+   integridade, `fv doctor --offline` e bench.
+3. Congelar os bytes exportados, gravar o digest em `freoa_verifica/data/snapshots-oficiais.json` e commitar.
+   Repetir a instalação, agora vinculada, em home vazio.
+4. Auditoria independente sobre esse commit (manifesto, instalador, digest, código).
+5. PR para `main` com CI verde nas oito combinações (Python 3.11–3.14 × Ubuntu e Windows), merge e tag `vX.Y.Z`
+   sobre o commit auditado. `release.yml` constrói com dependências travadas e cria a release como **rascunho**
+   (`gh release create --draft`) com wheel, sdist, lock, `SHA256SUMS` e attestation. Ele não publica na PyPI.
+6. Auditoria dos bytes da CI: baixar os assets do rascunho, conferir `SHA256SUMS` e a attestation
+   (`gh attestation verify <arquivo> --repo rickfreoa/freoa-verifica`), o conteúdo da wheel (sem `tests/`,
+   digest do snapshot embutido igual ao auditado) e instalar a wheel baixada em ambiente limpo. Anexar ao rascunho
+   exatamente o snapshot auditado e seu `.sha256` (`gh release upload`, sem substituir asset) e só então publicar
+   (`gh release edit vX.Y.Z --draft=false`).
+7. A publicação dispara `pypi.yml` (`release: published`): ele baixa os assets da própria release, confere
+   `SHA256SUMS` e a attestation, exige uma wheel e um sdist (sem `tests/` na wheel) e publica esses bytes por
+   Trusted Publishing, com `environment: pypi`. Roda só com `vars.PYPI_PUBLICAR == 'true'` e com o publicador
+   cadastrado em pypi.org (projeto `freoa-verifica`, workflow `pypi.yml`, ambiente `pypi`); sem isso é pulado.
+8. Instalar pelo instalador oficial e conferir attestation, digest, vínculo, `doctor` e um smoke de pesquisa.
+
+Locks: `scripts/atualizar_lock.ps1` (ou `.sh`) regera `requirements/*.lock`; commitar o resultado.

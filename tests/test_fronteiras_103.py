@@ -396,6 +396,7 @@ def test_c7_servidor_avisa_em_toda_resposta(tmp_path, monkeypatch):
 
 # ---------------------------------------------------------------- F10
 
+@pytest.mark.repositorio
 def test_f10_release_depende_da_suite_e_nao_substitui_assets():
     if not (ROOT / "pyproject.toml").exists():
         pytest.skip("pacote instalado fora do checkout: os workflows não o acompanham")
