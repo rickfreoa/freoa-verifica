@@ -61,7 +61,7 @@ def test_requisicao_post_json_pelo_transporte(conn):
     url, kw = conn.state["calls"][0]
     assert url == URL and kw["method"] == "POST" and kw["hosts"] == {"jurisdf.tjdft.jus.br"}
     assert kw["path_prefixes"] == {"jurisdf.tjdft.jus.br": ("/api/v1/pesquisa",)} and kw["mimes"] == {"application/json"}
-    assert json.loads(kw["body"]) == {"query": "acordo de acionistas", "pagina": 0, "tamanho": 3,
+    assert json.loads(kw["body"]) == {"query": "\"acordo de acionistas\"", "pagina": 0, "tamanho": 3,  # locucoes-1
                                        "termosAcessorios": [{"campo": "base", "valor": "acordaos"}]}
 
 
