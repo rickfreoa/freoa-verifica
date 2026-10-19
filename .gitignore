@@ -30,3 +30,5 @@ freoa-verifica-snapshot-*.tar.gz
 .env.*
 !.env.example
 
+saude-fontes.json
+live.xml
