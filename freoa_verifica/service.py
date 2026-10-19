@@ -26,6 +26,7 @@ from freoa_verifica.authority import RULES_VERSION as AUTHORITY_RULES_VERSION
 from freoa_verifica.authority import as_dict as authority_as_dict
 from freoa_verifica.authority import classify_authority
 from freoa_verifica.citation import Citation, extract, parse_one
+from freoa_verifica.contrato import CONTRATO_VERSAO
 from freoa_verifica.courts import normalize_court
 from freoa_verifica.search import buscar_and_or, consulta_fts, normalize_fts_query
 from freoa_verifica.connectors.base import (
@@ -2744,7 +2745,7 @@ class Verifica:
                     "circuito": circuit,
                 }
             )
-        return {"fontes": fontes, "total": len(fontes)}
+        return {"fontes": fontes, "total": len(fontes), "contrato": CONTRATO_VERSAO}
 
     def sincronizar(
         self,
