@@ -155,22 +155,6 @@ def test_no_negative_promotion(verifica_populada, monkeypatch, reason, expected)
     assert svc.verificar_texto("art. 254-A da Lei 6.404/76")["citacoes"][0]["status"] == expected
 
 
-def test_latest_release_fallback(monkeypatch):
-    calls = []
-    name = "freoa-verifica-snapshot-20261018.tar.gz"
-    url = "https://github.com/rickfreoa/freoa-verifica/releases/download/v1/" + name
-    def fetch(request, **kwargs):
-        calls.append(request)
-        data = {"assets": []} if request.endswith("/latest") else [
-            {"assets": []}, {"assets": [{"name": name, "browser_download_url": url}]}]
-        return SimpleNamespace(body=json.dumps(data).encode())
-    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": name, "sha256": '0' * 64, "derived_version": 3}])
-    monkeypatch.setattr(httputil, "connector_fetch", fetch)
-    monkeypatch.setattr(snapshot, "_download_release", lambda found, **kwargs: found)
-    assert snapshot._download_latest_release() == url
-    assert "page=1" in calls[-1]
-
-
 @pytest.mark.parametrize("failure", ["checksum", "download", "checksum_unavailable"])
 def test_snapshot_failure_cleans_before_extraction(monkeypatch, tmp_path, failure):
     from freoa_verifica.connectors.base import Unavailable

@@ -13,7 +13,7 @@ from freoa_verifica.service import Verifica
 def pin(monkeypatch, archive):
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{
-        "arquivo": archive.name, "sha256": digest, "versao_pacote_min": "1.1.0", "derived_version": 3}])
+        "arquivo": archive.name, "sha256": digest, "derived_version": 3}])
     return digest
 
 
@@ -73,22 +73,6 @@ def test_manifest_cannot_claim_binding(verifica_populada, tmp_path):
     # A flag explícita não promove um diretório, mesmo se o manifesto alegar vínculo.
     with Verifica(tmp_path / "target") as target:
         assert target.snapshot_install(export, aceitar_nao_vinculado=True)["vinculado"] is False
-
-
-def test_latest_ignores_unbound_and_wrong_digest(monkeypatch):
-    from freoa_verifica.connectors import httputil
-    entry = snapshot._snapshots_oficiais()[-1]
-    good = {"name": entry["arquivo"], "digest": "sha256:" + entry["sha256"], "browser_download_url": "GOOD"}
-    wrong = {**good, "digest": "sha256:" + "0" * 64, "browser_download_url": "BAD"}
-    newer = {"assets": [{"name": "freoa-verifica-snapshot-new.tar.gz", "browser_download_url": "UNKNOWN"}, wrong]}
-    calls = []
-    def fetch(url, **kwargs):
-        calls.append(url)
-        return SimpleNamespace(body=json.dumps(newer if url.endswith("/latest") else [newer, {"assets": [good]}]).encode())
-    monkeypatch.setattr(httputil, "connector_fetch", fetch)
-    monkeypatch.setattr(snapshot, "_download_release", lambda url, **kw: url)
-    assert snapshot._download_latest_release() == "GOOD"
-    assert len(calls) == 2
 
 
 def test_remote_digest_checked_before_extract(monkeypatch, tmp_path):

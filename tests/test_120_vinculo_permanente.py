@@ -14,7 +14,7 @@ def test_b1_nao_vinculado_e_permanente_apos_anexacao(verifica_populada, tmp_path
     # agora um snapshot "oficial" (pin sintético) anexado por cima
     official = tmp_path / "official.tar.gz"; source.snapshot_export(official)
     d = hashlib.sha256(official.read_bytes()).hexdigest()
-    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": official.name, "sha256": d, "versao_pacote_min": "1.1.0", "derived_version": 3}])
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": official.name, "sha256": d, "derived_version": 3}])
     with Verifica(home) as t:
         r2 = t.snapshot_install(official)
 
@@ -46,7 +46,7 @@ def test_b1_upgrade_e_home_sem_manifesto_nao_viram_vinculados(verifica_populada,
         mf.write_text(json.dumps(data), encoding="utf-8")
     official = tmp_path / "official.tar.gz"; source.snapshot_export(official)
     d = hashlib.sha256(official.read_bytes()).hexdigest()
-    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": official.name, "sha256": d, "versao_pacote_min": "1.1.0", "derived_version": 3}])
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": official.name, "sha256": d, "derived_version": 3}])
     with Verifica(home) as t:
         r = t.snapshot_install(official)
         assert r["status"] == "ok" and r["vinculado"] is False
@@ -58,7 +58,7 @@ def test_b1_home_vazio_com_snapshot_oficial_e_vinculado(verifica_populada, tmp_p
     source, _, _ = verifica_populada
     official = tmp_path / "official.tar.gz"; source.snapshot_export(official)
     d = hashlib.sha256(official.read_bytes()).hexdigest()
-    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": official.name, "sha256": d, "versao_pacote_min": "1.1.0", "derived_version": 3}])
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": official.name, "sha256": d, "derived_version": 3}])
     with Verifica(tmp_path / "vazio") as t:
         r = t.snapshot_install(official)
         assert r["vinculado"] is True and "vinculo_motivo" not in r
