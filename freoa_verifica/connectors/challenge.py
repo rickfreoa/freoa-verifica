@@ -58,13 +58,6 @@ def detect_challenge(
         if name in hdrs:
             return ChallengeDetected(kind)
 
-    if status == 202:
-        empty = body is None or (isinstance(body, (bytes, bytearray)) and len(body) == 0) or (
-            isinstance(body, str) and not body.strip()
-        )
-        if empty or hdrs.get("x-amzn-waf-action"):
-            return ChallengeDetected("aws_waf")
-
     text = _as_text(body)
     if text:
         if status in (None, 200) and expected_content and re.search(expected_content, text, re.I):
