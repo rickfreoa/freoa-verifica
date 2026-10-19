@@ -6,7 +6,18 @@ Captura com hash prova a origem dos bytes; não implica vigência nem juízo jur
 
 ## Acervo distribuído
 
-<<CONTAGENS>>
+Snapshot `freoa-verifica-snapshot-20261019-1.2.0.tar.gz` (617 MB; sha256
+`926a6eb7fcf25ca4b7c8ec37f2804b1b9a32232fc67b3770ca05c2e4d2acc4e7`; `derived_version` 4), montado a partir do
+snapshot 1.1.0 reprocessado com o código 1.2.0 e da semente TJDFT. Instalado em diretório novo: 826 obras,
+35.419 decisões, 2.034 capturas no pacote, `vinculado: true`.
+
+| Tribunal | Decisões | Recorte |
+|---|---:|---|
+| STJ | 32.668 | espelhos de 06/2024 a 08/2026 (Corte Especial, Segunda Seção, Terceira e Quarta Turmas) |
+| TCU | 1.800 | acórdãos de 08/2026 a 10/2026 |
+| STF | 799 | súmulas e súmulas vinculantes (temas de repercussão geral como metadados) |
+| TJDFT | 112 | semente temática societária (API oficial) |
+| CVM | 40 | Colegiado, 12/2023 a 09/2026 |
 
 ## Fonte a fonte
 
