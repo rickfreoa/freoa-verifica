@@ -20,6 +20,7 @@ def _item(i: dict) -> dict:
                                   "nivel_prova", "pertinencia", "correspondencia", "capture_id")} | {
         "autoridade": (i.get("autoridade") or {}).get("label") if isinstance(i.get("autoridade"), dict) else i.get("autoridade"),
         "ementa": (i.get("ementa") or "")[:400],
+        "texto_exibido": (i.get("ementa") or i.get("trecho_inteiro_teor") or "")[:400],
     }
 
 
