@@ -23,6 +23,11 @@ Um marco só avança com a suíte verde e parecer do auditor sem bloqueador.
 6. Sem dados de cliente, consultas, credenciais ou corpus privado no repositório.
 7. Nenhum modelo de linguagem no caminho de execução; juízo pendente vira `unknown` com o material necessário.
 8. Mudança de comportamento exige teste de regressão; mudança de regra exige registro em `docs/decisoes/`.
+9. Fixtures são capturas reais com proveniência registrada em `tests/fixtures/FIXTURES.json` (categoria `captura_real`) ou sintéticas rotuladas com gerador e propósito (categoria `sintetica`). Amostra real nunca é editada à mão; nova captura passa por `scripts/capturar_fixture.py`. Todo arquivo do diretório consta do manifesto.
+
+## Heurísticas de projeto
+
+- Generalizar para uma família de conectores (classe ou utilitário comum) só depois de duas ocorrências concretas do mesmo padrão. Antes disso, duplicação local é preferível a abstração prematura.
 
 ## Comandos
 
@@ -30,5 +35,7 @@ Um marco só avança com a suíte verde e parecer do auditor sem bloqueador.
 python -m venv .venv && .venv/bin/pip install -e ".[test,server]"
 pytest -q -m "not live"     # suíte offline (CI)
 pytest -q -m live           # contra as fontes reais
+pytest -q -m repositorio    # testes que exigem o checkout
 fv bench --gold <gold.jsonl>
+python scripts/capturar_fixture.py --help
 ```
