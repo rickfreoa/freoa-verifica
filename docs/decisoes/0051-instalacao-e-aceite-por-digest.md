@@ -1,4 +1,4 @@
-# 0044 — Instalação e aceite por digest da versão
+# 0051 — Instalação e aceite por digest da versão
 
 Data: 19/10/2026 · Versão: 1.3.0 · Origem: plano 1.3.0, item D2
 
