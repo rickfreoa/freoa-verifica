@@ -21,12 +21,18 @@ def test_detect_202_empty():
 
 
 def test_detect_403_html():
-    found = detect_challenge(
+    # 0045: 403 sem marcador é recusa identificada, não desafio; com marcador segue desafio.
+    assert detect_challenge(
         status=403,
         body=b"<html><body>blocked</body></html>",
         headers={"content-type": "text/html"},
+    ) is None
+    found = detect_challenge(
+        status=403,
+        body=b"<html><body>AwsWafIntegration.getToken()</body></html>",
+        headers={"content-type": "text/html"},
     )
-    assert found is not None
+    assert found is not None and found.args[0] == "aws_waf"
 
 
 def test_clean_body_no_challenge():

@@ -17,12 +17,41 @@ IDENTIFIED_USER_AGENT = (
 )
 
 
-class Unavailable(Exception):
-    """Fonte inacessível ou resposta não interpretável — nunca trate como zero resultados."""
+CATEGORIAS_INDISPONIBILIDADE = (
+    "ambiental_desafio",
+    "fonte_fora",
+    "recusa_identificado",
+    "resposta_inesperada",
+    "regressao",
+)
+_REASONS_RESPOSTA_INESPERADA = frozenset({"resposta_invalida", "resposta_inesperada"})
 
-    def __init__(self, reason: str):
+
+class Unavailable(Exception):
+    """Fonte inacessível ou resposta não interpretável — nunca trate como zero resultados.
+
+    `reason` é o código estável. `categoria` (decisão 0045) só existe por prova positiva;
+    `evidencia` traz status, marcador, cabecalho, sha256 e url quando conhecidos.
+    """
+
+    def __init__(self, reason: str, categoria: str | None = None, evidencia: dict | None = None):
         self.reason = reason
+        if categoria is None and reason in _REASONS_RESPOSTA_INESPERADA:
+            categoria = "resposta_inesperada"
+        if categoria is not None and categoria not in CATEGORIAS_INDISPONIBILIDADE:
+            raise ValueError(f"categoria inválida: {categoria}")
+        self.categoria = categoria
+        self.evidencia = dict(evidencia or {})
         super().__init__(reason)
+
+    def classificacao(self) -> dict:
+        """Campos aditivos para a saída JSON; vazio quando não há categoria provada."""
+        if self.categoria is None:
+            return {}
+        out: dict = {"categoria": self.categoria}
+        if self.evidencia:
+            out["evidencia_indisponibilidade"] = self.evidencia
+        return out
 
 
 @dataclass(frozen=True)
