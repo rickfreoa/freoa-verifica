@@ -1,0 +1,56 @@
+name: pypi
+
+# Publica na PyPI os bytes da release GitHub já publicada (e, portanto, já auditada).
+# Só roda depois que o mantenedor cadastrar o publicador em pypi.org (projeto
+# freoa-verifica, workflow pypi.yml, ambiente pypi) e definir a variável de repositório
+# PYPI_PUBLICAR=true. Sem isso, o job é pulado, não falha.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  pypi:
+    if: vars.PYPI_PUBLICAR == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Baixar assets da release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets
+      - name: Conferir SHA256SUMS
+        run: cd assets && sha256sum -c SHA256SUMS
+      - name: Verificar attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for f in assets/*.whl assets/*.tar.gz; do
+            case "$f" in assets/freoa-verifica-snapshot-*) continue ;; esac
+            gh attestation verify "$f" --repo rickfreoa/freoa-verifica
+          done
+      - name: Inspecionar conteúdo
+        run: |
+          set -eu
+          mkdir pypi-dist
+          wheels=$(ls assets/*.whl | wc -l)
+          sdists=$(ls assets/*.tar.gz | grep -v '/freoa-verifica-snapshot-' | wc -l)
+          test "$wheels" = 1 || { echo "esperada 1 wheel, achadas $wheels"; exit 1; }
+          test "$sdists" = 1 || { echo "esperado 1 sdist, achados $sdists"; exit 1; }
+          python3 - assets/*.whl <<'EOF'
+          import sys, zipfile
+          nomes = zipfile.ZipFile(sys.argv[1]).namelist()
+          ruins = [n for n in nomes if n.split("/")[0] == "tests"]
+          assert not ruins, f"tests/ na wheel: {ruins[:3]}"
+          EOF
+          cp assets/*.whl pypi-dist/
+          cp $(ls assets/*.tar.gz | grep -v '/freoa-verifica-snapshot-') pypi-dist/
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          packages-dir: pypi-dist
