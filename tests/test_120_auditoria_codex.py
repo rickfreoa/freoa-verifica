@@ -194,3 +194,13 @@ def test_resultado_sem_ementa_mostra_trecho_pertinente_rotulado(svc):
     corpo = "Poder Judiciário cabeçalho. " * 30 + "Trata-se de exclusão de sócio de sociedade limitada."
     trecho, cortado = _trecho_pertinente(corpo, "exclusao de socio", 200)
     assert "exclusão de sócio" in trecho and cortado
+
+
+def test_ementa_que_cobre_a_consulta_vem_antes_de_termos_espalhados(svc):
+    longo = ("Relatório. A sociedade transformou-se. " * 40 + " O sócio alegou exclusão indevida do foro. "
+             + "limitada a competência. " * 20)
+    _indexar(svc, "TJDFT", "MONO", text=longo, ementa="", profile="tjdft_inteiro_teor", kind="monocratica",
+             metadata={"documento": "inteiro_teor"})
+    _indexar(svc, "TJDFT", "ACORD", text="", ementa="Exclusão de sócio. Sociedade limitada. Falta grave.")
+    itens = svc.pesquisar_jurisprudencia("exclusao de socio sociedade limitada", tribunais=["tjdft"])["itens"]
+    assert itens[0]["classe_numero"].endswith("ACORD")

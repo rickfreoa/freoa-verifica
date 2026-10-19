@@ -2170,13 +2170,26 @@ class Verifica:
                     self.conn, fts, courts=tribunais_norm if tribunais is not None else None,
                     desde=desde, ate=ate, autoridade_min=autoridade_min, limit=n, offset=0)
             # AND primeiro; menos de offset+limite resultados completam com OR marcado (decisão 0025).
+            # Candidatos além da página: a reordenação abaixo precisa de margem para promover quem tem a
+            # consulta coberta pela ementa (comparativo 1.2.0).
+            alvo = max(offset + limite + 1, 50)
             res = buscar_and_or(
                 q, buscar, lambda r: f"{r.get('ementa') or ''} {r.get('inteiro_teor') or ''}",
                 lambda r: r.get("decision_id") or r.get("official_id"),
-                offset + limite + 1, offset + limite, colunas="ementa inteiro_teor", peso=self._peso_idf())
+                alvo, offset + limite, colunas="ementa inteiro_teor", peso=self._peso_idf())
             modo_busca = "ampliada" if res["fts"] and not res["and"] else "normal"
             tesauro_info = res["tesauro"]
-            return res["linhas"][offset:]
+            # Mesma correspondência: primeiro quem tem os termos na ementa (o resumo oficial do julgado), depois
+            # quem só os tem espalhados no inteiro teor; a ordem bm25 desempata. Determinístico.
+            from freoa_verifica.search import consulta_fts, pertinencia
+            variantes = consulta_fts(q)[1]
+            def cobertura_ementa(r):
+                h, n = pertinencia(variantes, r.get("ementa") or "")
+                return h / n
+            linhas = sorted(enumerate(res["linhas"]),
+                            key=lambda p: (p[1].get("correspondencia") != "todos_os_termos",
+                                           -round(cobertura_ementa(p[1]), 2), p[0]))
+            return [r for _, r in linhas][offset:offset + limite + 1]
 
         local = local_page()
         items: list[dict[str, Any]] = []

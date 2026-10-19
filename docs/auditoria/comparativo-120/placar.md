@@ -45,5 +45,5 @@
 
 **geral**: 42 casos — FREOA 33/42, JusRatio 38/42
 **acervo**: 35 casos — FREOA 33/35, JusRatio 35/35
-**precisão temática (resultados 'sim')**: FREOA 16/35, JusRatio 25/35
+**precisão temática (resultados 'sim')**: FREOA 15/35, JusRatio 23/35
 **confirmações indevidas**: FREOA 0, JusRatio 0 (nenhum sistema apresentou outro item como o pedido)
