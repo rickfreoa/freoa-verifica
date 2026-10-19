@@ -1,4 +1,4 @@
-# 0044 — CI travado por hashes e PyPI só depois da publicação da release
+# 0050 — CI travado por hashes e PyPI só depois da publicação da release
 
 Data: 19/10/2026 · Versão: 1.3.0 · Origem: plano 1.3.0 (G1, G3, D2)
 
