@@ -31,6 +31,12 @@ Python 3.14, nada impedia mascarar um gate com `continue-on-error`/`|| true`, e 
 - `scripts/ruff_catraca.py --atualizar` só reduz a baseline: recusa achado novo e aumento de contagem.
   A baseline nasce com `--inicializar`, que recusa se ela já existe.
 
+- O travamento alcança o build da release e o job `repositorio`: `build.lock` com `--require-hashes`,
+  `python -m build --no-isolation`, `ci.lock` com hashes e a wheel com `--no-deps`
+  (`pip install --no-deps --no-build-isolation -e .` no job `repositorio`). O `requirements-lock.txt` da
+  release é cópia de `requirements/ci.lock`, não `pip freeze`. `tests/test_workflows.py` reprova `pip install`
+  sem `--require-hashes`/`--no-deps` e `python -m build` com isolamento.
+
 ## Consequências
 
 - O publicador pendente em pypi.org passa a apontar para o workflow `pypi.yml`, não `release.yml`.

@@ -61,4 +61,7 @@ Checksums provam integridade, e a origem depende do canal da release.
    cadastrado em pypi.org (projeto `freoa-verifica`, workflow `pypi.yml`, ambiente `pypi`); sem isso é pulado.
 8. Instalar pelo instalador oficial e conferir attestation, digest, vínculo, `doctor` e um smoke de pesquisa.
 
+O `requirements-lock.txt` da release é cópia de `requirements/ci.lock` (instalado com `--require-hashes` no smoke
+test), não uma resolução posterior.
+
 Locks: `scripts/atualizar_lock.ps1` (ou `.sh`) regera `requirements/*.lock`; commitar o resultado.

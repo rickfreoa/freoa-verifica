@@ -33,18 +33,20 @@ jobs:
           test "$i" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != __version__ $i"; exit 1; }
       - name: Build
         run: |
-          python -m pip install --upgrade pip build
-          python -m build
+          python -m pip install --require-hashes -r requirements/build.lock
+          python -m build --no-isolation
           cd dist && sha256sum * > SHA256SUMS
       - name: Smoke test do wheel
         run: |
-          python -m venv /tmp/v && /tmp/v/bin/pip install dist/*.whl
+          python -m venv /tmp/v
+          /tmp/v/bin/pip install --require-hashes -r requirements/ci.lock
+          /tmp/v/bin/pip install --no-deps dist/*.whl
           /tmp/v/bin/fv --version
           /tmp/v/bin/fv doctor --offline
-      - name: Registrar dependências resolvidas
+      - name: Registrar dependências travadas
         run: |
-          /tmp/v/bin/pip install "$(ls dist/*.whl)[server]"
-          /tmp/v/bin/pip freeze --exclude freoa-verifica > dist/requirements-lock.txt
+          # O lock publicado é o próprio lock com hashes que instalou o smoke test, não uma resolução posterior.
+          cp requirements/ci.lock dist/requirements-lock.txt
           (cd dist && sha256sum requirements-lock.txt >> SHA256SUMS)
       - uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
         with:
