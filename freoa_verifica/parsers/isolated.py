@@ -49,20 +49,22 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url:
     if timeout <= 0:
         return _failure(profile, "orcamento esgotado")
     try:
-        with subprocess.Popen(
+        # Sem `with`: o __exit__ do Popen fecharia pipes ainda presos por um descendente fora do grupo
+        # (setsid) e bloquearia o pai; _bounded_io fecha o que pode e abandona o resto no prazo.
+        proc = subprocess.Popen(
             # -P: o diretório corrente não entra no sys.path do filho antes dos limites.
             [sys.executable, "-P", "-m", "freoa_verifica.parsers.isolated", profile, *([base_url] if base_url else [])],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
             # Grupo próprio: timeout e excesso matam também descendentes que herdem os pipes.
             **({"start_new_session": True} if os.name == "posix" else {}),
-        ) as proc:
-            output, stderr, exceeded = _bounded_io(proc, raw, timeout)
-            if exceeded:
-                return _failure(profile, exceeded)
-            if proc.returncode != 0:
-                detail = stderr.decode("utf-8", "replace").strip().splitlines()
-                return _failure(profile, f"parse_isolated falhou no filho (exit={proc.returncode}): "
-                                + (detail[-1][:200] if detail else "sem detalhe"))
+        )
+        output, stderr, exceeded = _bounded_io(proc, raw, timeout)
+        if exceeded:
+            return _failure(profile, exceeded)
+        if proc.returncode != 0:
+            detail = stderr.decode("utf-8", "replace").strip().splitlines()
+            return _failure(profile, f"parse_isolated falhou no filho (exit={proc.returncode}): "
+                            + (detail[-1][:200] if detail else "sem detalhe"))
     except OSError as exc:
         return _failure(profile, f"parse_isolated indisponivel: {type(exc).__name__}")
     try:
@@ -87,9 +89,10 @@ def _bounded_io(proc, raw: bytes, timeout: float):
             pass
 
     def read(stream, index, limit):
+        fd = stream.fileno()  # descritor cru: nenhuma trava de BufferedReader compartilhada com o fechamento
         try:
             while True:
-                chunk = stream.read(min(65536, limit - len(buffers[index]) + 1))
+                chunk = os.read(fd, min(65536, limit - len(buffers[index]) + 1))
                 if not chunk:
                     break
                 if len(buffers[index]) + len(chunk) > limit:
@@ -109,24 +112,27 @@ def _bounded_io(proc, raw: bytes, timeout: float):
         finally:
             proc.stdin.close()
 
-    threads = [threading.Thread(target=read, args=(proc.stdout, 0, STDOUT_LIMIT)),
-               threading.Thread(target=read, args=(proc.stderr, 1, STDERR_LIMIT)),
-               threading.Thread(target=write)]
+    threads = [threading.Thread(target=read, args=(proc.stdout, 0, STDOUT_LIMIT), daemon=True),
+               threading.Thread(target=read, args=(proc.stderr, 1, STDERR_LIMIT), daemon=True),
+               threading.Thread(target=write, daemon=True)]
     for thread in threads:
         thread.start()
     try:
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         kill(f"parse_isolated excedeu timeout={timeout}s")
-        proc.wait()
-    finally:
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+    for thread in threads:
+        thread.join(timeout=5)
+    if any(t.is_alive() for t in threads):
+        # Descendente segurando os pipes (inclusive fora do grupo, via setsid): mata o grupo e encerra
+        # como falha sem esperar; threads daemon e pipes são abandonados até o descendente morrer.
+        kill("descendente_reteve_pipes")
         for thread in threads:
-            thread.join(timeout=5)
-        if any(t.is_alive() for t in threads):
-            # Descendente segurando os pipes: mata o grupo e encerra como falha (não espera indefinidamente).
-            kill("descendente_reteve_pipes")
-            for thread in threads:
-                thread.join(timeout=5)
+            thread.join(timeout=2)
     return buffers[0], buffers[1], failures[0] if failures else None
 
 

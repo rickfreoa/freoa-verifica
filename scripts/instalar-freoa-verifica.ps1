@@ -5,7 +5,10 @@ function Invoke-NativeChecked {
     param([string]$Etapa, [string]$Comando, [string[]]$Argumentos)
     $resultado = & $Comando @Argumentos
     $codigo = $LASTEXITCODE
-    if ($codigo -ne 0) { throw "FALHOU na etapa: $Etapa (exit=$codigo)" }
+    if ($codigo -ne 0) {
+        $saida = (($resultado | Out-String).Trim() -split "`n" | Select-Object -Last 15) -join "`n"
+        throw "FALHOU na etapa: $Etapa (exit=$codigo)`n$saida"
+    }
     return $resultado
 }
 
@@ -62,6 +65,16 @@ try {
     $etapa = "validar versao"
     $v = (Invoke-NativeChecked $etapa $fv @("--version")) -join "`n"
     if ($v -notmatch '(?<![0-9.])1\.2\.0(?![0-9.])') { throw "versao inesperada: $v" }
+    # Instalação de snapshot é anexação: acervo anterior sem vínculo comprovado (1.1, ou instalado com
+    # --aceitar-nao-vinculado) contaminaria o novo. Ele é preservado ao lado e o snapshot vai para home limpo.
+    $etapa = "preservar acervo anterior"
+    $pre = (Invoke-NativeChecked $etapa $fv @("snapshot", "info", "--json")) -join "`n" | ConvertFrom-Json
+    if ($pre.instalado -and $pre.vinculado -ne $true) {
+        $bak = "$registroDir.pre-$versao-$(Get-Date -Format yyyyMMddHHmmss)"
+        Move-Item $registroDir $bak
+        New-Item -ItemType Directory -Force $registroDir | Out-Null
+        Write-Host "Acervo anterior sem vinculo preservado em $bak"
+    }
     $etapa = "instalar snapshot"
     $inst = (Invoke-NativeChecked $etapa $fv @("snapshot", "install", "--json")) -join "`n" | ConvertFrom-Json
     if ($inst.status -ne "ok") { throw "snapshot recusado: $($inst.motivo)" }

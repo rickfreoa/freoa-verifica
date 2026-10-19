@@ -890,18 +890,28 @@ def pack_snapshot(directory: Path, archive: Path) -> str:
     return digest
 
 
-def _vinculo_acumulado(home: Path, novo: dict[str, Any]) -> dict[str, Any]:
+def _vinculo_acumulado(home: Path, novo: dict[str, Any], *, banco_tinha_dados: bool) -> dict[str, Any]:
+    """Instalação é anexação: o acervo só é vinculado se já era vinculado ou se estava vazio (auditoria 1.2.0, B1).
+    Manifesto da 1.1 (sem a chave) ou banco populado sem manifesto não provam vínculo."""
+    if not novo.get("vinculado"):
+        return dict(novo)
     try:
         anterior = json.loads((Path(home) / acervo.MANIFESTO_LOCAL).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return dict(novo)  # home sem instalação anterior registrada
-    if isinstance(anterior, dict) and anterior.get("vinculado") is False and novo.get("vinculado"):
-        return {**novo, "vinculado": False, "vinculo_motivo": "ACERVO_CONTEM_SNAPSHOT_NAO_VINCULADO"}
-    return dict(novo)
+        anterior = None
+    if isinstance(anterior, dict) and anterior.get("vinculado") is True:
+        return dict(novo)
+    if anterior is None and not banco_tinha_dados:
+        return dict(novo)
+    motivo = ("ACERVO_CONTEM_SNAPSHOT_NAO_VINCULADO" if isinstance(anterior, dict) and anterior.get("vinculado") is False
+              else "ACERVO_PREEXISTENTE_SEM_VINCULO")
+    return {**novo, "vinculado": False, "vinculo_motivo": motivo}
 
 
 def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) -> dict[str, Any]:
     origem = Path(origem)
+    banco_tinha_dados = any(svc.conn.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone()
+                            for t in ("work", "decision", "capture"))
     if derivados.origem_nao_publicada(svc.conn):  # a instalação anexa ao banco local: não parte de banco limpo
         return {"status": "erro", "motivo": derivados.REASON_NAO_PUBLICADA,
                 "orientacao": "instale o snapshot em home novo"}
@@ -1059,7 +1069,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
         svc.conn = connect(db_dst)
         # O manifesto de origem não pode autoafirmar vínculo com o wheel. Instalação é anexação:
         # um snapshot não vinculado anterior continua no banco, logo o "não vinculado" é permanente.
-        vinculo = _vinculo_acumulado(svc.home, vinculo or {"vinculado": False})
+        vinculo = _vinculo_acumulado(svc.home, vinculo or {"vinculado": False}, banco_tinha_dados=banco_tinha_dados)
         manifest.update(vinculo)
         manifest["snapshot_derived_version"] = manifest.get("snapshot_derived_version") or manifest.get("derived_version")
         manifest["derived_version"] = acervo.derived_version(svc.conn)
