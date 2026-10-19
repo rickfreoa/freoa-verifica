@@ -1,6 +1,6 @@
 """Testes live: indisponibilidade ambiental provada vira xfail; o resto continua falha (decisão 0045).
 
-Ao fim da sessão grava `saude-fontes.json` com o estado por fonte (decisão 0053).
+Ao fim da sessão grava `saude-fontes.json` com o estado por fonte (decisão 0054).
 """
 
 from __future__ import annotations
