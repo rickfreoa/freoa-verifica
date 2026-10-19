@@ -19,7 +19,8 @@ WORKFLOWS = sorted((ROOT / ".github/workflows").glob("*.yml"))
 
 MASCARAS = (
     re.compile(r"\bcontinue-on-error:\s*(?!false\b)\S"),
-    re.compile(r"\|\|\s*(?:true|:|exit\s+0)\b"),
+    re.compile(r"\|\|\s*(?:true|:|exit\s+0)(?![\w-])"),  # `\b` não reconhece `:` no fim da linha
+    re.compile(r";\s*(?:true|:)\s*(?:#.*)?$"),
 )
 EXCECAO = re.compile(r"#\s*gate-nao-bloqueante:\s*\S")
 
@@ -49,12 +50,34 @@ def test_workflow_sem_gate_mascarado(arquivo):
     "    continue-on-error: ${{ matrix.experimental }}\n",
     "      - run: pytest -q || true\n",
     "      - run: pytest -q || exit 0\n",
+    "      - run: pytest -q || :\n",
+    "      - run: pytest -q || : # ignora\n",
+    "      - run: pytest -q ||true\n",
+    "      - run: pytest -q; true\n",
+    "      - run: pytest -q ; true\n",
+    "      - run: pytest -q; :\n",
+    "      - run: pytest -q || true; echo ok\n",
     "    continue-on-error: true  # gate-nao-bloqueante:\n",  # motivo vazio não vale
 ])
 def test_yaml_adulterado_e_reprovado(trecho):
     base = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert mascaramentos(base) == []
     assert mascaramentos(base + trecho)
+
+
+@pytest.mark.parametrize("linha", [
+    "pytest || :", "pytest || true", "pytest || exit 0", "pytest; true", "pytest;true", "pytest ||:",
+])
+def test_mascaramento_isolado_e_reconhecido(linha):
+    assert mascaramentos(f"- run: {linha}\n")
+
+
+@pytest.mark.parametrize("linha", [
+    "pytest || exit 1", "echo 'a; true'", "pytest || trueish", "pytest || exit 01", "python -c 'x = {1: 2}'",
+    "echo ok; true_check", "cmd || :foo",
+])
+def test_comando_legitimo_nao_e_mascaramento(linha):
+    assert mascaramentos(f"- run: {linha}\n") == []
 
 
 def test_excecao_documentada_e_aceita_e_false_passa():
