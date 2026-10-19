@@ -277,7 +277,8 @@ class BcbConnector(Connector):
         return resp
 
     def parse(self, resp: Response):
-        return parse_bcb_json(resp.body)
+        from freoa_verifica.parsers.isolated import parse_ou_indisponivel
+        return parse_ou_indisponivel("bcb_json", resp.body, 120.0)
 
 
 def _sem_conteudo(body: bytes) -> bool:

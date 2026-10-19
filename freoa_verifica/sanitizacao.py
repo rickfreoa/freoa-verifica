@@ -3,7 +3,11 @@
 Padrões adaptados do freoa-document-sanitizer (FREOA IA Legal System). O texto
 oficial nunca é alterado: só se sinaliza (alertas_conteudo) e se neutralizam os
 delimitadores DOCUMENTO OFICIAL que apareçam dentro do próprio documento, para
-que um texto coletado não consiga "fechar" o bloco de dado e falar como instrução.
+que um texto coletado não consiga "fechar" o bloco de dado.
+
+Alcance (avaliação externa, A11): é triagem por padrões conhecidos e delimitação. Instruções
+maliciosas não precisam usar esses padrões; a resistência do modelo cliente (obedecer ao documento,
+exfiltrar, usar ferramentas indevidamente) não é garantida aqui e precisa ser avaliada no cliente.
 """
 from __future__ import annotations
 

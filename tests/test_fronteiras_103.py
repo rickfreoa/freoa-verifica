@@ -24,6 +24,7 @@ def _client(app, **kw):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
+    kw.setdefault("base_url", "http://127.0.0.1")  # Host local (decisão 0040)
     return TestClient(app, **kw)
 
 
@@ -242,7 +243,7 @@ def test_f06_instalacao_de_snapshot_espera_operacoes(tmp_path, monkeypatch):
 
     svc = Verifica(home=tmp_path)
     monkeypatch.setattr(type(svc), "exclusivo", lambda self, timeout=60.0: (_ for _ in ()).throw(TimeoutError("operacoes_ativas")))
-    assert snapshot.install_snapshot(svc, tmp_path / "x") == {"status": "erro", "motivo": "operacoes_ativas"}
+    assert snapshot.install_snapshot(svc, tmp_path / "x", aceitar_nao_vinculado=True) == {"status": "erro", "motivo": "operacoes_ativas"}
     monkeypatch.undo()
     svc.close()
 
@@ -321,7 +322,7 @@ def test_c5_registro_via_cli_e_ambiente(tmp_path, monkeypatch):
 def test_c5_purga_preserva_triggers_e_move_original(tmp_path, capsys):
     from freoa_verifica.cli import main
 
-    with Verifica(home=tmp_path) as svc:
+    with Verifica(home=tmp_path, registro="completo") as svc:  # padrão agora é sem_conteudo (decisão 0040)
         svc.verificar_citacao(f"art. 254-A da Lei 6.404/76 {MARCADOR}")
     with pytest.raises(SystemExit) as e:
         main(["--home", str(tmp_path), "runs", "purgar", "--antes", "2000-01-01", "--json"])
@@ -404,6 +405,12 @@ def test_f10_release_depende_da_suite_e_nao_substitui_assets():
     assert "uses: ./.github/workflows/ci.yml" in rel and "needs: testes" in rel
     assert "--clobber" not in rel
     assert "requirements-lock.txt" in rel
+    subjects = rel.split("subject-path: |", 1)[1].split("      - name:", 1)[0]
+    for subject in ("dist/*.whl", "dist/*.tar.gz", "dist/requirements-lock.txt", "dist/SHA256SUMS"):
+        assert subject in subjects
+    import re
+    assert all(re.search(r"@[0-9a-f]{40}(?:\s|$)", action)
+               for action in re.findall(r"uses: (.+)", rel) if not action.startswith("./"))
 
 
 # ---------------------------------------------------------------- purga atômica com recuperação (C5)

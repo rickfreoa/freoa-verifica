@@ -164,6 +164,7 @@ def test_latest_release_fallback(monkeypatch):
         data = {"assets": []} if request.endswith("/latest") else [
             {"assets": []}, {"assets": [{"name": name, "browser_download_url": url}]}]
         return SimpleNamespace(body=json.dumps(data).encode())
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": name, "sha256": '0' * 64, "derived_version": 3}])
     monkeypatch.setattr(httputil, "connector_fetch", fetch)
     monkeypatch.setattr(snapshot, "_download_release", lambda found, **kwargs: found)
     assert snapshot._download_latest_release() == url

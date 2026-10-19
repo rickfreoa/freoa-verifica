@@ -112,7 +112,7 @@ def test_all_works_have_year_or_reason(populated, tmp_path):
     export=tmp_path/'snapshot'
     assert s.snapshot_export(export)['status']=='ok'
     with Verifica(tmp_path/'installed') as target:
-        installed=target.snapshot_install(export)
+        installed=target.snapshot_install(export, aceitar_nao_vinculado=True)
         assert installed['status']=='ok', installed
         assert target.conn.execute('SELECT reason FROM work_year_issue').fetchone()[0]=='ANO_NAO_DECLARADO'
 
@@ -231,11 +231,12 @@ def test_export_single_archive_cli(populated,tmp_path,monkeypatch):
     assert json.loads(result.stdout)['status']=='ok'
     assert Path(str(archive)+'.sha256').is_file()
     with Verifica(tmp_path/'clean') as target:
-        assert target.snapshot_install(archive)['status']=='ok'
+        assert target.snapshot_install(archive, aceitar_nao_vinculado=True)['status']=='ok'
         assert target.verificar_citacao('art. 87 da Lei 8765/1999',trecho='Regra principal.')['text']['status']=='verified'
 
 
 def test_install_latest_snapshot_without_arguments(populated,tmp_path,monkeypatch):
+    from freoa_verifica import snapshot
     from types import SimpleNamespace
     from freoa_verifica.connectors import httputil
     s,_=populated
@@ -254,6 +255,7 @@ def test_install_latest_snapshot_without_arguments(populated,tmp_path,monkeypatc
         assert request==url
         Path(kwargs["sink"]).write_bytes(archive.read_bytes())
         return SimpleNamespace(body=b"", sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": archive.name, "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(), "derived_version": 3}])
     monkeypatch.setattr(httputil,'connector_fetch',fetch)
     with Verifica(tmp_path/'latest') as target:
         assert target.snapshot_install()['status']=='ok'

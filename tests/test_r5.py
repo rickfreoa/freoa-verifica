@@ -130,7 +130,7 @@ def test_archive_roundtrip(populated,tmp_path):
     directory=tmp_path/'export'; assert s.snapshot_export(directory)['status']=='ok'
     archive=tmp_path/'snapshot.tar.gz'; pack_snapshot(directory,archive)
     with Verifica(tmp_path/'installed') as target:
-        assert target.snapshot_install(archive)['status']=='ok'
+        assert target.snapshot_install(archive, aceitar_nao_vinculado=True)['status']=='ok'
         assert target.verificar_citacao('art. 87 da Lei 8765/1999',trecho='Regra principal.')['text']['status']=='verified'
 
 
@@ -195,6 +195,7 @@ def test_latest_download_authenticates_checksum(tmp_path,monkeypatch):
         if kwargs.get("sink") is not None:
             Path(kwargs["sink"]).write_bytes(data)
         return SimpleNamespace(body=b"" if kwargs.get("sink") else data, sha256=hashlib.sha256(data).hexdigest())
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": name, "sha256": hashlib.sha256(body).hexdigest(), "derived_version": 3}])
     monkeypatch.setattr(httputil,'connector_fetch',fetch)
     monkeypatch.setattr(snapshot,'_new_staging',lambda **kw: tmp_path/'staging')
     (tmp_path/'staging').mkdir()
@@ -294,7 +295,7 @@ def test_snapshot_db_selection_rejected_before_import(tmp_path,mutation):
     sums={**m['arquivos_sha256'],'MANIFEST.json':hashlib.sha256(raw).hexdigest()}
     (package/'SHA256SUMS').write_text(''.join(f'{v}  {k}\n' for k,v in sums.items()))
     with Verifica(tmp_path/'target') as target:
-        assert install_snapshot(target,package)['status']=='erro'
+        assert install_snapshot(target,package, aceitar_nao_vinculado=True)['status']=='erro'
         assert not target.conn.execute("SELECT 1 FROM work WHERE id='external-marker'").fetchone()
 
 

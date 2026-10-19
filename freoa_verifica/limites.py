@@ -29,7 +29,7 @@ TETO_TEXTO = {
     "citacao": 4000, "q": 4000,
     "data": 32, "desde": 32, "ate": 32, "cursor": 20, "modo": 32, "parte": 32,
     "fonte": 256, "tipo": 256, "work_id": 256, "caminho": 256, "id": 256,
-    "capture_id": 256, "autoridade_min": 256,
+    "capture_id": 256, "autoridade_min": 256, "tribunal": 32,
 }
 # (mínimo, máximo) de parâmetros inteiros.
 FAIXA_INT = {"limite": (1, 50), "max_chars": (1, 50_000), "offset": (0, 10_000_000)}

@@ -28,7 +28,8 @@ def corpus(tmp_path, monkeypatch):
                                     "2026-10-18T00:00:00Z", [], "text/plain")
                 parsed = ParsedDecision("fixture", "acordao", court, f"{court}-{n}",
                     ementa="acordo de acionistas", text=text, class_name=cls,
-                    judgment_date=date, organ="Turma", rapporteur="Relator")
+                    judgment_date=date, organ="Turma", rapporteur="Relator",
+                    metadata={"documento": "inteiro_teor"})  # 1.2.0: integral só por declaração
                 connector = SimpleNamespace(id=court.lower(), authority=court, hosts={"example.org"},
                     fetch=lambda _, r=response: r, parse=lambda _, p=parsed: p)
                 svc._index_candidate_juris(connector, Candidate(court.lower(), f"{court}-{n}", "Acórdão"))
@@ -45,14 +46,14 @@ def test_export_install_searchable_all_courts(corpus, tmp_path):
     finally:
         db.close()
     with Verifica(tmp_path / "installed") as target:
-        assert install_snapshot(target, export)["status"] == "ok"
+        assert install_snapshot(target, export, aceitar_nao_vinculado=True)["status"] == "ok"
         for court in ("stj", "tcu", "cvm"):
             result = target.pesquisar_jurisprudencia("acionistas", tribunais=[court])
             assert len(result["itens"]) == 3
             assert {i["tribunal"] for i in result["itens"]} == {court.upper()}
             assert all(i["capture_id"] and i["url_oficial"] for i in result["itens"])
         # Reinstalação não duplica decisões nem páginas.
-        assert install_snapshot(target, export)["status"] == "ok"
+        assert install_snapshot(target, export, aceitar_nao_vinculado=True)["status"] == "ok"
         assert len(target.pesquisar_jurisprudencia("acionistas")["itens"]) == 9
 
 
@@ -103,7 +104,7 @@ def test_legacy_empty_index_install(corpus, tmp_path):
     sums = {**manifest["arquivos_sha256"], "MANIFEST.json": mhash}
     (export / "SHA256SUMS").write_text("".join(f"{v}  {k}\n" for k, v in sorted(sums.items())), encoding="utf-8")
     with Verifica(tmp_path / "repaired") as target:
-        assert install_snapshot(target, export)["status"] == "ok"
+        assert install_snapshot(target, export, aceitar_nao_vinculado=True)["status"] == "ok"
         assert len(target.pesquisar_jurisprudencia("acionistas")["itens"]) == 9
 
 
@@ -166,7 +167,7 @@ def test_legacy_stj_ementa_recovered_from_authenticated_json(tmp_path, monkeypat
         export = tmp_path / "export"
         assert export_snapshot(source.conn, source.home, export)["status"] == "ok"
     with Verifica(tmp_path / "target") as target:
-        assert install_snapshot(target, export)["status"] == "ok"
+        assert install_snapshot(target, export, aceitar_nao_vinculado=True)["status"] == "ok"
         result = target.pesquisar_jurisprudencia("tag along", tribunais=["stj"])
         assert result["itens"][0]["ementa"] == text
         assert target.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 2

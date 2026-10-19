@@ -132,7 +132,7 @@ def test_snapshot_inventory_complete(verifica_populada, tmp_path, mutation):
     else:
         (dest / (".hidden" if mutation == "extra_hidden" else "blobs/extra")).write_bytes(b"extra")
     before = svc.conn.execute("SELECT COUNT(*) FROM capture").fetchone()[0]
-    assert svc.snapshot_install(dest)["status"] == "erro"
+    assert svc.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "erro"
     assert svc.conn.execute("SELECT COUNT(*) FROM capture").fetchone()[0] == before
 
 
@@ -251,7 +251,7 @@ def test_paridade_json_adversarial(case, tmp_path, monkeypatch, capsys):
                 result = asyncio.run(mcp.call_tool("verificar_citacao", arguments))
                 assert not result.is_error
                 assert clean(result.structured_content) == expected
-                with TestClient(app, client=("127.0.0.1", 50000)) as client:
+                with TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as client:
                     response = client.post("/v1/verificacoes", json=arguments)
                     assert response.status_code == 200
                     assert clean(response.json()) == expected
@@ -267,7 +267,7 @@ def test_paridade_json_adversarial(case, tmp_path, monkeypatch, capsys):
             result = asyncio.run(mcp.call_tool("verificar_texto", {"texto": text}))
             assert not result.is_error
             assert clean(result.structured_content) == expected_text
-            with TestClient(app, client=("127.0.0.1", 50000)) as client:
+            with TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as client:
                 response = client.post("/v1/verificacoes/texto", json={"texto": text})
                 assert response.status_code == 200
                 assert clean(response.json()) == expected_text

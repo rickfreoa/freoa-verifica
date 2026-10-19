@@ -107,7 +107,7 @@ def test_snapshot_install_anexacao_preserva_local(verifica_populada, tmp_path):
             label="Local 99901",
         )
         before = svc2.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0]
-        inst = svc2.snapshot_install(dest)
+        inst = svc2.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert inst["status"] == "ok"
         assert inst.get("modo") == "anexacao"
         after = svc2.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0]

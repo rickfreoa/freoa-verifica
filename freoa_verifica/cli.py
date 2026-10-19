@@ -72,7 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sem-registro",
         action="store_true",
-        help="não grava citação, trecho nem evidência textual nas execuções (registro sem_conteudo)",
+        help="registro sem_conteudo (já é o padrão desde a 1.2.0; mantida por compatibilidade)",
+    )
+    parser.add_argument(
+        "--registro-completo",
+        action="store_true",
+        help="grava citação, trecho e evidência textual nas execuções (padrão: sem_conteudo; também FV_REGISTRO=completo)",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -127,6 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--parte", default="ementa")
     p.add_argument("--max-chars", type=int, default=8000)
     p.add_argument("--offset", type=int, default=0)
+    p.add_argument("--tribunal", default=None, help="tribunal do identificador oficial (desfaz colisões)")
     _add_json_flag(p)
 
     p = sub.add_parser("cvm", help="buscar normas CVM")
@@ -187,6 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("origem", nargs="?", default=None)
     pi.add_argument("--arquivo", default=None, help="caminho local do snapshot")
     pi.add_argument("--url", default=None, help="URL de asset de release GitHub")
+    pi.add_argument("--aceitar-nao-vinculado", action="store_true")
     _add_json_flag(pi)
     pf = snap.add_parser("info")
     pf.add_argument("origem", nargs="?")
@@ -204,6 +211,8 @@ def build_parser() -> argparse.ArgumentParser:
     runs = p.add_subparsers(dest="runs_cmd", required=True)
     pp = runs.add_parser("purgar", help="reconstruir o banco sem execuções anteriores a DATA")
     pp.add_argument("--antes", required=True, metavar="DATA", help="AAAA-MM-DD")
+    pp.add_argument("--apagar-original", action="store_true",
+                    help="apaga o banco original (movido para purgados/) após a troca bem-sucedida; sem a opção, o original fica para exclusão manual")
     _add_json_flag(pp)
 
     return parser
@@ -218,7 +227,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     as_json = bool(getattr(args, "json", False))
-    registro = "sem_conteudo" if args.sem_registro else None
+    if args.sem_registro and args.registro_completo:
+        parser.error("--sem-registro e --registro-completo são excludentes")
+    registro = "completo" if args.registro_completo else ("sem_conteudo" if args.sem_registro else None)
 
     if args.cmd == "serve-mcp":
         from freoa_verifica.mcp_server import run_server
@@ -235,7 +246,7 @@ def main(argv: list[str] | None = None) -> None:
 
     with Verifica(home=args.home, registro=registro) as svc:
         if args.cmd == "runs":
-            data = svc.purgar_execucoes(args.antes)
+            data = svc.purgar_execucoes(args.antes, apagar_original=args.apagar_original)
             _print_result(data, as_json=as_json, titulo="Purga de execuções")
             raise SystemExit(0 if data.get("status") == "ok" else 1)
 
@@ -291,7 +302,8 @@ def main(argv: list[str] | None = None) -> None:
 
         if args.cmd == "decisao":
             data = svc.obter_decisao(
-                args.id, parte=args.parte, max_chars=args.max_chars, offset=args.offset
+                args.id, parte=args.parte, max_chars=args.max_chars, offset=args.offset,
+                tribunal=args.tribunal,
             )
             raise SystemExit(_print_result(data, as_json=as_json, titulo="Decisão"))
 
@@ -361,10 +373,12 @@ def main(argv: list[str] | None = None) -> None:
                 data = svc.snapshot_export(dest)
             elif args.snap_cmd == "install":
                 arquivo = args.arquivo or args.origem
-                data = svc.snapshot_install(arquivo, url=args.url)
+                data = svc.snapshot_install(arquivo, url=args.url, aceitar_nao_vinculado=args.aceitar_nao_vinculado)
             else:
                 data = svc.snapshot_info(args.origem)
-            raise SystemExit(_print_result(data, as_json=as_json, titulo="Snapshot"))
+            codigo = _print_result(data, as_json=as_json, titulo="Snapshot")
+            # Recusa ou falha de instalação não sai com sucesso (auditoria 1.2.0, L3).
+            raise SystemExit(codigo or (1 if isinstance(data, dict) and data.get("status") == "erro" else 0))
 
         if args.cmd == "acervo":
             if args.acervo_cmd == "ressincronizar-situacao":

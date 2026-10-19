@@ -119,6 +119,11 @@ if os.name == "nt":
         return _InheritedTempPathFactory.from_config(request.config, _ispytest=True)
 
 
+@pytest.hookimpl(trylast=True)
 def pytest_configure(config):
+    if os.name == "nt":
+        # xdist usa a factory do config antes de solicitar a fixture de sessão.
+        # A factory herdável também precisa valer para o controlador Windows.
+        config._tmp_path_factory = _InheritedTempPathFactory.from_config(config, _ispytest=True)
     # O teste do pacote instalado roda sem pytest.ini; registra o marcador aqui.
     config.addinivalue_line("markers", "live: testes que acessam fontes oficiais reais")

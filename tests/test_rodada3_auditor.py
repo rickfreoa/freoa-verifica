@@ -39,11 +39,11 @@ def test_mcp_reuso_com_politica_diferente_e_recusado_e_nada_vaza(tmp_path):
     marker = "ZXPRIVATECITATION761994"
     m.create_mcp(home=str(tmp_path), registro="completo")
     try:
-        _indexar(m._service(str(tmp_path)), _doc([_prov("art1")]))
+        _indexar(m._service(str(tmp_path), "completo"), _doc([_prov("art1")]))
         with pytest.raises(ValueError, match="conflito de política"):
             m.create_mcp(home=str(tmp_path), registro="sem_conteudo")
-        # reuso sem pedir política explícita segue a do serviço
-        server = m.create_mcp(home=str(tmp_path))
+        # reuso com a mesma política (explícita: o padrão agora é sem_conteudo, decisão 0040)
+        server = m.create_mcp(home=str(tmp_path), registro="completo")
         asyncio.run(server.call_tool("verificar_citacao", {"citacao": "art. 1 da Lei 6.404/1976"}))
     finally:
         _fechar_mcp(tmp_path)
@@ -51,9 +51,9 @@ def test_mcp_reuso_com_politica_diferente_e_recusado_e_nada_vaza(tmp_path):
 
 def test_mcp_ambiente_diferente_do_servico_e_conflito(tmp_path, monkeypatch):
     monkeypatch.delenv("FV_REGISTRO", raising=False)
-    m.create_mcp(home=str(tmp_path))
+    m.create_mcp(home=str(tmp_path))  # padrão: sem_conteudo
     try:
-        monkeypatch.setenv("FV_REGISTRO", "sem_conteudo")
+        monkeypatch.setenv("FV_REGISTRO", "completo")
         with pytest.raises(ValueError, match="conflito de política"):
             m.create_mcp(home=str(tmp_path))
     finally:
@@ -303,7 +303,7 @@ def test_candidato_ao_vivo_sobrevive_a_reconstrucao_e_snapshot(tmp_path):
         assert s.snapshot_export(tmp_path / "snap")["status"] == "ok"
     with Verifica(tmp_path / "b") as s:
         _indexar(s, _doc())
-        assert s.snapshot_install(tmp_path / "snap")["status"] == "ok"
+        assert s.snapshot_install(tmp_path / "snap", aceitar_nao_vinculado=True)["status"] == "ok"
         assert s.conn.execute("select count(*) from fts_redaction where text like '%zebrafish%'").fetchone()[0] == 0
         assert s.conn.execute("select count(*) from fts_staging").fetchone()[0] >= 1
 
@@ -319,7 +319,7 @@ def test_snapshot_antigo_nao_rebaixa_derived_version(tmp_path):
     with Verifica(tmp_path / "new") as s:
         _indexar(s, _doc())
         assert derivados.versao(s.conn) == derivados.DERIVED_VERSION
-        out = s.snapshot_install(tmp_path / "snap")
+        out = s.snapshot_install(tmp_path / "snap", aceitar_nao_vinculado=True)
         assert out["status"] == "ok" and "aviso" in out
         assert derivados.versao(s.conn) == derivados.DERIVED_VERSION
         assert derivados.compativel(s.conn)

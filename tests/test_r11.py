@@ -28,7 +28,8 @@ def seed(svc, key):
 
 def hashes(root):
     return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in root.rglob("*") if p.is_file() and not p.name.endswith(("-wal", "-shm"))}
+            for p in root.rglob("*") if p.is_file() and not p.name.endswith(("-wal", "-shm"))
+            and ".fv-uso" not in p.parts and p.name != ".fv.lock"}  # travas de uso (1.2.0) são transitórias
 
 
 def reseal(export):
@@ -65,6 +66,8 @@ def route(export, mode, tmp_path, monkeypatch):
         assert address == url
         shutil.copyfile(archive, kw["sink"])
         return SimpleNamespace(sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [{"arquivo": archive.name,
+        "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(), "derived_version": 3}])
     monkeypatch.setattr(httputil, "connector_fetch", fetch)
     return None
 
@@ -149,7 +152,7 @@ def test_install_failure_preserves_all_local_evidence(tmp_path, monkeypatch, mod
                     fail()
                 return original(path)
             monkeypatch.setattr(snapshot, "connect", connect)
-        result = snapshot.install_snapshot(target, origin)
+        result = snapshot.install_snapshot(target, origin, aceitar_nao_vinculado=True)
         assert calls == [stage]
         assert result["status"] == "erro" and "injected_" + stage in result["motivo"]
         assert "rollback_error" not in result and "reopen_error" not in result
@@ -182,7 +185,7 @@ def test_stj_failed_reconstruction_preserves_existing_blobs(tmp_path, monkeypatc
             seed(target, key)
         target.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         before = hashes(target.home)
-        result = snapshot.install_snapshot(target, export)
+        result = snapshot.install_snapshot(target, export, aceitar_nao_vinculado=True)
         assert result["status"] == "erro"
         assert result["motivo"] == "stj_documento_ausente_no_recurso"
         assert result["rollback"] is False
@@ -199,7 +202,7 @@ def test_success_keeps_complete_backup_and_combines_evidence(tmp_path, monkeypat
         seed(target, "local")
         target.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         before = hashes(target.home)
-        result = snapshot.install_snapshot(target, export)
+        result = snapshot.install_snapshot(target, export, aceitar_nao_vinculado=True)
         assert result["status"] == "ok"
         assert hashlib.sha256(Path(result["backup"]).read_bytes()).hexdigest() == before["verifica.sqlite3"]
         assert hashes(Path(result["backup_blobs"])) == {

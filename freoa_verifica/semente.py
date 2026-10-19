@@ -9,7 +9,7 @@ import re
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
@@ -47,6 +47,9 @@ def load_corpus() -> dict[str, Any]:
     root = resources.files("freoa_verifica").joinpath("data")
     raw = root.joinpath("corpus_semente.json").read_text(encoding="utf-8")
     return json.loads(raw)
+
+
+_REVALIDAR_DIAS = 30
 
 
 def _now() -> str:
@@ -195,9 +198,24 @@ class SementeSync:
         if self.rate_delay > 0:
             time.sleep(self.rate_delay)
 
+    def _vencido(self, fonte: str, chave: str) -> bool:
+        """Checkpoint com mais de _REVALIDAR_DIAS: súmulas/SV do STF são recapturadas (decisão 0039)."""
+        row = self.state.get(fonte, chave)
+        try:
+            t = datetime.fromisoformat(row["updated_at"])
+        except (TypeError, ValueError, KeyError):
+            return True
+        return datetime.now(timezone.utc) - (t if t.tzinfo else t.replace(tzinfo=timezone.utc)) > timedelta(days=_REVALIDAR_DIAS)
+
     def _mark_indisponivel(self, fonte: str, chave: str, motivo: str) -> None:
         self._failed[fonte, chave] = motivo
-        self.state.set(fonte, chave, "indisponivel", motivo=motivo)
+        # Falha não apaga o histórico da última captura válida (sha256, ultima_captura_ok).
+        anterior = self.state.get(fonte, chave)
+        try:
+            payload = json.loads(anterior["payload_json"]) if anterior and anterior["payload_json"] else None
+        except (ValueError, TypeError, KeyError, IndexError):
+            payload = None
+        self.state.set(fonte, chave, "indisponivel", motivo=motivo, payload=payload)
         st = self._stats(fonte)
         st.indisponiveis += 1
         st.motivos[motivo] = st.motivos.get(motivo, 0) + 1
@@ -625,9 +643,8 @@ class SementeSync:
         prec = bool(self.corpus.get("jurisprudencia", {}).get("stj_precedentes_qualificados"))
         collections = [(f"espelhos:recentes12:{datetime.now(timezone.utc):%Y-%m}:{max_items}" + (":prec" if prec else ""), orgaos, desde)]
         for chave, packages, start in collections:
-            if self.state.done("stj", chave):
-                self._stats("stj").pulados += 1
-                continue
+            # Sem atalho pelo checkpoint da coleção: a revalidação é decidida recurso a recurso no
+            # conector (decisão 0039); recurso em dia não é baixado de novo (auditoria 1.2.0).
             try:
                 self._sleep()
                 n = conn_obj.sync(desde=start, orgaos=packages, max_itens=max_items, precedentes=prec)
@@ -749,6 +766,32 @@ class SementeSync:
         except Exception as exc:  # noqa: BLE001
             self._mark_indisponivel("tcu", chave, str(exc)[:200])
 
+    def sync_tjdft(self) -> None:
+        if not self._want("tjdft"):
+            return
+        cfg = self.corpus.get("jurisprudencia", {}).get("tjdft") or {}
+        por = int(cfg.get("por_consulta") or 20)
+        if self.max_itens is not None:
+            por = min(por, self.max_itens)
+        conn_obj = self.svc._get("tjdft")
+        for consulta in cfg.get("consultas") or []:
+            chave = f"consulta:{consulta}:{por}"
+            if self.state.done("tjdft", chave):
+                self._stats("tjdft").pulados += 1
+                continue
+            try:
+                self._sleep()
+                cands = conn_obj.search(consulta, limite=por)
+                ok = all([self._capture_juris("tjdft", conn_obj, c) for c in cands])
+                if ok:
+                    self.state.set("tjdft", chave, "capturado", payload={"n": len(cands), "total": cands.total})
+                else:
+                    self._mark_indisponivel("tjdft", chave, "candidato_sem_evidencia")
+            except Unavailable as exc:
+                self._mark_indisponivel("tjdft", chave, exc.reason[:200])
+            except Exception as exc:  # noqa: BLE001
+                self._mark_indisponivel("tjdft", chave, str(exc)[:200])
+
     def _capture_juris(self, fonte: str, connector: Any, cand: Any) -> bool:
         key = str(cand.key)
         checkpoint = fonte + "_doc"
@@ -856,14 +899,18 @@ class SementeSync:
                     self._mark_indisponivel("stf", lista, getattr(exc, "reason", str(exc))[:200])
                     continue
                 for cand in cands[: self.max_itens]:
-                    if self.state.done("stf", cand.key):
+                    if self.state.done("stf", cand.key) and not self._vencido("stf", cand.key):
                         self._stats("stf").pulados += 1
                         continue
                     try:
                         self._sleep()
                         item = self.svc._index_candidate_juris(conn_obj, cand)
                         if item and item.get("capture_id"):
-                            self.state.set("stf", cand.key, "parseado")
+                            # A reingestão substitui o documento; o sha registra a mudança na fonte.
+                            sha = self.svc.conn.execute("SELECT sha256 FROM capture WHERE id=?",
+                                                        (item["capture_id"],)).fetchone()
+                            self.state.set("stf", cand.key, "parseado",
+                                           payload={"sha256": sha[0] if sha else None})
                             self._stats("stf").parseados += 1
                             self._stats("stf").capturados += 1
                         else:
@@ -879,6 +926,7 @@ class SementeSync:
             ("bcb", self.sync_bcb),
             ("stj", self.sync_stj),
             ("tcu", self.sync_tcu),
+            ("tjdft", self.sync_tjdft),
             ("cvm_colegiado", self.sync_cvm_colegiado),
             ("stf", self.sync_stf),
         ]

@@ -77,7 +77,9 @@ _ESPERA_CLOSE = 30.0
 from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E402,F401
 
 _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
-_JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "cvm_colegiado")
+_JANELA_REORDENACAO = 50  # só os 50 primeiros candidatos são reordenados; além deles vale a ordem bm25
+_SIGLAS_TRIBUNAL_FILTRO = frozenset({"STJ", "STF", "TCU", "TJDFT", "TJSP", "CVM"})
+_JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "tjdft", "cvm_colegiado")
 _DEFAULT_TEXT_LIMIT = 4000
 _EMENTA_MAX = 1200
 _CLASSES_POR_EXTENSO = (
@@ -151,6 +153,25 @@ def _highlight(text: str, q: str, max_chars: int = 280) -> str:
     return snippet
 
 
+def _trecho_pertinente(text: str, q: str, max_chars: int) -> tuple[str, bool]:
+    """Janela do texto em torno do primeiro termo da consulta (sem acento/caixa); sem termo, o início."""
+    import unicodedata
+    # Texto dobrado (sem acento, minúsculo) com mapa para o índice do original: NFD e ligaduras inclusive.
+    dobrado, mapa = [], []
+    for i, ch in enumerate(text):
+        for c in unicodedata.normalize("NFKD", ch):
+            if not unicodedata.combining(c):
+                dobrado.append(c.lower())
+                mapa.append(i)
+    fold = "".join(dobrado)
+    termos = ["".join(c for c in unicodedata.normalize("NFKD", t) if not unicodedata.combining(c)).lower()
+              for t in re.findall(r"\w{4,}", unicodedata.normalize("NFC", q or ""))]
+    achados = [mapa[i] for t in termos if t and (i := fold.find(t)) >= 0]
+    inicio = max(0, min(achados) - 80) if achados else 0
+    trecho = text[inicio:inicio + max_chars]
+    return trecho, inicio > 0 or inicio + max_chars < len(text)
+
+
 def _citation_to_dict(c: Citation | None) -> dict[str, Any] | None:
     if c is None:
         return None
@@ -179,7 +200,50 @@ def _decode_cursor(cursor: str | None) -> int:
         return 0
 
 
-def _species_from_meta(court: str, class_name: str | None, organ: str | None) -> str:
+_KIND_ESPECIE = {"decisao_monocratica": "monocratica", "monocratica": "monocratica",
+                 "repercussao_geral": "repercussao_geral"}
+# Perfis cujo `text` é o documento integral declarado pela fonte (decisão 0038); comprimento não decide.
+_PERFIS_INTEIRO_TEOR = frozenset({"stf_pdf", "tjsp_pdf", "cvm_colegiado", "tjdft_inteiro_teor"})
+
+
+def _classe_norm(value: str | None) -> str:
+    """Sem acento, caixa nem espaços: "SumulaVinculante" casa "Súmula Vinculante"."""
+    import unicodedata
+    return "".join("".join(c for c in unicodedata.normalize("NFKD", value or "")
+                           if not unicodedata.combining(c)).lower().split())
+
+
+_DISPOSITIVO_SO = re.compile(
+    r"art(?:igo)?\.?\s*\d[\d.]*\s*(?:[º°o]|-[A-Z])?"
+    r"(?:\s*,?\s*(?:§\s*\d+\s*[º°o]?|par[aá]grafo\s+[úu]nico|inc(?:iso|\.)?\s*[IVXLCDM]+|[IVXLCDM]+"
+    r"|al[ií]nea\s+[a-z]|al\.\s*[a-z]|[a-z]\)))*\s*\.?",
+    re.I)
+
+
+def _dispositivo_posposto(citacao: str) -> str:
+    """Consulta isolada "<norma> art. N" (sem vírgula, nada além do dispositivo) recebe a vírgula que a
+    extração exige em prosa (decisões 0016/0018). Só na citação avulsa; texto corrido segue a regra geral."""
+    m = re.match(r"^\s*(.+?\d{4})\s+(art(?:igo)?\.?\s*\d.*?)\s*$", citacao, re.I)
+    if not m or not _DISPOSITIVO_SO.fullmatch(m.group(2)):
+        return citacao
+    norma = parse_one(m.group(1))
+    if norma is None or norma.work is None or norma.path or len(norma.raw.strip()) < len(m.group(1).strip()) - 1:
+        return citacao
+    return f"{m.group(1)}, {m.group(2)}"
+
+
+def _classe_compativel(row, key) -> bool:
+    if row["court"] == "TCU" and row["class"] is None:
+        return True
+    if row["class"]:
+        return _classe_norm(row["class"]) == _classe_norm(key.class_)
+    return row["official_id"] == key.number  # sem classe gravada, só o identificador exato
+
+
+def _species_from_meta(court: str, class_name: str | None, organ: str | None, kind: str | None = None) -> str:
+    # Espécie declarada pela fonte prevalece sobre a inferência por classe/órgão (decisão 0038).
+    if kind in _KIND_ESPECIE:
+        return _KIND_ESPECIE[kind]
     cls = (class_name or "").lower()
     if "súmula vinculante" in cls or "sumula vinculante" in cls or cls == "sv":
         return "sumula_vinculante"
@@ -306,6 +370,15 @@ class Verifica:
             recuperar_purga(self.home)  # purga interrompida entre os dois renames
             boot = connect(self._db_path)
             boot.close()
+        self._uso = None  # marca de uso do home entre processos (trava.py, A1)
+        if self.home.is_dir():
+            from freoa_verifica import trava
+
+            try:
+                self._uso = trava.registrar(self.home)
+            except OSError:  # home somente leitura: sem marca, nada a proteger por este lado
+                if not self._read_only:
+                    raise
         self._local = threading.local()
         self._conn_lock = threading.Lock()
         # (conexão, thread dona): cada conexão é fechada na própria thread quando possível.
@@ -372,6 +445,15 @@ class Verifica:
             with self._cv:
                 self._excl_owner = None
                 self._cv.notify_all()
+
+    @contextmanager
+    def exclusivo_home(self, timeout: float = 60.0):
+        """`exclusivo()` + nenhum OUTRO processo usando o home (HomeEmUso); para quem troca o arquivo do banco."""
+        from freoa_verifica import trava
+
+        with self.exclusivo(timeout):
+            with trava.exclusivo_entre_processos(self.home):
+                yield
 
     def _open_conn(self) -> sqlite3.Connection:
         if not self._read_only and not self._db_path.exists():
@@ -440,6 +522,11 @@ class Verifica:
         try:
             with self.exclusivo(timeout=_ESPERA_CLOSE):
                 self._close_all_conns()
+                if self._uso is not None:
+                    from freoa_verifica import trava
+
+                    trava.liberar(self._uso)
+                    self._uso = None
         except TimeoutError:
             _log.error("close(): operações ainda ativas após %ss; conexões mantidas abertas", _ESPERA_CLOSE)
             raise
@@ -1343,9 +1430,12 @@ class Verifica:
         _path: str | None = None,
         _cite: Citation | None = None,
     ) -> dict[str, Any]:
+        citacao = _dispositivo_posposto(citacao)
         cite = parse_one(citacao)
         if _path is not None:
             cite = next((c for c in extract(citacao) if c.path == _path), None)
+        if cite and cite.work is None and (cite.decision is not None or cite.kind == "processo") and _cite is None:
+            return self._verificar_decisao_avulsa(cite, citacao, trecho, data, modo, proposicao)
         if cite and cite.work is not None:
             try:
                 resolved = self._resolve(cite.work, requested_date(cite.raw), strict=True)
@@ -1475,6 +1565,31 @@ class Verifica:
         return {"status": "requer_conferencia", "citacao": citacao,
                 "identity": {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
                 "conferencia": self._bloco_conferencia(cite)}
+
+    def _verificar_decisao_avulsa(self, cite: Citation, citacao: str, trecho, data, modo, proposicao) -> dict[str, Any]:
+        """Decisão ou súmula citada sozinha: mesma confirmação de `verificar_texto` (auditoria comparativa 1.2.0).
+        Identidade confirmada só com documento oficial capturado; confronto textual de decisão não é feito."""
+        if cite.kind == "processo":
+            status, evidencia = self._confirm_cnj(cite)
+        else:
+            status, evidencia = self._confirm_decision(cite.decision)
+        ident = {
+            "encontrada": ("verified", "DECISAO_CONFIRMADA_NA_CAPTURA"),
+            "processo_confirmado": ("verified", "PROCESSO_CONFIRMADO_MAIS_DE_UM_REGISTRO"),
+            "nao_confirmado_no_acervo": ("unknown", "NAO_CONFIRMADO_NO_ACERVO"),
+            "indisponivel": ("unavailable", "EVIDENCIA_INDISPONIVEL"),
+        }.get(status, ("unknown", str(status).upper()))
+        out = {
+            "identity": {"status": ident[0], "reason_code": ident[1],
+                         "evidence": [evidencia] if ident[0] == "verified" and evidencia else [],
+                         **({"cobertura": evidencia.get("cobertura")} if isinstance(evidencia, dict) and "cobertura" in evidencia else {})},
+            "text": {"status": "not_assessed",
+                     "reason_code": "CONFRONTO_DE_DECISAO_NAO_REALIZADO" if trecho else "SEM_TRECHO", "evidence": []},
+            "temporal": {"status": "not_assessed", "reason_code": "NAO_APLICAVEL_A_DECISAO", "evidence": []},
+            "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED", "evidence": []},
+            "proposicao": proposicao, "run_id": None, "citation": _citation_to_dict(cite),
+        }
+        return self._finalizar(out, cite, citacao, trecho, data, modo, gravar=False)
 
     def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
                    trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
@@ -1699,37 +1814,48 @@ class Verifica:
         }
 
     def _decision_evidence(self, key, judgment_date=None) -> tuple[str, dict | None]:
+        status, evidence, _ = self._decision_evidence_rows(key, judgment_date)
+        return status, evidence
+
+    def _decision_evidence_rows(self, key, judgment_date=None):
         rows = self.conn.execute(
             "SELECT * FROM decision WHERE court=? AND identity_status='confirmed' "
-            "AND (official_id=? OR ((class=? COLLATE NOCASE OR (court='TCU' AND class IS NULL)) AND UPPER(REPLACE(REPLACE(number,'.',''),' ',''))=?))",
-            (key.court.upper(), key.number, key.class_, key.number.replace(".","").replace(" ","").upper()),
+            "AND (official_id=? OR UPPER(REPLACE(REPLACE(number,'.',''),' ',''))=?)",
+            (key.court.upper(), key.number, key.number.replace(".","").replace(" ","").upper()),
         ).fetchall()
+        # Classe comparada sem acento e sem caixa ("Sumula" casa "Súmula"); coincidência de identificador
+        # não supera classe gravada divergente (auditoria 1.2.0).
+        rows = [r for r in rows if _classe_compativel(r, key)]
         if key.year:
             rows = [r for r in rows if (r["judgment_date"] or "")[:4] == str(key.year)]
         if key.organ:
             rows = [r for r in rows if self._organ_key(r["organ"]) == self._organ_key(key.organ)]
+        uf_nao_conferida = False
         if key.uf:
-            rows = [r for r in rows if (r["uf"] or "").upper() == key.uf.upper()]
+            # UF divergente exclui; UF ausente no registro (espelhos do STJ não a trazem) não exclui, mas é declarada.
+            rows = [r for r in rows if not r["uf"] or r["uf"].upper() == key.uf.upper()]
+            uf_nao_conferida = any(not r["uf"] for r in rows)
         if judgment_date:
             rows = [r for r in rows if r["judgment_date"] == judgment_date]
         multiple = len(rows) > 1
         if not rows:
-            return "nao_confirmado_no_acervo", self._decision_coverage(key.court)
+            return "nao_confirmado_no_acervo", self._decision_coverage(key.court), []
         doc = self.conn.execute(
             "SELECT dd.*, c.url, c.fetched_at, c.sha256 AS capture_sha FROM decision_document dd "
             "JOIN capture c ON c.id=dd.capture_id WHERE dd.decision_id=? "
             "ORDER BY dd.created_at DESC LIMIT 1", (rows[0]["id"],),
         ).fetchone()
         if not doc or not doc["sha256"] or not doc["text"]:
-            return "indisponivel", None
+            return "indisponivel", None, rows
         try:
             blobs.get_blob(doc["capture_sha"], home=self.home)
             if hashlib.sha256(doc["text"].encode("utf-8")).hexdigest() != doc["sha256"]:
-                return "indisponivel", None
+                return "indisponivel", None, rows
         except (OSError, ValueError, blobs.BlobError):
-            return "indisponivel", None
+            return "indisponivel", None, rows
         return ("processo_confirmado" if multiple else "encontrada"), {"capture_id": doc["capture_id"], "sha256": doc["capture_sha"],
-                              "url": doc["url"], "fetched_at": doc["fetched_at"]}
+                              "url": doc["url"], "fetched_at": doc["fetched_at"],
+                              **({"uf_citada_nao_conferida": key.uf.upper()} if uf_nao_conferida else {})}, rows
 
     @staticmethod
     def _decision_context_date(text):
@@ -1894,10 +2020,78 @@ class Verifica:
         limite: int = 10,
         cursor: str | None = None,
     ) -> dict[str, Any]:
+        cnj = re.fullmatch(r"\s*(?:processo\s+(?:n[º°.]?\s*)?)?(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})\s*", q, re.I)
+        if cnj:
+            return self._juris_por_cnj(q, cnj.group(1))
         key = self._chave_processo(q)
         if key is not None:
             return self._juris_por_numero(q, key)
-        return self._juris_textual(q, tribunais, desde, ate, autoridade_min, limite, cursor)
+        filtro_da_consulta = None
+        if tribunais is None:
+            # Sigla de tribunal solta na consulta ("exclusão de sócio TJDFT") é filtro, não termo: como termo
+            # casaria o cabeçalho "Tribunal de Justiça do Distrito Federal" de qualquer decisão (comparativo 1.2.0).
+            # Só fora de aspas: frase exata é preservada como o usuário escreveu.
+            partes = re.split(r'("[^"]*(?:"|$))', q)  # aspa sem fechamento protege até o fim
+            fora = [p for p in partes if not p.startswith('"')]
+            siglas = [t for p in fora for t in re.findall(r"(?<![\w/])([A-Za-z]{2,6})(?![\w/])", p)
+                      if t.upper() in _SIGLAS_TRIBUNAL_FILTRO]
+            if siglas:
+                padrao = r"(?<![\w/])(?:" + "|".join(map(re.escape, siglas)) + r")(?![\w/])"
+                resto = "".join(p if p.startswith('"') else re.sub(padrao, " ", p) for p in partes).strip()
+                filtro_da_consulta = sorted({s.lower() for s in siglas})
+                if not re.search(r"\w", resto):
+                    return {"status": "entrada_insuficiente", "motivo": "CONSULTA_SO_COM_SIGLA_DE_TRIBUNAL",
+                            "consulta": q, "filtro_tribunal_da_consulta": filtro_da_consulta,
+                            "itens": [], "resultados": [], "truncado": False, "cursor": None}
+                q, tribunais = " ".join(resto.split()), filtro_da_consulta
+        out = self._juris_textual(q, tribunais, desde, ate, autoridade_min, limite, cursor)
+        if filtro_da_consulta:
+            out["filtro_tribunal_da_consulta"] = filtro_da_consulta
+        return out
+
+    # Segmento J.TR do CNJ -> conector com busca oficial pelo número (só onde existe).
+    _CNJ_CONECTORES = {"8.07": "tjdft"}
+
+    def _juris_por_cnj(self, q: str, cnj: str) -> dict[str, Any]:
+        """Número CNJ isolado: só o próprio processo, nunca outros (auditoria comparativa 1.2.0)."""
+        from freoa_verifica.citation import validate_cnj_dv
+
+        base = {"consulta": q, "modo_busca": "numero_cnj", "itens": [], "resultados": [], "relacionados": [],
+                "truncado": False, "cursor": None, "fontes": {}, "rules_version": AUTHORITY_RULES_VERSION}
+        if not validate_cnj_dv(cnj):
+            return {**base, "status": "formato_invalido", "motivo": "CNJ_DIGITO_VERIFICADOR_INVALIDO"}
+        conector_id = self._CNJ_CONECTORES.get(cnj[16:20])
+        fontes: dict[str, Any] = {}
+        if conector_id and not self._offline():
+            connector = self._get(conector_id)
+            try:
+                cands = [c for c in connector.search(cnj) if (c.metadata or {}).get("processo") == cnj]
+                for cand in cands:
+                    self._index_candidate_juris(connector, cand)
+                fontes[conector_id] = {"status": "ok", "registros_do_processo": len(cands)}
+            except (SourceUnavailable, Unavailable) as exc:
+                fontes[conector_id] = {"status": "indisponivel", "motivo": getattr(exc, "reason", str(exc))}
+        elif conector_id:
+            fontes[conector_id] = {"status": "nao_consultada", "motivo": "offline"}
+        alvo = cnj.replace(".", "").replace("-", "")
+        rows = [dict(r) for r in self.conn.execute(
+            "SELECT d.id AS decision_id FROM decision d WHERE d.identity_status='confirmed' "
+            "AND REPLACE(REPLACE(d.number,'.',''),'-','')=?", (alvo,))]
+        itens = []
+        for r in rows:
+            row = self.conn.execute("SELECT court FROM decision WHERE id=?", (r["decision_id"],)).fetchone()
+            for full in repo.decisions_by_number(self.conn, row["court"], cnj):
+                if full["decision_id"] == r["decision_id"]:
+                    itens.append({**self._decisao_item(full), "relacao": "exato"})
+        if itens:
+            return {**base, "status": "encontrada", "itens": itens, "resultados": itens,
+                    "total_parcial": len(itens), "fontes": fontes}
+        consultada = fontes.get(conector_id or "", {}).get("status") == "ok"
+        return {**base, "fontes": fontes,
+                "status": "nao_encontrado_na_fonte" if consultada else "nao_confirmado_no_acervo",
+                "escopo": (f"busca oficial {conector_id} pelo número" if consultada else "acervo local"),
+                "aviso": ("a fonte oficial não retornou registro com este número" if consultada
+                          else "processo não localizado no acervo local; ausência não demonstra inexistência")}
 
     @staticmethod
     def _chave_processo(q: str):
@@ -1913,7 +2107,8 @@ class Verifica:
 
     def _juris_por_numero(self, q: str, key) -> dict[str, Any]:
         """A6: lookup exato por classe e número no acervo; nunca mistura outros processos."""
-        status, evidence = self._decision_evidence(key)
+        status, evidence, filtradas = self._decision_evidence_rows(key)
+        ids_ok = {r["id"] for r in filtradas}
         base = {"consulta": q, "modo_busca": "numero", "status": status,
                 "itens": [], "resultados": [], "relacionados": [], "resultados_textuais": [],
                 "truncado": False, "cursor": None, "fontes": {},
@@ -1925,17 +2120,42 @@ class Verifica:
             return {**base, "cobertura": cob,
                     "aviso": "processo não localizado no acervo local; ausência não demonstra inexistência"}
         rows = repo.decisions_by_number(self.conn, key.court, key.number)
-        cls = key.class_.lower()
-        exatas = [r for r in rows if (r["class"] or "").lower() == cls or r["official_id"] == key.number]
-        incidentes = [r for r in rows if r not in exatas and (r["class"] or "").lower().endswith((" no " + cls, " nos " + cls))]
+        cls = _classe_norm(key.class_)
+        # Só os registros que passaram em todos os filtros de identidade (UF, ano, órgão, classe); cada item
+        # leva a evidência da própria captura, nunca a de outro registro (auditoria 1.2.0).
+        exatas = [r for r in rows if r["decision_id"] in ids_ok]
+        incidentes = [r for r in rows if r["decision_id"] not in ids_ok
+                      and _classe_norm(r["class"]).endswith(("no" + cls, "nos" + cls))]
         itens = []
         for r in exatas:
             item = self._decisao_item(r)
-            item["evidencia"], item["relacao"] = evidence, "exato"
+            item["evidencia"] = {"capture_id": r.get("capture_id"), "sha256": r.get("sha256"), "url": r.get("url_oficial"),
+                                 **({k: evidence[k] for k in ("uf_citada_nao_conferida",) if evidence and k in evidence})}
+            item["relacao"] = "exato"
             itens.append(item)
         rel = [{**self._decisao_item(r), "relacao": "incidente_do_mesmo_processo"} for r in incidentes]
         return {**base, "itens": itens, "resultados": itens, "relacionados": rel,
                 "total_parcial": len(itens), "evidencia": evidence}
+
+    def _peso_idf(self):
+        """Raridade do termo no acervo de decisões (IDF): "legitimidade" pesa mais que "sociedade" na
+        pertinência da complementação OR (comparativo 1.2.0). Determinístico para um mesmo acervo."""
+        import math
+        n = self.conn.execute("SELECT COUNT(*) FROM fts_decision").fetchone()[0] or 1
+        cache: dict[tuple[str, bool], float] = {}
+
+        def peso(termo: str, prefixo: bool) -> float:
+            k = (termo, prefixo)
+            if k not in cache:
+                expr = '{ementa inteiro_teor} : "' + termo.replace('"', '') + '"' + ("*" if prefixo else "")
+                try:
+                    df = self.conn.execute("SELECT COUNT(*) FROM fts_decision WHERE fts_decision MATCH ?",
+                                           (expr,)).fetchone()[0]
+                except sqlite3.Error:
+                    df = 0
+                cache[k] = math.log(1 + n / (1 + df))
+            return cache[k]
+        return peso
 
     def _juris_textual(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
         offset = _decode_cursor(cursor)
@@ -1943,9 +2163,9 @@ class Verifica:
         tribunais_norm = (list(_JURIS_CONNECTORS) if tribunais is None else
                           list(dict.fromkeys(normalize_court(t) for t in tribunais)))
         self.conn.create_function(
-            "fv_authority", 3,
-            lambda court, cls, organ: classify_authority(
-                species=_species_from_meta(court, cls, organ), court=court,
+            "fv_authority", 4,
+            lambda court, cls, organ, kind: classify_authority(
+                species=_species_from_meta(court, cls, organ, kind), court=court,
                 class_name=cls, organ=organ).label,
             deterministic=True,
         )
@@ -1958,24 +2178,44 @@ class Verifica:
                     self.conn, fts, courts=tribunais_norm if tribunais is not None else None,
                     desde=desde, ate=ate, autoridade_min=autoridade_min, limit=n, offset=0)
             # AND primeiro; menos de offset+limite resultados completam com OR marcado (decisão 0025).
+            # Candidatos além da página: a reordenação abaixo precisa de margem para promover quem tem a
+            # consulta coberta pela ementa (comparativo 1.2.0).
+            # Universo estável entre páginas: sempre ao menos 50 candidatos, completados por OR até o alvo, para que
+            # a reordenação dos 50 primeiros seja idêntica em qualquer página (auditoria 1.2.0, paginação).
+            alvo = max(offset + limite + 1, _JANELA_REORDENACAO)
             res = buscar_and_or(
                 q, buscar, lambda r: f"{r.get('ementa') or ''} {r.get('inteiro_teor') or ''}",
                 lambda r: r.get("decision_id") or r.get("official_id"),
-                offset + limite + 1, offset + limite, colunas="ementa inteiro_teor")
+                alvo, alvo, colunas="ementa inteiro_teor", peso=self._peso_idf())
             modo_busca = "ampliada" if res["fts"] and not res["and"] else "normal"
             tesauro_info = res["tesauro"]
-            return res["linhas"][offset:]
+            # Mesma correspondência: primeiro quem tem os termos na ementa (o resumo oficial do julgado), depois
+            # quem só os tem espalhados no inteiro teor; a ordem bm25 desempata. Determinístico.
+            from freoa_verifica.search import consulta_fts, pertinencia
+            variantes = consulta_fts(q)[1]
+            def forca(r):
+                # Termos na ementa contam inteiros; só no inteiro teor (sem ementa ou fora dela), pela metade.
+                if r.get("ementa"):
+                    h, n = pertinencia(variantes, r["ementa"])
+                    return max(h / n, 0.5 * (r.get("pertinencia") or 0))
+                return 0.5 * (r.get("pertinencia") or 0)
+            cabeca = sorted(enumerate(res["linhas"][:_JANELA_REORDENACAO]),
+                            key=lambda p: (-round(forca(p[1]), 2),
+                                           p[1].get("correspondencia") != "todos_os_termos", p[0]))
+            ordenadas = [r for _, r in cabeca] + res["linhas"][_JANELA_REORDENACAO:]
+            return ordenadas[offset:offset + limite + 1]
 
         local = local_page()
         items: list[dict[str, Any]] = []
         def append_local(rows):
-            items.extend(self._decisao_item(row) for row in rows)
+            items.extend(self._decisao_item(row, q) for row in rows)
         append_local(local)
 
         id_map = {
             "stj": "stj",
             "tcu": "tcu",
             "tjsp": "tjsp",
+            "tjdft": "tjdft",
             "cvm": "cvm_colegiado",
             "cvm_colegiado": "cvm_colegiado",
         }
@@ -1987,10 +2227,16 @@ class Verifica:
                 fontes_status[cid] = {"status": "unavailable", "motivo": "fonte_nao_suportada", "parcial": False}
             elif offline:
                 fontes_status[cid] = {"status": "unavailable", "motivo": "offline", "parcial": False}
-        if len(items) < limite and tribunais_norm and not offline:
+        # Fonte cujo acervo local é só semente (TJDFT) é consultada ao vivo quando pedida explicitamente.
+        sempre_ao_vivo = {id_map.get(t, t) for t in (tribunais_norm if tribunais is not None else [])
+                          if id_map.get(t, t) in registry()
+                          and getattr(registry()[id_map.get(t, t)], "coverage", {}).get("consultar_ao_vivo_sempre")}
+        if (len(items) < limite or sempre_ao_vivo) and tribunais_norm and not offline:
             for t in tribunais_norm:
                 cid = id_map.get(t, t)
                 if cid not in registry():
+                    continue
+                if len(items) >= limite and cid not in sempre_ao_vivo:
                     continue
                 try:
                     conn_obj = self._get(cid)
@@ -2015,7 +2261,7 @@ class Verifica:
                         ):
                             items.append(item)
                             got += 1
-                        if len(items) >= limite:
+                        if len(items) >= limite and cid not in sempre_ao_vivo:
                             break
                     fontes_status[cid] = {
                         "status": "ok",
@@ -2058,13 +2304,19 @@ class Verifica:
             "rules_version": AUTHORITY_RULES_VERSION,
         }
 
-    def _decisao_item(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _decisao_item(self, row: dict[str, Any], q: str | None = None) -> dict[str, Any]:
         text = row.get("ementa") or row.get("inteiro_teor") or ""
+        # Sem ementa, um trecho do inteiro teor (em torno do termo pesquisado) sai como `trecho_inteiro_teor`,
+        # nunca sob o rótulo `ementa` (0038).
         ementa, trunc = _truncate(text, _EMENTA_MAX)
+        trecho_it = None
+        if not row.get("ementa") and text:
+            trecho_it, trunc = _trecho_pertinente(text, q or "", _EMENTA_MAX)
+            ementa = None
         court = row.get("court") or ""
         class_name = row.get("class") or ""
         auth = classify_authority(
-            species=_species_from_meta(court, class_name, row.get("organ")),
+            species=_species_from_meta(court, class_name, row.get("organ"), row.get("kind")),
             court=court, class_name=class_name or None, organ=row.get("organ"),
         )
         if text:
@@ -2079,6 +2331,7 @@ class Verifica:
             "datas": {"julgamento": row.get("judgment_date"),
                       "publicacao": row.get("publication_date")},
             "ementa": ementa,
+            **({"trecho_inteiro_teor": trecho_it} if trecho_it else {}),
             "autoridade": authority_as_dict(auth),
             "rotulo_autoridade": auth.label, "regra_autoridade": auth.rule,
             "rules_version": AUTHORITY_RULES_VERSION,
@@ -2110,7 +2363,7 @@ class Verifica:
         rapporteur = meta.get("relator") or meta.get("rapporteur")
         ementa = cand.snippet or meta.get("ementa") or ""
         auth = classify_authority(
-            species=_species_from_meta(court, class_name, organ),
+            species=_species_from_meta(court, class_name, organ, meta.get("kind")),
             court=court,
             organ=organ,
             class_name=class_name,
@@ -2137,20 +2390,21 @@ class Verifica:
                 organ = parsed.organ or organ
                 rapporteur = parsed.rapporteur or rapporteur
                 auth = classify_authority(
-                    species=_species_from_meta(court, class_name, organ),
+                    species=_species_from_meta(court, class_name, organ, parsed.kind),
                     court=court, class_name=class_name, organ=organ,
                 )
                 attrs = authority_as_dict(auth)
                 for extra in ("situacao_precedente", "divergencia_na_fonte"):
                     if parsed.metadata.get(extra):
                         attrs[extra] = parsed.metadata[extra]
+                kind_gravado = ("decisao_monocratica" if parsed.kind == "monocratica" else parsed.kind) if parsed.kind in {
+                    "acordao", "decisao_monocratica", "monocratica", "sumula", "tema", "voto",
+                    "decisao_colegiado_cvm", "acordao_tcu", "repercussao_geral",
+                } else "acordao"
                 did = repo.upsert_decision(
                     self.conn,
                     court=court,
-                    kind=parsed.kind if parsed.kind in {
-                        "acordao", "decisao_monocratica", "sumula", "tema", "voto",
-                        "decisao_colegiado_cvm", "acordao_tcu",
-                    } else "acordao",
+                    kind=kind_gravado,
                     class_=class_name,
                     number=str(parsed.metadata.get("processo") or parsed.metadata.get("numeroProcesso") or parsed.metadata.get("numeroAcordao") or meta.get("numero") or meta.get("number") or parsed.official_id),
                     uf=meta.get("siglaUF") or meta.get("siglaUf") or meta.get("uf"),
@@ -2164,12 +2418,12 @@ class Verifica:
                     authority_label=auth.label,
                 )
                 # upsert não atualiza linha existente: a situação do precedente muda na fonte.
-                self.conn.execute("UPDATE decision SET authority_attrs_json=?, authority_label=? WHERE id=?",
-                                  (json.dumps(attrs, ensure_ascii=False), auth.label, did))
-                kind_doc = "inteiro_teor" if inteiro and len(inteiro) > 500 else "ementa"
-                if parsed.profile in {"stj_espelho", "tcu_acordao"}:
-                    kind_doc = "ementa"
-                text_doc = (ementa or inteiro) if parsed.profile == "stj_espelho" else (inteiro or ementa)
+                # A espécie também: recaptura validada de identidade preexistente corrige o kind (auditoria 1.2.0).
+                self.conn.execute("UPDATE decision SET authority_attrs_json=?, authority_label=?, kind=? WHERE id=?",
+                                  (json.dumps(attrs, ensure_ascii=False), auth.label, kind_gravado, did))
+                integral = parsed.profile in _PERFIS_INTEIRO_TEOR or parsed.metadata.get("documento") == "inteiro_teor"
+                kind_doc = "inteiro_teor" if inteiro and integral else "ementa"
+                text_doc = inteiro if kind_doc == "inteiro_teor" else (ementa or inteiro)
                 digest = (
                     hashlib.sha256(text_doc.encode("utf-8")).hexdigest() if text_doc else None
                 )
@@ -2210,7 +2464,8 @@ class Verifica:
             did = repo.upsert_decision(
                 self.conn,
                 court=court,
-                kind="acordao",
+                # Falha de download/parse preserva a espécie conhecida pelos metadados do candidato.
+                kind="decisao_monocratica" if meta.get("kind") in {"monocratica", "decisao_monocratica"} else "acordao",
                 class_=class_name,
                 number=str(meta.get("number") or cand.key),
                 organ=organ,
@@ -2255,35 +2510,40 @@ class Verifica:
         parte: str = "ementa",
         max_chars: int = 8000,
         offset: int = 0,
+        tribunal: str | None = None,
     ) -> dict[str, Any]:
-        parte = parte if parte in {"ementa", "inteiro_teor", "voto", "certidao"} else "ementa"
+        if parte not in {"ementa", "inteiro_teor", "voto", "certidao"}:
+            raise EntradaInvalida(f"parte inválida: {parte!r} (ementa|inteiro_teor|voto|certidao)")
         max_chars = max(1, min(int(max_chars), 50_000))
         offset = max(0, int(offset))
-        row = self.conn.execute("SELECT * FROM decision WHERE id=?", (id,)).fetchone()
-        if row is None:
-            # tentar official_id
-            row = self.conn.execute(
-                "SELECT * FROM decision WHERE official_id=?", (id,)
-            ).fetchone()
-        if row is None:
-            return {"status": "inexistente", "id": id}
+        court = normalize_court(tribunal).upper() if tribunal else None
+        rows = self.conn.execute("SELECT * FROM decision WHERE id=?", (id,)).fetchall()
+        if court:
+            rows = [r for r in rows if r["court"] == court]
+        if not rows:
+            # Identidade = tribunal + identificador oficial (decisão 0038): sem tribunal, colisão é ambiguidade.
+            sql, args = "SELECT * FROM decision WHERE official_id=?", [id]
+            if court:
+                sql, args = sql + " AND court=?", [id, court]
+            rows = self.conn.execute(sql + " ORDER BY court, id", args).fetchall()
+        if not rows:
+            # Ausência no banco local não é inexistência do julgado (decisão 0038).
+            return {"status": "nao_encontrado_no_acervo", "escopo": "acervo_local", "id": id,
+                    **({"tribunal": court} if court else {})}
+        if len(rows) > 1:
+            return {"status": "ambiguous", "motivo": "IDENTIFICADOR_EM_MAIS_DE_UM_REGISTRO", "id": id,
+                    "candidatos": [{"id": r["id"], "tribunal": r["court"], "classe": r["class"],
+                                    "numero": r["number"]} for r in rows]}
+        row = rows[0]
+        disponiveis = [r[0] for r in self.conn.execute(
+            "SELECT DISTINCT kind FROM decision_document WHERE decision_id=? AND COALESCE(text,'')!='' ORDER BY kind",
+            (row["id"],))]
         doc = self.conn.execute(
             "SELECT * FROM decision_document WHERE decision_id=? AND kind=? "
             "ORDER BY created_at DESC LIMIT 1",
             (row["id"], parte),
         ).fetchone()
-        if doc is None:
-            doc = self.conn.execute(
-                "SELECT * FROM decision_document WHERE decision_id=? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (row["id"],),
-            ).fetchone()
-        text = (doc["text"] if doc else "") or ""
-        self._authenticate_capture(doc["capture_id"] if doc else None)
-        slice_ = text[offset : offset + max_chars]
-        truncado = offset + max_chars < len(text)
-        return {
-            "status": "encontrada",
+        base = {
             "id": row["id"],
             "tribunal": row["court"],
             "classe": row["class"],
@@ -2291,14 +2551,29 @@ class Verifica:
             "orgao": row["organ"],
             "relator": row["rapporteur"],
             "parte": parte,
+            "parte_solicitada": parte,
+            "partes_disponiveis": disponiveis,
+            "autoridade_label": row["authority_label"],
+            **_situacao_precedente(row["authority_attrs_json"], _especie_gravada(row["authority_attrs_json"])),
+        }
+        if doc is None or not (doc["text"] or ""):
+            # Parte ausente nunca é substituída por outro documento sob o rótulo pedido (decisão 0038, A1).
+            return {**base, "status": "parte_indisponivel", "motivo": "PARTE_NAO_CAPTURADA",
+                    "parte_entregue": None, "texto": None, "capture_id": None}
+        text = doc["text"]
+        self._authenticate_capture(doc["capture_id"])
+        slice_ = text[offset : offset + max_chars]
+        truncado = offset + max_chars < len(text)
+        return {
+            **base,
+            "status": "encontrada",
+            "parte_entregue": doc["kind"],
             "texto": slice_,
             "truncado": truncado,
             "offset": offset,
             "max_chars": max_chars,
             "cursor": str(offset + max_chars) if truncado else None,
-            "capture_id": doc["capture_id"] if doc else None,
-            "autoridade_label": row["authority_label"],
-            **_situacao_precedente(row["authority_attrs_json"], _especie_gravada(row["authority_attrs_json"])),
+            "capture_id": doc["capture_id"],
         }
 
     # ------------------------------------------------------------------
@@ -2582,12 +2857,20 @@ class Verifica:
                 checks.append(
                     {"nome": f"fonte:{cid}", "status": "falha", "detalhe": str(exc)[:200]}
                 )
+        provenance = _acervo.installed_provenance(self.home)
+        checks.append({"nome": "snapshot_proveniencia",
+                       "status": "ok" if provenance.get("vinculado") else "alerta",
+                       "detalhe": provenance})
         aviso = self.acervo_status()
         checks.append({"nome": "acervo", "status": "alerta" if aviso else "ok",
                        "detalhe": aviso or "atende ao manifesto/mínimo"})
         ok = all(c["status"] in {"ok", "alerta"} for c in checks)
+        from freoa_verifica.connectors.stj import resumo_atualizacao
+
+        stj_atual = resumo_atualizacao(self.conn)
         return {"status": "ok" if ok else "falha", "verificacoes": checks,
-                **({"acervo_incompleto": aviso} if aviso else {})}
+                **({"acervo_incompleto": aviso} if aviso else {}),
+                **({"stj_atualizacao": stj_atual} if stj_atual else {})}
 
     # ------------------------------------------------------------------
     # Snapshot
@@ -2615,17 +2898,17 @@ class Verifica:
         """Reconstrói os derivados do home numa cópia e troca o banco só se tudo validar (C6)."""
         return _derivados.reconstruir(self, com_situacao=com_situacao)
 
-    def purgar_execucoes(self, antes: str) -> dict[str, Any]:
+    def purgar_execucoes(self, antes: str, apagar_original: bool = False) -> dict[str, Any]:
         """Reconstrói o banco sem as execuções anteriores a `antes` (AAAA-MM-DD)."""
         from freoa_verifica import registro as reg
 
         if self._read_only:
             return {"status": "erro", "motivo": "somente_leitura"}
         try:
-            with self.exclusivo():
+            with self.exclusivo_home():
                 self._close_all_conns(strict=True)
                 try:
-                    return reg.purgar(self.home, antes)
+                    return reg.purgar(self.home, antes, apagar_original)
                 finally:
                     self._clear_caches()
         except (ValueError, TimeoutError, RuntimeError, OSError) as exc:
@@ -2636,10 +2919,11 @@ class Verifica:
         origem: str | Path | None = None,
         *,
         url: str | None = None,
+        aceitar_nao_vinculado: bool = False,
     ) -> dict[str, Any]:
         from freoa_verifica import snapshot as snap
 
-        return snap.install_snapshot(self, origem, url=url)
+        return snap.install_snapshot(self, origem, url=url, aceitar_nao_vinculado=aceitar_nao_vinculado)
 
     def snapshot_info(self, origem: str | Path | None = None) -> dict[str, Any]:
         from freoa_verifica import snapshot as snap

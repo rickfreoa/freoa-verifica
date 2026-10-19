@@ -55,7 +55,8 @@ def test_fallback_uses_bm25_and_does_not_replace_exhausted_and_page(corpus):
         corpus.conn.execute("UPDATE fts_decision SET ementa='debentures', inteiro_teor='' WHERE official_id='STJ-1'")
         corpus.conn.execute("UPDATE fts_decision SET ementa='acordos debentures', inteiro_teor='' WHERE official_id='STJ-2'")
     normal = corpus.pesquisar_jurisprudencia('acordos debentures', tribunais=['stj'], limite=1)
-    assert normal['modo_busca'] == 'normal' and normal['cursor'] is None
+    # 1.2.0 (auditoria): há complemento OR depois do único AND, logo existe próxima página (antes encerrava cedo).
+    assert normal['modo_busca'] == 'normal' and normal['cursor'] is not None
     from freoa_verifica.service import _encode_cursor
     exhausted = corpus.pesquisar_jurisprudencia('acordos debentures', tribunais=['stj'], cursor=_encode_cursor(1))
     # Decisão 0025: o AND esgotado é completado pelo OR, sempre marcado como parcial.

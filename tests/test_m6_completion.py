@@ -65,7 +65,7 @@ def test_offline_sync_never_calls_connector(tmp_path, monkeypatch):
             pytest.fail("rede em modo offline")
         monkeypatch.setattr(svc, "_get", forbidden)
         result = svc.sincronizar(semente=True, max_itens=1)
-        assert len(result["fontes"]) == 7
+        assert len(result["fontes"]) == 8
         assert all(f["motivos"] == {"offline": 1} for f in result["fontes"])
 
 
@@ -105,7 +105,7 @@ def test_snapshot_same_work_remaps_and_reopens(verifica_populada, tmp_path):
         local_rw = local.indexar_obra(source_id="planalto", work_key=rw.work_key, document=doc,
                                      body=b"local", url="https://www.planalto.gov.br/local")
         assert local_rw.work_id != rw.work_id
-        result = local.snapshot_install(dest)
+        result = local.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert result["status"] == "ok", result
         assert local.conn.execute("PRAGMA foreign_key_check").fetchone() is None
         assert local.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0] == 1
@@ -127,7 +127,7 @@ def test_snapshot_rollback_on_blob_copy_failure(verifica_populada, tmp_path, mon
                 raise OSError("simulated failure")
             return original(src, dst, *args, **kwargs)
         monkeypatch.setattr(snapshot.shutil, "copy2", fail)
-        result = local.snapshot_install(dest)
+        result = local.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert result["status"] == "erro" and not result["rollback"]
         assert local.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0] == 0
         assert local.conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
@@ -139,10 +139,10 @@ def test_snapshot_zip_and_traversal(verifica_populada, tmp_path):
     assert svc.snapshot_export(dest)["status"] == "ok"
     archive = Path(shutil.make_archive(str(tmp_path / "snapshot-bundle"), "zip", dest))
     with Verifica(tmp_path / "zip-home") as local:
-        assert local.snapshot_install(archive)["status"] == "ok"
+        assert local.snapshot_install(archive, aceitar_nao_vinculado=True)["status"] == "ok"
         with zipfile.ZipFile(archive, "a") as z:
             z.writestr("../outside", b"forbidden")
-        assert local.snapshot_install(archive)["status"] == "erro"
+        assert local.snapshot_install(archive, aceitar_nao_vinculado=True)["status"] == "erro"
         assert not (tmp_path / "outside").exists()
 
 
@@ -207,7 +207,8 @@ def test_stj_seed_uses_recent_monthly_corpus_organs(tmp_path, monkeypatch):
         assert len(calls[0]["orgaos"]) == 7  # 1.1.0: sete órgãos não criminais
         assert all(c["max_itens"] == 2 for c in calls)
         engine.sync_stj()
-        assert len(calls) == 1
+        # 1.2.0: o checkpoint da coleção não dispensa a revalidação por recurso (decisão 0039).
+        assert len(calls) == 2
 
 
 def test_colegiado_seed_captures_each_item(tmp_path, monkeypatch):
@@ -227,13 +228,14 @@ def test_colegiado_seed_captures_each_item(tmp_path, monkeypatch):
         engine = SementeSync(svc, rate_delay=0)
         engine.corpus["jurisprudencia"]["cvm_colegiado_desde"] = year
         engine.sync_cvm_colegiado()
-        assert svc.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 2
+        # 1.2.0: deliberação integral da ata (inteiro_teor) + assunto (ementa), por item.
+        assert svc.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 4
 
         for n, word in ((1, "primeiro"), (2, "segundo")):
-            result = svc.obter_decisao(f"reuniao={year}1014-R1#{n}")
-            assert word in result["texto"]
+            result = svc.obter_decisao(f"reuniao={year}1014-R1#{n}", parte="inteiro_teor")
+            assert word in result["texto"] and result["parte_entregue"] == "inteiro_teor"
         engine.sync_cvm_colegiado()
-        assert svc.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 2
+        assert svc.conn.execute("SELECT COUNT(*) FROM decision_document").fetchone()[0] == 4  # sem duplicar
 
 
 @pytest.mark.parametrize("kind,number,year,tipo", [("lei_complementar", "182", 2021, "LCP"),

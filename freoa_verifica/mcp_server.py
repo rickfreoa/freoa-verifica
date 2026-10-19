@@ -6,7 +6,7 @@ Pendência: sampling / avaliar_vigencia — NÃO implementado nesta versão.
 from __future__ import annotations
 
 import argparse
-import hmac
+import json
 import os
 import sys
 import threading
@@ -21,6 +21,7 @@ except ModuleNotFoundError:
     # mcp>=2 renomeou FastMCP → MCPServer
     from mcp.server.mcpserver import MCPServer as FastMCP
 
+from freoa_verifica.fronteira import origens_permitidas, token_ok, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP
 from freoa_verifica.registro import normalizar as normalizar_registro
@@ -204,7 +205,7 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         limite: Limite = 10,
         cursor: Cursor | None = None,
     ) -> dict[str, Any]:
-        """Pesquisa jurisprudência (STJ, STF, TCU, TJSP, CVM Colegiado).
+        """Pesquisa jurisprudência (STJ, STF, TCU, TJSP, TJDFT, CVM Colegiado).
 
         Pode gravar cache local. limite máximo: 50. Aceita siglas e nomes dos tribunais.
         """
@@ -221,6 +222,8 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         for item in data_out.get("itens") or []:
             if isinstance(item, dict) and item.get("ementa"):
                 item["ementa"] = _wrap_oficial(item["ementa"])
+            if isinstance(item, dict) and item.get("trecho_inteiro_teor"):
+                item["trecho_inteiro_teor"] = _wrap_oficial(item["trecho_inteiro_teor"])
         return data_out
 
     @mcp.tool()
@@ -229,14 +232,17 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         parte: Parte = "ementa",
         max_chars: MaxChars = 8000,
         offset: Offset = 0,
+        tribunal: Identificador | None = None,
     ) -> dict[str, Any]:
         """Obtém ementa ou inteiro teor de uma decisão (texto oficial delimitado).
 
         max_chars máximo: 50.000. parte: ementa|inteiro_teor|voto|certidao.
+        Identificador oficial repetido em tribunais distintos exige `tribunal` (senão: ambiguous).
+        Parte não capturada devolve parte_indisponivel; nunca outro documento no lugar.
         """
         max_chars = max(1, min(int(max_chars), 50_000))
         data_out = svc_().obter_decisao(
-            id, parte=parte, max_chars=max_chars, offset=offset
+            id, parte=parte, max_chars=max_chars, offset=offset, tribunal=tribunal
         )
         return _wrap_result_text(data_out, ("texto",))
 
@@ -282,11 +288,12 @@ class _SoLoopback:
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] in ("http", "websocket"):
             cliente = (scope.get("client") or (None,))[0]
-            hdrs = {k.lower() for k, _ in scope["headers"]}
-            if cliente not in _LOCAL_CLIENTES or hdrs & {b"x-forwarded-for", b"forwarded"}:
+            motivo = None if cliente in _LOCAL_CLIENTES else "modo local aceita apenas cliente loopback direto"
+            motivo = motivo or validar(scope["headers"], com_token=False)
+            if motivo:
                 if scope["type"] == "websocket":
                     return
-                body = b'{"title":"erro","status":403,"detail":"modo local aceita apenas cliente loopback direto"}'
+                body = json.dumps({"title": "erro", "status": 403, "detail": motivo}).encode()
                 await send({"type": "http.response.start", "status": 403, "headers": [
                     (b"content-type", b"application/problem+json"),
                     (b"content-length", str(len(body)).encode())]})
@@ -300,12 +307,21 @@ class _BearerMCP:
 
     def __init__(self, app, token: str) -> None:
         self.app, self.token = app, token
+        self.extras = origens_permitidas()
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] == "http":
+            motivo = validar(scope["headers"], com_token=True, extras=self.extras)
+            if motivo:
+                body = json.dumps({"title": "erro", "status": 403, "detail": motivo}).encode()
+                await send({"type": "http.response.start", "status": 403, "headers": [
+                    (b"content-type", b"application/problem+json"),
+                    (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return
             auth = dict(scope["headers"]).get(b"authorization", b"").decode("latin-1")
             scheme, _, cred = auth.partition(" ")
-            if scheme.lower() != "bearer" or not hmac.compare_digest(cred.strip(), self.token):
+            if scheme.lower() != "bearer" or not token_ok(cred.strip(), self.token):
                 body = b'{"title":"erro","status":401,"detail":"token invalido ou ausente"}'
                 await send({"type": "http.response.start", "status": 401, "headers": [
                     (b"content-type", b"application/problem+json"),
@@ -322,7 +338,13 @@ def build_http_app(mcp: FastMCP, *, host: str, token: str | None):
     """App ASGI do MCP HTTP. Host não local exige token (verificado em toda requisição)."""
     if host not in _LOCAL_HOSTS and not token:
         raise RuntimeError("recusado: host não local exige token (--token ou FV_MCP_TOKEN)")
-    app = mcp.streamable_http_app(host=host, max_request_body_size=MAX_CORPO_HTTP)
+    # A5: a proteção de Host/Origin do SDK exige porta e é minúscula-sensível; `fronteira.validar` já cobre
+    # (e é a mesma do REST), então a do SDK fica desligada para dar paridade.
+    from mcp.server.transport_security import TransportSecuritySettings
+
+    app = mcp.streamable_http_app(
+        host=host, max_request_body_size=MAX_CORPO_HTTP,
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
     return _BearerMCP(app, token) if token else _SoLoopback(app)
 
 
@@ -342,7 +364,8 @@ def run_server(
     if http:
         import uvicorn
 
-        uvicorn.run(build_http_app(mcp, host=host, token=token), host=host, port=port)
+        # access_log=False: a query string não vai em claro para o log (decisão 0040, A2)
+        uvicorn.run(build_http_app(mcp, host=host, token=token), host=host, port=port, access_log=False)
     else:
         mcp.run(transport="stdio")
 
@@ -354,10 +377,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--home", default=None)
     parser.add_argument("--token", default=None, help="bearer (obrigatório com host não local)")
-    parser.add_argument("--sem-registro", action="store_true", help="não grava entradas (registro sem_conteudo)")
+    parser.add_argument("--sem-registro", action="store_true", help="registro sem_conteudo (já é o padrão; mantida por compatibilidade)")
+    parser.add_argument("--registro-completo", action="store_true", help="grava as entradas nas execuções (padrão: sem_conteudo)")
     args = parser.parse_args(argv)
+    if args.sem_registro and args.registro_completo:
+        parser.error("--sem-registro e --registro-completo são excludentes")
     run_server(http=args.http, host=args.host, port=args.port, home=args.home, token=args.token,
-               registro="sem_conteudo" if args.sem_registro else None)
+               registro="completo" if args.registro_completo else ("sem_conteudo" if args.sem_registro else None))
 
 
 if __name__ == "__main__":

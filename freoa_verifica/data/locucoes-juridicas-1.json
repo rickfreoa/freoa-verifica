@@ -1,0 +1,16 @@
+{
+  "versao": "locucoes-1",
+  "nota": "Locuções jurídicas enviadas entre aspas às buscas oficiais que ranqueiam termos soltos mal (TJDFT). Determinístico; casa sem acento e sem caixa.",
+  "locucoes": [
+    "exclusão de sócio", "sociedade limitada", "sociedade anônima", "apuração de haveres", "dissolução parcial",
+    "dissolução parcial de sociedade", "balanço de determinação", "desconsideração da personalidade jurídica",
+    "desconsideração inversa", "confusão patrimonial", "desvio de finalidade", "acordo de acionistas",
+    "acordo de sócios", "acionista controlador", "abuso de poder de controle", "alienação de controle",
+    "recuperação judicial", "plano de recuperação", "falência", "direito de recesso", "direito de retirada",
+    "retirada de sócio", "quebra de affectio societatis", "affectio societatis", "conflito de interesses",
+    "dever de lealdade", "responsabilidade do administrador", "ação de responsabilidade", "assembleia geral",
+    "deliberação assemblear", "nulidade de deliberação", "quotas sociais", "cessão de quotas", "valor patrimonial",
+    "fundo de comércio", "sociedade em conta de participação", "holding familiar", "planejamento sucessório",
+    "execução específica", "tag along", "oferta pública"
+  ]
+}

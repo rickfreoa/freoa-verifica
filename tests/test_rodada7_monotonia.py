@@ -90,7 +90,7 @@ def test_c_instalacao_de_snapshot(tmp_path):
         assert o.snapshot_export(tmp_path / "snap")["status"] == "ok"
     with Verifica(tmp_path / "alvo") as t:
         _idx(t, ("um", "dois", "tres"), T0, "A")
-        out = t.snapshot_install(tmp_path / "snap")
+        out = t.snapshot_install(tmp_path / "snap", aceitar_nao_vinculado=True)
         assert out["status"] == "ok", out
         assert [d["motivo"] for d in out["divergentes"]] == ["PERDA_ESTRUTURAL"]
         assert t.conn.execute("select candidato_ao_vivo from parsed_document pd join capture c on c.id=pd.capture_id "

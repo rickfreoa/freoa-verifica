@@ -229,7 +229,7 @@ def test_snapshot_valida_hashes_e_staging(verifica_populada, tmp_path):
     home2 = tmp_path / "home2"
     home2.mkdir()
     with Verifica(home=home2) as svc2:
-        inst = svc2.snapshot_install(dest)
+        inst = svc2.snapshot_install(dest, aceitar_nao_vinculado=True)
         assert inst["status"] == "ok"
 
 
@@ -292,7 +292,7 @@ def test_rest_problem_json_sem_vazamento(verifica_populada, monkeypatch):
         raise RuntimeError(f"segredo em {svc.home / 'verifica.sqlite3'}")
 
     app.get("/v1/_boom")(boom)
-    with TestClient(app, raise_server_exceptions=False, client=("127.0.0.1", 50000)) as c:
+    with TestClient(app, raise_server_exceptions=False, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as c:
         r = c.get("/v1/_boom")
         assert r.status_code == 500
         assert r.headers["content-type"].startswith("application/problem+json")
@@ -463,7 +463,7 @@ def test_cli_resolve_e_matriz_paridade(verifica_populada, monkeypatch, capsys):
 
     app = create_app(home=str(svc.home), token=None)
     app.state.verifica.registrar(rw)
-    with TestClient(app, client=("127.0.0.1", 50000)) as c:
+    with TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as c:
         r = c.post(
             "/v1/verificacoes",
             json={"citacao": citacao, "trecho": trecho},

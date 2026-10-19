@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_call:  # reutilizado por release.yml (mesmo commit)
 
+permissions:
+  contents: read
+
 jobs:
   test:
     strategy:
@@ -36,5 +39,7 @@ jobs:
           REPO="$PWD"
           TMPDIR="$(mktemp -d)"
           cp -r "$REPO/tests" "$TMPDIR/tests"
+          mkdir -p "$TMPDIR/scripts"
+          cp "$REPO/scripts/instalar-freoa-verifica.ps1" "$TMPDIR/scripts/"
           cd "$TMPDIR"
           python -m pytest tests -q -m "not live" -p no:cacheprovider

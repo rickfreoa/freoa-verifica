@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from freoa_verifica.ids import new_ulid
+from freoa_verifica.registro import checkpoint_truncate
 from freoa_verifica.parsers.model import document_from_dict
 
 _log = logging.getLogger(__name__)
@@ -19,7 +20,8 @@ _log = logging.getLogger(__name__)
 # 2 = 1.0.3 (ADCT com escopo próprio, rubrica, FTS só com redações do modelo atual).
 # 3 = 1.1.0 (cvm-pdf-2 com dispositivos inferidos, tipo "Resolução" do BCB como CMN pelo preâmbulo,
 #     data de efeito declarada no BCB, situação estruturada de precedentes).
-DERIVED_VERSION = 3
+# 4 = 1.2.0 (espécie declarada pela fonte prevalece: monocrática nunca rotulada como acórdão; decisão 0038).
+DERIVED_VERSION = 4
 
 REASON = "ACERVO_DESATUALIZADO"
 REASON_NAO_PUBLICADA = "ACERVO_DE_VERSAO_NAO_PUBLICADA"
@@ -150,6 +152,60 @@ def _validar(origem: dict[str, int], novo: sqlite3.Connection) -> None:
         raise RuntimeError("extrações perdidas")
 
 
+_ESPECIES_GRAVADAS = frozenset({"sumula", "sumula_vinculante", "repetitivo", "irdr_iac",
+                                 "repercussao_geral", "controle_concentrado"})
+
+
+def reclassificar_autoridade(conn: sqlite3.Connection) -> int:
+    """Recalcula o rótulo A–E gravado com as regras atuais (decisão 0038). Rótulos de versões anteriores
+    ficavam congelados no banco (p. ex. Colegiado da CVM em D) enquanto a busca recalculava. A espécie de
+    precedente qualificado gravada pela ingestão é preservada; monocrática declarada prevalece."""
+    from freoa_verifica.authority import as_dict, classify_authority
+    from freoa_verifica.service import _species_from_meta
+
+    n = 0
+    for did, court, cls, organ, kind, attrs_json, label in conn.execute(
+            "SELECT id, court, class, organ, kind, authority_attrs_json, authority_label FROM decision").fetchall():
+        try:
+            old = json.loads(attrs_json) if attrs_json else {}
+        except ValueError:
+            old = {}
+        gravada = ((old.get("attributes") or {}).get("species") if isinstance(old.get("attributes"), dict)
+                   else old.get("species"))
+        # Monocrática declarada na ingestão (atributo gravado) prevalece sobre `kind` legado de acórdão;
+        # o kind é corrigido junto (auditoria 1.2.0).
+        if gravada == "monocratica":
+            kind = "decisao_monocratica"
+        species = _species_from_meta(court or "", cls, organ, kind)
+        if species != "monocratica" and gravada in _ESPECIES_GRAVADAS:
+            species = gravada
+        auth = classify_authority(species=species, court=court or "", class_name=cls, organ=organ)
+        attrs = {**old, **as_dict(auth)}
+        if auth.label != label or attrs != old or (gravada == "monocratica"):
+            conn.execute("UPDATE decision SET authority_label=?, authority_attrs_json=?, kind=? WHERE id=?",
+                         (auth.label, json.dumps(attrs, ensure_ascii=False), kind, did))
+            n += 1 if (auth.label != label or attrs != old) else 0
+    return n
+
+
+def corrigir_inteiro_teor_sumulas(conn: sqlite3.Connection) -> int:
+    """Até a 1.1.0, enunciado de súmula com mais de 500 caracteres era gravado como inteiro_teor (A12).
+    Súmula não tem inteiro teor: o documento volta a ementa (ou sai, se a ementa já existe) e o FTS acompanha."""
+    alvo = conn.execute(
+        "SELECT dd.id, dd.decision_id, d.court, d.official_id, "
+        "EXISTS(SELECT 1 FROM decision_document e WHERE e.decision_id=dd.decision_id AND e.kind='ementa') "
+        "FROM decision_document dd JOIN decision d ON d.id=dd.decision_id "
+        "WHERE dd.kind='inteiro_teor' AND (d.kind='sumula' OR LOWER(COALESCE(d.class,'')) LIKE '%mula%')").fetchall()
+    for doc_id, did, court, official_id, tem_ementa in alvo:
+        if tem_ementa:
+            conn.execute("DELETE FROM decision_document WHERE id=?", (doc_id,))
+        else:
+            conn.execute("UPDATE decision_document SET kind='ementa', nivel_prova='ementa_capturada' WHERE id=?", (doc_id,))
+        conn.execute("UPDATE decision SET nivel_prova='ementa_capturada' WHERE id=?", (did,))
+        conn.execute("UPDATE fts_decision SET inteiro_teor='' WHERE court=? AND official_id=?", (court, official_id))
+    return len(alvo)
+
+
 def reprocessar_pasta(pasta: Path, *, com_situacao: bool = False) -> dict[str, Any]:
     """Reprocessa com os parsers atuais o banco `pasta/verifica.sqlite3` (+ blobs), reindexa o FTS,
     carimba DERIVED_VERSION e valida contagens. Levanta RuntimeError se algo não fechar."""
@@ -177,6 +233,8 @@ def reprocessar_pasta(pasta: Path, *, com_situacao: bool = False) -> dict[str, A
         relatorio.update(reprocessados=rep["reprocessados"], divergentes=rep["divergentes"])
         with novo.conn:
             relatorio["fts"] = reindexar_fts(novo.conn)
+            relatorio["decisoes_reclassificadas"] = reclassificar_autoridade(novo.conn)
+            relatorio["sumulas_sem_inteiro_teor"] = corrigir_inteiro_teor_sumulas(novo.conn)
         if com_situacao:
             if novo._offline():
                 relatorio["situacao"] = "ignorada_offline"
@@ -203,10 +261,10 @@ def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
     db = home / "verifica.sqlite3"
     pasta = home / f".reconstruir-{new_ulid()}"
     try:
-        with svc.exclusivo():
+        with svc.exclusivo_home():
             for velha in home.glob(".reconstruir-*"):  # restos de execução interrompida
                 shutil.rmtree(velha, ignore_errors=True)
-            svc.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            checkpoint_truncate(svc.conn)
             pasta.mkdir()
             # Blobs espelhados por hardlink (sem symlink: exige privilégio no Windows).
             if (home / "blobs").exists():
