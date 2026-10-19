@@ -1,0 +1,44 @@
+[
+ {
+  "SeqDocumento": 403803631,
+  "dataPublicacao": "2026-10-08",
+  "tipoDocumento": "ACÓRDÃO",
+  "numeroRegistro": "202602296109",
+  "processo": "REsp 2280461",
+  "dataRecebimento": "2026-06-10",
+  "dataDistribuição": "2026-06-26",
+  "NM_MINISTRO": "JOÃO OTÁVIO DE NORONHA",
+  "recurso": null,
+  "teor": "Não Conhecendo",
+  "descricaoMonocratica": null,
+  "assuntos": "01156.07771.07752."
+ },
+ {
+  "SeqDocumento": 403805548,
+  "dataPublicacao": "2026-10-08",
+  "tipoDocumento": "ACÓRDÃO",
+  "numeroRegistro": "202601770857",
+  "processo": "AREsp 3264125",
+  "dataRecebimento": "2026-05-06",
+  "dataDistribuição": "2026-05-22",
+  "NM_MINISTRO": "JOÃO OTÁVIO DE NORONHA",
+  "recurso": "EDcl  ",
+  "teor": "Negando",
+  "descricaoMonocratica": null,
+  "assuntos": "00899.10432.10496."
+ },
+ {
+  "SeqDocumento": 403437651,
+  "dataPublicacao": "2026-10-08",
+  "tipoDocumento": "DECISÃO",
+  "numeroRegistro": "202602689416",
+  "processo": "AREsp 3309728",
+  "dataRecebimento": "2026-07-01",
+  "dataDistribuição": "2026-07-23",
+  "NM_MINISTRO": "LUIS FELIPE SALOMÃO",
+  "recurso": null,
+  "teor": "Não Conhecendo",
+  "descricaoMonocratica": "Não conhecido o recurso de #{nome_da_parte} #{campo_livre_final}",
+  "assuntos": "00899.07681.07717."
+ }
+]
