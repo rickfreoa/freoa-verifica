@@ -1,0 +1,5 @@
+target-version = "py311"
+extend-exclude = [".venv", "build", "dist", "freoa_verifica.egg-info"]
+
+[lint]
+select = ["E9", "F", "S", "BLE", "TRY"]
