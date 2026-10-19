@@ -41,6 +41,11 @@ locuções entre aspas). Cada rodada teve juiz cego novo; os vereditos anteriore
 Como a busca ao vivo do TJDFT indexa candidatos no acervo local, a ordem dos casos influencia resultados
 posteriores (D8 passou a incluir um acórdão do TJDFT capturado na E5): é o comportamento real do produto.
 
+**Risco de sobreajuste.** Os ajustes de reconhecimento e de ranking foram motivados por falhas observadas
+neste mesmo conjunto. As regras são gerais e determinísticas (nenhuma menciona caso, número ou decisão do
+conjunto), mas o placar temático final mede um sistema ajustado à vista dele. Antes de tratar esse número
+como representativo, é preciso repeti-lo num conjunto novo, montado sem conhecer estas consultas.
+
 ## Leitura
 
 O comparativo serviu de teste, não de vitrine. A primeira rodada expôs defeitos de reconhecimento: REsp
