@@ -1,4 +1,4 @@
-# 0044 — Fixtures com proveniência e heurística de família de conectores
+# 0052 — Fixtures com proveniência e heurística de família de conectores
 
 Data: 19/10/2026 · Versão: 1.3.0 · Origem: marco G2 do plano 1.3.0
 
