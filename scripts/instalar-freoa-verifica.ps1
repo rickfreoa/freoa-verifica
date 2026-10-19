@@ -69,10 +69,14 @@ try {
     # --aceitar-nao-vinculado) contaminaria o novo. Ele é preservado ao lado e o snapshot vai para home limpo.
     $etapa = "preservar acervo anterior"
     $pre = (Invoke-NativeChecked $etapa $fv @("snapshot", "info", "--json")) -join "`n" | ConvertFrom-Json
-    if ($pre.instalado -and $pre.vinculado -ne $true) {
-        $bak = "$registroDir.pre-$versao-$(Get-Date -Format yyyyMMddHHmmss)"
-        Move-Item $registroDir $bak
-        New-Item -ItemType Directory -Force $registroDir | Out-Null
+    $temDados = $pre.instalado -or ([int]$pre.obras -gt 0) -or ([int]$pre.capturas -gt 0) -or ([int]$pre.decisoes -gt 0)
+    if ($temDados -and $pre.vinculado -ne $true) {
+        $homeAtual = if ($pre.home) { [string]$pre.home } else { $registroDir }  # respeita FV_HOME
+        $bak = "$homeAtual.pre-$versao-$(Get-Date -Format yyyyMMddHHmmss)"
+        $n = 0
+        while (Test-Path -LiteralPath $bak) { $n++; $bak = "$homeAtual.pre-$versao-$(Get-Date -Format yyyyMMddHHmmss)-$n" }
+        Move-Item -LiteralPath $homeAtual $bak
+        New-Item -ItemType Directory -Force $homeAtual | Out-Null
         Write-Host "Acervo anterior sem vinculo preservado em $bak"
     }
     $etapa = "instalar snapshot"

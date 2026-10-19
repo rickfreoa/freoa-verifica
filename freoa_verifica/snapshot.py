@@ -27,9 +27,10 @@ from freoa_verifica.store.db import connect, data_home
 # autor rickfreoa/freoa-verifica) + attestation do GitHub Actions
 # (`gh attestation verify`). Não é assinatura criptográfica própria do pacote.
 AUTHENTICITY_NOTE = (
-    "Checksums demonstram integridade. A origem depende do canal da release "
-    "GitHub rickfreoa/freoa-verifica; eventual attestation deve ser conferida "
-    "separadamente. Não há assinatura própria nem attestation demonstrada aqui."
+    "Checksums demonstram integridade. `vinculado: true` significa que o sha256 do snapshot "
+    "consta da lista embutida no pacote; a origem do pacote se prova pela attestation do wheel "
+    "(`gh attestation verify`), conferida pelo instalador quando o GitHub CLI existe. "
+    "Não há assinatura própria do snapshot."
 )
 
 

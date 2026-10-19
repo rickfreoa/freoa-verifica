@@ -209,7 +209,13 @@ class SementeSync:
 
     def _mark_indisponivel(self, fonte: str, chave: str, motivo: str) -> None:
         self._failed[fonte, chave] = motivo
-        self.state.set(fonte, chave, "indisponivel", motivo=motivo)
+        # Falha não apaga o histórico da última captura válida (sha256, ultima_captura_ok).
+        anterior = self.state.get(fonte, chave)
+        try:
+            payload = json.loads(anterior["payload_json"]) if anterior and anterior["payload_json"] else None
+        except (ValueError, TypeError, KeyError, IndexError):
+            payload = None
+        self.state.set(fonte, chave, "indisponivel", motivo=motivo, payload=payload)
         st = self._stats(fonte)
         st.indisponiveis += 1
         st.motivos[motivo] = st.motivos.get(motivo, 0) + 1
@@ -637,9 +643,8 @@ class SementeSync:
         prec = bool(self.corpus.get("jurisprudencia", {}).get("stj_precedentes_qualificados"))
         collections = [(f"espelhos:recentes12:{datetime.now(timezone.utc):%Y-%m}:{max_items}" + (":prec" if prec else ""), orgaos, desde)]
         for chave, packages, start in collections:
-            if self.state.done("stj", chave):
-                self._stats("stj").pulados += 1
-                continue
+            # Sem atalho pelo checkpoint da coleção: a revalidação é decidida recurso a recurso no
+            # conector (decisão 0039); recurso em dia não é baixado de novo (auditoria 1.2.0).
             try:
                 self._sleep()
                 n = conn_obj.sync(desde=start, orgaos=packages, max_itens=max_items, precedentes=prec)

@@ -106,7 +106,10 @@ def _bounded_io(proc, raw: bytes, timeout: float):
 
     def write():
         try:
-            proc.stdin.write(raw)
+            # bufsize=0: write(2) pode ser parcial; repete até o fim (entrada truncada não pode virar documento).
+            fd, mv = proc.stdin.fileno(), memoryview(raw)
+            while mv:
+                mv = mv[os.write(fd, mv[: 1 << 20]):]
         except (BrokenPipeError, OSError):
             pass
         finally:

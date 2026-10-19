@@ -121,7 +121,7 @@ def test_inteiro_teor_sem_numero_do_processo_ou_curto(conn):
 def test_inteiro_teor_html_valido_vira_texto(conn):
     mono = _load("monocratica")
     rec = mono["registros"][0]
-    corpo = f"<html><body><style>x{{}}</style><p>Processo {rec['processo']}</p><p>" + "texto da decisão " * 80 + "</p></body></html>"
+    corpo = f"<html><body><style>x{{}}</style><p>Processo {rec['processo']}</p><p>" + "texto da decisão " * 80 + " Ante o exposto, indefiro. Publique-se.</p></body></html>"  # 1.2.0: exige fecho decisório
     rec["inteiroTeor"], rec["inteiroTeorHtml"] = None, corpo
     p, _ = _parse(conn, mono, rec)
     assert p.profile == "tjdft_inteiro_teor" and "<p>" not in p.text and "x{}" not in p.text and rec["processo"] in p.text

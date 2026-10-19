@@ -65,6 +65,14 @@ def _html_text(raw: str) -> str:
     return " ".join(root.text_content().split())
 
 
+# Frases de indisponibilidade do próprio documento (não "bem indisponível", comum em decisões reais).
+_NEGATIVOS = ("teor indisponivel", "teor nao disponivel", "teor nao esta disponivel", "documento indisponivel",
+              "documento nao disponivel", "nao disponivel no momento", "indisponivel no momento", "sem inteiro teor")
+# Fecho de decisão judicial: dispositivo e ordens de cumprimento ou assinatura do prolator.
+_POSITIVOS = ("ante o exposto", "diante do exposto", "pelo exposto", "isso posto", "publique-se",
+              "intimem-se", "intime-se", "decido", "e o relatorio", "desembargador", "presidente do tribunal")
+
+
 def inteiro_teor_valido(rec: dict[str, Any]) -> str | None:
     """Regra conservadora (decisão 0041): só texto íntegro do próprio processo; `possuiInteiroTeor` não conta."""
     processo = str(rec.get("processo") or "").strip()
@@ -75,9 +83,11 @@ def inteiro_teor_valido(rec: dict[str, Any]) -> str | None:
         if not isinstance(raw, str) or not raw.strip():
             continue
         text = _html_text(raw) if _TAG_RE.search(raw) else raw
-        if "inteiro teor indisponivel" in _norm(text):
+        n = _norm(text)
+        if any(neg in n for neg in _NEGATIVOS):
             continue
-        if len(text) >= MIN_INTEIRO_TEOR and processo in text:
+        # Prova positiva de documento decisório, não só comprimento e número (auditoria 1.2.0).
+        if len(text) >= MIN_INTEIRO_TEOR and processo in text and any(pos in n for pos in _POSITIVOS):
             return text
     return None
 

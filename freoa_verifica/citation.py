@@ -614,8 +614,20 @@ def _court_of_class(cls: str) -> str:
     return "stj"
 
 
+_OUTRO_TRIBUNAL_ANTES_RE = re.compile(r"\b(TJ[A-Z]{2,3}|TRF\d|TCU)\s*$")
+_OUTRO_TRIBUNAL_DEPOIS_RE = re.compile(r"\s*(?:/|-|\bdo|\bda)\s*(TJ[A-Z]{2,3}|TRF\d|TCU)\b")
+# Classes que só existem em STF/STJ: um tribunal de origem citado junto não muda o tribunal da decisão.
+_CLASSES_SUPERIORES_RE = re.compile(r"\b(?:E?REsp|AREsp|RE|ARE|ADI|ADC|ADPF|ADO)$", re.I)
+
+
 def _court_from_context(text: str, start: int, end: int, default: str) -> str:
-    """Tribunal contextual explícito ('do STJ', '/STJ', 'STJ,') prevalece."""
+    """Tribunal contextual explícito ('do STJ', '/STJ', 'STJ,', 'TJDFT AI ...') prevalece (auditoria 1.2.0)."""
+    outro = (_OUTRO_TRIBUNAL_ANTES_RE.search(text[max(0, start - 12):start])
+             # o sufixo "/TJ" pode ter sido lido como UF pelo padrão da decisão: olha a partir de antes do fim
+             or _OUTRO_TRIBUNAL_DEPOIS_RE.match(text, max(start, end - 3), min(len(text), end + 16))
+             or _OUTRO_TRIBUNAL_DEPOIS_RE.match(text, end, min(len(text), end + 16)))
+    if outro:
+        return outro.group(1).lower()
     window = text[max(0, start - 5) : min(len(text), end + 24)]
     m = _COURT_CTX_RE.search(window)
     if m:
@@ -1088,7 +1100,12 @@ def extract(texto: str) -> list[Citation]:
                 court = tok.lower()
             elif len(tok) == 2:
                 uf = tok
-        court = _court_from_context(text, m.start(), m.end(), court)
+        ctx = _court_from_context(text, m.start(), m.end(), court)
+        if ctx not in ("stf", "stj") and _CLASSES_SUPERIORES_RE.search(cls):
+            ctx = court
+        if ctx != court and ctx not in ("stf", "stj"):
+            uf = None  # "/TJ" de "/TJDFT" não é UF
+        court = ctx
         raw_cites.append(
             Citation(
                 kind="decisao",

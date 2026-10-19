@@ -207,7 +207,8 @@ def test_stj_seed_uses_recent_monthly_corpus_organs(tmp_path, monkeypatch):
         assert len(calls[0]["orgaos"]) == 7  # 1.1.0: sete órgãos não criminais
         assert all(c["max_itens"] == 2 for c in calls)
         engine.sync_stj()
-        assert len(calls) == 1
+        # 1.2.0: o checkpoint da coleção não dispensa a revalidação por recurso (decisão 0039).
+        assert len(calls) == 2
 
 
 def test_colegiado_seed_captures_each_item(tmp_path, monkeypatch):

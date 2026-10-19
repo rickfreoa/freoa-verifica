@@ -2154,13 +2154,14 @@ class Verifica:
                 for extra in ("situacao_precedente", "divergencia_na_fonte"):
                     if parsed.metadata.get(extra):
                         attrs[extra] = parsed.metadata[extra]
+                kind_gravado = ("decisao_monocratica" if parsed.kind == "monocratica" else parsed.kind) if parsed.kind in {
+                    "acordao", "decisao_monocratica", "monocratica", "sumula", "tema", "voto",
+                    "decisao_colegiado_cvm", "acordao_tcu", "repercussao_geral",
+                } else "acordao"
                 did = repo.upsert_decision(
                     self.conn,
                     court=court,
-                    kind=("decisao_monocratica" if parsed.kind == "monocratica" else parsed.kind) if parsed.kind in {
-                        "acordao", "decisao_monocratica", "monocratica", "sumula", "tema", "voto",
-                        "decisao_colegiado_cvm", "acordao_tcu", "repercussao_geral",
-                    } else "acordao",
+                    kind=kind_gravado,
                     class_=class_name,
                     number=str(parsed.metadata.get("processo") or parsed.metadata.get("numeroProcesso") or parsed.metadata.get("numeroAcordao") or meta.get("numero") or meta.get("number") or parsed.official_id),
                     uf=meta.get("siglaUF") or meta.get("siglaUf") or meta.get("uf"),
@@ -2174,8 +2175,9 @@ class Verifica:
                     authority_label=auth.label,
                 )
                 # upsert não atualiza linha existente: a situação do precedente muda na fonte.
-                self.conn.execute("UPDATE decision SET authority_attrs_json=?, authority_label=? WHERE id=?",
-                                  (json.dumps(attrs, ensure_ascii=False), auth.label, did))
+                # A espécie também: recaptura validada de identidade preexistente corrige o kind (auditoria 1.2.0).
+                self.conn.execute("UPDATE decision SET authority_attrs_json=?, authority_label=?, kind=? WHERE id=?",
+                                  (json.dumps(attrs, ensure_ascii=False), auth.label, kind_gravado, did))
                 integral = parsed.profile in _PERFIS_INTEIRO_TEOR or parsed.metadata.get("documento") == "inteiro_teor"
                 kind_doc = "inteiro_teor" if inteiro and integral else "ementa"
                 text_doc = inteiro if kind_doc == "inteiro_teor" else (ementa or inteiro)
@@ -2219,7 +2221,8 @@ class Verifica:
             did = repo.upsert_decision(
                 self.conn,
                 court=court,
-                kind="acordao",
+                # Falha de download/parse preserva a espécie conhecida pelos metadados do candidato.
+                kind="decisao_monocratica" if meta.get("kind") in {"monocratica", "decisao_monocratica"} else "acordao",
                 class_=class_name,
                 number=str(meta.get("number") or cand.key),
                 organ=organ,
