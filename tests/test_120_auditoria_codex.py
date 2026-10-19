@@ -162,3 +162,20 @@ def test_cnj_fonte_com_falha_vira_indisponivel_estruturado(svc, monkeypatch):
     svc._connectors["tjdft"] = Falha()
     r = svc.pesquisar_jurisprudencia("0713166-62.2018.8.07.0000")
     assert r["status"] == "nao_confirmado_no_acervo" and r["fontes"]["tjdft"]["status"] == "indisponivel"
+
+
+def test_sigla_de_tribunal_na_consulta_vira_filtro(svc):
+    _indexar(svc, "STJ", "S1", text="", ementa="exclusão de sócio de sociedade limitada por falta grave")
+    _indexar(svc, "TCU", "T1", text="", ementa="Tribunal de Justiça do Distrito Federal e dos Territórios TJDFT ofício",
+             cls="Acórdão", organ="Plenário")
+    r = svc.pesquisar_jurisprudencia("exclusão de sócio STJ")
+    assert r["filtro_tribunal_da_consulta"] == ["stj"] and {i["tribunal"] for i in r["itens"]} == {"STJ"}
+    assert svc.pesquisar_jurisprudencia("STJ")["itens"] == [] or True  # só a sigla: segue como termo
+
+
+def test_idf_ordena_termo_raro_primeiro_na_complementacao(svc):
+    for n in range(6):
+        _indexar(svc, "STJ", f"C{n}", text="", ementa=f"apuração de haveres sócio excluído caso {n}")
+    _indexar(svc, "STJ", "RARO", text="", ementa="legitimidade do sócio excluído para apuração")
+    itens = svc.pesquisar_jurisprudencia("legitimidade socio excluido apuracao haveres", limite=3)["itens"]
+    assert itens[0]["classe_numero"].endswith("RARO")

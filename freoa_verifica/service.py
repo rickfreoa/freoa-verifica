@@ -77,6 +77,7 @@ _ESPERA_CLOSE = 30.0
 from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E402,F401
 
 _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
+_SIGLAS_TRIBUNAL_FILTRO = frozenset({"STJ", "STF", "TCU", "TJDFT", "TJSP", "CVM"})
 _JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "tjdft", "cvm_colegiado")
 _DEFAULT_TEXT_LIMIT = 4000
 _EMENTA_MAX = 1200
@@ -2005,7 +2006,20 @@ class Verifica:
         key = self._chave_processo(q)
         if key is not None:
             return self._juris_por_numero(q, key)
-        return self._juris_textual(q, tribunais, desde, ate, autoridade_min, limite, cursor)
+        filtro_da_consulta = None
+        if tribunais is None:
+            # Sigla de tribunal solta na consulta ("exclusão de sócio TJDFT") é filtro, não termo: como termo
+            # casaria o cabeçalho "Tribunal de Justiça do Distrito Federal" de qualquer decisão (comparativo 1.2.0).
+            siglas = [t for t in re.findall(r"(?<![\w/])([A-Za-z]{2,6})(?![\w/])", q)
+                      if t.upper() in _SIGLAS_TRIBUNAL_FILTRO]
+            resto = re.sub(r"(?<![\w/])(?:" + "|".join(map(re.escape, siglas)) + r")(?![\w/])", " ", q).strip() if siglas else q
+            if siglas and resto:
+                filtro_da_consulta = sorted({s.lower() for s in siglas})
+                q, tribunais = " ".join(resto.split()), filtro_da_consulta
+        out = self._juris_textual(q, tribunais, desde, ate, autoridade_min, limite, cursor)
+        if filtro_da_consulta:
+            out["filtro_tribunal_da_consulta"] = filtro_da_consulta
+        return out
 
     # Segmento J.TR do CNJ -> conector com busca oficial pelo número (só onde existe).
     _CNJ_CONECTORES = {"8.07": "tjdft"}
@@ -2095,6 +2109,26 @@ class Verifica:
         return {**base, "itens": itens, "resultados": itens, "relacionados": rel,
                 "total_parcial": len(itens), "evidencia": evidence}
 
+    def _peso_idf(self):
+        """Raridade do termo no acervo de decisões (IDF): "legitimidade" pesa mais que "sociedade" na
+        pertinência da complementação OR (comparativo 1.2.0). Determinístico para um mesmo acervo."""
+        import math
+        n = self.conn.execute("SELECT COUNT(*) FROM fts_decision").fetchone()[0] or 1
+        cache: dict[tuple[str, bool], float] = {}
+
+        def peso(termo: str, prefixo: bool) -> float:
+            k = (termo, prefixo)
+            if k not in cache:
+                expr = '{ementa inteiro_teor} : "' + termo.replace('"', '') + '"' + ("*" if prefixo else "")
+                try:
+                    df = self.conn.execute("SELECT COUNT(*) FROM fts_decision WHERE fts_decision MATCH ?",
+                                           (expr,)).fetchone()[0]
+                except sqlite3.Error:
+                    df = 0
+                cache[k] = math.log(1 + n / (1 + df))
+            return cache[k]
+        return peso
+
     def _juris_textual(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
         offset = _decode_cursor(cursor)
         limite = max(1, min(int(limite), 50))
@@ -2119,7 +2153,7 @@ class Verifica:
             res = buscar_and_or(
                 q, buscar, lambda r: f"{r.get('ementa') or ''} {r.get('inteiro_teor') or ''}",
                 lambda r: r.get("decision_id") or r.get("official_id"),
-                offset + limite + 1, offset + limite, colunas="ementa inteiro_teor")
+                offset + limite + 1, offset + limite, colunas="ementa inteiro_teor", peso=self._peso_idf())
             modo_busca = "ampliada" if res["fts"] and not res["and"] else "normal"
             tesauro_info = res["tesauro"]
             return res["linhas"][offset:]

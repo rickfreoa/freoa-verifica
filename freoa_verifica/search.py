@@ -89,27 +89,30 @@ def consulta_fts(query: str, *, expanded: bool = False,
     return fts, variantes, usados
 
 
-def pertinencia(variantes: list[str], texto: str) -> tuple[int, int]:
-    """(termos encontrados, termos) da melhor variante; palavra inteira ou prefixo conforme a consulta."""
+def pertinencia(variantes: list[str], texto: str, peso=None) -> tuple[float, float]:
+    """(peso dos termos encontrados, peso total) da melhor variante; palavra inteira ou prefixo conforme a
+    consulta. Sem `peso`, cada termo vale 1; com `peso(termo, prefixo)`, vale a raridade no acervo (IDF)."""
     folded, melhor = _fold(texto or ""), (0, 1)
     for v in variantes:
         units = re.findall(r'"([^"]*)"(\*?)', normalize_fts_query(v))
         if not units:
             continue
-        hits = sum(1 for u, star in units
+        pesos = [peso(u, bool(star)) if peso else 1 for u, star in units]
+        hits = sum(w for (u, star), w in zip(units, pesos)
                    if re.search(r'(?<!\w)' + re.escape(_fold(u)) + ('' if star else r'(?!\w)'), folded))
-        if hits * melhor[1] > melhor[0] * len(units):
-            melhor = (hits, len(units))
+        total = sum(pesos) or 1
+        if hits * melhor[1] > melhor[0] * total:
+            melhor = (hits, total)
     return melhor
 
 
-def passa_corte(hits: int, n: int) -> bool:
+def passa_corte(hits: float, n: float) -> bool:
     # shortcut: até dois termos basta um (preserva a ampliação da 0010); acima, dois terços.
     return hits > 0 and (n <= 2 or hits * 3 >= 2 * n)
 
 
 def buscar_and_or(q: str, buscar, texto, chave, total: int, minimo: int | None = None,
-                  colunas: str | None = None) -> dict:
+                  colunas: str | None = None, peso=None) -> dict:
     """AND primeiro (até `total` linhas); com menos de `minimo` (padrão `total`), completa com OR de pertinência acima do corte.
 
     `buscar(fts, limite)` devolve dicts por relevância; `texto(linha)` e `chave(linha)` extraem
@@ -126,6 +129,10 @@ def buscar_and_or(q: str, buscar, texto, chave, total: int, minimo: int | None =
             h, n = pertinencia(variantes, texto(r))
             r["pertinencia"], r["correspondencia"] = round(h / n, 2), corr
             r["_corte"] = passa_corte(h, n)
+            # IDF só ordena (termo raro pesa mais); corte e pertinência exibida seguem a contagem de termos.
+            if peso:
+                hp, np_ = pertinencia(variantes, texto(r), peso)
+                r["_peso"] = hp / np_
         return rows
     rows = marcar(buscar(fts, total), "todos_os_termos")
     out["linhas"], out["and"] = rows, len(rows)
@@ -134,6 +141,6 @@ def buscar_and_or(q: str, buscar, texto, chave, total: int, minimo: int | None =
         # shortcut: o OR olha os 200 melhores por bm25; mais recall exige consulta mais específica.
         ou = marcar(buscar(consulta_fts(q, expanded=True, colunas=colunas)[0], 200), "parcial")
         extra = [r for r in ou if chave(r) not in vistos and r["_corte"]]
-        extra.sort(key=lambda r: -r["pertinencia"])
+        extra.sort(key=lambda r: (-r["pertinencia"], -r.get("_peso", 0)))
         out["linhas"] = rows + extra[: total - len(rows)]
     return out
