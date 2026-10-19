@@ -1,0 +1,1646 @@
+[
+ {
+  "arquivo": "freoa_verifica/authority.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 2
+ },
+ {
+  "arquivo": "freoa_verifica/bench.py",
+  "regra": "F841",
+  "mensagem": "Local variable `pos_text` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/bench.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/captura.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 5
+ },
+ {
+  "arquivo": "freoa_verifica/citation.py",
+  "regra": "F841",
+  "mensagem": "Local variable `device_m` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/citation.py",
+  "regra": "S105",
+  "mensagem": "Possible hardcoded password assigned to: \"_ALI_TOKEN\"",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/citation.py",
+  "regra": "S105",
+  "mensagem": "Possible hardcoded password assigned to: \"_INC_TOKEN\"",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/citation.py",
+  "regra": "S105",
+  "mensagem": "Possible hardcoded password assigned to: \"_ITEM_TOKEN\"",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/citation.py",
+  "regra": "S105",
+  "mensagem": "Possible hardcoded password assigned to: \"_PAR_TOKEN\"",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/cli.py",
+  "regra": "S110",
+  "mensagem": "`try`-`except`-`pass` detected, consider logging the exception",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/base.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/bcb.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/bcb.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.parsers.bcb_json.parse_bcb_json` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/bcb.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/challenge.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/cvm_colegiado.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/cvm_colegiado.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/cvm_colegiado.py",
+  "regra": "S314",
+  "mensagem": "Using `xml` to parse untrusted data is known to be vulnerable to XML attacks; use `defusedxml` equivalents",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/cvm_normas.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/cvm_normas.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.parsers.cvm_docx.parse_cvm_docx` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/cvm_normas.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/cvm_normas.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/datajud.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/planalto.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/planalto.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.parsers.planalto.parse_planalto` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/planalto.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.transport.HTTPStatusError` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/planalto.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 2
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/senado.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/senado.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/stf.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/stf.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.connectors.challenge.detect_challenge` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/stf.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.connectors.challenge.unavailable_from_challenge` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/stf.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 2
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/stj.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/stj.py",
+  "regra": "TRY301",
+  "mensagem": "Abstract `raise` to an inner function",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/tcu.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/tcu.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/tjdft.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/tjsp.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/connectors/tjsp.py",
+  "regra": "F841",
+  "mensagem": "Local variable `init` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/derivados.py",
+  "regra": "S608",
+  "mensagem": "Possible SQL injection vector through string-based query construction",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/derivados.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 6
+ },
+ {
+  "arquivo": "freoa_verifica/fronteira.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/ids.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/limites.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 6
+ },
+ {
+  "arquivo": "freoa_verifica/mcp_server.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/parsers/cvm_docx.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 5
+ },
+ {
+  "arquivo": "freoa_verifica/parsers/html_devices.py",
+  "regra": "TRY300",
+  "mensagem": "Consider moving this statement to an `else` block",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/parsers/isolated.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/parsers/isolated.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/parsers/model.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/parsers/paths.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 11
+ },
+ {
+  "arquivo": "freoa_verifica/registro.py",
+  "regra": "F401",
+  "mensagem": "`time` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/registro.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 6
+ },
+ {
+  "arquivo": "freoa_verifica/rest.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 5
+ },
+ {
+  "arquivo": "freoa_verifica/semente.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 7
+ },
+ {
+  "arquivo": "freoa_verifica/semente.py",
+  "regra": "F402",
+  "mensagem": "Import `annotations` from line 3 shadowed by loop variable",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/semente.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/semente.py",
+  "regra": "TRY300",
+  "mensagem": "Consider moving this statement to an `else` block",
+  "n": 2
+ },
+ {
+  "arquivo": "freoa_verifica/semente.py",
+  "regra": "TRY301",
+  "mensagem": "Abstract `raise` to an inner function",
+  "n": 2
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.parsers.model.EditorialBlock` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.parsers.model.Redaction` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.search.consulta_fts` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.search.normalize_fts_query` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "F401",
+  "mensagem": "`shutil` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "F401",
+  "mensagem": "`tempfile` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "F811",
+  "mensagem": "Redefinition of unused `consulta_fts` from line 30: `consulta_fts` redefined here",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "S608",
+  "mensagem": "Possible SQL injection vector through string-based query construction",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 6
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "TRY004",
+  "mensagem": "Prefer `TypeError` exception for invalid type",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "TRY300",
+  "mensagem": "Consider moving this statement to an `else` block",
+  "n": 4
+ },
+ {
+  "arquivo": "freoa_verifica/service.py",
+  "regra": "TRY301",
+  "mensagem": "Abstract `raise` to an inner function",
+  "n": 7
+ },
+ {
+  "arquivo": "freoa_verifica/situacao.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/situacao.py",
+  "regra": "TRY301",
+  "mensagem": "Abstract `raise` to an inner function",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/snapshot.py",
+  "regra": "S202",
+  "mensagem": "Uses of `tarfile.extractall()`",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/snapshot.py",
+  "regra": "S608",
+  "mensagem": "Possible SQL injection vector through string-based query construction",
+  "n": 8
+ },
+ {
+  "arquivo": "freoa_verifica/snapshot.py",
+  "regra": "TRY004",
+  "mensagem": "Prefer `TypeError` exception for invalid type",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/snapshot.py",
+  "regra": "TRY300",
+  "mensagem": "Consider moving this statement to an `else` block",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/snapshot.py",
+  "regra": "TRY301",
+  "mensagem": "Abstract `raise` to an inner function",
+  "n": 5
+ },
+ {
+  "arquivo": "freoa_verifica/store/blobs.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 3
+ },
+ {
+  "arquivo": "freoa_verifica/store/migrations/012_candidato_por_documento.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/store/repo.py",
+  "regra": "S608",
+  "mensagem": "Possible SQL injection vector through string-based query construction",
+  "n": 4
+ },
+ {
+  "arquivo": "freoa_verifica/store/repo.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 9
+ },
+ {
+  "arquivo": "freoa_verifica/textcmp.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/transport.py",
+  "regra": "BLE001",
+  "mensagem": "Do not catch blind exception: `Exception`",
+  "n": 4
+ },
+ {
+  "arquivo": "freoa_verifica/transport.py",
+  "regra": "S112",
+  "mensagem": "`try`-`except`-`continue` detected, consider logging the exception",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/transport.py",
+  "regra": "S310",
+  "mensagem": "Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/transport.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 48
+ },
+ {
+  "arquivo": "freoa_verifica/transport.py",
+  "regra": "TRY301",
+  "mensagem": "Abstract `raise` to an inner function",
+  "n": 8
+ },
+ {
+  "arquivo": "freoa_verifica/trava.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "freoa_verifica/trava.py",
+  "regra": "TRY300",
+  "mensagem": "Consider moving this statement to an `else` block",
+  "n": 2
+ },
+ {
+  "arquivo": "freoa_verifica/verify.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 2
+ },
+ {
+  "arquivo": "scripts/capturar_fixture.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "scripts/capturar_fixture.py",
+  "regra": "TRY004",
+  "mensagem": "Prefer `TypeError` exception for invalid type",
+  "n": 1
+ },
+ {
+  "arquivo": "scripts/capturar_fixture.py",
+  "regra": "TRY301",
+  "mensagem": "Abstract `raise` to an inner function",
+  "n": 1
+ },
+ {
+  "arquivo": "scripts/ruff_catraca.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/conftest.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/fixture_util.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/live/test_live_bcb.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 5
+ },
+ {
+  "arquivo": "tests/live/test_live_cvm_colegiado.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 6
+ },
+ {
+  "arquivo": "tests/live/test_live_cvm_normas.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 4
+ },
+ {
+  "arquivo": "tests/live/test_live_datajud.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/live/test_live_planalto.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 7
+ },
+ {
+  "arquivo": "tests/live/test_live_senado.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 5
+ },
+ {
+  "arquivo": "tests/live/test_live_stf.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 5
+ },
+ {
+  "arquivo": "tests/live/test_live_stj.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 3
+ },
+ {
+  "arquivo": "tests/live/test_live_tcu.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 4
+ },
+ {
+  "arquivo": "tests/live/test_live_tjsp.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 4
+ },
+ {
+  "arquivo": "tests/test_110_bcb_efeito.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 7
+ },
+ {
+  "arquivo": "tests/test_110_bench.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_110_circular_bcb.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 4
+ },
+ {
+  "arquivo": "tests/test_110_mcp_injecao.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.service.Verifica` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_110_mcp_injecao.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 5
+ },
+ {
+  "arquivo": "tests/test_110_pdf_real.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 13
+ },
+ {
+  "arquivo": "tests/test_110_situacao_falha.py",
+  "regra": "F811",
+  "mensagem": "Redefinition of unused `svc` from line 4: `svc` redefined here",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_110_situacao_falha.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_120_auditoria_codex.py",
+  "regra": "F811",
+  "mensagem": "Redefinition of unused `svc` from line 12: `svc` redefined here",
+  "n": 14
+ },
+ {
+  "arquivo": "tests/test_120_auditoria_codex.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 52
+ },
+ {
+  "arquivo": "tests/test_120_contrato_evidencia.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 25
+ },
+ {
+  "arquivo": "tests/test_120_isolamento_conectores.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 7
+ },
+ {
+  "arquivo": "tests/test_120_isolamento_setsid.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_120_vinculo_permanente.py",
+  "regra": "F841",
+  "mensagem": "Local variable `n_unbound` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_120_vinculo_permanente.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 10
+ },
+ {
+  "arquivo": "tests/test_auditoria_rodada2.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.connectors.base.Candidate` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_auditoria_rodada2.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.situacao.WorkStatus` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_auditoria_rodada2.py",
+  "regra": "F401",
+  "mensagem": "`types.SimpleNamespace` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_auditoria_rodada2.py",
+  "regra": "F811",
+  "mensagem": "Redefinition of unused `svc` from line 15: `svc` redefined here",
+  "n": 3
+ },
+ {
+  "arquivo": "tests/test_auditoria_rodada2.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 15
+ },
+ {
+  "arquivo": "tests/test_authority.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 14
+ },
+ {
+  "arquivo": "tests/test_busca_nao_indexados.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 7
+ },
+ {
+  "arquivo": "tests/test_c2_situacao.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 68
+ },
+ {
+  "arquivo": "tests/test_c6_derivados.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 59
+ },
+ {
+  "arquivo": "tests/test_c6_derivados.py",
+  "regra": "S608",
+  "mensagem": "Possible SQL injection vector through string-based query construction",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_c6_derivados.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_captura.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 27
+ },
+ {
+  "arquivo": "tests/test_categorias_indisponibilidade.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 29
+ },
+ {
+  "arquivo": "tests/test_cf_adct.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 17
+ },
+ {
+  "arquivo": "tests/test_challenge.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 7
+ },
+ {
+  "arquivo": "tests/test_citation.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 41
+ },
+ {
+  "arquivo": "tests/test_cli.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.service.Verifica` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_cli.py",
+  "regra": "F401",
+  "mensagem": "`pathlib.Path` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_cli.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 15
+ },
+ {
+  "arquivo": "tests/test_connectors_parse.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.connectors.tjsp.TjspConnector` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_connectors_parse.py",
+  "regra": "F401",
+  "mensagem": "`pytest` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_connectors_parse.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 34
+ },
+ {
+  "arquivo": "tests/test_f_c_negativa_historico_recibo.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 51
+ },
+ {
+  "arquivo": "tests/test_fd_busca.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 29
+ },
+ {
+  "arquivo": "tests/test_fd_busca.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_fix_0040.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 33
+ },
+ {
+  "arquivo": "tests/test_fix_0040.py",
+  "regra": "S106",
+  "mensagem": "Possible hardcoded password assigned to argument: \"token\"",
+  "n": 4
+ },
+ {
+  "arquivo": "tests/test_fix_0040.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_fixtures_manifesto.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 17
+ },
+ {
+  "arquivo": "tests/test_fronteiras_103.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 75
+ },
+ {
+  "arquivo": "tests/test_fronteiras_103.py",
+  "regra": "S104",
+  "mensagem": "Possible binding to all interfaces",
+  "n": 3
+ },
+ {
+  "arquivo": "tests/test_fronteiras_103.py",
+  "regra": "S106",
+  "mensagem": "Possible hardcoded password assigned to argument: \"token\"",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_fronteiras_103.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_identidade_sem_ano.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 13
+ },
+ {
+  "arquivo": "tests/test_instalador_120.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 12
+ },
+ {
+  "arquivo": "tests/test_instalador_120.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 3
+ },
+ {
+  "arquivo": "tests/test_instalador_130.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 17
+ },
+ {
+  "arquivo": "tests/test_instalador_130.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_installed_package.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_isolamento_120.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 13
+ },
+ {
+  "arquivo": "tests/test_m11_rubricas_mojibake.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 21
+ },
+ {
+  "arquivo": "tests/test_m3_audit_fix.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.citation.DecisionKey` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m3_audit_fix.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 30
+ },
+ {
+  "arquivo": "tests/test_m4_audit_fixes.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.connectors.tcu.TcuConnector` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m4_audit_fixes.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 42
+ },
+ {
+  "arquivo": "tests/test_m4_audit_fixes.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.service.DOC_OPEN` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.verify.ResolvedWork` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "F401",
+  "mensagem": "`pathlib.Path` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "F401",
+  "mensagem": "`sqlite3` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "F401",
+  "mensagem": "`unittest.mock.MagicMock` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "F841",
+  "mensagem": "Local variable `casos` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "F841",
+  "mensagem": "Local variable `fastapi` is assigned to but never used",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 57
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "S104",
+  "mensagem": "Possible binding to all interfaces",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m5_audit_fixes.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_m6_completion.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 46
+ },
+ {
+  "arquivo": "tests/test_m6_completion.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m6_finish.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.connectors.stj` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m6_finish.py",
+  "regra": "F401",
+  "mensagem": "`pathlib.Path` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m6_finish.py",
+  "regra": "F401",
+  "mensagem": "`socket` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m6_finish.py",
+  "regra": "F401",
+  "mensagem": "`tests.test_m6_completion.LegisConnector` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m6_finish.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 41
+ },
+ {
+  "arquivo": "tests/test_m6_semente_bench.py",
+  "regra": "F401",
+  "mensagem": "`pytest` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m6_semente_bench.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 48
+ },
+ {
+  "arquivo": "tests/test_m8_epigrafe_alterador.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.connectors.base.Unavailable` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_m8_epigrafe_alterador.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 5
+ },
+ {
+  "arquivo": "tests/test_mcp.py",
+  "regra": "F841",
+  "mensagem": "Local variable `mcp_svc` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_mcp.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 12
+ },
+ {
+  "arquivo": "tests/test_p1_atualizacao.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 18
+ },
+ {
+  "arquivo": "tests/test_p1_fronteira_local.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 43
+ },
+ {
+  "arquivo": "tests/test_p1_fronteira_local.py",
+  "regra": "S106",
+  "mensagem": "Possible hardcoded password assigned to argument: \"token\"",
+  "n": 3
+ },
+ {
+  "arquivo": "tests/test_p1_registro_hmac.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 35
+ },
+ {
+  "arquivo": "tests/test_p1_registro_hmac.py",
+  "regra": "S608",
+  "mensagem": "Possible SQL injection vector through string-based query construction",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_p5_precedentes_sumulas.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.connectors.base.Candidate` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_p5_precedentes_sumulas.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 48
+ },
+ {
+  "arquivo": "tests/test_parse_bcb.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 6
+ },
+ {
+  "arquivo": "tests/test_parse_cvm.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 35
+ },
+ {
+  "arquivo": "tests/test_parse_oracle.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 4
+ },
+ {
+  "arquivo": "tests/test_parse_planalto.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 77
+ },
+ {
+  "arquivo": "tests/test_paths.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 28
+ },
+ {
+  "arquivo": "tests/test_pdf_dispositivos.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 14
+ },
+ {
+  "arquivo": "tests/test_proveniencia_120.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 24
+ },
+ {
+  "arquivo": "tests/test_r10.py",
+  "regra": "F811",
+  "mensagem": "Redefinition of unused `corpus` from line 5: `corpus` redefined here",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_r10.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 20
+ },
+ {
+  "arquivo": "tests/test_r11.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 23
+ },
+ {
+  "arquivo": "tests/test_r12.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 22
+ },
+ {
+  "arquivo": "tests/test_r12.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r13.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 22
+ },
+ {
+  "arquivo": "tests/test_r14.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 11
+ },
+ {
+  "arquivo": "tests/test_r15.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 21
+ },
+ {
+  "arquivo": "tests/test_r16.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 21
+ },
+ {
+  "arquivo": "tests/test_r17.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 22
+ },
+ {
+  "arquivo": "tests/test_r18.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 21
+ },
+ {
+  "arquivo": "tests/test_r19.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 23
+ },
+ {
+  "arquivo": "tests/test_r19.py",
+  "regra": "S311",
+  "mensagem": "Standard pseudo-random generators are not suitable for cryptographic purposes",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r20.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 7
+ },
+ {
+  "arquivo": "tests/test_r3_regressions.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.store.repo` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r3_regressions.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.verify._result_to_json` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r3_regressions.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.verify.verificar` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r3_regressions.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 38
+ },
+ {
+  "arquivo": "tests/test_r4.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.parsers.planalto.parse_planalto` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r4.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 80
+ },
+ {
+  "arquivo": "tests/test_r5.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 49
+ },
+ {
+  "arquivo": "tests/test_r5.py",
+  "regra": "S106",
+  "mensagem": "Possible hardcoded password assigned to argument: \"token\"",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r5.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r6.py",
+  "regra": "F401",
+  "mensagem": "`tests.test_r5.docx` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r6.py",
+  "regra": "F401",
+  "mensagem": "`tests.test_r5.populated` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r6.py",
+  "regra": "F811",
+  "mensagem": "Redefinition of unused `populated` from line 18: `populated` redefined here",
+  "n": 6
+ },
+ {
+  "arquivo": "tests/test_r6.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 50
+ },
+ {
+  "arquivo": "tests/test_r6.py",
+  "regra": "S106",
+  "mensagem": "Possible hardcoded password assigned to argument: \"token\"",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_r6.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 3
+ },
+ {
+  "arquivo": "tests/test_r7.py",
+  "regra": "F401",
+  "mensagem": "`json` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r7.py",
+  "regra": "F401",
+  "mensagem": "`tests.test_transport.local_server` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r7.py",
+  "regra": "F811",
+  "mensagem": "Redefinition of unused `local_server` from line 14: `local_server` redefined here",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r7.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 15
+ },
+ {
+  "arquivo": "tests/test_r8.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.service.Verifica` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_r8.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 20
+ },
+ {
+  "arquivo": "tests/test_r9.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 34
+ },
+ {
+  "arquivo": "tests/test_r9.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_rest.py",
+  "regra": "F841",
+  "mensagem": "Local variable `doc` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rest.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 13
+ },
+ {
+  "arquivo": "tests/test_rest.py",
+  "regra": "S106",
+  "mensagem": "Possible hardcoded password assigned to argument: \"token\"",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada3_auditor.py",
+  "regra": "F841",
+  "mensagem": "Local variable `args` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada3_auditor.py",
+  "regra": "F841",
+  "mensagem": "Local variable `marker` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada3_auditor.py",
+  "regra": "F841",
+  "mensagem": "Local variable `resultado` is assigned to but never used",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada3_auditor.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 39
+ },
+ {
+  "arquivo": "tests/test_rodada3_auditor.py",
+  "regra": "S603",
+  "mensagem": "`subprocess` call: check for execution of untrusted input",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada3_auditor.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada4_auditor.py",
+  "regra": "F401",
+  "mensagem": "`pytest` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada4_auditor.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 15
+ },
+ {
+  "arquivo": "tests/test_rodada4_auditor.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada5_auditor.py",
+  "regra": "F401",
+  "mensagem": "`json` imported but unused",
+  "n": 2
+ },
+ {
+  "arquivo": "tests/test_rodada5_auditor.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 25
+ },
+ {
+  "arquivo": "tests/test_rodada5_auditor.py",
+  "regra": "S110",
+  "mensagem": "`try`-`except`-`pass` detected, consider logging the exception",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_rodada7_monotonia.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 23
+ },
+ {
+  "arquivo": "tests/test_sanitizacao.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 12
+ },
+ {
+  "arquivo": "tests/test_service.py",
+  "regra": "F401",
+  "mensagem": "`freoa_verifica.service.Verifica` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_service.py",
+  "regra": "F401",
+  "mensagem": "`json` imported but unused",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_service.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 29
+ },
+ {
+  "arquivo": "tests/test_snapshot_versao_130.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 10
+ },
+ {
+  "arquivo": "tests/test_store.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 27
+ },
+ {
+  "arquivo": "tests/test_store.py",
+  "regra": "S608",
+  "mensagem": "Possible SQL injection vector through string-based query construction",
+  "n": 1
+ },
+ {
+  "arquivo": "tests/test_temporal.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 30
+ },
+ {
+  "arquivo": "tests/test_tjdft.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 47
+ },
+ {
+  "arquivo": "tests/test_transport.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 27
+ },
+ {
+  "arquivo": "tests/test_transport.py",
+  "regra": "TRY003",
+  "mensagem": "Avoid specifying long messages outside the exception class",
+  "n": 5
+ },
+ {
+  "arquivo": "tests/test_verify.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 29
+ },
+ {
+  "arquivo": "tests/test_workflows.py",
+  "regra": "S101",
+  "mensagem": "Use of `assert` detected",
+  "n": 9
+ }
+]
