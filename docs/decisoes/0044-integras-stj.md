@@ -21,7 +21,7 @@ Os metadados não trazem órgão julgador.
 4. Decisões monocráticas ficam fora nesta versão e são contadas.
 6. Limites do ZIP: 5.000 entradas, 200 MB descompactados, 5 MB por entrada, razão 100;
    nome fora de `[0-9]+.txt` (fullmatch) recusa o recurso inteiro (cobre zip-slip); bytes
-   contados na leitura, n?o no cabe?alho; entrada cifrada ou ileg?vel recusa o recurso.
+   contados na leitura, não no cabeçalho; entrada cifrada ou ilegível recusa o recurso.
 7. A cobertura textual do ZIP é parcial; `texto_ausente_no_zip` é descarte esperado e não
    pode ser lido como falha da fonte.
 
@@ -34,9 +34,9 @@ FONTES.md, e só então novo snapshot, após auditoria independente.
 
 ## Limites conhecidos
 
-- `recurso = "EDcl"` n?o revela a cadeia inteira; cadeias distintas compat?veis caem em
+- `recurso = "EDcl"` não revela a cadeia inteira; cadeias distintas compatíveis caem em
   `ambiguous`.
-- A data de publica??o n?o entra no v?nculo: o espelho a traz em texto livre ("DJEN DATA:")
-  e o ac?rd?o pode ser republicado. Avaliar como desempate na liga??o ao acervo.
-- O texto do `.txt` n?o ? conferido contra os metadados (sem cabe?alho estruturado).
-- Republica??o com sha256 diferente deve ser tratada como conflito pelo chamador.
+- A data de publicação não entra no vínculo: o espelho a traz em texto livre ("DJEN DATA:")
+  e o acórdão pode ser republicado. Avaliar como desempate na ligação ao acervo.
+- O texto do `.txt` não ? conferido contra os metadados (sem cabeçalho estruturado).
+- Republicação com sha256 diferente deve ser tratada como conflito pelo chamador.
