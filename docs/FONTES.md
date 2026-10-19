@@ -46,3 +46,18 @@ snapshot 1.1.0 reprocessado com o código 1.2.0 e da semente TJDFT. Instalado em
 - Busca temática é lexical (FTS5 com bm25 ponderado, tesauro determinístico e ordenação por raridade do termo);
   não é busca semântica. A pertinência temática medida está no [comparativo](auditoria/comparativo-120/).
 - STJ (SCON e consulta pública), STF e TJSP podem impor barreiras oficiais; não são contornadas.
+
+## Indisponibilidade classificada (decisão 0045)
+
+Toda indisponibilidade de fonte mantém o `motivo` e, quando há prova, traz `categoria` e
+`evidencia_indisponibilidade` (`status`, `marcador`, `cabecalho`, `sha256`, `url`):
+
+| categoria | prova | efeito no teste live |
+|---|---|---|
+| `ambiental_desafio` | assinatura de WAF/CAPTCHA no corpo ou cabeçalho de borda | xfail se há evidência |
+| `fonte_fora` | 5xx, timeout, falha de conexão/TLS | xfail se há evidência |
+| `recusa_identificado` | 401/403 sem assinatura | falha |
+| `resposta_inesperada` | corpo vazio, 202 sem prova, formato não reconhecido | falha |
+| `regressao` | exceção não prevista do próprio código | falha |
+
+Sem prova não há categoria. Desafio e recusa continuam sem contorno.

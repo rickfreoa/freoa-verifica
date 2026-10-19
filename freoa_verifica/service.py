@@ -1049,7 +1049,8 @@ class Verifica:
                     "truncado": bool(getattr(cands, "truncado", False)) or got < len(cands),
                 }
             except Unavailable as exc:
-                fontes_status[cid] = {"status": "unavailable", "motivo": exc.reason, "parcial": False}
+                fontes_status[cid] = {"status": "unavailable", "motivo": exc.reason, "parcial": False,
+                                      **exc.classificacao()}
             except Exception as exc:  # noqa: BLE001
                 fontes_status[cid] = {
                     "status": "unavailable",
@@ -1948,7 +1949,7 @@ class Verifica:
         except Unavailable as exc:
             if key.court == 'stj' and exc.reason == 'stj_indice_local_ausente':
                 return 'nao_confirmado_no_acervo', {**(evidence or {}), 'motivo':exc.reason}
-            return 'indisponivel', {**(evidence or {}), 'motivo':exc.reason}
+            return 'indisponivel', {**(evidence or {}), 'motivo':exc.reason, **exc.classificacao()}
         except Exception as exc:
             return 'indisponivel', {**(evidence or {}), 'motivo':type(exc).__name__}
 
@@ -1992,7 +1993,7 @@ class Verifica:
             cap = repo.save_capture(self.conn,resp,connector.id,home=self.home)
             return 'processo_confirmado', {'capture_id':cap,'sha256':resp.sha256,'url':resp.final_url,'fetched_at':resp.fetched_at,'escopo':'processo; não julgamento'}
         except Unavailable as exc:
-            return 'indisponivel', {'motivo':exc.reason,'escopo':'processo; não julgamento'}
+            return 'indisponivel', {'motivo':exc.reason,'escopo':'processo; não julgamento', **exc.classificacao()}
 
         except Exception as exc:
             return 'indisponivel', {'motivo':type(exc).__name__,'escopo':'processo; não julgamento'}
@@ -2275,6 +2276,7 @@ class Verifica:
                         "status": "unavailable",
                         "motivo": exc.reason,
                         "parcial": False,
+                        **exc.classificacao(),
                     }
                 except Exception as exc:  # noqa: BLE001
                     fontes_status[cid] = {
@@ -2606,7 +2608,8 @@ class Verifica:
             connector = self._get(source)
             cands = _com_prazo(prazo, connector.search, q, **filtros)
         except Unavailable as exc:
-            return {"status": "indisponivel", "motivo": exc.reason, "reason_code": exc.reason, "itens": []}
+            return {"status": "indisponivel", "motivo": exc.reason, "reason_code": exc.reason, "itens": [],
+                    **exc.classificacao()}
         except Exception as exc:  # noqa: BLE001
             motivo = f"{type(exc).__name__}:{exc}"[:200]
             return {"status": "indisponivel", "motivo": motivo, "reason_code": motivo, "itens": []}
@@ -2792,7 +2795,8 @@ class Verifica:
                         {"fonte": cid, "status": "ok", "candidatos": len(cands)}
                     )
             except Unavailable as exc:
-                relatorio.append({"fonte": cid, "status": "indisponivel", "motivo": exc.reason})
+                relatorio.append({"fonte": cid, "status": "indisponivel", "motivo": exc.reason,
+                                  **exc.classificacao()})
             except Exception as exc:  # noqa: BLE001
                 relatorio.append({"fonte": cid, "status": "erro", "motivo": str(exc)[:200]})
         return {"sincronizado_em": _now_iso(), "fontes": relatorio}

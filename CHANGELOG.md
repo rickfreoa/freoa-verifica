@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## Não lançado (1.3.0)
+
+- Indisponibilidade classificada (decisão 0045): `Unavailable` ganha `categoria` e `evidencia`; saída JSON ganha `categoria` e `evidencia_indisponibilidade` (aditivo). Códigos de motivo novos: `http_401`, `http_403` (antes `desafio_http_403` para qualquer 403) e `corpo_vazio` (antes `desafio_corpo_vazio`); `desafio_<tipo>` fica só para assinatura identificada. Testes live: desafio ambiental ou fonte fora, com evidência, viram xfail.
+
 ## 1.2.0 (19/10/2026)
 
 Responde à avaliação externa de 18/10/2026 (achados A1–A12; plano em `docs/PLANO-1.2.0.md`).

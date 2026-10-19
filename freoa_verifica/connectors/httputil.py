@@ -15,7 +15,6 @@ from freoa_verifica.connectors.challenge import (
 from freoa_verifica.limites import restante
 from freoa_verifica.transport import (
     DEFAULT_USER_AGENT,
-    HTTPStatusError,
     Response,
     Session,
     fetch as transport_fetch,
@@ -72,11 +71,9 @@ def connector_fetch(
             **({"sink": sink} if sink is not None else {}),
         )
     except Exception as exc:
-        mapped = map_transport_error(exc)
+        mapped = map_transport_error(exc, url)
         if mapped is not None:
             raise mapped from exc
-        if isinstance(exc, HTTPStatusError):
-            raise Unavailable(f"http_{exc.status}") from exc
         raise Unavailable(f"transporte_{type(exc).__name__}") from exc
 
     if check_challenge:
@@ -94,7 +91,9 @@ def connector_fetch(
             if kind not in ignored:
                 if sink is not None:
                     Path(sink).unlink(missing_ok=True)
-                raise unavailable_from_challenge(found)
+                raise unavailable_from_challenge(
+                    found, status=resp.status, headers=resp.headers, body=sample, url=url
+                )
     return resp
 
 
@@ -107,4 +106,4 @@ def form_body(fields: Mapping[str, Any]) -> bytes:
 def ensure_not_challenge_bytes(data: bytes, *, status: int = 200) -> None:
     found = detect_challenge(status=status, body=data)
     if found is not None:
-        raise unavailable_from_challenge(found)
+        raise unavailable_from_challenge(found, status=status, body=data)
