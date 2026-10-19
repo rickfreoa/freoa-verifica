@@ -118,3 +118,15 @@ def test_tribunal_explicito_variantes():
     assert [c.decision.court for c in extract("HC 123.456 do tjsp") if c.decision] == ["tjsp"]
     assert [(c.decision.class_, c.decision.court) for c in extract("REsp 1.234.567/DF e RE 123.456 do STF")
             if c.decision] == [("REsp", "stj"), ("RE", "stf")]
+
+
+def test_verificar_citacao_de_sumula_e_decisao_usa_o_acervo(svc):
+    _indexar(svc, "STF", "Súmula 473", text="", ementa="A administração pode anular seus próprios atos...",
+             cls="Súmula", organ="Plenário", kind="sumula")
+    svc.conn.execute("UPDATE decision SET number='473' WHERE official_id='Súmula 473'")
+    r = svc.verificar_citacao("Sumula 473 do STF")
+    assert r["identity"]["status"] == "verified" and r["identity"]["evidence"][0]["capture_id"]
+    assert r["text"]["status"] == "not_assessed"
+    fora = svc.verificar_citacao("Súmula 999 do STJ")
+    assert fora["identity"]["status"] == "unknown" and fora["identity"]["reason_code"] == "NAO_CONFIRMADO_NO_ACERVO"
+    assert svc.verificar_citacao("REsp 9.999.999/SP")["identity"]["status"] != "verified"

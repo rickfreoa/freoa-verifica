@@ -1405,6 +1405,8 @@ class Verifica:
         cite = parse_one(citacao)
         if _path is not None:
             cite = next((c for c in extract(citacao) if c.path == _path), None)
+        if cite and cite.work is None and (cite.decision is not None or cite.kind == "processo") and _cite is None:
+            return self._verificar_decisao_avulsa(cite, citacao, trecho, data, modo, proposicao)
         if cite and cite.work is not None:
             try:
                 resolved = self._resolve(cite.work, requested_date(cite.raw), strict=True)
@@ -1534,6 +1536,31 @@ class Verifica:
         return {"status": "requer_conferencia", "citacao": citacao,
                 "identity": {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
                 "conferencia": self._bloco_conferencia(cite)}
+
+    def _verificar_decisao_avulsa(self, cite: Citation, citacao: str, trecho, data, modo, proposicao) -> dict[str, Any]:
+        """Decisão ou súmula citada sozinha: mesma confirmação de `verificar_texto` (auditoria comparativa 1.2.0).
+        Identidade confirmada só com documento oficial capturado; confronto textual de decisão não é feito."""
+        if cite.kind == "processo":
+            status, evidencia = self._confirm_cnj(cite)
+        else:
+            status, evidencia = self._confirm_decision(cite.decision)
+        ident = {
+            "encontrada": ("verified", "DECISAO_CONFIRMADA_NA_CAPTURA"),
+            "processo_confirmado": ("verified", "PROCESSO_CONFIRMADO_MAIS_DE_UM_REGISTRO"),
+            "nao_confirmado_no_acervo": ("unknown", "NAO_CONFIRMADO_NO_ACERVO"),
+            "indisponivel": ("unavailable", "EVIDENCIA_INDISPONIVEL"),
+        }.get(status, ("unknown", str(status).upper()))
+        out = {
+            "identity": {"status": ident[0], "reason_code": ident[1],
+                         "evidence": [evidencia] if ident[0] == "verified" and evidencia else [],
+                         **({"cobertura": evidencia.get("cobertura")} if isinstance(evidencia, dict) and "cobertura" in evidencia else {})},
+            "text": {"status": "not_assessed",
+                     "reason_code": "CONFRONTO_DE_DECISAO_NAO_REALIZADO" if trecho else "SEM_TRECHO", "evidence": []},
+            "temporal": {"status": "not_assessed", "reason_code": "NAO_APLICAVEL_A_DECISAO", "evidence": []},
+            "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED", "evidence": []},
+            "proposicao": proposicao, "run_id": None, "citation": _citation_to_dict(cite),
+        }
+        return self._finalizar(out, cite, citacao, trecho, data, modo, gravar=False)
 
     def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
                    trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
