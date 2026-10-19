@@ -122,12 +122,15 @@ class StjConnector(Connector):
     mimes = _JSON_MIMES
     user_agent = "browser"
     coverage = {
-        "colecoes": ["espelhos", "integras", "precedentes_qualificados"],
-        "periodo": "espelhos desde 2022; íntegras diárias",
+        # Declara só o que o sync adquire: espelhos (ementa) e precedentes qualificados. A coleção oficial
+        # de íntegras existe no portal, mas a aquisição não está implementada (avaliação externa, A12).
+        "colecoes": ["espelhos", "precedentes_qualificados"],
+        "periodo": "espelhos mensais publicados no portal de dados abertos (recorte do acervo instalado)",
+        "integras": "nao_implementado",
         "busca_textual": True,
         "busca_textual_ao_vivo": False,
         "ementa": True,
-        "inteiro_teor": True,
+        "inteiro_teor": False,
         "atualizacao": "fv sync stj --desde AAAA-MM",
         "licenca": "CC BY",
     }
