@@ -262,3 +262,12 @@ def test_busca_filtrada_pelo_tjdft_consulta_a_api_mesmo_com_acervo_local(svc, co
     svc._connectors["tjdft"] = conn
     r = svc.pesquisar_jurisprudencia("apuração de haveres", tribunais=["tjdft"], limite=1)
     assert conn.state["calls"] and r["fontes"]["tjdft"]["status"] == "ok"
+
+
+def test_consulta_oficial_poe_locucoes_entre_aspas(conn):
+    assert tjdft.consulta_oficial("exclusao de socio sociedade limitada") == '"sociedade limitada" "exclusão de sócio"'
+    assert tjdft.consulta_oficial("0713166-62.2018.8.07.0000") == "0713166-62.2018.8.07.0000"
+    assert tjdft.consulta_oficial('"acordo de acionistas" x') == '"acordo de acionistas" x'
+    _search(conn, _load("vazio"), "apuracao de haveres")
+    corpo = json.loads(conn.state["calls"][-1][1]["body"])
+    assert corpo["query"] == '"apuração de haveres"'

@@ -77,6 +77,29 @@ _FECHO = ("publique-se", "intimem-se", "intime-se", "cumpra-se", "comunique-se",
          "remetam-se", "documento assinado", "assinado digitalmente", "assinado eletronicamente")
 
 
+def _locucoes() -> list[str]:
+    from importlib.resources import files
+    data = json.loads(files("freoa_verifica").joinpath("data/locucoes-juridicas-1.json").read_text(encoding="utf-8"))
+    return sorted(data["locucoes"], key=len, reverse=True)
+
+
+def consulta_oficial(q: str) -> str:
+    """A API do TJDFT ranqueia mal termos soltos e bem frases entre aspas: locuções conhecidas (casadas sem acento)
+    vão entre aspas na grafia canônica; o restante segue como digitado. Consulta já com aspas não é tocada."""
+    if '"' in q:
+        return q
+    resto, frases = f" {_norm(q)} ", []
+    for loc in _locucoes():
+        alvo = f" {_norm(loc)} "
+        if alvo in resto:
+            frases.append(f'"{loc}"')
+            resto = resto.replace(alvo, " ")
+    if not frases:
+        return q
+    sobra = [w for w in resto.split() if len(w) > 3]
+    return " ".join(frases + sobra)
+
+
 def inteiro_teor_valido(rec: dict[str, Any]) -> str | None:
     """Regra conservadora (decisão 0041): só texto íntegro do próprio processo; `possuiInteiroTeor` não conta."""
     processo = str(rec.get("processo") or "").strip()
@@ -151,7 +174,7 @@ class TjdftConnector(Connector):
             raise Unavailable("tjdft_consulta_vazia")
         pagina = max(0, int(filtros.get("pagina") or 0))
         tamanho = min(MAX_TAMANHO, max(1, int(filtros.get("limite") or filtros.get("tamanho") or 20)))
-        payload: dict[str, Any] = {"query": q, "pagina": pagina, "tamanho": tamanho}
+        payload: dict[str, Any] = {"query": consulta_oficial(q), "pagina": pagina, "tamanho": tamanho}
         if filtros.get("base") in _BASES:
             payload["termosAcessorios"] = [{"campo": "base", "valor": filtros["base"]}]
         resp = connector_fetch(
