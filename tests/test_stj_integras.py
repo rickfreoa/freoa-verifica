@@ -27,11 +27,24 @@ def _zip(entradas: dict[str, bytes], metodo=zipfile.ZIP_DEFLATED) -> bytes:
 M = json.loads(MD.decode("utf-8"))
 # fixture real: REsp 2280461 (recurso null) e EDcl no AREsp 3264125; a terceira ? monocrática
 # ambas da QUARTA TURMA, sessão virtual de 29/09/2026 a 06/10/2026 (lida do texto)
-ESP = {REGS[0]: [("e1", "REsp", "2280461", "QUARTA TURMA", "20261006")],
-       REGS[1]: [("e2", "EDcl no AREsp", "3264125", "QUARTA TURMA", "20261006")]}
+import re as _re
+_TXT = {s: t for s, (t, _) in ler_textos(ZB).items()}
+
+
+def _ementa_de(seq) -> str:
+    """Trecho real do próprio texto, com a pontuação e o <br> originais, como a ementa do espelho."""
+    t = _re.sub(r"(?i)<br\s*/?>", " ", _TXT[str(seq)])
+    i = t.index(" ", t.find("Superior Tribunal de Justiça") + 400)
+    return t[i:t.rindex(" ", 0, i + 500)]
+
+
+EM0, EM1 = _ementa_de(M[0]["SeqDocumento"]), _ementa_de(M[1]["SeqDocumento"])
+EMS = "AGRAVO INTERNO NOS EMBARGOS DE DECLARAÇÃO NO RECURSO ESPECIAL. " + "Tese sintética da ementa. " * 8
+ESP = {REGS[0]: [("e1", "REsp", "2280461", "QUARTA TURMA", "20261006", EM0)],
+       REGS[1]: [("e2", "EDcl no AREsp", "3264125", "QUARTA TURMA", "20261006", EM1)]}
 ABERTURA = ("ACÓRDÃO<br>Vistos e relatados estes autos em que são partes as acima indicadas, acordam os Ministros "
             "da QUARTA TURMA do Superior Tribunal de Justiça, em Sessão Virtual de 29/09/2026 a 06/10/2026, "
-            "por unanimidade, negar provimento.").encode("utf-8")
+            "por unanimidade, negar provimento.<br>EMENTA<br>").encode("utf-8") + EMS.encode("utf-8")
 
 
 def test_fixture_real_vincula_acordaos_e_descarta_monocratica():
@@ -45,13 +58,13 @@ def test_fixture_real_vincula_acordaos_e_descarta_monocratica():
 
 def test_mesmo_registro_outro_grau_recursal_nao_vincula():
     # só o espelho do AREsp no acervo: a íntegra dos EDcl não pode cair nele
-    res = combinar(MD, ZB, {REGS[1]: [("e2", "AREsp", "3264125", "QUARTA TURMA", "20261006")],
-                            REGS[0]: [("e1", "AgInt no REsp", "2280461", "QUARTA TURMA", "20261006")]})
+    res = combinar(MD, ZB, {REGS[1]: [("e2", "AREsp", "3264125", "QUARTA TURMA", "20261006", EM1)],
+                            REGS[0]: [("e1", "AgInt no REsp", "2280461", "QUARTA TURMA", "20261006", EM0)]})
     assert not res.vinculadas and res.descartes["fora_do_recorte_ou_sem_espelho"] == 2
 
 
 def test_numero_divergente_nao_vincula():
-    res = combinar(MD, ZB, {REGS[0]: [("e1", "REsp", "9999999", "QUARTA TURMA", "20261006")]})
+    res = combinar(MD, ZB, {REGS[0]: [("e1", "REsp", "9999999", "QUARTA TURMA", "20261006", EM0)]})
     assert not res.vinculadas
 
 
@@ -61,7 +74,7 @@ def test_sem_espelho_e_descartado_e_contado():
 
 
 def test_dois_espelhos_compativeis_e_ambiguo_nunca_escolhe():
-    res = combinar(MD, ZB, {**ESP, REGS[0]: [ESP[REGS[0]][0], ("e9", "REsp", "2280461", "QUARTA TURMA", "20260930")]})
+    res = combinar(MD, ZB, {**ESP, REGS[0]: [ESP[REGS[0]][0], ("e9", "REsp", "2280461", "QUARTA TURMA", "20260930", EM0)]})
     assert len(res.ambiguas) == 1 and res.ambiguas[0][1] == ["e1", "e9"]
     assert [k for _, k in res.vinculadas] == ["e2"]
 
@@ -70,7 +83,8 @@ def test_duas_integras_do_mesmo_acordao_no_dia_sao_ambiguas():
     dup = dict(M[0], SeqDocumento=1)
     md = json.dumps(M + [dup], ensure_ascii=False).encode("utf-8")
     zb = _zip({**{f"{m['SeqDocumento']}.txt": ABERTURA for m in M}, "1.txt": ABERTURA + b" y"})
-    res = combinar(md, zb, ESP)
+    esp = {r: [v[0][:5] + (EMS,)] for r, v in ESP.items()}
+    res = combinar(md, zb, esp)
     assert len(res.ambiguas) == 2 and [k for _, k in res.vinculadas] == ["e2"]
 
 
@@ -124,24 +138,41 @@ def test_cadeia_profunda_ausente_no_metadado_nao_cai_no_espelho_raso():
     md = json.dumps([{"SeqDocumento": 7, "tipoDocumento": "ACÓRDÃO", "numeroRegistro": "202600000001",
                       "processo": "REsp 123", "recurso": "AgInt"}]).encode("utf-8")
     zb = _zip({"7.txt": ABERTURA})
-    raso = ("errado", "AgInt no REsp", "123", "QUARTA TURMA", "20260801")
-    fundo = ("correto", "AgInt nos EDcl no REsp", "123", "QUARTA TURMA", "20261001")
+    raso = ("errado", "AgInt no REsp", "123", "QUARTA TURMA", "20260801", "Outra ementa do agravo interno. " * 6)
+    fundo = ("correto", "AgInt nos EDcl no REsp", "123", "QUARTA TURMA", "20261001", EMS)
     assert [k for _, k in combinar(md, zb, {"202600000001": [raso, fundo]}).vinculadas] == ["correto"]
     so_raso = combinar(md, zb, {"202600000001": [raso]})
     assert not so_raso.vinculadas and so_raso.descartes == {"julgamento_divergente_do_espelho": 1}
-    mesma_sessao = combinar(md, zb, {"202600000001": [raso[:4] + ("20261001",), fundo]})
-    assert not mesma_sessao.vinculadas and mesma_sessao.ambiguas[0][1] == ["correto", "errado"]
+    # raso sozinho na mesma sessão (Codex, 2ª rodada B1): a ementa não confere, não vincula
+    raso_mesma = raso[:4] + ("20261001", raso[5])
+    so = combinar(md, zb, {"202600000001": [raso_mesma]})
+    assert not so.vinculadas and so.descartes == {"julgamento_divergente_do_espelho": 1}
+    assert [k for _, k in combinar(md, zb, {"202600000001": [raso_mesma, fundo]}).vinculadas] == ["correto"]
+
+
+def test_troca_dos_textos_reais_nao_vincula():
+    # bytes do EDcl no AREsp 3264125 sob o Seq do REsp 2280461: mesma turma e sessão, ementa diferente
+    s0, s1 = str(M[0]["SeqDocumento"]), str(M[1]["SeqDocumento"])
+    zb = _zip({f"{s0}.txt": _TXT[s1].encode("utf-8"), f"{s1}.txt": _TXT[s1].encode("utf-8")})
+    res = combinar(MD, zb, ESP)
+    assert [k for _, k in res.vinculadas] == ["e2"]
+    assert res.descartes["julgamento_divergente_do_espelho"] == 1
+
+
+def test_espelho_sem_ementa_nao_vincula():
+    esp = {r: [v[0][:5] + ("",)] for r, v in ESP.items()}
+    assert not combinar(MD, ZB, esp).vinculadas
 
 
 def test_sem_formula_de_sessao_fica_pendente():
     zb = _zip({f"{M[0]['SeqDocumento']}.txt": b"ACORDAO sem abertura padrao",
                f"{M[1]['SeqDocumento']}.txt": ABERTURA})
-    res = combinar(MD, zb, ESP)
+    res = combinar(MD, zb, {r: [v[0][:5] + (EMS,)] for r, v in ESP.items()})
     assert res.descartes["sem_prova_do_julgamento"] == 1 and [k for _, k in res.vinculadas] == ["e2"]
 
 
 def test_orgao_abreviado_e_gerador_de_espelhos():
-    esp = {r: iter([(k, c, n, "QUARTA TURMA", d)]) for r, [(k, c, n, _, d)] in ESP.items()}
+    esp = {r: iter([(k, c, n, "QUARTA TURMA", d, e)]) for r, [(k, c, n, _, d, e)] in ESP.items()}
     assert len(combinar(MD, ZB, esp).vinculadas) == 2
     from freoa_verifica.connectors.stj_integras import _orgao
     assert _orgao("S2") == _orgao("SEGUNDA SEÇÃO")

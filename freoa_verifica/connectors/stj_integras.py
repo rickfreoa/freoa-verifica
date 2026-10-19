@@ -206,6 +206,20 @@ def _data_iso(v: Any) -> str | None:
     return f"{d[:4]}-{d[4:6]}-{d[6:8]}" if len(d) == 8 and d[:2] in ("19", "20") else None
 
 
+def _normal(t: str) -> str:
+    t = re.sub(r"(?i)<br\s*/?>", " ", t)
+    return re.sub(r"[^0-9A-Z]+", " ", _sem_acento(t)).strip()
+
+
+_EMENTA_MIN = 120
+
+
+def _ementa_no_texto(ementa: Any, texto_normal: str) -> bool:
+    """O acórdão reproduz a própria ementa: o trecho inicial dela individualiza o julgamento."""
+    e = _normal(str(ementa or ""))
+    return len(e) >= _EMENTA_MIN and e[:400] in texto_normal
+
+
 def _cadeia_compativel(meta: tuple[str, ...], espelho: tuple[str, ...]) -> bool:
     """Metadados trazem recurso externo e classe base; graus intermediários podem faltar."""
     if not meta or not espelho:
@@ -216,12 +230,13 @@ def _cadeia_compativel(meta: tuple[str, ...], espelho: tuple[str, ...]) -> bool:
 
 
 def combinar(metadados_body: bytes, zip_body: bytes,
-             espelhos_por_registro: Mapping[str, Iterable[tuple[str, str, str, str, str]]]) -> Resultado:
+             espelhos_por_registro: Mapping[str, Iterable[tuple[str, str, str, str, str, str]]]) -> Resultado:
     """Une metadados e textos e vincula cada acórdão a um espelho do acervo.
 
     `espelhos_por_registro`: numeroRegistro -> (chave, siglaClasse, numeroProcesso,
-    nomeOrgaoJulgador, dataDecisao) dos espelhos. Classe dos metadados ? parcial: o vínculo
-    exige ainda órgão e data de julgamento do espelho dentro da sessão declarada no texto.
+    nomeOrgaoJulgador, dataDecisao, ementa) dos espelhos. Classe dos metadados ? parcial: o vínculo
+    exige ainda órgão e data de julgamento do espelho dentro da sessão declarada no texto e a
+    ementa do espelho reproduzida no texto (prova positiva do julgamento individual).
     O registro abriga vários acórdãos (REsp, AgInt no REsp, EDcl...): o vínculo exige registro,
     classe composta e número iguais. Um candidato: vínculo. Vários: ambíguo. Nenhum: descarte.
     """
@@ -295,8 +310,10 @@ def combinar(metadados_body: bytes, zip_body: bytes,
             res.descartar("sem_prova_do_julgamento")
             continue
         orgao, ini, fim = prova
+        texto_n = _normal(integra.texto)
         chaves = sorted({e[0] for e in compat
-                         if _orgao(e[3]) == orgao and _data_iso(e[4]) and ini <= _data_iso(e[4]) <= fim})
+                         if _orgao(e[3]) == orgao and _data_iso(e[4]) and ini <= _data_iso(e[4]) <= fim
+                         and _ementa_no_texto(e[5] if len(e) > 5 else None, texto_n)})
         if not chaves:
             res.descartar("julgamento_divergente_do_espelho")
         elif len(chaves) == 1:
