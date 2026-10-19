@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hmac
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -10,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, StrictStr
 
-from freoa_verifica.fronteira import origens_permitidas, validar
+from freoa_verifica.fronteira import MOTIVO_ENCAMINHADO, origens_permitidas, token_ok, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP, EntradaInvalida, Sobrecarga
 from freoa_verifica.sanitizacao import Protegido
@@ -145,7 +144,7 @@ def create_app(
     ) -> None:
         if not expected:
             return
-        if creds is None or creds.scheme.lower() != "bearer" or not hmac.compare_digest(creds.credentials.encode(), expected.encode()):
+        if creds is None or creds.scheme.lower() != "bearer" or not token_ok(creds.credentials, expected):
             raise HTTPException(status_code=401, detail="token inválido ou ausente")
 
     @app.middleware("http")
@@ -156,14 +155,15 @@ def create_app(
                 return _problem(403, "erro", motivo)
             auth = request.headers.get("authorization", "")
             scheme, _, cred = auth.partition(" ")
-            if scheme.lower() != "bearer" or not hmac.compare_digest(cred.strip(), expected):
+            if scheme.lower() != "bearer" or not token_ok(cred.strip(), expected):
                 return _problem(401, "erro", "token inválido ou ausente")
         else:
             host = request.client.host if request.client else None
-            proxied = "x-forwarded-for" in request.headers or "forwarded" in request.headers
-            if host not in _LOCAL_HOSTS or proxied:
+            if host not in _LOCAL_HOSTS:
                 return _problem(401, "erro", "sem token, apenas origem local direta é aceita")
             if (motivo := validar(request.scope["headers"], com_token=False)):
+                if motivo == MOTIVO_ENCAMINHADO:  # mantém o 401 de antes
+                    return _problem(401, "erro", "sem token, apenas origem local direta é aceita")
                 return _problem(403, "erro", motivo)
         return await call_next(request)
 
@@ -333,4 +333,5 @@ def run_api(
     aviso = app.state.verifica.acervo_status()
     if aviso:
         print(f"[aviso] acervo_incompleto: {aviso}", file=sys.stderr, flush=True)
-    uvicorn.run(app, host=host, port=port)
+    # access_log=False: a query string (citação) não pode ir em claro para o log (decisão 0040, A2)
+    uvicorn.run(app, host=host, port=port, access_log=False)

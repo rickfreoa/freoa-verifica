@@ -140,8 +140,9 @@ def test_purgar_apagar_original(tmp_path):
         assert svc.conn.execute("SELECT COUNT(*) FROM run").fetchone()[0] == 0
     assert out["status"] == "ok" and out["original_apagado"] is True and out["apagar_manualmente"] == []
     assert len(list((tmp_path / "purgados").rglob("verifica.sqlite3"))) == 1  # só o da primeira purga
-    ultimo = json.loads((tmp_path / "purgas.jsonl").read_text().splitlines()[-1])
-    assert ultimo["original_apagado"] is True and ultimo["original_movido_para"] == []
+    linhas = [json.loads(x) for x in (tmp_path / "purgas.jsonl").read_text().splitlines()]
+    assert linhas[-1]["evento"] == "original_apagado" and linhas[-1]["falhas"] == []  # desfecho (A7)
+    assert linhas[-2]["apagar_original_pedido"] is True  # registro gravado antes de apagar
 
 
 def test_cli_apagar_original_e_flag_registro_completo(tmp_path, monkeypatch):

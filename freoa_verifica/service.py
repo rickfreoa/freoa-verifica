@@ -315,6 +315,15 @@ class Verifica:
             recuperar_purga(self.home)  # purga interrompida entre os dois renames
             boot = connect(self._db_path)
             boot.close()
+        self._uso = None  # marca de uso do home entre processos (trava.py, A1)
+        if self.home.is_dir():
+            from freoa_verifica import trava
+
+            try:
+                self._uso = trava.registrar(self.home)
+            except OSError:  # home somente leitura: sem marca, nada a proteger por este lado
+                if not self._read_only:
+                    raise
         self._local = threading.local()
         self._conn_lock = threading.Lock()
         # (conexão, thread dona): cada conexão é fechada na própria thread quando possível.
@@ -381,6 +390,15 @@ class Verifica:
             with self._cv:
                 self._excl_owner = None
                 self._cv.notify_all()
+
+    @contextmanager
+    def exclusivo_home(self, timeout: float = 60.0):
+        """`exclusivo()` + nenhum OUTRO processo usando o home (HomeEmUso); para quem troca o arquivo do banco."""
+        from freoa_verifica import trava
+
+        with self.exclusivo(timeout):
+            with trava.exclusivo_entre_processos(self.home):
+                yield
 
     def _open_conn(self) -> sqlite3.Connection:
         if not self._read_only and not self._db_path.exists():
@@ -449,6 +467,11 @@ class Verifica:
         try:
             with self.exclusivo(timeout=_ESPERA_CLOSE):
                 self._close_all_conns()
+                if self._uso is not None:
+                    from freoa_verifica import trava
+
+                    trava.liberar(self._uso)
+                    self._uso = None
         except TimeoutError:
             _log.error("close(): operações ainda ativas após %ss; conexões mantidas abertas", _ESPERA_CLOSE)
             raise
@@ -2662,7 +2685,7 @@ class Verifica:
         if self._read_only:
             return {"status": "erro", "motivo": "somente_leitura"}
         try:
-            with self.exclusivo():
+            with self.exclusivo_home():
                 self._close_all_conns(strict=True)
                 try:
                     return reg.purgar(self.home, antes, apagar_original)

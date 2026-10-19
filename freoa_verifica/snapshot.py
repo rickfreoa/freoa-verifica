@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from freoa_verifica import acervo, derivados
 from freoa_verifica.ids import new_ulid
+from freoa_verifica.trava import HomeEmUso
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.store import blobs
 from freoa_verifica.store.db import connect, data_home
@@ -691,9 +692,9 @@ def install_snapshot(
 ) -> dict[str, Any]:
     """Instala o snapshot com acesso exclusivo: espera as operações ativas terminarem."""
     try:
-        with svc.exclusivo():
+        with svc.exclusivo_home():
             return _install_snapshot(svc, origem, url=url, aceitar_nao_vinculado=aceitar_nao_vinculado)
-    except TimeoutError as exc:
+    except (TimeoutError, HomeEmUso) as exc:
         return {"status": "erro", "motivo": str(exc)}
 
 
