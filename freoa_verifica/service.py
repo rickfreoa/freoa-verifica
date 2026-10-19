@@ -211,6 +211,14 @@ def _dispositivo_posposto(citacao: str) -> str:
     return f"{m.group(1)}, {m.group(2)}"
 
 
+def _classe_compativel(row, key) -> bool:
+    if row["court"] == "TCU" and row["class"] is None:
+        return True
+    if row["class"]:
+        return _classe_norm(row["class"]) == _classe_norm(key.class_)
+    return row["official_id"] == key.number  # sem classe gravada, só o identificador exato
+
+
 def _species_from_meta(court: str, class_name: str | None, organ: str | None, kind: str | None = None) -> str:
     # Espécie declarada pela fonte prevalece sobre a inferência por classe/órgão (decisão 0038).
     if kind in _KIND_ESPECIE:
@@ -1785,14 +1793,18 @@ class Verifica:
         }
 
     def _decision_evidence(self, key, judgment_date=None) -> tuple[str, dict | None]:
+        status, evidence, _ = self._decision_evidence_rows(key, judgment_date)
+        return status, evidence
+
+    def _decision_evidence_rows(self, key, judgment_date=None):
         rows = self.conn.execute(
             "SELECT * FROM decision WHERE court=? AND identity_status='confirmed' "
             "AND (official_id=? OR UPPER(REPLACE(REPLACE(number,'.',''),' ',''))=?)",
             (key.court.upper(), key.number, key.number.replace(".","").replace(" ","").upper()),
         ).fetchall()
-        # Classe comparada sem acento e sem caixa ("Sumula" casa "Súmula"; auditoria comparativa 1.2.0).
-        rows = [r for r in rows if r["official_id"] == key.number or _classe_norm(r["class"]) == _classe_norm(key.class_)
-                or (r["court"] == "TCU" and r["class"] is None)]
+        # Classe comparada sem acento e sem caixa ("Sumula" casa "Súmula"); coincidência de identificador
+        # não supera classe gravada divergente (auditoria 1.2.0).
+        rows = [r for r in rows if _classe_compativel(r, key)]
         if key.year:
             rows = [r for r in rows if (r["judgment_date"] or "")[:4] == str(key.year)]
         if key.organ:
@@ -1806,23 +1818,23 @@ class Verifica:
             rows = [r for r in rows if r["judgment_date"] == judgment_date]
         multiple = len(rows) > 1
         if not rows:
-            return "nao_confirmado_no_acervo", self._decision_coverage(key.court)
+            return "nao_confirmado_no_acervo", self._decision_coverage(key.court), []
         doc = self.conn.execute(
             "SELECT dd.*, c.url, c.fetched_at, c.sha256 AS capture_sha FROM decision_document dd "
             "JOIN capture c ON c.id=dd.capture_id WHERE dd.decision_id=? "
             "ORDER BY dd.created_at DESC LIMIT 1", (rows[0]["id"],),
         ).fetchone()
         if not doc or not doc["sha256"] or not doc["text"]:
-            return "indisponivel", None
+            return "indisponivel", None, rows
         try:
             blobs.get_blob(doc["capture_sha"], home=self.home)
             if hashlib.sha256(doc["text"].encode("utf-8")).hexdigest() != doc["sha256"]:
-                return "indisponivel", None
+                return "indisponivel", None, rows
         except (OSError, ValueError, blobs.BlobError):
-            return "indisponivel", None
+            return "indisponivel", None, rows
         return ("processo_confirmado" if multiple else "encontrada"), {"capture_id": doc["capture_id"], "sha256": doc["capture_sha"],
                               "url": doc["url"], "fetched_at": doc["fetched_at"],
-                              **({"uf_citada_nao_conferida": key.uf.upper()} if uf_nao_conferida else {})}
+                              **({"uf_citada_nao_conferida": key.uf.upper()} if uf_nao_conferida else {})}, rows
 
     @staticmethod
     def _decision_context_date(text):
@@ -2015,8 +2027,8 @@ class Verifica:
                 for cand in cands:
                     self._index_candidate_juris(connector, cand)
                 fontes[conector_id] = {"status": "ok", "registros_do_processo": len(cands)}
-            except SourceUnavailable as exc:
-                fontes[conector_id] = {"status": "indisponivel", "motivo": exc.reason}
+            except (SourceUnavailable, Unavailable) as exc:
+                fontes[conector_id] = {"status": "indisponivel", "motivo": getattr(exc, "reason", str(exc))}
         elif conector_id:
             fontes[conector_id] = {"status": "nao_consultada", "motivo": "offline"}
         alvo = cnj.replace(".", "").replace("-", "")
@@ -2053,7 +2065,8 @@ class Verifica:
 
     def _juris_por_numero(self, q: str, key) -> dict[str, Any]:
         """A6: lookup exato por classe e número no acervo; nunca mistura outros processos."""
-        status, evidence = self._decision_evidence(key)
+        status, evidence, filtradas = self._decision_evidence_rows(key)
+        ids_ok = {r["id"] for r in filtradas}
         base = {"consulta": q, "modo_busca": "numero", "status": status,
                 "itens": [], "resultados": [], "relacionados": [], "resultados_textuais": [],
                 "truncado": False, "cursor": None, "fontes": {},
@@ -2066,12 +2079,17 @@ class Verifica:
                     "aviso": "processo não localizado no acervo local; ausência não demonstra inexistência"}
         rows = repo.decisions_by_number(self.conn, key.court, key.number)
         cls = _classe_norm(key.class_)
-        exatas = [r for r in rows if _classe_norm(r["class"]) == cls or r["official_id"] == key.number]
-        incidentes = [r for r in rows if r not in exatas and _classe_norm(r["class"]).endswith(("no" + cls, "nos" + cls))]
+        # Só os registros que passaram em todos os filtros de identidade (UF, ano, órgão, classe); cada item
+        # leva a evidência da própria captura, nunca a de outro registro (auditoria 1.2.0).
+        exatas = [r for r in rows if r["decision_id"] in ids_ok]
+        incidentes = [r for r in rows if r["decision_id"] not in ids_ok
+                      and _classe_norm(r["class"]).endswith(("no" + cls, "nos" + cls))]
         itens = []
         for r in exatas:
             item = self._decisao_item(r)
-            item["evidencia"], item["relacao"] = evidence, "exato"
+            item["evidencia"] = {"capture_id": r.get("capture_id"), "sha256": r.get("sha256"), "url": r.get("url_oficial"),
+                                 **({k: evidence[k] for k in ("uf_citada_nao_conferida",) if evidence and k in evidence})}
+            item["relacao"] = "exato"
             itens.append(item)
         rel = [{**self._decisao_item(r), "relacao": "incidente_do_mesmo_processo"} for r in incidentes]
         return {**base, "itens": itens, "resultados": itens, "relacionados": rel,

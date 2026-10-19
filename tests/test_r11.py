@@ -28,7 +28,8 @@ def seed(svc, key):
 
 def hashes(root):
     return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in root.rglob("*") if p.is_file() and not p.name.endswith(("-wal", "-shm"))}
+            for p in root.rglob("*") if p.is_file() and not p.name.endswith(("-wal", "-shm"))
+            and ".fv-uso" not in p.parts and p.name != ".fv.lock"}  # travas de uso (1.2.0) são transitórias
 
 
 def reseal(export):

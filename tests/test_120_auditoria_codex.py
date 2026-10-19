@@ -130,3 +130,35 @@ def test_verificar_citacao_de_sumula_e_decisao_usa_o_acervo(svc):
     fora = svc.verificar_citacao("Súmula 999 do STJ")
     assert fora["identity"]["status"] == "unknown" and fora["identity"]["reason_code"] == "NAO_CONFIRMADO_NO_ACERVO"
     assert svc.verificar_citacao("REsp 9.999.999/SP")["identity"]["status"] != "verified"
+
+
+# Parecer do Codex, rodada 4.
+def test_numero_com_uf_nao_traz_registro_de_outra_uf_nem_empresta_evidencia(svc):
+    pr = _indexar(svc, "STJ", "A-PR", text="", ementa="registro do Paraná", cls="REsp")
+    sp = _indexar(svc, "STJ", "A-SP", text="", ementa="registro de São Paulo", cls="REsp")
+    svc.conn.execute("UPDATE decision SET number='2257277', uf='PR' WHERE id=?", (pr,))
+    svc.conn.execute("UPDATE decision SET number='2257277', uf='SP' WHERE id=?", (sp,))
+    r = svc.pesquisar_jurisprudencia("REsp 2.257.277/PR")
+    assert r["status"] == "encontrada" and [i["id"] for i in r["itens"]] == [pr]
+    cap = svc.conn.execute("SELECT capture_id FROM decision_document WHERE decision_id=?", (pr,)).fetchone()[0]
+    assert r["itens"][0]["evidencia"]["capture_id"] == cap
+
+
+def test_identificador_igual_nao_supera_classe_divergente(svc):
+    did = _indexar(svc, "STF", "265", text="", ementa="enunciado comum", cls="Súmula", organ="Plenário", kind="sumula")
+    svc.conn.execute("UPDATE decision SET number='265' WHERE id=?", (did,))
+    assert svc.pesquisar_jurisprudencia("Súmula Vinculante 265 do STF")["status"] == "nao_confirmado_no_acervo"
+    assert svc.verificar_citacao("Súmula Vinculante 265")["identity"]["status"] != "verified"
+    assert svc.pesquisar_jurisprudencia("Súmula 265 do STF")["status"] == "encontrada"
+
+
+def test_cnj_fonte_com_falha_vira_indisponivel_estruturado(svc, monkeypatch):
+    from freoa_verifica.connectors.base import Unavailable
+
+    class Falha:
+        def search(self, q, **kw):
+            raise Unavailable("http_503")
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+    svc._connectors["tjdft"] = Falha()
+    r = svc.pesquisar_jurisprudencia("0713166-62.2018.8.07.0000")
+    assert r["status"] == "nao_confirmado_no_acervo" and r["fontes"]["tjdft"]["status"] == "indisponivel"
