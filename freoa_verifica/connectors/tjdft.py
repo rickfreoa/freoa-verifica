@@ -9,7 +9,7 @@ import json
 import re
 import unicodedata
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Mapping
 
 from lxml import html as lxml_html
 
@@ -28,6 +28,11 @@ from freoa_verifica.transport import Response
 
 _HOST = "jurisdf.tjdft.jus.br"
 _API = f"https://{_HOST}/api/v1/pesquisa"
+SEARCH_URL = _API
+# Chaves documentadas da API pública aceitas além de query/pagina/tamanho.
+_EXTRAS_DOCUMENTADOS = frozenset({
+    "termosAcessorios", "sinonimos", "espelho", "inteiroTeor", "retornaInteiroTeor", "retornaTotalizacao",
+})
 MAX_TAMANHO = 50
 MIN_INTEIRO_TEOR = 1000
 _CACHE_MAX = 4096
@@ -136,6 +141,18 @@ def inteiro_teor_valido(rec: dict[str, Any]) -> str | None:
     return None
 
 
+def build_search_payload(
+    query: str, *, pagina: int, tamanho: int, extras: Mapping[str, object] | None = None
+) -> dict[str, Any]:
+    """Corpo da busca da API pública; única origem do payload (conector e captura)."""
+    desconhecidas = sorted(set(extras or ()) - _EXTRAS_DOCUMENTADOS)
+    if desconhecidas:
+        raise ValueError(f"extras não documentados da API do TJDFT: {desconhecidas}")
+    payload: dict[str, Any] = {"query": query, "pagina": pagina, "tamanho": tamanho}
+    payload.update(extras or {})
+    return payload
+
+
 @register
 class TjdftConnector(Connector):
     id = "tjdft"
@@ -189,11 +206,10 @@ class TjdftConnector(Connector):
             raise Unavailable("tjdft_consulta_vazia")
         pagina = max(0, int(filtros.get("pagina") or 0))
         tamanho = min(MAX_TAMANHO, max(1, int(filtros.get("limite") or filtros.get("tamanho") or 20)))
-        payload: dict[str, Any] = {"query": consulta_oficial(q), "pagina": pagina, "tamanho": tamanho}
-        if filtros.get("base") in _BASES:
-            payload["termosAcessorios"] = [{"campo": "base", "valor": filtros["base"]}]
+        extras = {"termosAcessorios": [{"campo": "base", "valor": filtros["base"]}]} if filtros.get("base") in _BASES else None
+        payload = build_search_payload(consulta_oficial(q), pagina=pagina, tamanho=tamanho, extras=extras)
         resp = connector_fetch(
-            _API,
+            SEARCH_URL,
             hosts=self.hosts,
             path_prefixes=self.path_prefixes,
             mimes=self.mimes,
