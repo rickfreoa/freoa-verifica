@@ -18,10 +18,13 @@ def pin(monkeypatch, archive):
 
 
 def test_published_pin():
-    entry, = snapshot._snapshots_oficiais()
-    assert entry == {"arquivo": "freoa-verifica-snapshot-20261018-1.1.0.tar.gz",
-                     "sha256": "adaeca748fba9e3ad97f4459fad754f61ba337305383677b3655c7ea20c27119",
-                     "versao_pacote_min": "1.1.0", "derived_version": 3}
+    assert snapshot._snapshots_oficiais() == [
+        {"arquivo": "freoa-verifica-snapshot-20261018-1.1.0.tar.gz",
+         "sha256": "adaeca748fba9e3ad97f4459fad754f61ba337305383677b3655c7ea20c27119",
+         "versao_pacote_min": "1.1.0", "derived_version": 3},
+        {"arquivo": "freoa-verifica-snapshot-20261019-1.2.0.tar.gz",
+         "sha256": "926a6eb7fcf25ca4b7c8ec37f2804b1b9a32232fc67b3770ca05c2e4d2acc4e7",
+         "versao_pacote_min": "1.2.0", "derived_version": 4}]
 
 
 @pytest.mark.parametrize("packed", [True, False])
@@ -74,7 +77,7 @@ def test_manifest_cannot_claim_binding(verifica_populada, tmp_path):
 
 def test_latest_ignores_unbound_and_wrong_digest(monkeypatch):
     from freoa_verifica.connectors import httputil
-    entry, = snapshot._snapshots_oficiais()
+    entry = snapshot._snapshots_oficiais()[-1]
     good = {"name": entry["arquivo"], "digest": "sha256:" + entry["sha256"], "browser_download_url": "GOOD"}
     wrong = {**good, "digest": "sha256:" + "0" * 64, "browser_download_url": "BAD"}
     newer = {"assets": [{"name": "freoa-verifica-snapshot-new.tar.gz", "browser_download_url": "UNKNOWN"}, wrong]}
