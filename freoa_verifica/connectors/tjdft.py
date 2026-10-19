@@ -51,6 +51,14 @@ def _iso(value: Any) -> str | None:
     return m.group(1) if m else None
 
 
+def _na_janela(meta: dict[str, Any], desde: str | None, ate: str | None) -> bool:
+    """Data de julgamento (ou, na falta, de publicação) dentro de [desde, ate]; sem data não se prova a janela."""
+    if not (desde or ate):
+        return True
+    dia = meta.get("judgment_date") or meta.get("publication_date")
+    return bool(dia) and (not desde or dia >= desde) and (not ate or dia <= ate)
+
+
 def _segredo(rec: dict[str, Any]) -> bool:
     return str(rec.get("segredoJustica")).strip().lower() in {"true", "1", "s", "sim"}
 
@@ -161,6 +169,8 @@ class TjdftConnector(Connector):
     path_prefixes = {_HOST: ("/api/v1/pesquisa",)}
     mimes = frozenset({"application/json"})
     user_agent = "identified"
+    # Forma de data em `termosAcessorios` sem fixture que a comprove: o filtro de data é local (0053).
+    filtros = {"desde": "local", "ate": "local"}
     coverage = {
         "colecoes": ["acordaos", "decisoes-monocraticas", "decisoes-presidencia"],
         "periodo": "acervo da API pública de jurisprudência",
@@ -237,6 +247,8 @@ class TjdftConnector(Connector):
             if _segredo(rec):
                 continue
             cand = _cand(self.id, rec)
+            if not _na_janela(cand.metadata, filtros.get("desde"), filtros.get("ate")):
+                continue
             self._capturas[cand.metadata["uuid"]] = resp
             out.append(cand)
         while len(self._capturas) > _CACHE_MAX:
