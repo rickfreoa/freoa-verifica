@@ -1,0 +1,26 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "pesquisar_jurisprudencia_cnj_formato_invalido",
+    "commit": "239bef6",
+    "entrada": {
+      "q": "0710920-40.2025.8.07.0000"
+    },
+    "ferramenta": "pesquisar_jurisprudencia",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "consulta": "0710920-40.2025.8.07.0000",
+    "cursor": null,
+    "fontes": {},
+    "itens": [],
+    "modo_busca": "numero_cnj",
+    "motivo": "CNJ_DIGITO_VERIFICADOR_INVALIDO",
+    "relacionados": [],
+    "resultados": [],
+    "rules_version": "autoridade-1",
+    "status": "formato_invalido",
+    "truncado": false
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "historico_dispositivo",
+    "commit": "239bef6",
+    "entrada": {
+      "citacao": "art. 254-A da Lei 6.404/76"
+    },
+    "ferramenta": "historico_dispositivo",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "caminho": "art254-A",
+    "citacao": "art. 254-A da Lei 6.404/76",
+    "eventos": [
+      {
+        "act_date": null,
+        "act_ref": "Lei nº 10.303, de 2001",
+        "kind": "incluido",
+        "raw": "(Incluído pela Lei nº 10.303, de 2001)"
+      }
+    ],
+    "flags": [],
+    "linha_do_tempo": [
+      {
+        "fim": null,
+        "fim_desconhecido": false,
+        "flags": [
+          "data_ano_nao_resolvida"
+        ],
+        "inicio": null,
+        "redaction_id": "r0",
+        "regra": "data_do_ato",
+        "riscada": false,
+        "trecho": "A alienação, direta ou indireta, do controle de companhia aberta somente poderá ser contratada sob a condição, suspensiva ou resolutiva, de que o adquirente se "
+      }
+    ],
+    "needs_judgment": false,
+    "redacao_anterior_ausente_na_fonte": false,
+    "regras": [
+      "R1",
+      "R2",
+      "R6",
+      "R4"
+    ],
+    "situacao_obra": null,
+    "status": "encontrada",
+    "work_id": "<ulid>"
+  }
+}

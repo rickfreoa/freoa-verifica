@@ -1,0 +1,32 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "pesquisar_jurisprudencia_cnj_nao_confirmado",
+    "commit": "239bef6",
+    "entrada": {
+      "q": "0713166-62.2018.8.07.0000"
+    },
+    "ferramenta": "pesquisar_jurisprudencia",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "aviso": "processo não localizado no acervo local; ausência não demonstra inexistência",
+    "consulta": "0713166-62.2018.8.07.0000",
+    "cursor": null,
+    "escopo": "acervo local",
+    "fontes": {
+      "tjdft": {
+        "motivo": "offline",
+        "status": "nao_consultada"
+      }
+    },
+    "itens": [],
+    "modo_busca": "numero_cnj",
+    "relacionados": [],
+    "resultados": [],
+    "rules_version": "autoridade-1",
+    "status": "nao_confirmado_no_acervo",
+    "truncado": false
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "_proveniencia": {
+    "adaptador": "mcp",
+    "caso": "obter_evidencia_inexistente",
+    "commit": "239bef6",
+    "entrada": {
+      "capture_id": "capture-inexistente"
+    },
+    "ferramenta": "obter_evidencia",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "motivo": "EVIDENCIA_AUSENTE",
+    "reason_code": "EVIDENCIA_AUSENTE",
+    "status": "unavailable"
+  }
+}

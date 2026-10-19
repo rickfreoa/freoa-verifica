@@ -1,0 +1,43 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "verificar_citacao_obra_inexistente",
+    "commit": "239bef6",
+    "entrada": {
+      "citacao": "Lei inventada 99.999/2099"
+    },
+    "ferramenta": "verificar_citacao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "algo_versions": {
+      "citation": "citation-3",
+      "temporal": "temporal-1",
+      "textcmp": "textcmp-1",
+      "verify": "verify-r5-1"
+    },
+    "identity": {
+      "evidence": [],
+      "reason_code": "CITACAO_NAO_RECONHECIDA",
+      "status": "not_found"
+    },
+    "proposicao": null,
+    "run_id": "<ulid>",
+    "support": {
+      "evidence": [],
+      "reason_code": "SUPPORT_NOT_IN_M3",
+      "status": "not_assessed"
+    },
+    "temporal": {
+      "evidence": [],
+      "reason_code": "SEM_IDENTIDADE",
+      "status": "not_assessed"
+    },
+    "text": {
+      "evidence": [],
+      "reason_code": "SEM_IDENTIDADE",
+      "status": "not_assessed"
+    }
+  }
+}

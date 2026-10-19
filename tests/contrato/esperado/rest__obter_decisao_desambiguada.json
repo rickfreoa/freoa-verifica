@@ -1,0 +1,36 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "obter_decisao_desambiguada",
+    "commit": "239bef6",
+    "entrada": {
+      "id": "555",
+      "tribunal": "TCU"
+    },
+    "ferramenta": "obter_decisao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "autoridade_label": "E",
+    "capture_id": "<ulid>",
+    "classe": "Acórdão",
+    "cursor": null,
+    "id": "<ulid>",
+    "max_chars": 8000,
+    "numero": "555",
+    "offset": 0,
+    "orgao": "Plenário",
+    "parte": "ementa",
+    "parte_entregue": "ementa",
+    "parte_solicitada": "ementa",
+    "partes_disponiveis": [
+      "ementa"
+    ],
+    "relator": "Relator",
+    "status": "encontrada",
+    "texto": "ementa tcu 555",
+    "tribunal": "TCU",
+    "truncado": false
+  }
+}

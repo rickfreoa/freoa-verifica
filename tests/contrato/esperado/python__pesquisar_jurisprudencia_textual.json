@@ -1,0 +1,233 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "pesquisar_jurisprudencia_textual",
+    "commit": "239bef6",
+    "entrada": {
+      "q": "ementa sintética",
+      "tribunais": [
+        "STJ"
+      ]
+    },
+    "ferramenta": "pesquisar_jurisprudencia",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "autoridade_min": null,
+    "consulta": "ementa sintética",
+    "cursor": null,
+    "fontes": {
+      "stj": {
+        "motivo": "offline",
+        "parcial": false,
+        "status": "unavailable"
+      }
+    },
+    "itens": [
+      {
+        "autoridade": {
+          "attributes": {
+            "class_name": "REsp",
+            "court": "STJ",
+            "organ": "Terceira Turma",
+            "species": "acordao"
+          },
+          "label": "D",
+          "rule": "acordao_turma_camara_ou_equivalente",
+          "rules_version": "autoridade-1"
+        },
+        "capture_id": "<ulid>",
+        "classe_numero": "REsp 900002",
+        "correspondencia": "todos_os_termos",
+        "datas": {
+          "julgamento": "2025-05-05",
+          "publicacao": null
+        },
+        "ementa": "Ementa sintética apenas.",
+        "id": "<ulid>",
+        "nivel_prova": "ementa_capturada",
+        "orgao": "Terceira Turma",
+        "pertinencia": 1.0,
+        "regra_autoridade": "acordao_turma_camara_ou_equivalente",
+        "relator": "Relator",
+        "rotulo_autoridade": "D",
+        "rules_version": "autoridade-1",
+        "tribunal": "STJ",
+        "truncado": false,
+        "url_oficial": "https://example.org/STJ/900002"
+      },
+      {
+        "autoridade": {
+          "attributes": {
+            "class_name": "REsp",
+            "court": "STJ",
+            "organ": "Terceira Turma",
+            "species": "acordao"
+          },
+          "label": "D",
+          "rule": "acordao_turma_camara_ou_equivalente",
+          "rules_version": "autoridade-1"
+        },
+        "capture_id": "<ulid>",
+        "classe_numero": "REsp 900001",
+        "correspondencia": "todos_os_termos",
+        "datas": {
+          "julgamento": "2025-05-05",
+          "publicacao": null
+        },
+        "ementa": "Ementa sintética do acordão.",
+        "id": "<ulid>",
+        "nivel_prova": "ementa_capturada",
+        "orgao": "Terceira Turma",
+        "pertinencia": 1.0,
+        "regra_autoridade": "acordao_turma_camara_ou_equivalente",
+        "relator": "Relator",
+        "rotulo_autoridade": "D",
+        "rules_version": "autoridade-1",
+        "tribunal": "STJ",
+        "truncado": false,
+        "url_oficial": "https://example.org/STJ/900001"
+      },
+      {
+        "autoridade": {
+          "attributes": {
+            "class_name": "REsp",
+            "court": "STJ",
+            "organ": "Terceira Turma",
+            "species": "acordao"
+          },
+          "label": "D",
+          "rule": "acordao_turma_camara_ou_equivalente",
+          "rules_version": "autoridade-1"
+        },
+        "capture_id": "<ulid>",
+        "classe_numero": "REsp 555",
+        "correspondencia": "parcial",
+        "datas": {
+          "julgamento": "2025-05-05",
+          "publicacao": null
+        },
+        "ementa": "ementa stj 555",
+        "id": "<ulid>",
+        "nivel_prova": "ementa_capturada",
+        "orgao": "Terceira Turma",
+        "pertinencia": 0.5,
+        "regra_autoridade": "acordao_turma_camara_ou_equivalente",
+        "relator": "Relator",
+        "rotulo_autoridade": "D",
+        "rules_version": "autoridade-1",
+        "tribunal": "STJ",
+        "truncado": false,
+        "url_oficial": "https://example.org/STJ/555"
+      }
+    ],
+    "modo_busca": "normal",
+    "resultados": [
+      {
+        "autoridade": {
+          "attributes": {
+            "class_name": "REsp",
+            "court": "STJ",
+            "organ": "Terceira Turma",
+            "species": "acordao"
+          },
+          "label": "D",
+          "rule": "acordao_turma_camara_ou_equivalente",
+          "rules_version": "autoridade-1"
+        },
+        "capture_id": "<ulid>",
+        "classe_numero": "REsp 900002",
+        "correspondencia": "todos_os_termos",
+        "datas": {
+          "julgamento": "2025-05-05",
+          "publicacao": null
+        },
+        "ementa": "Ementa sintética apenas.",
+        "id": "<ulid>",
+        "nivel_prova": "ementa_capturada",
+        "orgao": "Terceira Turma",
+        "pertinencia": 1.0,
+        "regra_autoridade": "acordao_turma_camara_ou_equivalente",
+        "relator": "Relator",
+        "rotulo_autoridade": "D",
+        "rules_version": "autoridade-1",
+        "tribunal": "STJ",
+        "truncado": false,
+        "url_oficial": "https://example.org/STJ/900002"
+      },
+      {
+        "autoridade": {
+          "attributes": {
+            "class_name": "REsp",
+            "court": "STJ",
+            "organ": "Terceira Turma",
+            "species": "acordao"
+          },
+          "label": "D",
+          "rule": "acordao_turma_camara_ou_equivalente",
+          "rules_version": "autoridade-1"
+        },
+        "capture_id": "<ulid>",
+        "classe_numero": "REsp 900001",
+        "correspondencia": "todos_os_termos",
+        "datas": {
+          "julgamento": "2025-05-05",
+          "publicacao": null
+        },
+        "ementa": "Ementa sintética do acordão.",
+        "id": "<ulid>",
+        "nivel_prova": "ementa_capturada",
+        "orgao": "Terceira Turma",
+        "pertinencia": 1.0,
+        "regra_autoridade": "acordao_turma_camara_ou_equivalente",
+        "relator": "Relator",
+        "rotulo_autoridade": "D",
+        "rules_version": "autoridade-1",
+        "tribunal": "STJ",
+        "truncado": false,
+        "url_oficial": "https://example.org/STJ/900001"
+      },
+      {
+        "autoridade": {
+          "attributes": {
+            "class_name": "REsp",
+            "court": "STJ",
+            "organ": "Terceira Turma",
+            "species": "acordao"
+          },
+          "label": "D",
+          "rule": "acordao_turma_camara_ou_equivalente",
+          "rules_version": "autoridade-1"
+        },
+        "capture_id": "<ulid>",
+        "classe_numero": "REsp 555",
+        "correspondencia": "parcial",
+        "datas": {
+          "julgamento": "2025-05-05",
+          "publicacao": null
+        },
+        "ementa": "ementa stj 555",
+        "id": "<ulid>",
+        "nivel_prova": "ementa_capturada",
+        "orgao": "Terceira Turma",
+        "pertinencia": 0.5,
+        "regra_autoridade": "acordao_turma_camara_ou_equivalente",
+        "relator": "Relator",
+        "rotulo_autoridade": "D",
+        "rules_version": "autoridade-1",
+        "tribunal": "STJ",
+        "truncado": false,
+        "url_oficial": "https://example.org/STJ/555"
+      }
+    ],
+    "rules_version": "autoridade-1",
+    "status": "ok",
+    "tesauro": {
+      "expansoes": [],
+      "versao": "tesauro-1"
+    },
+    "total_parcial": 3,
+    "truncado": false
+  }
+}

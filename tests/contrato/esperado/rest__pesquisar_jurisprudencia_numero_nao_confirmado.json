@@ -1,0 +1,38 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "pesquisar_jurisprudencia_numero_nao_confirmado",
+    "commit": "239bef6",
+    "entrada": {
+      "q": "REsp 9.999.999"
+    },
+    "ferramenta": "pesquisar_jurisprudencia",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "aviso": "processo não localizado no acervo local; ausência não demonstra inexistência",
+    "cobertura": {
+      "ate": "2025-05-05",
+      "desde": "2025-05-05",
+      "escopo": "acervo local; ausência não demonstra inexistência",
+      "orgaos": "Terceira Turma",
+      "registros": 3,
+      "tribunais": [
+        "STJ",
+        "TCU"
+      ]
+    },
+    "consulta": "REsp 9.999.999",
+    "cursor": null,
+    "fontes": {},
+    "itens": [],
+    "modo_busca": "numero",
+    "relacionados": [],
+    "resultados": [],
+    "resultados_textuais": [],
+    "rules_version": "autoridade-1",
+    "status": "nao_confirmado_no_acervo",
+    "truncado": false
+  }
+}

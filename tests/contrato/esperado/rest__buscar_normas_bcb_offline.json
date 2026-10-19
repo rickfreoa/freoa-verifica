@@ -1,0 +1,21 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "buscar_normas_bcb_offline",
+    "commit": "239bef6",
+    "entrada": {
+      "q": "resolução 4966"
+    },
+    "ferramenta": "buscar_normas_bcb",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "itens": [],
+    "motivo": "offline",
+    "offline": true,
+    "status": "indisponivel",
+    "total": 0,
+    "truncado": false
+  }
+}

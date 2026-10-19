@@ -1,0 +1,38 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "obter_decisao_inteiro_teor_paginado",
+    "commit": "239bef6",
+    "entrada": {
+      "id": "@stj_inteiro",
+      "max_chars": 100,
+      "parte": "inteiro_teor"
+    },
+    "ferramenta": "obter_decisao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "autoridade_label": "D",
+    "capture_id": "<ulid>",
+    "classe": "REsp",
+    "cursor": "100",
+    "id": "<ulid>",
+    "max_chars": 100,
+    "numero": "900001",
+    "offset": 0,
+    "orgao": "Terceira Turma",
+    "parte": "inteiro_teor",
+    "parte_entregue": "inteiro_teor",
+    "parte_solicitada": "inteiro_teor",
+    "partes_disponiveis": [
+      "ementa",
+      "inteiro_teor"
+    ],
+    "relator": "Relator",
+    "status": "encontrada",
+    "texto": "Inteiro teor sintético do acórdão. Inteiro teor sintético do acórdão. Inteiro teor sintético do acór",
+    "tribunal": "STJ",
+    "truncado": true
+  }
+}

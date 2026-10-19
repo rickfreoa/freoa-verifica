@@ -1,0 +1,32 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "obter_decisao_ambigua",
+    "commit": "239bef6",
+    "entrada": {
+      "id": "555"
+    },
+    "ferramenta": "obter_decisao",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "candidatos": [
+      {
+        "classe": "REsp",
+        "id": "<ulid>",
+        "numero": "555",
+        "tribunal": "STJ"
+      },
+      {
+        "classe": "Acórdão",
+        "id": "<ulid>",
+        "numero": "555",
+        "tribunal": "TCU"
+      }
+    ],
+    "id": "555",
+    "motivo": "IDENTIFICADOR_EM_MAIS_DE_UM_REGISTRO",
+    "status": "ambiguous"
+  }
+}

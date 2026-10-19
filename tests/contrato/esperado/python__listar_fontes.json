@@ -1,0 +1,357 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "listar_fontes",
+    "commit": "239bef6",
+    "entrada": {},
+    "ferramenta": "listar_fontes",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "fontes": [
+      {
+        "autoridade": "Banco Central do Brasil",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "www.bcb.gov.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "bcb.gov.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "normativos.bcb.gov.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "API buscanormativos",
+          "busca_textual": true,
+          "colecoes": [
+            "Resolução BCB",
+            "Resolução CMN",
+            "Circular",
+            "Carta Circular",
+            "Instrução Normativa BCB"
+          ],
+          "ementa": true,
+          "inteiro_teor": true,
+          "periodo": "acervo SharePoint normativos"
+        },
+        "id": "bcb",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "CVM Colegiado",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "www.cvm.gov.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "conteudo.cvm.gov.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "cvm.gov.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "RSS + páginas decisoes/AAAA/",
+          "busca_textual": true,
+          "colecoes": [
+            "decisoes_colegiado",
+            "atas"
+          ],
+          "ementa": true,
+          "inteiro_teor": true,
+          "periodo": "2002–presente"
+        },
+        "id": "cvm_colegiado",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "CVM",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "conteudo.cvm.gov.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "índice OpenCms + página do ato",
+          "busca_textual": true,
+          "colecoes": [
+            "resolucoes",
+            "instrucoes",
+            "pareceres-orientacao",
+            "oficios-circulares",
+            "deliberacoes"
+          ],
+          "ementa": true,
+          "inteiro_teor": true,
+          "periodo": "acervo portal"
+        },
+        "id": "cvm_normas",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "CNJ DataJud",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "api-publica.datajud.cnj.jus.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "API pública Elasticsearch",
+          "busca_textual": false,
+          "colecoes": [
+            "metadados_processuais"
+          ],
+          "ementa": false,
+          "inteiro_teor": false,
+          "nota": "Sem índice do STF (404). Usado para confirmar existência de número CNJ.",
+          "periodo": "conforme tribunal"
+        },
+        "id": "datajud",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "Presidência da República / Planalto",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "planalto.gov.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "www.planalto.gov.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "sob demanda (HTTP)",
+          "busca_textual": false,
+          "colecoes": [
+            "leis",
+            "lcp",
+            "decreto-lei",
+            "constituicao"
+          ],
+          "ementa": true,
+          "inteiro_teor": true,
+          "periodo": "variavel por espécie"
+        },
+        "id": "planalto",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "Senado Federal / Dados Abertos",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "legis.senado.leg.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "normas.leg.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "API dados abertos",
+          "busca_textual": true,
+          "colecoes": [
+            "DEC",
+            "DEL",
+            "DLG",
+            "DSN",
+            "EMC",
+            "LCP",
+            "LEI",
+            "MPV"
+          ],
+          "ementa": true,
+          "inteiro_teor": false,
+          "periodo": "acervo Sigen"
+        },
+        "id": "senado",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "Supremo Tribunal Federal",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "portal.stf.jus.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "sistemas.stf.jus.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "jurisprudencia.stf.jus.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "sob demanda",
+          "busca_textual": false,
+          "colecoes": [
+            "processos",
+            "decisoes",
+            "repercussao_geral",
+            "sumulas",
+            "sumulas_vinculantes"
+          ],
+          "ementa": true,
+          "inteiro_teor": true,
+          "nota": "busca textual livre → unavailable(stf_busca_textual_sob_waf)",
+          "periodo": "acervo portal"
+        },
+        "id": "stf",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "Superior Tribunal de Justiça",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "dadosabertos.web.stj.jus.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "www.stj.jus.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "stj.jus.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "fv sync stj --desde AAAA-MM",
+          "busca_textual": true,
+          "busca_textual_ao_vivo": false,
+          "colecoes": [
+            "espelhos",
+            "precedentes_qualificados"
+          ],
+          "ementa": true,
+          "integras": "nao_implementado",
+          "inteiro_teor": false,
+          "licenca": "CC BY",
+          "periodo": "espelhos mensais publicados no portal de dados abertos (recorte do acervo instalado)"
+        },
+        "id": "stj",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "Tribunal de Contas da União",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "contas.tcu.gov.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "sites.tcu.gov.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "dados-abertos.apps.tcu.gov.br"
+          },
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "pesquisa.apps.tcu.gov.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "sincronização incremental por inicio",
+          "busca_textual": true,
+          "busca_textual_ao_vivo": false,
+          "colecoes": [
+            "acordaos"
+          ],
+          "ementa": true,
+          "inteiro_teor": true,
+          "periodo": "acervo API recupera-acordaos"
+        },
+        "id": "tcu",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "Tribunal de Justiça do Distrito Federal e dos Territórios",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "jurisdf.tjdft.jus.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "sob demanda; semente temática",
+          "busca_textual": true,
+          "busca_textual_ao_vivo": true,
+          "colecoes": [
+            "acordaos",
+            "decisoes-monocraticas",
+            "decisoes-presidencia"
+          ],
+          "consultar_ao_vivo_sempre": true,
+          "ementa": true,
+          "inteiro_teor": "somente quando o registro o traz íntegro (decisões monocráticas e da presidência); acórdão sem íntegra pela API",
+          "periodo": "acervo da API pública de jurisprudência"
+        },
+        "id": "tjdft",
+        "ultimo_health": null
+      },
+      {
+        "autoridade": "Tribunal de Justiça de São Paulo",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "esaj.tjsp.jus.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "sob demanda",
+          "busca_textual": true,
+          "colecoes": [
+            "acordãos_cjsg"
+          ],
+          "ementa": true,
+          "inteiro_teor": true,
+          "periodo": "acervo e-SAJ"
+        },
+        "id": "tjsp",
+        "ultimo_health": null
+      }
+    ],
+    "total": 11
+  }
+}
