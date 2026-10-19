@@ -2,7 +2,7 @@ name: saude-das-fontes
 
 # Executa semanalmente os testes contra as fontes oficiais e mantém a issue viva `saude-das-fontes`.
 # Várias fontes bloqueiam IPs de datacenter: isso vira xfail ambiental e não derruba o job.
-# Regressão (ou recusa identificada) derruba o job; execução incompleta também (decisão 0053).
+# Regressão (ou recusa identificada) derruba o job; execução incompleta também (decisão 0054).
 on:
   schedule:
     - cron: "17 9 * * 1"

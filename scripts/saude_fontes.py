@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mantém a issue viva `saude-das-fontes` a partir de `saude-fontes.json` (decisão 0053).
+"""Mantém a issue viva `saude-das-fontes` a partir de `saude-fontes.json` (decisão 0054).
 
 Códigos de saída: 0 tudo ok ou só indisponibilidade ambiental; 1 há `regressao` ou `recusa_identificado`;
 2 erro do próprio script (inclui falha da API); 3 execução incompleta (JSON ausente, truncado ou
