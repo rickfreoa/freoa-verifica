@@ -64,3 +64,31 @@ def test_tribunal_explicito_prevalece_na_extracao():
     # Classe exclusiva de tribunal superior não muda por tribunal de origem citado junto.
     assert [c.decision.court for c in extract("REsp 1.234.567 do TJRJ") if c.decision] == ["stj"]
     assert [(c.decision.court, c.decision.uf) for c in extract("REsp 1.234.567/DF") if c.decision] == [("stj", "DF")]
+
+
+# Auditoria comparativa (FREOA × JusRatio, 1.2.0): falhas de reconhecimento, não de acervo.
+def test_numero_com_uf_acha_registro_sem_uf_e_declara(svc):
+    _indexar(svc, "STJ", "1456264", text="", ementa="ementa do REsp", cls="REsp")
+    svc.conn.execute("UPDATE decision SET number='2257277', uf=NULL WHERE official_id='1456264'")
+    r = svc.pesquisar_jurisprudencia("REsp 2.257.277/PR")
+    assert r["status"] == "encontrada" and len(r["itens"]) == 1
+    assert r["evidencia"]["uf_citada_nao_conferida"] == "PR"
+    svc.conn.execute("UPDATE decision SET uf='SP' WHERE official_id='1456264'")
+    assert svc.pesquisar_jurisprudencia("REsp 2.257.277/PR")["status"] == "nao_confirmado_no_acervo"
+
+
+def test_sumula_sem_acento_casa_classe_com_acento(svc):
+    _indexar(svc, "STF", "Súmula 265", text="", ementa="Na apuração de haveres não prevalece o balanço...",
+             cls="Súmula", organ="Plenário", kind="sumula")
+    svc.conn.execute("UPDATE decision SET number='265' WHERE official_id='Súmula 265'")
+    for q in ("Sumula 265 do STF", "Súmula 265 do STF"):
+        assert svc.pesquisar_jurisprudencia(q)["status"] == "encontrada", q
+
+
+def test_dispositivo_posposto_so_na_citacao_avulsa():
+    from freoa_verifica.service import _dispositivo_posposto as d
+    assert d("Resolução CVM 44/2021 art. 2º") == "Resolução CVM 44/2021, art. 2º"
+    assert d("Lei 6.404/1976 art. 117, § 1º, a)") == "Lei 6.404/1976, art. 117, § 1º, a)"
+    for intacto in ("Lei 6.404/1976 art. 117 do contrato", "Lei 6.404/1976 art. 117 e o contrato social",
+                    "Resolução CVM 44/2021, art. 2º"):
+        assert d(intacto) == intacto

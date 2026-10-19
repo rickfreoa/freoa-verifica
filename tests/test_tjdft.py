@@ -209,3 +209,33 @@ def test_ponta_a_ponta_indexacao_obter_decisao_e_pesquisa(svc, conn):
     found = svc.pesquisar_jurisprudencia("Gabinete Desembargador", tribunais=["tjdft"])["itens"]
     assert any(i["tribunal"] == "TJDFT" for i in found)
     assert svc.pesquisar_jurisprudencia("Gabinete Desembargador", tribunais=["tjdf"])["itens"]
+
+
+# Auditoria comparativa 1.2.0: número CNJ isolado devolve só o próprio processo.
+def test_cnj_digito_verificador_invalido(svc):
+    r = svc.pesquisar_jurisprudencia("0710920-40.2025.8.07.0000")
+    assert r["status"] == "formato_invalido" and r["itens"] == []
+
+
+def test_cnj_offline_sem_acervo_nao_mistura_outros(svc):
+    r = svc.pesquisar_jurisprudencia("0713166-62.2018.8.07.0000")
+    assert r["status"] == "nao_confirmado_no_acervo" and r["itens"] == []
+
+
+def test_cnj_busca_oficial_traz_so_o_processo(svc, conn, monkeypatch):
+    monkeypatch.delenv("FV_OFFLINE")
+    data = _load("processo")  # registros do processo 0713166-62.2018.8.07.0000
+    conn.state["resp"] = _resp(data)
+    svc._connectors["tjdft"] = conn
+    r = svc.pesquisar_jurisprudencia("0713166-62.2018.8.07.0000")
+    assert r["status"] == "encontrada" and r["itens"]
+    assert {i["classe_numero"].split()[-1] for i in r["itens"]} == {"0713166-62.2018.8.07.0000"}
+    assert r["fontes"]["tjdft"]["status"] == "ok"
+
+
+def test_cnj_fonte_sem_o_processo_nao_devolve_outros(svc, conn, monkeypatch):
+    monkeypatch.delenv("FV_OFFLINE")
+    conn.state["resp"] = _resp(_load("acordo_acionistas"))  # fonte responde com outros processos
+    svc._connectors["tjdft"] = conn
+    r = svc.pesquisar_jurisprudencia("0713166-62.2018.8.07.0000")
+    assert r["status"] == "nao_encontrado_na_fonte" and r["itens"] == []

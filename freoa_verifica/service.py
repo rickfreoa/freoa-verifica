@@ -185,6 +185,32 @@ _KIND_ESPECIE = {"decisao_monocratica": "monocratica", "monocratica": "monocrati
 _PERFIS_INTEIRO_TEOR = frozenset({"stf_pdf", "tjsp_pdf", "cvm_colegiado", "tjdft_inteiro_teor"})
 
 
+def _classe_norm(value: str | None) -> str:
+    """Sem acento, caixa nem espaços: "SumulaVinculante" casa "Súmula Vinculante"."""
+    import unicodedata
+    return "".join("".join(c for c in unicodedata.normalize("NFKD", value or "")
+                           if not unicodedata.combining(c)).lower().split())
+
+
+_DISPOSITIVO_SO = re.compile(
+    r"art(?:igo)?\.?\s*\d[\d.]*\s*(?:[º°o]|-[A-Z])?"
+    r"(?:\s*,?\s*(?:§\s*\d+\s*[º°o]?|par[aá]grafo\s+[úu]nico|inc(?:iso|\.)?\s*[IVXLCDM]+|[IVXLCDM]+"
+    r"|al[ií]nea\s+[a-z]|al\.\s*[a-z]|[a-z]\)))*\s*\.?",
+    re.I)
+
+
+def _dispositivo_posposto(citacao: str) -> str:
+    """Consulta isolada "<norma> art. N" (sem vírgula, nada além do dispositivo) recebe a vírgula que a
+    extração exige em prosa (decisões 0016/0018). Só na citação avulsa; texto corrido segue a regra geral."""
+    m = re.match(r"^\s*(.+?\d{4})\s+(art(?:igo)?\.?\s*\d.*?)\s*$", citacao, re.I)
+    if not m or not _DISPOSITIVO_SO.fullmatch(m.group(2)):
+        return citacao
+    norma = parse_one(m.group(1))
+    if norma is None or norma.work is None or norma.path or len(norma.raw.strip()) < len(m.group(1).strip()) - 1:
+        return citacao
+    return f"{m.group(1)}, {m.group(2)}"
+
+
 def _species_from_meta(court: str, class_name: str | None, organ: str | None, kind: str | None = None) -> str:
     # Espécie declarada pela fonte prevalece sobre a inferência por classe/órgão (decisão 0038).
     if kind in _KIND_ESPECIE:
@@ -1375,6 +1401,7 @@ class Verifica:
         _path: str | None = None,
         _cite: Citation | None = None,
     ) -> dict[str, Any]:
+        citacao = _dispositivo_posposto(citacao)
         cite = parse_one(citacao)
         if _path is not None:
             cite = next((c for c in extract(citacao) if c.path == _path), None)
@@ -1733,15 +1760,21 @@ class Verifica:
     def _decision_evidence(self, key, judgment_date=None) -> tuple[str, dict | None]:
         rows = self.conn.execute(
             "SELECT * FROM decision WHERE court=? AND identity_status='confirmed' "
-            "AND (official_id=? OR ((class=? COLLATE NOCASE OR (court='TCU' AND class IS NULL)) AND UPPER(REPLACE(REPLACE(number,'.',''),' ',''))=?))",
-            (key.court.upper(), key.number, key.class_, key.number.replace(".","").replace(" ","").upper()),
+            "AND (official_id=? OR UPPER(REPLACE(REPLACE(number,'.',''),' ',''))=?)",
+            (key.court.upper(), key.number, key.number.replace(".","").replace(" ","").upper()),
         ).fetchall()
+        # Classe comparada sem acento e sem caixa ("Sumula" casa "Súmula"; auditoria comparativa 1.2.0).
+        rows = [r for r in rows if r["official_id"] == key.number or _classe_norm(r["class"]) == _classe_norm(key.class_)
+                or (r["court"] == "TCU" and r["class"] is None)]
         if key.year:
             rows = [r for r in rows if (r["judgment_date"] or "")[:4] == str(key.year)]
         if key.organ:
             rows = [r for r in rows if self._organ_key(r["organ"]) == self._organ_key(key.organ)]
+        uf_nao_conferida = False
         if key.uf:
-            rows = [r for r in rows if (r["uf"] or "").upper() == key.uf.upper()]
+            # UF divergente exclui; UF ausente no registro (espelhos do STJ não a trazem) não exclui, mas é declarada.
+            rows = [r for r in rows if not r["uf"] or r["uf"].upper() == key.uf.upper()]
+            uf_nao_conferida = any(not r["uf"] for r in rows)
         if judgment_date:
             rows = [r for r in rows if r["judgment_date"] == judgment_date]
         multiple = len(rows) > 1
@@ -1761,7 +1794,8 @@ class Verifica:
         except (OSError, ValueError, blobs.BlobError):
             return "indisponivel", None
         return ("processo_confirmado" if multiple else "encontrada"), {"capture_id": doc["capture_id"], "sha256": doc["capture_sha"],
-                              "url": doc["url"], "fetched_at": doc["fetched_at"]}
+                              "url": doc["url"], "fetched_at": doc["fetched_at"],
+                              **({"uf_citada_nao_conferida": key.uf.upper()} if uf_nao_conferida else {})}
 
     @staticmethod
     def _decision_context_date(text):
@@ -1926,10 +1960,57 @@ class Verifica:
         limite: int = 10,
         cursor: str | None = None,
     ) -> dict[str, Any]:
+        cnj = re.fullmatch(r"\s*(?:processo\s+(?:n[º°.]?\s*)?)?(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})\s*", q, re.I)
+        if cnj:
+            return self._juris_por_cnj(q, cnj.group(1))
         key = self._chave_processo(q)
         if key is not None:
             return self._juris_por_numero(q, key)
         return self._juris_textual(q, tribunais, desde, ate, autoridade_min, limite, cursor)
+
+    # Segmento J.TR do CNJ -> conector com busca oficial pelo número (só onde existe).
+    _CNJ_CONECTORES = {"8.07": "tjdft"}
+
+    def _juris_por_cnj(self, q: str, cnj: str) -> dict[str, Any]:
+        """Número CNJ isolado: só o próprio processo, nunca outros (auditoria comparativa 1.2.0)."""
+        from freoa_verifica.citation import validate_cnj_dv
+
+        base = {"consulta": q, "modo_busca": "numero_cnj", "itens": [], "resultados": [], "relacionados": [],
+                "truncado": False, "cursor": None, "fontes": {}, "rules_version": AUTHORITY_RULES_VERSION}
+        if not validate_cnj_dv(cnj):
+            return {**base, "status": "formato_invalido", "motivo": "CNJ_DIGITO_VERIFICADOR_INVALIDO"}
+        conector_id = self._CNJ_CONECTORES.get(cnj[16:20])
+        fontes: dict[str, Any] = {}
+        if conector_id and not self._offline():
+            connector = self._get(conector_id)
+            try:
+                cands = [c for c in connector.search(cnj) if (c.metadata or {}).get("processo") == cnj]
+                for cand in cands:
+                    self._index_candidate_juris(connector, cand)
+                fontes[conector_id] = {"status": "ok", "registros_do_processo": len(cands)}
+            except SourceUnavailable as exc:
+                fontes[conector_id] = {"status": "indisponivel", "motivo": exc.reason}
+        elif conector_id:
+            fontes[conector_id] = {"status": "nao_consultada", "motivo": "offline"}
+        alvo = cnj.replace(".", "").replace("-", "")
+        rows = [dict(r) for r in self.conn.execute(
+            "SELECT d.id AS decision_id FROM decision d WHERE d.identity_status='confirmed' "
+            "AND REPLACE(REPLACE(d.number,'.',''),'-','')=?", (alvo,))]
+        itens = []
+        for r in rows:
+            row = self.conn.execute("SELECT court FROM decision WHERE id=?", (r["decision_id"],)).fetchone()
+            for full in repo.decisions_by_number(self.conn, row["court"], cnj):
+                if full["decision_id"] == r["decision_id"]:
+                    itens.append({**self._decisao_item(full), "relacao": "exato"})
+        if itens:
+            return {**base, "status": "encontrada", "itens": itens, "resultados": itens,
+                    "total_parcial": len(itens), "fontes": fontes}
+        consultada = fontes.get(conector_id or "", {}).get("status") == "ok"
+        return {**base, "fontes": fontes,
+                "status": "nao_encontrado_na_fonte" if consultada else "nao_confirmado_no_acervo",
+                "escopo": (f"busca oficial {conector_id} pelo número" if consultada else "acervo local"),
+                "aviso": ("a fonte oficial não retornou registro com este número" if consultada
+                          else "processo não localizado no acervo local; ausência não demonstra inexistência")}
 
     @staticmethod
     def _chave_processo(q: str):
@@ -1957,9 +2038,9 @@ class Verifica:
             return {**base, "cobertura": cob,
                     "aviso": "processo não localizado no acervo local; ausência não demonstra inexistência"}
         rows = repo.decisions_by_number(self.conn, key.court, key.number)
-        cls = key.class_.lower()
-        exatas = [r for r in rows if (r["class"] or "").lower() == cls or r["official_id"] == key.number]
-        incidentes = [r for r in rows if r not in exatas and (r["class"] or "").lower().endswith((" no " + cls, " nos " + cls))]
+        cls = _classe_norm(key.class_)
+        exatas = [r for r in rows if _classe_norm(r["class"]) == cls or r["official_id"] == key.number]
+        incidentes = [r for r in rows if r not in exatas and _classe_norm(r["class"]).endswith(("no" + cls, "nos" + cls))]
         itens = []
         for r in exatas:
             item = self._decisao_item(r)
