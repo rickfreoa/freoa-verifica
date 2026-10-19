@@ -159,6 +159,7 @@ def test_registrar_fixture_recusa_indisponivel(monkeypatch, tmp_path):
         captura.registrar_fixture(reg, "tjdft_z", _fixtures_falsas(_mk(tmp_path, "fx")))
 
 
+@pytest.mark.repositorio
 def test_cli_sonda_nao_toca_manifesto(envios, tmp_path, monkeypatch):
     import importlib.util
 
@@ -177,6 +178,7 @@ def test_cli_sonda_nao_toca_manifesto(envios, tmp_path, monkeypatch):
         cli.main(["--conector", "tjdft", "--consulta", "{}", "--sonda", "--saida", str(RAIZ / "tests" / "x")])
 
 
+@pytest.mark.repositorio
 @pytest.mark.parametrize("arquivo", ["freoa_verifica/captura.py", "scripts/capturar_fixture.py"])
 def test_sem_importar_rede_direta(arquivo):
     proibidos = {"urllib", "http", "requests", "httpx", "socket"}
