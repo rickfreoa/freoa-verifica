@@ -161,6 +161,55 @@ def test_cli_codigo_de_saida(home, tmp_path, capsys):
     assert e.value.code == 1
 
 
+def _blobs_do_home(home):
+    conn = sqlite3.connect(str(home / bateria.BANCO))
+    try:
+        return [home / "blobs" / s[:2] / s[2:4] / s for (s,) in conn.execute("SELECT sha256 FROM capture ORDER BY id")]
+    finally:
+        conn.close()
+
+
+def test_blob_ausente_falha(home):
+    """B3-04: captura sem os bytes não passa."""
+    alvo = _blobs_do_home(home)[0]
+    alvo.unlink()
+    r = bateria.executar(home)
+    assert r["status"] == "falha" and _codigos(r) == {"blob_ausente"}
+
+
+def test_blob_com_tamanho_ou_hash_divergente_falha(home):
+    a, b = _blobs_do_home(home)
+    a.write_bytes(b"curto")
+    b.write_bytes(b"x" * len(b.read_bytes()))  # mesmo tamanho, outros bytes
+    assert _codigos(bateria.executar(home)) == {"blob_tamanho", "blob_hash"}
+
+
+def test_sem_blobs_e_parcial_e_nao_grava_manifesto(home, tmp_path):
+    _blobs_do_home(home)[0].unlink()
+    arq = tmp_path / "m.json"
+    r = bateria.executar(home, sem_blobs=True, gravar=arq)
+    assert r["status"] == "parcial" and r["falhas"] == [] and r["defeitos"]["blobs"] is None
+    assert r["manifesto_gravado"] is False and not arq.exists()
+
+
+def test_verificacao_de_blobs_nao_cria_diretorios(tmp_path):
+    with Verifica(tmp_path) as svc:
+        _decisao(svc, "d1")
+        svc.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    raiz = tmp_path / "blobs"
+    for f in sorted(raiz.rglob("*"), reverse=True):
+        f.unlink() if f.is_file() else f.rmdir()
+    raiz.rmdir()
+    assert bateria.executar(tmp_path)["status"] == "falha"
+    assert not raiz.exists()
+
+
+def test_cli_sem_blobs_sai_com_codigo_proprio(home, capsys):
+    with pytest.raises(SystemExit) as e:
+        cli.main(["acervo", "conferir", "--home", str(home), "--sem-blobs", "--json"])
+    assert e.value.code == 2 and json.loads(capsys.readouterr().out)["status"] == "parcial"
+
+
 def test_cli_sem_datas_herda_recorte_do_manifesto(home, tmp_path, capsys):
     """B3-02: a CLI efetiva sem flags de data usa o recorte congelado (mudança dentro do mesmo mês)."""
     arq = tmp_path / "m.json"
