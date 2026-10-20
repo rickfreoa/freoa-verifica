@@ -125,6 +125,36 @@ def test_junit_com_falha_que_o_json_nao_registra_sai_3(tmp_path):
     assert gh.chamadas == []
 
 
+def test_junit_solicitado_e_ausente_sai_3_antes_da_api(tmp_path):
+    gh = FakeGh(corpo_de(OK))
+    assert rodar(tmp_path, relatorio(OK), gh, "--junit", str(tmp_path / "ausente.xml")) == 3
+    assert gh.chamadas == []
+
+
+def _com_testes(fonte_estado, *testes_estados):
+    rel = relatorio({"bcb": ("ok", None)})
+    rel["fontes"]["bcb"]["estado"] = fonte_estado
+    rel["fontes"]["bcb"]["testes"] = [{"nome": f"t{i}", "estado": e} for i, e in enumerate(testes_estados)]
+    return rel
+
+
+@pytest.mark.parametrize("rel", [
+    relatorio({"bcb": ("not_run", None)}),                 # completa: true com fonte not_run
+    _com_testes("ok", "ok", "not_run"),                    # teste sem fase final
+    _com_testes("ok", "ok", "regressao"),                  # fonte verde com teste vermelho (B2-06)
+    _com_testes("ok", "ok", None),                         # teste sem estado
+], ids=["fonte_not_run", "teste_not_run", "fonte_ignora_teste", "teste_sem_estado"])
+def test_contradicoes_do_relatorio_saem_3_sem_chamar_a_api(tmp_path, rel):
+    gh = FakeGh(corpo_de(OK))
+    assert rel["completa"] is True
+    assert rodar(tmp_path, rel, gh) == 3
+    assert gh.chamadas == []
+
+
+def test_relatorio_coerente_com_testes_passa(tmp_path):
+    assert rodar(tmp_path, _com_testes("regressao", "ok", "regressao"), FakeGh(corpo_de(OK))) == 1
+
+
 @pytest.mark.parametrize("falha", ["GET", "POST", "PATCH"])
 def test_falha_da_api_sai_2_sem_perder_estado(tmp_path, falha):
     antigo = corpo_de(OK)
