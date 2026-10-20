@@ -43,7 +43,7 @@ Checksums provam integridade, e a origem depende do canal da release.
 1. Congelar código funcional e versão na integração; registrar o commit.
 2. Instalar a wheel local em ambiente limpo; reconstruir o acervo sobre cópia do corpus candidato, exportar o
    snapshot e instalá-lo de forma **experimental** (`--aceitar-nao-vinculado`) em home descartável; conferir
-   integridade, `fv doctor --offline` e bench. Bateria S4 (decisão 0056, somente leitura): no corpus candidato,
+   integridade, `fv doctor --offline` e bench. Bateria S4 (decisão 0057, somente leitura): no corpus candidato,
    `fv acervo conferir --home <candidato> --recorte-desde AAAA-MM-DD --recorte-ate AAAA-MM-DD --estrito
    --gravar-manifesto manifesto.json` (sem defeito nem pendência); na instalação experimental,
    `fv acervo conferir --home <descartável> --manifesto manifesto.json --estrito`, que deve sair com 0.

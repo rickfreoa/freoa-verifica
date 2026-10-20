@@ -2,7 +2,7 @@
 
 ## Não lançado (1.3.0)
 
-- Bateria do snapshot (decisão 0056): `fv acervo conferir` confere o acervo em modo somente leitura (contagens por fonte, órgão e mês do STJ, recursos CKAN, pendências do `sync_state`; duplicatas, decisões sem captura, datas fora do recorte, derivados antigos) e compara com manifesto congelado (`--gravar-manifesto`, `--manifesto`; `--estrito` inclui pendências). Sai com 1 em qualquer divergência.
+- Bateria do snapshot (decisão 0057): `fv acervo conferir` confere o acervo em modo somente leitura (contagens por fonte, órgão e mês do STJ, recursos CKAN, pendências do `sync_state`; duplicatas, decisões sem captura, datas fora do recorte, derivados antigos) e compara com manifesto congelado (`--gravar-manifesto`, `--manifesto`; `--estrito` inclui pendências). Sai com 1 em qualquer divergência.
 
 - Indisponibilidade classificada (decisão 0045): `Unavailable` ganha `categoria` e `evidencia`; saída JSON ganha `categoria` e `evidencia_indisponibilidade` (aditivo). Códigos de motivo novos: `http_401`, `http_403` (antes `desafio_http_403` para qualquer 403) e `corpo_vazio` (antes `desafio_corpo_vazio`); `desafio_<tipo>` fica só para assinatura identificada. Testes live: desafio ambiental ou fonte fora, com evidência, viram xfail.
 

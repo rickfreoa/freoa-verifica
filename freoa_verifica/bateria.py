@@ -1,4 +1,4 @@
-"""Bateria do snapshot (decisão 0056): confere um acervo antes de exportar e depois de instalar.
+"""Bateria do snapshot (decisão 0057): confere um acervo antes de exportar e depois de instalar.
 
 Somente leitura: o banco abre com `mode=ro` e nada aqui escreve no home. Não usa `Verifica`
 (que aplica migrações e grava registro).

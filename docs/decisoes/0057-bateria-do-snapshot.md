@@ -1,4 +1,4 @@
-# 0056 — Bateria do snapshot (`fv acervo conferir`)
+# 0057 — Bateria do snapshot (`fv acervo conferir`)
 
 Data: 19/10/2026 · Versão: 1.3.0 · Origem: plano 1.3.0, S4
 
