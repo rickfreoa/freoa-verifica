@@ -114,19 +114,18 @@ def test_repair_preserves_capture_and_detaches_key(tmp_path):
         assert not s.conn.execute('PRAGMA foreign_key_check').fetchall()
 
 
-def test_planalto_retry_bounded(monkeypatch):
+def test_planalto_nao_repete_por_conta_propria(monkeypatch):
+    # FIX5/F-02: a repetição é política do transporte; o conector faz uma chamada por URL.
     from freoa_verifica.connectors import planalto
     from freoa_verifica.connectors.base import Candidate,Unavailable
-    calls=[];delays=[]
+    calls=[]
     def fetch(url,**kwargs):
         calls.append((url,kwargs))
-        if len(calls)<3: raise Unavailable('transporte_Timeout')
-        return 'receipt'
+        raise Unavailable('transporte_Timeout')
     monkeypatch.setattr(planalto,'connector_fetch',fetch)
-    monkeypatch.setattr(planalto.time,'sleep',delays.append)
-    assert planalto.PlanaltoConnector().fetch(Candidate('planalto','x','x','https://www.planalto.gov.br/ccivil_03/test.htm'))=='receipt'
-    assert len(calls)==3 and delays==[2,4]
-    assert all(c[1]['timeout']==180 and c[1]['min_bytes_per_second']==256 for c in calls)
+    with pytest.raises(Unavailable):planalto.PlanaltoConnector().fetch(Candidate('planalto','x','x','https://www.planalto.gov.br/ccivil_03/test.htm'))
+    assert len(calls)==1
+    assert calls[0][1]['timeout']==180 and calls[0][1]['min_bytes_per_second']==256
 
 
 def test_planalto_challenge_not_retried(monkeypatch):

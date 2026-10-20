@@ -68,7 +68,6 @@ def _planalto_com(monkeypatch, roteiro):
         return item
 
     monkeypatch.setattr(httputil, "transport_fetch", falso)
-    monkeypatch.setattr("freoa_verifica.connectors.planalto.time.sleep", lambda s: None)
     c = PlanaltoConnector()
     return c, c.resolve({"tipo": "LEI", "numero": 6404, "ano": 1976}), pedidos
 
