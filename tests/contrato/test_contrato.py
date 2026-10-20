@@ -155,3 +155,35 @@ def test_listar_fontes_congelado_da_1_2_0_nao_tem_contrato():
     c = h.carregar("python", "listar_fontes")["resposta"]
     assert "contrato" not in c
     assert h.incompatibilidades("listar_fontes", c, {**c, "contrato": "1"}) == []
+
+
+# ----------------------------------------------------------------------------------------------
+# P1: `cobertura` (experimental) em pesquisar_jurisprudencia
+# ----------------------------------------------------------------------------------------------
+
+_CAMPOS_COBERTURA = {"tribunal", "capacidade", "consulta", "motivo_nao_consulta", "recorte_acervo", "capturado_em",
+                     "total_remoto", "total_exato", "lidos", "indexados", "truncado_remoto", "truncado_local",
+                     "indisponivel"}
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_cobertura_nos_tres_adaptadores(ambiente, adaptador):
+    r = _responder(ambiente, adaptador, "pesquisar_jurisprudencia", {"q": "ementa sintética", "tribunais": ["STJ"]})
+    assert [set(c) for c in r["cobertura"]] == [_CAMPOS_COBERTURA]
+    c = r["cobertura"][0]
+    assert c["tribunal"] == "STJ" and c["total_remoto"] is None  # acervo só: nunca zero inventado
+
+
+def test_cobertura_e_experimental_e_documentada():
+    assert "pesquisar_jurisprudencia:cobertura[]" in EXPERIMENTAL
+    md = CONTRATO_MD.read_text(encoding="utf-8")
+    secao = md.split("### `pesquisar_jurisprudencia`", 1)[1].split("\n### ", 1)[0]
+    assert "cobertura" in secao and "experimental" in secao
+    for campo in _CAMPOS_COBERTURA:
+        assert f"`{campo}`" in md
+
+
+def test_cobertura_experimental_nao_isenta_o_objeto_estavel_do_acervo():
+    congelada = {"cobertura": {"desde": "2020-01-01", "tribunais": ["STJ"]}}
+    sem_objeto = {"cobertura": []}
+    assert h.incompatibilidades("pesquisar_jurisprudencia", congelada, sem_objeto, EXPERIMENTAL)
