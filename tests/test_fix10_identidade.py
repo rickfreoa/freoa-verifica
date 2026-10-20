@@ -87,3 +87,49 @@ def test_apos_captcha_a_variante_nao_faz_novo_pedido(ambiente, nome):
             _baixar(VARIANTES[nome].replace(CAMINHO, "/outra"))
     assert ei.value.categoria == "ambiental_desafio"
     assert len(server.pedidos) == 1
+
+
+# --- F-11: bloqueio pelo host de cada salto -----------------------------------------------------
+
+HOSTS = frozenset({HOST, "planalto.gov.br", "legis.planalto.gov.br"})
+ALVO = "https://planalto.gov.br/target"
+
+
+def _pedir(url):
+    from freoa_verifica.connectors.httputil import connector_fetch
+
+    return connector_fetch(url, hosts=HOSTS, path_prefixes=None, mimes=frozenset({"text/html"}))
+
+
+@pytest.mark.parametrize(
+    "categoria,resposta",
+    [
+        ("ambiental_desafio", (403, "text/html", CAPTCHA)),
+        ("recusa_identificado", (403, "text/html", b"negado")),
+    ],
+)
+def test_host_que_desafiou_no_salto_e_bloqueado_e_nao_visitado(ambiente, categoria, resposta):
+    server, incrementos = ambiente({
+        "/start": [(302, "text/html", b"", {"Location": ALVO})],
+        "/start2": [(302, "text/html", b"", {"Location": ALVO})],
+        "/target": [resposta],
+        "/direto": [(200, "text/html", HTML_OK)],
+    })
+    guarda = GuardaExecucao()
+    with guarda.ativar():
+        with pytest.raises(Unavailable) as primeira:
+            _pedir(f"https://{HOST}/start")
+        assert primeira.value.categoria == categoria
+        assert [p[1] for p in server.pedidos] == ["/start", "/target"]
+        assert {"www.planalto.gov.br", "planalto.gov.br"} <= set(guarda.bloqueios)
+        antes = len(incrementos)
+        # consulta direta ao host que de fato desafiou
+        with pytest.raises(Unavailable) as direta:
+            _pedir("https://planalto.gov.br/direto")
+        assert direta.value.categoria == categoria
+        # host inicial ainda livre cujo redirecionamento leva ao host bloqueado: o salto é recusado
+        with pytest.raises(Unavailable) as salto:
+            _pedir("https://legis.planalto.gov.br/start2")
+        assert salto.value.categoria == categoria
+    assert [p[1] for p in server.pedidos] == ["/start", "/target", "/start2"]  # nenhum novo /target
+    assert len(incrementos) == antes  # a recusa do salto não conta como falha da fonte

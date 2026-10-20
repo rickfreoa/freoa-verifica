@@ -40,7 +40,7 @@ def connector_fetch(url: str, **kw: Any) -> Response:
         url,
         kw.get("body"),
         cacheavel=kw.get("session") is None and kw.get("sink") is None,
-        baixar=lambda: _connector_fetch(url, **kw),
+        baixar=lambda: _connector_fetch(url, antes_do_salto=guarda.antes_do_salto, **kw),
     )
 
 
@@ -63,6 +63,7 @@ def _connector_fetch(
     check_challenge: bool = True,
     ignore_challenge_kinds: frozenset[str] | None = None,
     expected_content: str | None = None,
+    antes_do_salto: Any = None,
 ) -> Response:
     timeout = restante(timeout)
     if timeout <= 0:
@@ -85,7 +86,10 @@ def _connector_fetch(
             max_redirects=max_redirects,
             session=session,
             **({"sink": sink} if sink is not None else {}),
+            **({"antes_do_salto": antes_do_salto} if antes_do_salto is not None else {}),
         )
+    except Unavailable:
+        raise  # recusa de salto pela guarda: já classificada
     except Exception as exc:
         mapped = map_transport_error(exc, url)
         if mapped is not None:
@@ -107,9 +111,12 @@ def _connector_fetch(
             if kind not in ignored:
                 if sink is not None:
                     Path(sink).unlink(missing_ok=True)
-                raise unavailable_from_challenge(
+                desafio = unavailable_from_challenge(
                     found, status=resp.status, headers=resp.headers, body=sample, url=url
                 )
+                if resp.final_url != url:
+                    desafio.evidencia["url_final"] = resp.final_url  # host que de fato desafiou
+                raise desafio
     return resp
 
 

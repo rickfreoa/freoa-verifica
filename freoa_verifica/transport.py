@@ -17,7 +17,7 @@ import ssl
 import threading
 import tempfile
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Callable
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -854,6 +854,7 @@ def _percorrer(
     min_bytes_per_second: float | None = None,
     session: Session | None = None,
     sink: BinaryIO | None = None,
+    antes_do_salto: Callable[[str], None] | None = None,
 ) -> Response:
     """Percurso bruto dos saltos: levanta a exceção original; `_fetch_once` a classifica."""
     original = url
@@ -959,6 +960,13 @@ def _percorrer(
                         for name, value in req_extra.items()
                         if name.lower() not in _HOP_CREDENTIAL_HEADERS
                     }
+                if antes_do_salto is not None:
+                    # Controlador externo (guarda de execução): pode recusar o host seguinte, sem requisição.
+                    try:
+                        antes_do_salto(_host_canonico(urlsplit(next_url)))
+                    except Exception as recusa:
+                        recusa.sem_requisicao = True  # não é falha da fonte: o breaker não conta
+                        raise
                 url = next_url
                 continue
             if response.status != 200:
@@ -1116,6 +1124,7 @@ def fetch(
     sink: str | os.PathLike | None = None,
     repeticao: int = REPETICOES_PADRAO,
     idempotente: bool = False,
+    antes_do_salto: Callable[[str], None] | None = None,
 ) -> Response:
     """Baixa URL HTTPS com IP fixado, validando cada redirecionamento.
 
@@ -1124,6 +1133,8 @@ def fetch(
     `repeticao`: máximo de repetições (além da primeira tentativa) após 502/503/504 sem marcador
     de desafio ou falha de conexão/leitura; POST só repete com `idempotente=True`. 403, 429 e
     desafio nunca repetem. A espera cabe no prazo total; senão a falha original é devolvida.
+    `antes_do_salto(host)`: chamado antes de seguir cada redirecionamento; se levantar, a cadeia
+    termina com essa exceção, sem nova requisição.
     """
     if isinstance(repeticao, bool) or not isinstance(repeticao, int) or repeticao < 0:
         raise ValueError("repeticao inválida")
@@ -1195,6 +1206,7 @@ def fetch(
                                 **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
                                 session=session,
                                 estado=estado,
+                                antes_do_salto=antes_do_salto,
                                 **({"sink": output} if output is not None else {}),
                             )
                             break
@@ -1216,7 +1228,9 @@ def fetch(
                 breaker.record_success()
                 outcome.put((result, None))
             except Exception as exc:
-                if isinstance(exc, HTTPStatusError) and exc.status in {404,410}:
+                if getattr(exc, "sem_requisicao", False):
+                    pass
+                elif isinstance(exc, HTTPStatusError) and exc.status in {404,410}:
                     breaker.record_success()
                 else:
                     breaker.record_failure()

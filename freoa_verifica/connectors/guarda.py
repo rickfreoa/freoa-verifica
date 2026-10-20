@@ -8,7 +8,9 @@ Ativa só dentro de `with guarda.ativar():` (a sincronização da semente). Em `
    repete a identidade, sem novo pedido e sem novo incremento no breaker;
 3. por fonte (host): depois de `Unavailable` com categoria `ambiental_desafio` ou
    `recusa_identificado`, nenhuma nova requisição àquele host na execução; as seguintes recebem a
-   mesma categoria, sem rede, e ficam pendentes.
+   mesma categoria, sem rede, e ficam pendentes. O host bloqueado é o inicial e o de cada salto da
+   cadeia que respondeu sem redirecionar (`evidencia.saltos`, `url_final`); o transporte consulta
+   `antes_do_salto` antes de seguir cada redirecionamento e não visita host bloqueado (FIX10/F-11).
 
 Requisições com `session` (estado de cookie) ou `sink` (arquivo) não entram no cache de desfechos, mas
 observam e respeitam o bloqueio por host. Respostas bem-sucedidas ficam num LRU limitado em bytes
@@ -27,7 +29,8 @@ from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.transport import _host_canonico, identidade_requisicao
 
 BLOQUEIAM_A_FONTE = frozenset({"ambiental_desafio", "recusa_identificado"})
-LIMITE_BYTES = 64 * 1024 * 1024
+_REDIRECIONAMENTOS = frozenset({301, 302, 303, 307, 308})
+LIMITE_BYTES =64 * 1024 * 1024
 _ATIVA: contextvars.ContextVar["GuardaExecucao | None"] = contextvars.ContextVar("guarda_execucao", default=None)
 
 
@@ -59,6 +62,23 @@ class GuardaExecucao:
         finally:
             _ATIVA.reset(token)
 
+    @staticmethod
+    def _hosts_recusantes(inicial: str, exc: Unavailable) -> set[str]:
+        """Host inicial e host de cada salto que respondeu sem ser redirecionamento (evidência `saltos`)."""
+        ev = exc.evidencia
+        urls = [s.get("url") for s in ev.get("saltos") or () if s.get("status") not in _REDIRECIONAMENTOS]
+        urls.append(ev.get("url_final"))
+        hosts = {_host_canonico(urlsplit(u)) for u in urls if u}
+        hosts.add(inicial)
+        hosts.discard("")
+        return hosts
+
+    def antes_do_salto(self, host: str) -> None:
+        """Chamado pelo transporte antes de seguir um redirecionamento: host bloqueado não é visitado."""
+        bloqueio = self.bloqueios.get(host)
+        if bloqueio is not None:
+            raise _copia(bloqueio, bloqueio_fonte=host)
+
     def executar(self, method: str, url: str, body: bytes | None, *, cacheavel: bool, baixar: Callable):
         host = _host_canonico(urlsplit(url))
         bloqueio = self.bloqueios.get(host)
@@ -79,8 +99,9 @@ class GuardaExecucao:
                 raise
             if cacheavel:
                 self._falhas[chave] = exc
-            if exc.categoria in BLOQUEIAM_A_FONTE and host:
-                self.bloqueios.setdefault(host, exc)
+            if exc.categoria in BLOQUEIAM_A_FONTE:
+                for recusante in self._hosts_recusantes(host, exc):
+                    self.bloqueios.setdefault(recusante, exc)
             raise
         if cacheavel:
             tamanho = len(getattr(resp, "body", b"") or b"")
