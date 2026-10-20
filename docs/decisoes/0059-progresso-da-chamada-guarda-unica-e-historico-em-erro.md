@@ -59,3 +59,14 @@ A rodada 5 achou variantes das mesmas classes; a emenda troca os remendos por me
   pesquisa textual (`pesquisar_jurisprudencia`) roda sob uma `GuardaExecucao` por pesquisa: candidatos da mesma URL
   usam uma única captura, a indisponibilidade de um candidato interrompe a fonte, aparece em `fontes` e em
   `cobertura[].indisponivel` com categoria, e o status de topo é `parcial` ou `indisponivel`, nunca `ok`.
+
+## Emenda FIX11 (auditoria final, rodada 7: F-11, F-13, F-16)
+
+- **Framing de toda resposta (F-13).** `transport._validar_framing(resposta)` roda sobre os cabeçalhos brutos de
+  qualquer resposta, com qualquer status, antes da classificação: `Transfer-Encoding` diferente de um único `chunked`,
+  `Content-Length` duplicado (mesmo com valores iguais), não numérico, com sinal ou negativo, e `Content-Length` junto
+  de `Transfer-Encoding` são `RespostaInvalida` (`resposta_inesperada`, sem repetição). O 200 e as respostas de erro
+  usam a mesma função. O fluxo chunked é lido por `_RespostaEstrita`, que não herda a tolerância do `http.client`:
+  tamanho `HEXDIG+` com extensão opcional (sem sinal, sublinhado, espaço ou `0x`), fim de chunk exatamente CRLF, e
+  corpo terminado em `0 CRLF [trailer] CRLF`. Dados além do tamanho declarado, tamanho inválido e encerramento
+  prematuro são `RespostaInvalida` em 200, 503 e demais status.

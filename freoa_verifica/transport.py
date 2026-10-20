@@ -229,6 +229,75 @@ def _failure_http(response) -> HTTPMetadata | None:
         return None
 
 
+_LINHA_CHUNK = re.compile(rb"[0-9A-Fa-f]{1,16}(?:;[^\r\n]*)?\r\n")
+_MAX_LINHA_CHUNK = 65536
+
+
+class _RespostaEstrita(http.client.HTTPResponse):
+    """HTTPResponse que não tolera framing chunked malformado (FIX11/F-13).
+
+    O `http.client` descarta sem conferir os 2 bytes depois dos dados de um chunk, aceita tamanho com
+    sinal, sublinhado ou espaço (`int(x, 16)`) e dá o fim do corpo por bom sem o CRLF final. Aqui o
+    tamanho é `HEXDIG+` com extensão opcional, o fim de chunk é exatamente CRLF e o corpo termina em
+    `0 CRLF [trailer] CRLF`; qualquer outra coisa é `HTTPException`/`IncompleteRead`, que o transporte
+    classifica como `RespostaInvalida` (resposta já iniciada), nunca repetível.
+    """
+
+    def _get_chunk_left(self):
+        chunk_left = self.chunk_left
+        if not chunk_left:  # 0 (fim do chunk) ou None (nenhum chunk aberto)
+            if chunk_left is not None and self._safe_read(2) != b"\r\n":
+                self._close_conn()
+                raise http.client.HTTPException("Fim de chunk inválido")
+            linha = self.fp.readline(_MAX_LINHA_CHUNK + 1)
+            if len(linha) > _MAX_LINHA_CHUNK:
+                raise http.client.LineTooLong("chunk size")
+            if _LINHA_CHUNK.fullmatch(linha) is None:
+                self._close_conn()
+                raise http.client.HTTPException("Tamanho de chunk inválido")
+            chunk_left = int(linha.split(b";", 1)[0], 16)
+            if chunk_left == 0:
+                self._ler_trailer()
+                self._close_conn()
+                chunk_left = None
+            self.chunk_left = chunk_left
+        return chunk_left
+
+    def _ler_trailer(self) -> None:
+        for _ in range(100):
+            linha = self.fp.readline(_MAX_LINHA_CHUNK + 1)
+            if len(linha) > _MAX_LINHA_CHUNK:
+                raise http.client.LineTooLong("trailer line")
+            if not linha.endswith(b"\r\n"):
+                self._close_conn()
+                raise http.client.IncompleteRead(b"")  # encerramento prematuro
+            if linha == b"\r\n":
+                return
+        raise http.client.HTTPException("Trailer excessivo")
+
+
+def _validar_framing(response) -> int | None:
+    """Verificações de framing de QUALQUER resposta, qualquer status (FIX11/F-13). Devolve o Content-Length.
+
+    Inspeciona os cabeçalhos brutos (`response.msg`), não a leitura tolerante do `http.client`:
+    Transfer-Encoding diferente de um único `chunked`, Content-Length duplicado, não numérico ou
+    negativo, e Content-Length junto de Transfer-Encoding são `RespostaInvalida`. O fluxo chunked é
+    validado por `_RespostaEstrita`.
+    """
+    def invalida(motivo: str) -> RespostaInvalida:
+        return RespostaInvalida(motivo, http=_failure_http(response))
+
+    te = response.msg.get_all("Transfer-Encoding") or []
+    cl = response.msg.get_all("Content-Length") or []
+    if te and (len(te) > 1 or te[0].strip().lower() != "chunked"):
+        raise invalida("Transfer-Encoding não suportado")
+    if len(cl) > 1 or (cl and (len(cl[0]) > 20 or not re.fullmatch(r"[0-9]+", cl[0]))):
+        raise invalida("Content-Length inválido")
+    if cl and te:
+        raise invalida("Cabeçalhos de framing conflitantes")
+    return int(cl[0]) if cl else None
+
+
 _AMOSTRA_DESAFIO = 65536
 
 
@@ -881,6 +950,7 @@ def _percorrer(
         # Prazo do soquete acompanha o timeout da captura (CKAN/STJ ~25–90s).
         connection = PinnedHTTPSConnection(host, ip, timeout=max(1.0, remaining))
         connection.capture_deadline = deadline
+        connection.response_class = _RespostaEstrita
         timed_out = threading.Event()
         slow = threading.Event()
         finished = threading.Event()
@@ -929,6 +999,7 @@ def _percorrer(
             saltos.append({"url": url, "status": response.status})
             if session is not None:
                 session.absorb_response(url, response)
+            declared_size = _validar_framing(response)  # todo status, antes de qualquer classificação
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader("Location")
                 if not location:
@@ -992,30 +1063,11 @@ def _percorrer(
                     f"MIME não permitido: {mime or '(ausente)'}",
                     http=_failure_http(response),
                 )
-            transfer_encoding = response.getheader("Transfer-Encoding")
-            if transfer_encoding is not None and transfer_encoding.strip().lower() != "chunked":
-                raise RespostaInvalida(
-                    "Transfer-Encoding não suportado",
+            if declared_size is not None and declared_size > max_bytes:
+                raise TooLarge(
+                    "Corpo declarado acima do limite",
                     http=_failure_http(response),
                 )
-            declared = response.getheader("Content-Length")
-            declared_size = None
-            if declared is not None:
-                if len(declared) > 20 or not re.fullmatch(r"[0-9]+", declared):
-                    raise RespostaInvalida(
-                        "Content-Length inválido", http=_failure_http(response)
-                    )
-                declared_size = int(declared)
-                if declared_size > max_bytes:
-                    raise TooLarge(
-                        "Corpo declarado acima do limite",
-                        http=_failure_http(response),
-                    )
-                if transfer_encoding is not None:
-                    raise RespostaInvalida(
-                        "Cabeçalhos de framing conflitantes",
-                        http=_failure_http(response),
-                    )
             chunks: list[bytes] = []
             digest = hashlib.sha256()
             size = 0
