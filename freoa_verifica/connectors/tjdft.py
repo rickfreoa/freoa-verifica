@@ -1,4 +1,4 @@
-"""Conector TJDFT — API pública oficial de jurisprudência (decisão 0041).
+"""Conector TJDFT — API pública oficial de jurisprudência (decisões 0041 e 0046).
 
 A resposta JSON inteira é a captura; cada candidato aponta para o seu registro por `uuid` + `identificador`.
 """
@@ -88,6 +88,8 @@ _DISPOSITIVO = ("ante o exposto", "diante do exposto", "pelo exposto", "isso pos
                 "julgo", "homologo", "nao conheco", "conheco do")
 _FECHO = ("publique-se", "intimem-se", "intime-se", "cumpra-se", "comunique-se", "arquive-se", "registre-se",
          "remetam-se", "documento assinado", "assinado digitalmente", "assinado eletronicamente")
+# Fecho do acórdão: proclamação do resultado na seção "DECISÃO" que encerra o documento (decisão 0046).
+_FECHO_ACORDAO = ("unanime", "maioria", "vencido")
 
 
 def _locucoes() -> list[str]:
@@ -128,25 +130,40 @@ def consulta_oficial(q: str) -> str:
     return " ".join(frases + resto.split())
 
 
-def inteiro_teor_valido(rec: dict[str, Any]) -> str | None:
-    """Regra conservadora (decisão 0041): só texto íntegro do próprio processo; `possuiInteiroTeor` não conta."""
+def avaliar_inteiro_teor(rec: dict[str, Any]) -> tuple[str | None, str | None]:
+    """(texto, None) se o registro traz a íntegra do próprio processo; senão (None, motivo) quando havia texto a
+    avaliar, ou (None, None) quando não havia (decisões 0041 e 0046). Vale para acórdãos e monocráticas."""
     processo = str(rec.get("processo") or "").strip()
-    if not processo:
-        return None
+    acordao = _kind(rec) == "acordao"
+    motivo = None
     for campo in ("inteiroTeor", "inteiroTeorHtml"):
         raw = rec.get(campo)
         if not isinstance(raw, str) or not raw.strip():
             continue
         text = _html_text(raw) if _TAG_RE.search(raw) else raw
         n = _norm(text)
-        if any(neg in n for neg in _NEGATIVOS):
-            continue
         # Prova positiva de documento decisório, não só comprimento e número (auditoria 1.2.0).
         cauda = n[-max(600, len(n) // 4):]  # fecho no fim do texto: fragmento inicial não passa
-        if (len(text) >= MIN_INTEIRO_TEOR and processo in text and any(p in n for p in _DISPOSITIVO)
-                and any(f in cauda for f in _FECHO)):
-            return text
-    return None
+        if any(neg in n for neg in _NEGATIVOS):
+            falha = "integra_placeholder"
+        elif len(text) < MIN_INTEIRO_TEOR:
+            falha = "integra_curta"
+        elif not processo or processo not in text:
+            falha = "integra_processo_divergente"
+        elif not any(p in n for p in _DISPOSITIVO):
+            falha = "integra_sem_dispositivo"
+        elif not (any(f in cauda for f in _FECHO)
+                  or (acordao and "decisao" in cauda and any(f in cauda for f in _FECHO_ACORDAO))):
+            falha = "integra_sem_fecho"
+        else:
+            return text, None
+        motivo = motivo or falha
+    return None, motivo
+
+
+def inteiro_teor_valido(rec: dict[str, Any]) -> str | None:
+    """Regra conservadora (decisões 0041 e 0046): só texto íntegro do próprio processo; `possuiInteiroTeor` não conta."""
+    return avaliar_inteiro_teor(rec)[0]
 
 
 def build_search_payload(
@@ -179,7 +196,7 @@ class TjdftConnector(Connector):
         # O acervo local do TJDFT é só a semente temática: a busca filtrada pelo tribunal consulta a API oficial.
         "consultar_ao_vivo_sempre": True,
         "ementa": True,
-        "inteiro_teor": "somente quando o registro o traz íntegro (decisões monocráticas e da presidência); acórdão sem íntegra pela API",
+        "inteiro_teor": "quando o registro o traz íntegro (acórdãos, decisões monocráticas e da presidência): número do processo, dispositivo e fecho; senão só ementa",
         "atualizacao": "sob demanda; semente temática",
     }
 
@@ -216,7 +233,9 @@ class TjdftConnector(Connector):
             raise Unavailable("tjdft_consulta_vazia")
         pagina = max(0, int(filtros.get("pagina") or 0))
         tamanho = min(MAX_TAMANHO, max(1, int(filtros.get("limite") or filtros.get("tamanho") or 20)))
-        extras = {"termosAcessorios": [{"campo": "base", "valor": filtros["base"]}]} if filtros.get("base") in _BASES else None
+        extras: dict[str, object] = {"retornaInteiroTeor": True}  # sem ele, 1 de 5 registros traz a íntegra (0046)
+        if filtros.get("base") in _BASES:
+            extras["termosAcessorios"] = [{"campo": "base", "valor": filtros["base"]}]
         payload = build_search_payload(consulta_oficial(q), pagina=pagina, tamanho=tamanho, extras=extras)
         resp = connector_fetch(
             SEARCH_URL,
@@ -248,6 +267,8 @@ class TjdftConnector(Connector):
             if _segredo(rec):
                 continue
             cand = _cand(self.id, rec)
+            if any(c.metadata["uuid"] == cand.metadata["uuid"] for c in out):
+                continue  # registro repetido na resposta: um candidato só (o parse segue ambíguo, 0046)
             if not _na_janela(cand.metadata, filtros.get("desde"), filtros.get("ate")):
                 continue
             self._capturas[cand.metadata["uuid"]] = resp
@@ -296,7 +317,7 @@ class TjdftConnector(Connector):
         kind = _kind(rec)
         if kind is None:
             raise Unavailable("tjdft_especie_desconhecida")
-        text = inteiro_teor_valido(rec)
+        text, motivo = avaliar_inteiro_teor(rec)
         # Em decisões individuais o campo "ementa" da API é o próprio texto da decisão (começa pelo cabeçalho):
         # não é ementa. Com o texto integral validado, ele vai só para inteiro_teor (comparativo 1.2.0).
         # Sem texto integral validado, a decisão individual fica sem documento (só metadados), em vez de
@@ -305,6 +326,8 @@ class TjdftConnector(Connector):
         meta = {k: rec.get(k) for k in ("uuid", "processo", "base", "subbase", "codigoClasseCnj")}
         if text:
             meta["documento"] = "inteiro_teor"
+        elif motivo:
+            meta["integra_motivo"] = motivo
         return ParsedDecision(
             profile="tjdft_inteiro_teor" if text else "tjdft_ementa",
             kind=kind,

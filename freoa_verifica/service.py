@@ -2515,7 +2515,7 @@ class Verifica:
                     court=court, class_name=class_name, organ=organ,
                 )
                 attrs = authority_as_dict(auth)
-                for extra in ("situacao_precedente", "divergencia_na_fonte"):
+                for extra in ("situacao_precedente", "divergencia_na_fonte", "integra_motivo"):
                     if parsed.metadata.get(extra):
                         attrs[extra] = parsed.metadata[extra]
                 kind_gravado = ("decisao_monocratica" if parsed.kind == "monocratica" else parsed.kind) if parsed.kind in {
@@ -2679,7 +2679,13 @@ class Verifica:
         }
         if doc is None or not (doc["text"] or ""):
             # Parte ausente nunca é substituída por outro documento sob o rótulo pedido (decisão 0038, A1).
+            try:
+                integra_motivo = (json.loads(row["authority_attrs_json"] or "{}").get("integra_motivo")
+                                  if parte == "inteiro_teor" else None)
+            except ValueError:
+                integra_motivo = None
             return {**base, "status": "parte_indisponivel", "motivo": "PARTE_NAO_CAPTURADA",
+                    **({"motivo_integra": integra_motivo} if integra_motivo else {}),
                     "parte_entregue": None, "texto": None, "capture_id": None}
         text = doc["text"]
         self._authenticate_capture(doc["capture_id"])

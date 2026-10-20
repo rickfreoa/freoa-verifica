@@ -565,6 +565,25 @@
   "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
   "url_final": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
  },
+ "tjdft_busca_integra": {
+  "bytes": 241544,
+  "capturado_em": "2026-10-20T00:44:28.871567+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "tjdft/tjdft_busca_integra.json",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "47dbaf4a21daf49eb53570ce7b14363a8c15081c0d5f447650b0003ff2275b15",
+  "status": 200,
+  "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+  "url_final": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
+ },
+ "tjdft_busca_integra__captura": {
+  "bytes": 920,
+  "categoria": "metadados_captura",
+  "descreve": "tjdft_busca_integra",
+  "file": "tjdft/tjdft_busca_integra.captura.json",
+  "sha256": "d06079ba3be62a82ba8467f62ec377660c19b3549a05357c1ef15f5ae35a07f1"
+ },
  "tjdft_frase_exata": {
   "bytes": 42756,
   "capturado_em": "2026-10-18",
