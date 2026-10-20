@@ -81,6 +81,8 @@ _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
 _JANELA_REORDENACAO = 50  # só os 50 primeiros candidatos são reordenados; além deles vale a ordem bm25
 _SIGLAS_TRIBUNAL_FILTRO = frozenset({"STJ", "STF", "TCU", "TJDFT", "TJSP", "CVM"})
 _JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "tjdft", "cvm_colegiado")
+_JURIS_ID_MAP = {"stj": "stj", "tcu": "tcu", "tjsp": "tjsp", "tjdft": "tjdft",
+                 "cvm": "cvm_colegiado", "cvm_colegiado": "cvm_colegiado"}
 _DEFAULT_TEXT_LIMIT = 4000
 _EMENTA_MAX = 1200
 _CLASSES_POR_EXTENSO = (
@@ -2044,7 +2046,7 @@ class Verifica:
                 if not re.search(r"\w", resto):
                     return {"status": "entrada_insuficiente", "motivo": "CONSULTA_SO_COM_SIGLA_DE_TRIBUNAL",
                             "consulta": q, "filtro_tribunal_da_consulta": filtro_da_consulta,
-                            "itens": [], "resultados": [], "truncado": False, "cursor": None}
+                            "itens": [], "resultados": [], "cobertura": [], "truncado": False, "cursor": None}
                 q, tribunais = " ".join(resto.split()), filtro_da_consulta
         out = self._juris_textual(q, tribunais, desde, ate, autoridade_min, limite, cursor)
         if filtro_da_consulta:
@@ -2059,32 +2061,47 @@ class Verifica:
         from freoa_verifica.citation import validate_cnj_dv
 
         base = {"consulta": q, "modo_busca": "numero_cnj", "itens": [], "resultados": [], "relacionados": [],
-                "truncado": False, "cursor": None, "fontes": {}, "rules_version": AUTHORITY_RULES_VERSION}
+                "truncado": False, "cursor": None, "fontes": {}, "cobertura": [],
+                "rules_version": AUTHORITY_RULES_VERSION}
         if not validate_cnj_dv(cnj):
             return {**base, "status": "formato_invalido", "motivo": "CNJ_DIGITO_VERIFICADOR_INVALIDO"}
         conector_id = self._CNJ_CONECTORES.get(cnj[16:20])
         fontes: dict[str, Any] = {}
+        vivo: dict[str, Any] | None = None
+        motivo_vivo: str | None = None
         if conector_id and not self._offline():
             connector = self._get(conector_id)
             try:
-                cands = [c for c in connector.search(cnj) if (c.metadata or {}).get("processo") == cnj]
+                lidas = connector.search(cnj)
+                cands = [c for c in lidas if (c.metadata or {}).get("processo") == cnj]
                 for cand in cands:
                     self._index_candidate_juris(connector, cand)
                 fontes[conector_id] = {"status": "ok", "registros_do_processo": len(cands)}
+                vivo = {"lidos": len(lidas), "indexados": len(cands), "total": getattr(lidas, "total", None),
+                        "total_exato": getattr(lidas, "total_exato", None)}
             except (SourceUnavailable, Unavailable) as exc:
                 fontes[conector_id] = {"status": "indisponivel", "motivo": getattr(exc, "reason", str(exc))}
+                motivo_vivo = "falha"
+                vivo = {"indisponivel": {"motivo": getattr(exc, "reason", str(exc)),
+                                         **(exc.classificacao() if isinstance(exc, Unavailable) else {})}}
         elif conector_id:
             fontes[conector_id] = {"status": "nao_consultada", "motivo": "offline"}
+            motivo_vivo = "offline"
         alvo = cnj.replace(".", "").replace("-", "")
         rows = [dict(r) for r in self.conn.execute(
             "SELECT d.id AS decision_id FROM decision d WHERE d.identity_status='confirmed' "
             "AND REPLACE(REPLACE(d.number,'.',''),'-','')=?", (alvo,))]
         itens = []
+        tribunal_do_acervo = None
         for r in rows:
             row = self.conn.execute("SELECT court FROM decision WHERE id=?", (r["decision_id"],)).fetchone()
+            tribunal_do_acervo = tribunal_do_acervo or row["court"]
             for full in repo.decisions_by_number(self.conn, row["court"], cnj):
                 if full["decision_id"] == r["decision_id"]:
                     itens.append({**self._decisao_item(full), "relacao": "exato"})
+        # Tribunal implicado: o do conector do segmento J.TR; senão o do acervo; senão o próprio segmento (sem suporte).
+        base["cobertura"] = [self._item_cobertura(
+            conector_id or tribunal_do_acervo or f"CNJ {cnj[16:20]}", vivo=vivo, motivo_vivo=motivo_vivo)]
         if itens:
             return {**base, "status": "encontrada", "itens": itens, "resultados": itens,
                     "total_parcial": len(itens), "fontes": fontes}
@@ -2115,11 +2132,14 @@ class Verifica:
                 "itens": [], "resultados": [], "relacionados": [], "resultados_textuais": [],
                 "truncado": False, "cursor": None, "fontes": {},
                 "rules_version": AUTHORITY_RULES_VERSION}
+        # Só o acervo é consultado por classe e número; a fonte ao vivo, mesmo existindo, não é (nao_suportado).
+        cobertura = [self._item_cobertura(key.court, vivo=None, motivo_vivo="nao_suportado")] if key.court else []
         if status == "nao_confirmado_no_acervo":
             cob = dict(evidence["cobertura"])
             cob["tribunais"] = [r[0] for r in self.conn.execute(
                 "SELECT DISTINCT court FROM decision ORDER BY court")]
-            return {**base, "cobertura": cob,
+            # `cobertura` já é o objeto do acervo neste estado (contrato 1): a lista por tribunal vai ao lado.
+            return {**base, "cobertura": cob, "cobertura_por_tribunal": cobertura,
                     "aviso": "processo não localizado no acervo local; ausência não demonstra inexistência"}
         rows = repo.decisions_by_number(self.conn, key.court, key.number)
         cls = _classe_norm(key.class_)
@@ -2136,7 +2156,7 @@ class Verifica:
             item["relacao"] = "exato"
             itens.append(item)
         rel = [{**self._decisao_item(r), "relacao": "incidente_do_mesmo_processo"} for r in incidentes]
-        return {**base, "itens": itens, "resultados": itens, "relacionados": rel,
+        return {**base, "itens": itens, "resultados": itens, "relacionados": rel, "cobertura": cobertura,
                 "total_parcial": len(itens), "evidencia": evidence}
 
     def _peso_idf(self):
@@ -2158,6 +2178,56 @@ class Verifica:
                 cache[k] = math.log(1 + n / (1 + df))
             return cache[k]
         return peso
+
+    def _acervo_do_tribunal(self, tribunal: str) -> dict[str, Any]:
+        """Recorte e captura mais recente do tribunal no acervo instalado (decisão 0055)."""
+        self.conn.create_function("fv_court", 1, normalize_court, deterministic=True)
+        n, desde, ate = self.conn.execute(
+            "SELECT COUNT(*), MIN(NULLIF(COALESCE(NULLIF(judgment_date,''), publication_date),'')), "
+            "MAX(NULLIF(COALESCE(NULLIF(judgment_date,''), publication_date),'')) "
+            "FROM decision WHERE fv_court(court)=?", (tribunal,)).fetchone()
+        capturado = self.conn.execute(
+            "SELECT MAX(c.fetched_at) FROM decision d JOIN decision_document dd ON dd.decision_id=d.id "
+            "JOIN capture c ON c.id=dd.capture_id WHERE fv_court(d.court)=?", (tribunal,)).fetchone()[0]
+        return {"n": n, "recorte": {"desde": desde, "ate": ate} if n and (desde or ate) else None,
+                "capturado_em": capturado}
+
+    def _item_cobertura(self, tribunal: str, *, acervo_consultado: bool = True, vivo: dict[str, Any] | None = None,
+                        motivo_vivo: str | None = None, truncado_local: bool = False) -> dict[str, Any]:
+        """Um item de `cobertura` (docs/CONTRATO.md). `vivo`: leitura ao vivo concluída (lidos, indexados, total,
+        total_exato); `motivo_vivo`: por que a fonte ao vivo não foi (ou não concluiu a ser) consultada.
+        `total_remoto` só vem da fonte; sem ela fica nulo, nunca o tamanho lido."""
+        t = normalize_court(tribunal)
+        cls = registry().get(_JURIS_ID_MAP.get(t, t))
+        cov = getattr(cls, "coverage", {"busca_textual": True}) if cls is not None else {}
+        ac = self._acervo_do_tribunal(t)
+        tem_acervo = bool(ac["n"])
+        tem_vivo = cls is not None and bool(cov.get("busca_textual_ao_vivo", cov.get("busca_textual")))
+        capacidade = ("ambos" if tem_acervo and tem_vivo else "acervo" if tem_acervo
+                      else "ao_vivo" if tem_vivo else "nenhuma")
+        fez_acervo = acervo_consultado and tem_acervo
+        fez_vivo = tem_vivo and vivo is not None and motivo_vivo is None
+        consulta = ("ambos" if fez_acervo and fez_vivo else "acervo" if fez_acervo
+                    else "ao_vivo" if fez_vivo else "nenhuma")
+        if capacidade == "nenhuma":
+            motivo = "nao_suportado"
+        elif consulta == capacidade:
+            motivo = None
+        else:
+            motivo = motivo_vivo if tem_vivo and not fez_vivo else "nao_suportado"
+        indisponivel = (vivo or {}).get("indisponivel") if motivo == "falha" else None
+        vivo = (vivo or {}) if fez_vivo else {}
+        total = vivo.get("total")
+        lidos = vivo.get("lidos", 0)
+        return {
+            "tribunal": t.upper(), "capacidade": capacidade, "consulta": consulta, "motivo_nao_consulta": motivo,
+            "recorte_acervo": ac["recorte"], "capturado_em": ac["capturado_em"],
+            "total_remoto": total, "total_exato": vivo.get("total_exato") if total is not None else None,
+            "lidos": lidos, "indexados": vivo.get("indexados", 0),
+            "truncado_remoto": total is not None and total > lidos,
+            "truncado_local": truncado_local or bool(vivo.get("cortou_no_limite")),
+            "indisponivel": indisponivel,
+        }
 
     def _juris_textual(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
         offset = _decode_cursor(cursor)
@@ -2213,14 +2283,9 @@ class Verifica:
             items.extend(self._decisao_item(row, q) for row in rows)
         append_local(local)
 
-        id_map = {
-            "stj": "stj",
-            "tcu": "tcu",
-            "tjsp": "tjsp",
-            "tjdft": "tjdft",
-            "cvm": "cvm_colegiado",
-            "cvm_colegiado": "cvm_colegiado",
-        }
+        id_map = _JURIS_ID_MAP
+        vivos: dict[str, dict[str, Any]] = {}  # leitura ao vivo por conector (alimenta `cobertura`)
+        motivos_vivo: dict[str, str] = {}
         offline = os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
         fontes_status: dict[str, dict[str, Any]] = {}
         filtros_por_fonte: dict[str, dict[str, str]] = {}
@@ -2231,6 +2296,7 @@ class Verifica:
                 fontes_status[cid] = {"status": "unavailable", "motivo": "fonte_nao_suportada", "parcial": False}
             elif offline:
                 fontes_status[cid] = {"status": "unavailable", "motivo": "offline", "parcial": False}
+                motivos_vivo[cid] = "offline"
         # Fonte cujo acervo local é só semente (TJDFT) é consultada ao vivo quando pedida explicitamente.
         sempre_ao_vivo = {id_map.get(t, t) for t in (tribunais_norm if tribunais is not None else [])
                           if id_map.get(t, t) in registry()
@@ -2241,6 +2307,7 @@ class Verifica:
                 if cid not in registry():
                     continue
                 if len(items) >= limite and cid not in sempre_ao_vivo:
+                    motivos_vivo[cid] = "limite"
                     continue
                 try:
                     conn_obj = self._get(cid)
@@ -2264,9 +2331,12 @@ class Verifica:
                                 "compensacao": "filtro_local_sobre_o_recuperado"})
                     cands = conn_obj.search(q, **filtros)
                     got = 0
-                    for cand in cands:
+                    indexados = 0
+                    cortou = False
+                    for pos, cand in enumerate(cands):
                         item = self._index_candidate_juris(conn_obj, cand)
                         if item:
+                            indexados += 1
                             self._authenticate_output(item)
                         if item and normalize_court(item.get("tribunal") or "") in tribunais_norm and _authority_min_ok(
                             item.get("rotulo_autoridade") or "E", autoridade_min
@@ -2274,11 +2344,16 @@ class Verifica:
                             items.append(item)
                             got += 1
                         if len(items) >= limite and cid not in sempre_ao_vivo:
+                            cortou = pos + 1 < len(cands)
                             break
+                    # `total` só da fonte (decisão 0055): lista sem o atributo = fonte não informa.
+                    vivos[cid] = {"lidos": len(cands), "indexados": indexados, "cortou_no_limite": cortou,
+                                  "total": getattr(cands, "total", None),
+                                  "total_exato": getattr(cands, "total_exato", None)}
                     fontes_status[cid] = {
                         "status": "ok",
                         "motivo": None,
-                        "parcial": got < len(cands),
+                        "parcial": got < len(cands) or bool(getattr(cands, "truncado", False)),
                     }
                 except SourceUnavailable:
                     raise
@@ -2289,31 +2364,49 @@ class Verifica:
                         "parcial": False,
                         **exc.classificacao(),
                     }
+                    motivos_vivo[cid] = "falha"
+                    vivos[cid] = {"indisponivel": {"motivo": exc.reason, **exc.classificacao()}}
                 except Exception as exc:  # noqa: BLE001
                     fontes_status[cid] = {
                         "status": "unavailable",
                         "motivo": f"{type(exc).__name__}:{exc}"[:200],
                         "parcial": False,
                     }
+                    motivos_vivo[cid] = "falha"
+                    vivos[cid] = {"indisponivel": {"motivo": fontes_status[cid]["motivo"]}}
 
         # Candidatos capturados ao vivo passam pelos mesmos filtros e ranking SQL.
         if not offline and any(v.get("status") == "ok" for v in fontes_status.values()):
             items.clear()
             append_local(local_page())
         page = items[:limite]
-        truncado = len(items) > limite
+        truncado_local = len(items) > limite
         for cid, aplicados in filtros_por_fonte.items():
             if cid in fontes_status:
                 fontes_status[cid]["filtros"] = aplicados
+        # Cobertura por tribunal pedido ou implicado pelos itens (decisão 0055).
+        courts_cortados = {normalize_court(i.get("tribunal") or "") for i in items[limite:]}
+        implicados = [c for c in dict.fromkeys(normalize_court(i.get("tribunal") or "") for i in page)
+                      if c and c not in tribunais_norm]
+        cobertura = []
+        for t in [*tribunais_norm, *implicados]:
+            cid = id_map.get(t, t)
+            if cid in registry() and cid not in vivos and cid not in motivos_vivo and not offline:
+                motivos_vivo[cid] = "limite"  # a consulta ao vivo nem começou: a página já estava cheia
+            cobertura.append(self._item_cobertura(
+                t, vivo=vivos.get(cid), motivo_vivo=motivos_vivo.get(cid), truncado_local=t in courts_cortados))
+        truncado_remoto = any(c["truncado_remoto"] for c in cobertura)
+        truncado = truncado_local or truncado_remoto  # o cursor só pagina o que é local
         return {
             **_status_com_falhas("parcial" if truncado else "ok", _falhas_de_fonte(fontes_status), len(page)),
             "itens": page,
             "resultados": page,
+            "cobertura": cobertura,
             "fontes": fontes_status,
             "filtros_nao_aplicados": filtros_nao_aplicados,  # experimental (docs/FILTROS.md)
             "total_parcial": offset + len(items),
             "truncado": truncado,
-            "cursor": _encode_cursor(offset + limite) if truncado else None,
+            "cursor": _encode_cursor(offset + limite) if truncado_local else None,
             "consulta": q,
             "autoridade_min": autoridade_min,
             "modo_busca": modo_busca,
