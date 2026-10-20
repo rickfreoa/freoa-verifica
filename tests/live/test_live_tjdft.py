@@ -5,6 +5,7 @@ import hashlib
 import pytest
 
 from freoa_verifica.connectors.tjdft import TjdftConnector
+from freoa_verifica.service import Verifica
 
 pytestmark = pytest.mark.live
 
@@ -37,13 +38,21 @@ def test_live_tjdft_documento_captura_e_parse():
     assert parsed.metadata["uuid"] == found[0].metadata["uuid"]
 
 
-def test_live_tjdft_acordao_sem_integra_fica_so_com_ementa():
+def test_live_tjdft_acordao_sem_integra_fica_so_com_ementa(tmp_path):
     c = TjdftConnector()
     found = c.search(CONSULTA, limite=20, base="acordaos")
     acordaos = [x for x in found if x.metadata["base"] == "acordaos"]
     assert acordaos
-    parsed = c.parse_candidate(c.fetch(acordaos[0]), acordaos[0])
-    # A API não entrega íntegra de acórdão: o serviço responde `parte_indisponivel` para inteiro_teor.
-    assert parsed.profile == "tjdft_ementa"
-    assert parsed.text == ""
-    assert parsed.metadata.get("documento") is None
+    resp = c.fetch(acordaos[0])
+    parsed = c.parse_candidate(resp, acordaos[0])
+    # Confronto da resposta pública (B2-09): indexa a captura obtida e pede o inteiro teor ao serviço.
+    with Verifica(tmp_path / "home") as svc:
+        assert svc._index_candidate_juris(c, acordaos[0], captured_response=resp)
+        r = svc.obter_decisao(acordaos[0].key, tribunal="tjdft", parte="inteiro_teor")
+    if parsed.text:  # perfil com íntegra validada (F1): a parte tem de ser entregue
+        assert parsed.profile == "tjdft_inteiro_teor"
+        assert r["status"] == "encontrada" and r["parte_entregue"] == "inteiro_teor" and r["texto"]
+    else:  # a API não entrega íntegra de acórdão: o serviço responde `parte_indisponivel`
+        assert parsed.profile == "tjdft_ementa"
+        assert parsed.metadata.get("documento") is None
+        assert r["status"] == "parte_indisponivel" and r["texto"] is None and r["parte_entregue"] is None
