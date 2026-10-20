@@ -889,8 +889,13 @@ class Verifica:
                 raise
             except Unavailable as exc:
                 errors.append(f"{cid}:{exc.reason}")
+                # Só ausência explícita (404/410) ou identidade não declarada autoriza a próxima fonte;
+                # desafio, recusa, fonte fora e resposta inválida interrompem (FIX7, sem fallback).
+                if exc.reason not in {"http_404", "http_410", "IDENTIDADE_NAO_DECLARADA"}:
+                    break
             except Exception as exc:  # noqa: BLE001 — captura sob demanda
                 errors.append(f"{cid}:{type(exc).__name__}")
+                break
         if errors:
             raise SourceUnavailable(";".join(errors[:3]))
         return None
@@ -1982,7 +1987,9 @@ class Verifica:
             connector = self._get('tjsp')
             try:
                 found = connector.search(cite.raw, numero_processo=cite.raw, limite=5) if tribunal == 'tjsp' else []
-            except Unavailable:
+            except Unavailable as exc:
+                if exc.reason not in {"http_404", "http_410"}:
+                    raise  # falha do TJSP não autoriza consultar o DataJud no lugar (FIX7)
                 found = []
             for cand in found:
                 response = connector.fetch(cand)
