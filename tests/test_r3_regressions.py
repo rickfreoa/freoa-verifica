@@ -167,10 +167,13 @@ def test_decision_evidence_identity(tmp_path, monkeypatch):
             return ParsedDecision("test", "acordao", "STJ", "A", ementa="ementa alfa", text="ementa alfa", class_name="REsp")
     with Verifica(tmp_path) as svc:
         for key, text in (("A", "ementa alfa"), ("B", "ementa beta")):
-            svc._index_candidate_juris(Connector(), Candidate("stj", key, key, metadata={"court": "STJ", "classe": "REsp", "ementa": text}))
-        result = svc.pesquisar_jurisprudencia("beta")
-        assert result["status"] == "unavailable"
-        assert result["reason_code"] == "EVIDENCIA_AUSENTE"
+            cand = Candidate("stj", key, key, metadata={"court": "STJ", "classe": "REsp", "ementa": text})
+            if key == "B":  # FIX10/F-14: a indisponibilidade sobe ao controlador, sem candidato só com metadados
+                with pytest.raises(Unavailable):
+                    svc._index_candidate_juris(Connector(), cand)
+            else:
+                svc._index_candidate_juris(Connector(), cand)
+        assert svc.conn.execute("SELECT COUNT(*) FROM decision WHERE number='B'").fetchone()[0] == 0
         result = svc.pesquisar_jurisprudencia("alfa")
         assert result["itens"][0]["capture_id"] is not None
 
