@@ -176,7 +176,6 @@ class SementeSync:
         self.state = SyncState(svc.conn)
         self.corpus = load_corpus()
         self.stats: dict[str, FonteStats] = {}
-        self.retry_backoff = 2.0 if rate_delay else 0.0
         self._failed: dict[tuple[str, str], str] = {}
 
     def _stats(self, fonte: str) -> FonteStats:
@@ -207,7 +206,7 @@ class SementeSync:
             return True
         return datetime.now(timezone.utc) - (t if t.tzinfo else t.replace(tzinfo=timezone.utc)) > timedelta(days=_REVALIDAR_DIAS)
 
-    def _mark_indisponivel(self, fonte: str, chave: str, motivo: str) -> None:
+    def _mark_indisponivel(self, fonte: str, chave: str, motivo: str, categoria: str | None = None) -> None:
         self._failed[fonte, chave] = motivo
         # Falha não apaga o histórico da última captura válida (sha256, ultima_captura_ok).
         anterior = self.state.get(fonte, chave)
@@ -215,7 +214,11 @@ class SementeSync:
             payload = json.loads(anterior["payload_json"]) if anterior and anterior["payload_json"] else None
         except (ValueError, TypeError, KeyError, IndexError):
             payload = None
-        self.state.set(fonte, chave, "indisponivel", motivo=motivo, payload=payload)
+        # A categoria da falha atual substitui a anterior; a próxima execução decide a repetição por ela.
+        payload = {k: v for k, v in (payload or {}).items() if k != "categoria"}
+        if categoria:
+            payload["categoria"] = categoria
+        self.state.set(fonte, chave, "indisponivel", motivo=motivo, payload=payload or None)
         st = self._stats(fonte)
         st.indisponiveis += 1
         st.motivos[motivo] = st.motivos.get(motivo, 0) + 1
@@ -282,7 +285,7 @@ class SementeSync:
             )
             return status, parsed
         except Unavailable as exc:
-            self._mark_indisponivel(fonte, chave, exc.reason[:200])
+            self._mark_indisponivel(fonte, chave, exc.reason[:200], exc.categoria)
             return "indisponivel", None
         except Exception as exc:  # noqa: BLE001
             self._mark_indisponivel(fonte, chave, f"{type(exc).__name__}:{exc}"[:200])
@@ -333,14 +336,14 @@ class SementeSync:
                     self.state.set("alterador_contexto", chave, "indisponivel" if complete is False else "concluido", motivo="ALTERADORES_PENDENTES" if complete is False else None)
                 except Exception as exc:
                     # Falha no contexto de uma obra não descarta as próximas obras.
-                    self._mark_indisponivel("alterador_contexto", chave, str(exc)[:200])
+                    self._mark_indisponivel("alterador_contexto", chave, str(exc)[:200], getattr(exc, "categoria", None))
 
         # Reexecuta também pendências legadas que já não aparecem nas remissões atuais.
-        pending_rows = self.svc.conn.execute("SELECT chave,motivo FROM sync_state WHERE fonte='alterador' AND status='indisponivel' ORDER BY chave").fetchall()
+        pending_rows = self.svc.conn.execute("SELECT chave,payload_json FROM sync_state WHERE fonte='alterador' AND status='indisponivel' ORDER BY chave").fetchall()
         if self.max_itens is not None:
             pending_rows = pending_rows[:self.max_itens]
         for row in pending_rows:
-            if not _transient(row['motivo'] or ''):
+            if not _transient(row):
                 continue
             parts = row['chave'].split(':')
             if len(parts) != 3 or not parts[2].isdigit():
@@ -396,7 +399,7 @@ class SementeSync:
                     self.state.set("alterador_data", akey, "parseado" if iso else "indisponivel",
                                    motivo=None if iso else "senado_sem_data", payload={"data": iso})
                 except Exception as exc:
-                    self._mark_indisponivel("alterador_data", akey, str(exc)[:200])
+                    self._mark_indisponivel("alterador_data", akey, str(exc)[:200], getattr(exc, "categoria", None))
             for ann in annotations:
                 if iso and (ann.act_date is None or len(ann.act_date) == 4):
                     ann.act_date = iso
@@ -411,7 +414,7 @@ class SementeSync:
                 alterador = self.svc._resolve(WorkKey("federal", akind, anumero, aano))
             except Exception as exc:
                 complete = False
-                self._mark_indisponivel("alterador", akey, str(exc)[:200])
+                self._mark_indisponivel("alterador", akey, str(exc)[:200], getattr(exc, "categoria", None))
                 continue
             if alterador and not isinstance(alterador, list):
                 # Senado sem data: a epígrafe capturada do próprio ato alterador; ano deve bater com a remissão.
@@ -457,7 +460,7 @@ class SementeSync:
                         break
                     page += 1
                 except Exception as exc:
-                    self._mark_indisponivel("cvm_normas", f"indice:{tipo}:{page}", str(exc)[:200])
+                    self._mark_indisponivel("cvm_normas", f"indice:{tipo}:{page}", str(exc)[:200], getattr(exc, "categoria", None))
                     break
 
         # Instruções históricas
@@ -474,7 +477,7 @@ class SementeSync:
                     continue
                 self._capture_cvm_cand(conn_obj, cand)
             except Exception as exc:  # noqa: BLE001
-                self._mark_indisponivel("cvm_normas", chave, str(exc)[:200])
+                self._mark_indisponivel("cvm_normas", chave, str(exc)[:200], getattr(exc, "categoria", None))
 
     def _capture_cvm_cand(self, conn_obj: Any, cand: Any) -> None:
         chave = cand.key
@@ -521,7 +524,7 @@ class SementeSync:
                 payload={"url": resp.final_url or resp.url},
             )
         except Unavailable as exc:
-            self._mark_indisponivel("cvm_normas", chave, exc.reason[:200])
+            self._mark_indisponivel("cvm_normas", chave, exc.reason[:200], exc.categoria)
         except Exception as exc:  # noqa: BLE001
             self._mark_indisponivel("cvm_normas", chave, f"{type(exc).__name__}:{exc}"[:200])
 
@@ -551,7 +554,7 @@ class SementeSync:
                     continue
                 self._capture_bcb_cand(conn_obj, cand, chave)
             except Exception as exc:  # noqa: BLE001
-                self._mark_indisponivel("bcb", chave, str(exc)[:200])
+                self._mark_indisponivel("bcb", chave, str(exc)[:200], getattr(exc, "categoria", None))
 
         for tipo in recentes_cfg.get("tipos") or []:
             try:
@@ -585,9 +588,9 @@ class SementeSync:
                         continue
                     self._capture_bcb_cand(conn_obj, cand, chave)
             except Unavailable as exc:
-                self._mark_indisponivel("bcb", f"recentes:{tipo}", exc.reason[:200])
+                self._mark_indisponivel("bcb", f"recentes:{tipo}", exc.reason[:200], exc.categoria)
             except Exception as exc:  # noqa: BLE001
-                self._mark_indisponivel("bcb", f"recentes:{tipo}", str(exc)[:200])
+                self._mark_indisponivel("bcb", f"recentes:{tipo}", str(exc)[:200], getattr(exc, "categoria", None))
 
     def _capture_bcb_cand(self, conn_obj: Any, cand: Any, chave: str) -> None:
         try:
@@ -626,7 +629,7 @@ class SementeSync:
             )
             self.state.set("bcb", chave, status, payload={"url": resp.final_url or resp.url})
         except Unavailable as exc:
-            self._mark_indisponivel("bcb", chave, exc.reason[:200])
+            self._mark_indisponivel("bcb", chave, exc.reason[:200], exc.categoria)
         except Exception as exc:  # noqa: BLE001
             self._mark_indisponivel("bcb", chave, f"{type(exc).__name__}:{exc}"[:200])
 
@@ -658,7 +661,7 @@ class SementeSync:
                 else:
                     self.state.set("stj", chave, "capturado", payload={"inseridos_fts": n})
             except Exception as exc:
-                self._mark_indisponivel("stj", chave, str(exc)[:200])
+                self._mark_indisponivel("stj", chave, str(exc)[:200], getattr(exc, "categoria", None))
                 self._index_stj_from_fts(conn_obj, max_items=None)
 
     def _index_stj_from_fts(self, conn_obj: Any, *, max_items: int | None) -> None:
@@ -711,7 +714,7 @@ class SementeSync:
                 else:
                     self._mark_indisponivel("stj_doc", chave, "sem_evidencia_capturada")
             except Exception as exc:  # noqa: BLE001
-                self._mark_indisponivel("stj_doc", chave, str(exc)[:200])
+                self._mark_indisponivel("stj_doc", chave, str(exc)[:200], getattr(exc, "categoria", None))
         db.close()
 
     def sync_tcu(self) -> None:
@@ -762,9 +765,9 @@ class SementeSync:
             complete = all(self.state.done("tcu_doc", f"{_official_id(raw)}") for raw in items)
             self.state.set("tcu", chave, "capturado" if complete else "indisponivel", payload={"n": len(items)})
         except Unavailable as exc:
-            self._mark_indisponivel("tcu", chave, exc.reason[:200])
+            self._mark_indisponivel("tcu", chave, exc.reason[:200], exc.categoria)
         except Exception as exc:  # noqa: BLE001
-            self._mark_indisponivel("tcu", chave, str(exc)[:200])
+            self._mark_indisponivel("tcu", chave, str(exc)[:200], getattr(exc, "categoria", None))
 
     def sync_tjdft(self) -> None:
         if not self._want("tjdft"):
@@ -788,9 +791,9 @@ class SementeSync:
                 else:
                     self._mark_indisponivel("tjdft", chave, "candidato_sem_evidencia")
             except Unavailable as exc:
-                self._mark_indisponivel("tjdft", chave, exc.reason[:200])
+                self._mark_indisponivel("tjdft", chave, exc.reason[:200], exc.categoria)
             except Exception as exc:  # noqa: BLE001
-                self._mark_indisponivel("tjdft", chave, str(exc)[:200])
+                self._mark_indisponivel("tjdft", chave, str(exc)[:200], getattr(exc, "categoria", None))
 
     def _capture_juris(self, fonte: str, connector: Any, cand: Any) -> bool:
         key = str(cand.key)
@@ -809,7 +812,7 @@ class SementeSync:
             self._stats(fonte).parseados += 1
             return True
         except Exception as exc:
-            self._mark_indisponivel(checkpoint, key, str(exc)[:200])
+            self._mark_indisponivel(checkpoint, key, str(exc)[:200], getattr(exc, "categoria", None))
             return False
 
     def sync_cvm_colegiado(self) -> None:
@@ -843,7 +846,7 @@ class SementeSync:
                         self._capture_juris("cvm_colegiado", connector, single)
                         processed += 1
             except Exception as exc:
-                self._mark_indisponivel("cvm_colegiado", f"colegiado:{ano}", str(exc)[:200])
+                self._mark_indisponivel("cvm_colegiado", f"colegiado:{ano}", str(exc)[:200], getattr(exc, "categoria", None))
 
     def sync_stf(self) -> None:
         if not self._want("stf"):
@@ -885,9 +888,9 @@ class SementeSync:
                 self._stats("stf").parseados += 1
                 self._stats("stf").capturados += 1
             except Unavailable as exc:
-                self._mark_indisponivel("stf", chave, exc.reason[:200])
+                self._mark_indisponivel("stf", chave, exc.reason[:200], exc.categoria)
             except Exception as exc:  # noqa: BLE001
-                self._mark_indisponivel("stf", chave, str(exc)[:200])
+                self._mark_indisponivel("stf", chave, str(exc)[:200], getattr(exc, "categoria", None))
 
         if self.corpus.get("jurisprudencia", {}).get("stf_sumulas"):
             for base in SUMULA_BASES:
@@ -896,7 +899,7 @@ class SementeSync:
                     self._sleep()
                     cands = conn_obj.list_sumulas(base)
                 except Exception as exc:  # noqa: BLE001
-                    self._mark_indisponivel("stf", lista, getattr(exc, "reason", str(exc))[:200])
+                    self._mark_indisponivel("stf", lista, getattr(exc, "reason", str(exc))[:200], getattr(exc, "categoria", None))
                     continue
                 for cand in cands[: self.max_itens]:
                     if self.state.done("stf", cand.key) and not self._vencido("stf", cand.key):
@@ -916,7 +919,7 @@ class SementeSync:
                         else:
                             self._mark_indisponivel("stf", cand.key, "sem_evidencia_capturada")
                     except Exception as exc:  # noqa: BLE001
-                        self._mark_indisponivel("stf", cand.key, str(exc)[:200])
+                        self._mark_indisponivel("stf", cand.key, str(exc)[:200], getattr(exc, "categoria", None))
 
     def run(self) -> dict[str, Any]:
         self.progress("início sync semente")
@@ -930,17 +933,10 @@ class SementeSync:
             ("cvm_colegiado", self.sync_cvm_colegiado),
             ("stf", self.sync_stf),
         ]
-        queue = [(nome, fn, 0) for nome, fn in steps]
-        for nome, fn, attempt in queue:
+        for nome, fn in steps:
             if not self._want(nome):
                 continue
             try:
-                if attempt:
-                    from freoa_verifica.transport import circuit_retry_after
-                    wait_until = time.monotonic() + max(self.retry_backoff * 2 ** (attempt - 1), circuit_retry_after())
-                    self.progress(f"{nome}: reagendado, tentativa {attempt + 1}")
-                    while time.monotonic() < wait_until:
-                        time.sleep(min(1.0, wait_until - time.monotonic()))
                 if self.svc._offline():
                     self._mark_indisponivel(nome, "_fonte", "offline")
                     continue
@@ -949,14 +945,7 @@ class SementeSync:
                     self.state.set(nome, "_fonte", "concluido")
             except Exception as exc:  # noqa: BLE001 — falha não aborta o conjunto
                 log.exception("falha em fonte %s", nome)
-                self._mark_indisponivel(nome, "_fonte", str(exc)[:200])
-            # Uma nova passagem ao fim da fila reaproveita checkpoints bem sucedidos.
-            # Falhas permanentes e desafios não são repetidos automaticamente.
-            failures = [(f, k, reason) for (f, k), reason in self._failed.items()
-                        if self._stats(f).fonte == nome
-                        and (self.state.get(f, k) or {}).get("status") == "indisponivel"]
-            if attempt < 2 and any(_transient(reason) for _, _, reason in failures):
-                queue.append((nome, fn, attempt + 1))
+                self._mark_indisponivel(nome, "_fonte", str(exc)[:200], getattr(exc, "categoria", None))
         for st in self.stats.values():
             st.indisponiveis = 0
             st.motivos = {}
@@ -977,8 +966,9 @@ class SementeSync:
         return relatorio
 
 
-def _transient(reason: str) -> bool:
-    return any(part in reason.lower() for part in (
-        "timeout", "transportelento", "http_408", "http_429", "http_500",
-        "http_502", "http_503", "http_504", "circuit breaker", "transitorio",
-    ))
+def _transient(row: dict[str, Any]) -> bool:
+    """Pendência gravada com categoria `fonte_fora` é retomada na próxima execução (nunca na mesma)."""
+    try:
+        return json.loads(row["payload_json"] or "{}").get("categoria") == "fonte_fora"
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return False
