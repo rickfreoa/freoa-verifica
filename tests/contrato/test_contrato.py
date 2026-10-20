@@ -105,6 +105,25 @@ def test_negativo_campo_removido_de_um_unico_item_reprova():
     assert h.incompatibilidades("pesquisar_jurisprudencia", c, copy.deepcopy(c), DEPRECATED | EXPERIMENTAL) == []
 
 
+@pytest.mark.parametrize("valor", [42, None], ids=["numero", "null"])
+def test_negativo_tipo_ou_nulidade_de_um_unico_item_reprova(valor):
+    """B3-07: o agregado por caminho encobria `itens[0].ementa` com outro tipo ou null."""
+    c = _congelada(caso="pesquisar_jurisprudencia_textual")
+    assert len(c["itens"]) >= 2 and all(isinstance(i["ementa"], str) for i in c["itens"])
+    adulterada = copy.deepcopy(c)
+    adulterada["itens"][0]["ementa"] = valor
+    erros = h.incompatibilidades("pesquisar_jurisprudencia", c, adulterada, DEPRECATED | EXPERIMENTAL)
+    assert any(e.startswith("tipo mudou em itens[].ementa") for e in erros), erros
+
+
+def test_tipo_por_elemento_respeita_variantes_e_isencoes():
+    c = {"itens": [{"id": 1, "x": None}, {"id": 2, "x": "a"}]}
+    assert h.incompatibilidades("t", c, {"itens": [{"id": 1, "x": "agora com valor"}, {"id": 2, "x": "a"}]}) == []
+    mudou = {"itens": [{"id": 1, "x": None}, {"id": 2, "x": 5}]}
+    assert h.incompatibilidades("t", c, mudou)
+    assert h.incompatibilidades("t", c, mudou, frozenset({"t:itens[].x"})) == []
+
+
 def test_listas_heterogeneas_preservam_variantes_legitimas():
     c = {"itens": [{"id": 1, "ementa": "x"}, {"id": 2, "trecho_inteiro_teor": "y"}]}
     atual = {"itens": [{"id": 1, "ementa": "x", "novo": 1}, {"id": 2, "trecho_inteiro_teor": "y"}]}
