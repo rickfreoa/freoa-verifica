@@ -636,6 +636,7 @@ def _fetch_once(
     min_bytes_per_second: float | None = None,
     session: Session | None = None,
     sink: BinaryIO | None = None,
+    progresso: threading.Event | None = None,
 ) -> Response:
     original = url
     redirects: list[str] = []
@@ -659,6 +660,8 @@ def _fetch_once(
         # Prazo do soquete acompanha o timeout da captura (CKAN/STJ ~25–90s).
         connection = PinnedHTTPSConnection(host, ip, timeout=max(1.0, remaining))
         connection.capture_deadline = deadline
+        if progresso is not None:
+            progresso.clear()
         timed_out = threading.Event()
         slow = threading.Event()
         finished = threading.Event()
@@ -696,6 +699,8 @@ def _fetch_once(
             )
             network_state["socket"] = getattr(connection, "sock", None)
             response = connection.getresponse()
+            if progresso is not None:
+                progresso.set()
             if session is not None:
                 session.absorb_response(url, response)
             if response.status in (301, 302, 303, 307, 308):
@@ -805,8 +810,9 @@ def _fetch_once(
                 if slow.is_set():
                     raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response))
                 if timed_out.is_set() or time.monotonic() >= deadline:
-                    raise Timeout(
-                        "Prazo de captura esgotado", http=_failure_http(response)
+                    raise RespostaInvalida(
+                        "Prazo de captura esgotado após o início da resposta",
+                        http=_failure_http(response),
                     )
                 # read(n) pode aguardar n bytes apesar de receber dados continuamente.
                 # read1 devolve os bytes disponíveis, permitindo medir o progresso real.
@@ -828,8 +834,9 @@ def _fetch_once(
             if slow.is_set():
                 raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response))
             if timed_out.is_set() or time.monotonic() >= deadline:
-                raise Timeout(
-                    "Prazo de captura esgotado", http=_failure_http(response)
+                raise RespostaInvalida(
+                    "Prazo de captura esgotado após o início da resposta",
+                    http=_failure_http(response),
                 )
             if declared_size is not None and size != declared_size:
                 raise RespostaInvalida(
@@ -857,13 +864,9 @@ def _fetch_once(
             _attach_http(exc, response)
             raise
         except (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
-            por_prazo = (
-                slow.is_set() or isinstance(exc, TimeoutError) or timed_out.is_set()
-                or time.monotonic() >= deadline
-            )
-            if response is not None and not por_prazo:
+            if response is not None and not slow.is_set():
                 # Falha depois de recebido o status/cabeçalho (IncompleteRead, chunk inválido, reset
-                # no corpo): resposta inválida, não indisponibilidade ambiental (decisão 0045).
+                # ou prazo no corpo): resposta inválida, não indisponibilidade ambiental (decisão 0045).
                 raise RespostaInvalida(str(exc), http=_failure_http(response)) from exc
             if slow.is_set():
                 raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response)) from exc
@@ -936,6 +939,7 @@ def fetch(
     outcome: Queue = Queue(maxsize=1)
     cancelled = threading.Event()
     worker_done = threading.Event()
+    recebeu = threading.Event()  # status/cabeçalhos da tentativa corrente já chegaram
     temporary: list[Path] = []
 
     def worker() -> None:
@@ -977,6 +981,7 @@ def fetch(
                                 deadline=deadline,
                                 **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
                                 session=session,
+                                progresso=recebeu,
                                 **({"sink": output} if output is not None else {}),
                             )
                             break
@@ -1019,6 +1024,8 @@ def fetch(
         cancelled.set()
         if worker_done.is_set() and temporary:
             temporary[0].unlink(missing_ok=True)
+        if recebeu.is_set():
+            raise RespostaInvalida("Prazo de captura esgotado após o início da resposta")
         raise Timeout("Prazo de captura esgotado")
     try:
         result, error = outcome.get_nowait()
