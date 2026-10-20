@@ -14,6 +14,8 @@ from freoa_verifica.limites import EntradaInvalida, Sobrecarga
 from freoa_verifica.service import Verifica
 from freoa_verifica.textcmp import compare
 
+pytestmark = pytest.mark.usefixtures("planalto_offline")
+
 LOCAL = ("127.0.0.1", 50000)
 ROOT = Path(__file__).resolve().parent.parent
 

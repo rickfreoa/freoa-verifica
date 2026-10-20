@@ -127,3 +127,36 @@ def pytest_configure(config):
         config._tmp_path_factory = _InheritedTempPathFactory.from_config(config, _ispytest=True)
     # O teste do pacote instalado roda sem pytest.ini; registra o marcador aqui.
     config.addinivalue_line("markers", "live: testes que acessam fontes oficiais reais")
+
+
+@pytest.fixture
+def planalto_offline(monkeypatch):
+    """Planalto servido pela captura real da Lei 6.404/1976 (sem rede); outras obras: `http_404`.
+
+    A decisão 0058 impede cair no Senado após recusa do Planalto; testes que precisam de uma captura
+    federal não podem depender de a rede aceitar a requisição.
+    """
+    import hashlib
+
+    from freoa_verifica.connectors.base import Unavailable
+    from freoa_verifica.connectors.planalto import PlanaltoConnector
+    from freoa_verifica.transport import Response
+
+    entry = load_meta()["planalto_lei_6404_1976"]
+
+    class _PlanaltoOffline(PlanaltoConnector):
+        def fetch(self, candidate):
+            if candidate.key != "LEI:6404:1976":
+                raise Unavailable("http_404")
+            body = load_fixture("planalto_lei_6404_1976")
+            return Response(entry["url"], entry["url"], 200, {}, body, hashlib.sha256(body).hexdigest(),
+                            entry.get("capturado_em") or "2026-01-01T00:00:00+00:00", [], "text/html")
+
+    original = Verifica._get
+
+    def _get(self, connector_id):
+        if connector_id == "planalto" and not isinstance(self._connectors.get("planalto"), _PlanaltoOffline):
+            self._connectors["planalto"] = _PlanaltoOffline()
+        return original(self, connector_id)
+
+    monkeypatch.setattr(Verifica, "_get", _get)

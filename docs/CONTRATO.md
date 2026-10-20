@@ -73,6 +73,7 @@ Mapa de adaptadores:
 | `path` | string | sim | caminho canônico do dispositivo |
 | `span` | array de 2 number | sim | intervalo do trecho no texto oficial (só na dimensão `text`) |
 | `trecho_oficial` | string | sim | texto oficial confrontado |
+| `fontes_consultadas` | array de `{fonte, resultado, motivo, categoria}` | ausente | **experimental** (decisão 0058). Só presente quando uma fonte oficial anterior ficou indisponível (ou sem o ato) e outra respondeu; `url`, `sha256` e `capture_id` são os da fonte que respondeu. Em `verificar_texto` (itens de citação) e na confirmação de processo CNJ (`evidencia`), o mesmo campo declara as fontes anteriores. |
 
 `obter_dispositivo.evidencia` e `historico_dispositivo` usam `capture_id`, `fetched_at`, `sha256`, `url`. Nos itens de decisão, `evidencia` traz `capture_id`, `sha256`, `url` (ver inconsistência 3 sobre o que o `sha256` mede).
 

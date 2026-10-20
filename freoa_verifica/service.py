@@ -860,11 +860,13 @@ class Verifica:
             order = list(_LEGIS_CONNECTORS)
 
         errors: list[str] = []
-        for cid in order:
+        consultadas: list[dict] = []
+        for cid in dict.fromkeys(order):  # cada fonte uma vez por chamada (0058)
             try:
                 conn_obj = self._get(cid)
                 cand = conn_obj.resolve(key)
                 if cand is None:
+                    consultadas.append({"fonte": cid, "resultado": "ausente", "motivo": None, "categoria": None})
                     continue
                 resp = conn_obj.fetch(cand)
                 parsed = conn_obj.parse(resp)
@@ -884,18 +886,19 @@ class Verifica:
                 )
                 if cid == "cvm_normas":  # C2: página do ato sempre capturada como evidência de situação
                     situacao.registrar_cvm(self.conn, self.home, conn_obj, cand, rw_novo)
+                rw_novo.fontes_consultadas = consultadas
                 return rw_novo
             except IdentityMismatch:
                 raise
             except Unavailable as exc:
+                # Entre fontes oficiais distintas qualquer Unavailable permite a próxima, declarada em
+                # fontes_consultadas; dentro da mesma fonte só ausência explícita autoriza (decisão 0058).
                 errors.append(f"{cid}:{exc.reason}")
-                # Só ausência explícita (404/410) ou identidade não declarada autoriza a próxima fonte;
-                # desafio, recusa, fonte fora e resposta inválida interrompem (FIX7, sem fallback).
-                if exc.reason not in {"http_404", "http_410", "IDENTIDADE_NAO_DECLARADA"}:
-                    break
+                consultadas.append({"fonte": cid, "resultado": "indisponivel", "motivo": exc.reason,
+                                    "categoria": exc.categoria})
             except Exception as exc:  # noqa: BLE001 — captura sob demanda
                 errors.append(f"{cid}:{type(exc).__name__}")
-                break
+                break  # erro de programação ou de parse não passa adiante
         if errors:
             raise SourceUnavailable(";".join(errors[:3]))
         return None
@@ -1211,6 +1214,8 @@ class Verifica:
         out["caminho"] = cite.path
         out["url_oficial"] = resolved.url
         out["capture_id"] = resolved.capture_id
+        if resolved.fontes_consultadas:
+            out["fontes_consultadas"] = resolved.fontes_consultadas
         return out
 
     @_authenticated_output
@@ -1985,34 +1990,38 @@ class Verifica:
         try:
             # cjsg pode identificar julgamento; DataJud confirma somente o processo.
             connector = self._get('tjsp')
+            # TJSP e DataJud são fontes distintas: falha do TJSP não impede o DataJud, mas fica declarada (0058).
+            consultadas: list[dict] = []
             try:
                 found = connector.search(cite.raw, numero_processo=cite.raw, limite=5) if tribunal == 'tjsp' else []
+                for cand in found:
+                    response = connector.fetch(cand)
+                    parsed = connector.parse(response)
+                    if re.sub(r'\D','',parsed.cnj_number or '') != digits:
+                        continue
+                    if judgment_date and parsed.judgment_date != judgment_date:
+                        continue
+                    result = self._index_candidate_juris(connector,cand)
+                    if result and result.get('capture_id'):
+                        return 'encontrada', result
             except Unavailable as exc:
-                if exc.reason not in {"http_404", "http_410"}:
-                    raise  # falha do TJSP não autoriza consultar o DataJud no lugar (FIX7)
-                found = []
-            for cand in found:
-                response = connector.fetch(cand)
-                parsed = connector.parse(response)
-                if re.sub(r'\D','',parsed.cnj_number or '') != digits:
-                    continue
-                if judgment_date and parsed.judgment_date != judgment_date:
-                    continue
-                result = self._index_candidate_juris(connector,cand)
-                if result and result.get('capture_id'):
-                    return 'encontrada', result
-            connector = self._get('datajud')
-            cand = connector.resolve({'tribunal':tribunal,'numero':cite.raw})
-            if not cand:
-                return 'nao_confirmado_no_acervo', {'escopo':'processo; não julgamento'}
-            resp = connector.fetch(cand)
-            parsed = connector.parse(resp)
-            if re.sub(r'\D','', parsed.cnj_number or '') != digits:
-                return 'indisponivel', {'motivo':'identidade_divergente'}
-            self.conn.execute("INSERT OR IGNORE INTO source(id,authority,profile,hosts_json) VALUES (?,?,?,?)", (connector.id,connector.authority,connector.id,json.dumps(sorted(connector.hosts))))
-            self.conn.commit()
-            cap = repo.save_capture(self.conn,resp,connector.id,home=self.home)
-            return 'processo_confirmado', {'capture_id':cap,'sha256':resp.sha256,'url':resp.final_url,'fetched_at':resp.fetched_at,'escopo':'processo; não julgamento'}
+                consultadas.append({'fonte':'tjsp','resultado':'indisponivel','motivo':exc.reason,'categoria':exc.categoria})
+            declaradas = {'fontes_consultadas':consultadas} if consultadas else {}
+            try:
+                connector = self._get('datajud')
+                cand = connector.resolve({'tribunal':tribunal,'numero':cite.raw})
+                if not cand:
+                    return 'nao_confirmado_no_acervo', {'escopo':'processo; não julgamento', **declaradas}
+                resp = connector.fetch(cand)
+                parsed = connector.parse(resp)
+                if re.sub(r'\D','', parsed.cnj_number or '') != digits:
+                    return 'indisponivel', {'motivo':'identidade_divergente', **declaradas}
+                self.conn.execute("INSERT OR IGNORE INTO source(id,authority,profile,hosts_json) VALUES (?,?,?,?)", (connector.id,connector.authority,connector.id,json.dumps(sorted(connector.hosts))))
+                self.conn.commit()
+                cap = repo.save_capture(self.conn,resp,connector.id,home=self.home)
+                return 'processo_confirmado', {'capture_id':cap,'sha256':resp.sha256,'url':resp.final_url,'fetched_at':resp.fetched_at,'escopo':'processo; não julgamento', **declaradas}
+            except Unavailable as exc:
+                return 'indisponivel', {'motivo':exc.reason,'escopo':'processo; não julgamento', **declaradas, **exc.classificacao()}
         except Unavailable as exc:
             return 'indisponivel', {'motivo':exc.reason,'escopo':'processo; não julgamento', **exc.classificacao()}
 
