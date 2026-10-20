@@ -15,6 +15,8 @@ MOTIVO = "HOME_EM_USO_POR_OUTRO_PROCESSO"
 LOCAL = ("127.0.0.1", 50000)
 CIT = "art. 1 da Lei 6.404/1976"
 
+pytestmark = pytest.mark.usefixtures("planalto_offline")
+
 _FILHO = textwrap.dedent("""
     import sys
     from freoa_verifica.service import Verifica

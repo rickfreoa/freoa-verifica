@@ -11,6 +11,8 @@ import pytest
 from freoa_verifica import registro as reg
 from freoa_verifica.service import Verifica
 
+pytestmark = pytest.mark.usefixtures("planalto_offline")
+
 MARCADOR = "ZZCONFIDENCIALMARCADOR9917"
 CITACAO = f"art. 254-A da Lei 6.404/76 {MARCADOR}"
 
