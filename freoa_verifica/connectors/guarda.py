@@ -90,6 +90,7 @@ class GuardaExecucao:
     def executar(
         self, method: str, url: str, body: bytes | None, *, cacheavel: bool, baixar: Callable,
         revalidar: Callable | None = None, politica: object = None, entrada: Callable | None = None,
+        cabecalhos: dict[str, str] | None = None,
     ):
         """`entrada()` valida a URL solicitada nesta chamada, antes de qualquer cache (FIX12/F-16).
 
@@ -104,7 +105,7 @@ class GuardaExecucao:
         bloqueio = self.bloqueios.get(host)
         if bloqueio is not None:
             raise _copia(bloqueio, url=url, bloqueio_fonte=host)
-        chave = identidade_requisicao(method, url, body)
+        chave = identidade_requisicao(method, url, body, cabecalhos)
         if cacheavel:
             falha = self._falhas.get(chave)
             if falha is not None and falha[1] == politica:

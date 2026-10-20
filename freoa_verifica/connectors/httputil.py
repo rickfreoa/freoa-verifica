@@ -63,6 +63,8 @@ def connector_fetch(
         revalidar=lambda resp: _revalidar(resp, url, **kw),
         entrada=lambda: _validar_entrada(url, kw["hosts"], kw.get("path_prefixes")),
         politica=_politica(kw),
+        # cabeçalhos do chamador (e o modo de User-Agent, que muda o que é enviado) fazem parte da identidade
+        cabecalhos={**(kw.get("headers") or {}), "\0user-agent-modo": str(kw.get("user_agent", ""))},
     )
 
 

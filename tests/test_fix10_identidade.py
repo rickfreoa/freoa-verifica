@@ -34,14 +34,16 @@ def test_identidade_igual_a_da_variante_normal(nome):
 
 
 def test_percent_encoding_de_nao_reservado_e_mesma_identidade():
+    # só o caminho é canonicalizado; a query vai como enviada (FIX13/F-16)
     a = transport.identidade_requisicao("GET", f"https://{HOST}/a~b?q=%7e&p=%2f")
-    b = transport.identidade_requisicao("GET", f"https://{HOST}/a%7Eb?q=~&p=%2F")
+    b = transport.identidade_requisicao("GET", f"https://{HOST}/a%7Eb?q=%7e&p=%2f")
     assert a == b
+    assert a != transport.identidade_requisicao("GET", f"https://{HOST}/a~b?q=~&p=%2f")
 
 
-def test_query_ordenada_mas_valores_distintos_seguem_distintos():
+def test_query_como_enviada_e_valores_distintos_seguem_distintos():
     base = f"https://{HOST}/x"
-    assert transport.identidade_requisicao("GET", base + "?a=1&b=2") == transport.identidade_requisicao("GET", base + "?b=2&a=1")
+    assert transport.identidade_requisicao("GET", base + "?a=1&b=2") != transport.identidade_requisicao("GET", base + "?b=2&a=1")
     assert transport.identidade_requisicao("GET", base + "?a=1") != transport.identidade_requisicao("GET", base + "?a=2")
     assert transport.identidade_requisicao("GET", base) != transport.identidade_requisicao("POST", base)
     assert transport.identidade_requisicao("GET", base) != transport.identidade_requisicao("GET", base + "/y")
