@@ -2036,11 +2036,17 @@ class Verifica:
         cursor: str | None = None,
     ) -> dict[str, Any]:
         cnj = re.fullmatch(r"\s*(?:processo\s+(?:n[º°.]?\s*)?)?(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})\s*", q, re.I)
-        if cnj:
-            return self._juris_por_cnj(q, cnj.group(1))
-        key = self._chave_processo(q)
-        if key is not None:
-            return self._juris_por_numero(q, key)
+        key = None if cnj else self._chave_processo(q)
+        if cnj or key is not None:
+            # Modo por identificador: data, autoridade e cursor não se aplicam; tribunal e limite, quando cabem (B2-04).
+            nao_aplicados = [{"filtro": f, "motivo": "modo_por_identificador"}
+                             for f, v in (("desde", desde), ("ate", ate), ("autoridade_min", autoridade_min),
+                                          ("cursor", cursor)) if v]
+            tribunais_norm = None if tribunais is None else {normalize_court(t) for t in tribunais}
+            limite = max(1, min(int(limite), 50))
+            if cnj:
+                return self._juris_por_cnj(q, cnj.group(1), tribunais_norm, limite, nao_aplicados)
+            return self._juris_por_numero(q, key, tribunais_norm, limite, nao_aplicados)
         filtro_da_consulta = None
         if tribunais is None:
             # Sigla de tribunal solta na consulta ("exclusão de sócio TJDFT") é filtro, não termo: como termo
@@ -2067,16 +2073,23 @@ class Verifica:
     # Segmento J.TR do CNJ -> conector com busca oficial pelo número (só onde existe).
     _CNJ_CONECTORES = {"8.07": "tjdft"}
 
-    def _juris_por_cnj(self, q: str, cnj: str) -> dict[str, Any]:
-        """Número CNJ isolado: só o próprio processo, nunca outros (auditoria comparativa 1.2.0)."""
+    def _juris_por_cnj(self, q: str, cnj: str, tribunais=None, limite: int = 10,
+                       nao_aplicados: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        """Número CNJ isolado: só o próprio processo, nunca outros (auditoria comparativa 1.2.0).
+
+        `tribunais` (siglas normalizadas) e `limite` valem aqui; os demais filtros vêm em `nao_aplicados`."""
         from freoa_verifica.citation import validate_cnj_dv
 
         base = {"consulta": q, "modo_busca": "numero_cnj", "itens": [], "resultados": [], "relacionados": [],
                 "truncado": False, "cursor": None, "fontes": {}, "cobertura": [],
+                "filtros_nao_aplicados": list(nao_aplicados or []),
                 "rules_version": AUTHORITY_RULES_VERSION}
         if not validate_cnj_dv(cnj):
             return {**base, "status": "formato_invalido", "motivo": "CNJ_DIGITO_VERIFICADOR_INVALIDO"}
         conector_id = self._CNJ_CONECTORES.get(cnj[16:20])
+        if tribunais is not None and conector_id and normalize_court(conector_id) not in tribunais:
+            return {**base, "status": "nao_confirmado_no_acervo", "escopo": "tribunal fora do filtro",
+                    "aviso": "o tribunal do número CNJ está fora do filtro de tribunais; nada foi consultado"}
         fontes: dict[str, Any] = {}
         vivo: dict[str, Any] | None = None
         motivo_vivo: str | None = None
@@ -2110,9 +2123,14 @@ class Verifica:
             for full in repo.decisions_by_number(self.conn, row["court"], cnj):
                 if full["decision_id"] == r["decision_id"]:
                     itens.append({**self._decisao_item(full), "relacao": "exato"})
+        if tribunais is not None:
+            itens = [i for i in itens if normalize_court(i["tribunal"] or "") in tribunais]
+        cortou = len(itens) > limite
+        itens = itens[:limite]
         # Tribunal implicado: o do conector do segmento J.TR; senão o do acervo; senão o próprio segmento (sem suporte).
         base["cobertura"] = [self._item_cobertura(
-            conector_id or tribunal_do_acervo or f"CNJ {cnj[16:20]}", vivo=vivo, motivo_vivo=motivo_vivo)]
+            conector_id or tribunal_do_acervo or f"CNJ {cnj[16:20]}", vivo=vivo, motivo_vivo=motivo_vivo,
+            truncado_local=cortou)]
         base["truncado"] = self._truncado_da_cobertura(base["cobertura"])
         if itens:
             return {**base, "status": "encontrada", "itens": itens, "resultados": itens,
@@ -2138,14 +2156,22 @@ class Verifica:
             return cite.decision
         return None
 
-    def _juris_por_numero(self, q: str, key) -> dict[str, Any]:
-        """A6: lookup exato por classe e número no acervo; nunca mistura outros processos."""
-        status, evidence, filtradas = self._decision_evidence_rows(key)
-        ids_ok = {r["id"] for r in filtradas}
-        base = {"consulta": q, "modo_busca": "numero", "status": status,
+    def _juris_por_numero(self, q: str, key, tribunais=None, limite: int = 10,
+                          nao_aplicados: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        """A6: lookup exato por classe e número no acervo; nunca mistura outros processos.
+
+        `tribunais` (siglas normalizadas) e `limite` valem aqui; os demais filtros vêm em `nao_aplicados`."""
+        base = {"consulta": q, "modo_busca": "numero", "status": "nao_confirmado_no_acervo",
                 "itens": [], "resultados": [], "relacionados": [], "resultados_textuais": [],
                 "truncado": False, "cursor": None, "fontes": {},
+                "filtros_nao_aplicados": list(nao_aplicados or []),
                 "rules_version": AUTHORITY_RULES_VERSION}
+        if tribunais is not None and key.court and normalize_court(key.court) not in tribunais:
+            return {**base, "cobertura": [],
+                    "aviso": "o tribunal da classe e número está fora do filtro de tribunais; nada foi consultado"}
+        status, evidence, filtradas = self._decision_evidence_rows(key)
+        base["status"] = status
+        ids_ok = {r["id"] for r in filtradas}
         # Só o acervo é consultado por classe e número; a fonte ao vivo, mesmo existindo, não é (nao_suportado).
         cobertura = [self._item_cobertura(key.court, vivo=None, motivo_vivo="nao_suportado")] if key.court else []
         if status == "nao_confirmado_no_acervo":
@@ -2170,6 +2196,9 @@ class Verifica:
             item["relacao"] = "exato"
             itens.append(item)
         rel = [{**self._decisao_item(r), "relacao": "incidente_do_mesmo_processo"} for r in incidentes]
+        if len(itens) > limite:
+            itens = itens[:limite]
+            cobertura = [dict(c, truncado_local=True) for c in cobertura]
         return {**base, "itens": itens, "resultados": itens, "relacionados": rel, "cobertura": cobertura,
                 "truncado": self._truncado_da_cobertura(cobertura),
                 "total_parcial": len(itens), "evidencia": evidence}

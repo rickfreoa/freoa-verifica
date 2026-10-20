@@ -6,6 +6,7 @@ Este documento diz, por filtro público e por conector, **onde** o filtro age: p
 
 `pesquisar_jurisprudencia` ganhou, de forma aditiva e **experimental** (pode mudar na 1.x sem o ciclo de aviso de `stable`):
 
+- Nos modos por identificador (número CNJ; classe e número), `desde`, `ate`, `autoridade_min` e `cursor` não se aplicam e entram em `filtros_nao_aplicados` como `{"filtro", "motivo": "modo_por_identificador"}` (sem `fonte`); `tribunais` restringe o resultado (tribunal do identificador fora do filtro: nada é consultado, `nao_confirmado_no_acervo`) e `limite` corta os itens, marcando `truncado_local` (B2-04).
 - `filtros_nao_aplicados`: lista, sempre presente (vazia quando nada a declarar), de `{"fonte", "filtro", "compensacao"}`. Um item significa que a fonte consultada ao vivo não aplicou aquele filtro na origem; `compensacao: "filtro_local_sobre_o_recuperado"` diz que o serviço o aplica depois, em SQL, só ao que a fonte devolveu. A janela recuperada é finita (uma página da fonte), então **a ausência de um item no resultado não prova que a fonte não o tenha**.
 - `fontes.<id>.filtros`: para cada filtro pedido, `"remoto"`, `"local"` ou `"nao_suportado"`.
 
