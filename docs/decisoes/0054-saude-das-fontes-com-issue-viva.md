@@ -27,7 +27,19 @@ era indistinguível de uma execução saudável.
 5. O workflow perde `continue-on-error` e `|| true`; o passo do script roda com `if: always()` e o job
    termina com o código dele. Permissões: `issues: write`, `contents: read`.
 
+6. (Emenda B2-06 a B2-08.) O hook consolida cada teste só depois de setup, call e teardown (o pior
+   estado prevalece). O script recusa (exit 3, antes de qualquer chamada à API) XML solicitado e ausente
+   e contradições: `completa` com fonte ou teste `not_run`, ou estado de fonte que ignora seus testes.
+7. O workflow usa `concurrency: {group: saude-das-fontes, cancel-in-progress: false}`: uma execução
+   por vez, sem cancelar a em curso. O corpo da issue guarda também `<!-- execucao: {run_id, inicio} -->`;
+   o script, ao reler a issue, não escreve (nem comenta) se o `inicio` gravado for posterior ao seu.
+
 ## Limites
 
-Sem bloqueio de concorrência no GitHub, duas execuções simultâneas ainda têm janela mínima entre a
-releitura e a escrita; o pior caso é um comentário duplicado, nunca estado perdido.
+A API de issues não oferece escrita condicional. A releitura sozinha **não** impede perda de estado:
+duas execuções intercaladas (A relê, B grava, A publica) deixavam o sucesso antigo de A sobre a
+regressão mais nova de B, e não apenas um comentário duplicado, como esta decisão afirmava. A
+serialização pelo workflow elimina a corrida entre execuções do próprio workflow; a recusa por `inicio`
+impede que resultado mais antigo sobrescreva o mais novo já gravado. Resta uma janela mínima entre a
+última releitura e o `PATCH` para escritor fora do grupo (execução manual local com `--issue`); o
+efeito é limitado a uma semana, até a próxima execução do workflow.

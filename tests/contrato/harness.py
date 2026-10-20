@@ -254,6 +254,29 @@ def _isento(ferramenta: str, caminho: str, isentos: frozenset[str]) -> bool:
     return any(chave == i or chave.startswith((i + ".", i + "[]")) for i in isentos)
 
 
+def _por_elemento(ferramenta: str, c: Any, a: Any, caminho: str, isentos: frozenset[str], em_lista: bool) -> list[str]:
+    """Campos de cada elemento de lista da congelada precisam existir no elemento de mesmo índice da atual.
+
+    O achatamento une os caminhos de todos os elementos, e um item que ainda tem o campo encobre a remoção em
+    outro (B2-05). Variantes legítimas (itens com campos diferentes) são preservadas porque a comparação é item a
+    item, não contra a união. Só índices presentes nas duas listas; o tamanho da lista não é contrato."""
+    erros: list[str] = []
+    if isinstance(c, dict) and isinstance(a, dict):
+        for k, v in c.items():
+            p = f"{caminho}.{k}" if caminho else k
+            if _isento(ferramenta, p, isentos):
+                continue
+            if k not in a:
+                if em_lista:
+                    erros.append(f"campo removido: {p}")
+            else:
+                erros.extend(_por_elemento(ferramenta, v, a[k], p, isentos, em_lista))
+    elif isinstance(c, list) and isinstance(a, list):
+        for i, (vc, va) in enumerate(zip(c, a)):
+            erros.extend(f"{e} (elemento {i})" for e in _por_elemento(ferramenta, vc, va, f"{caminho}[]", isentos, True))
+    return erros
+
+
 def incompatibilidades(ferramenta: str, congelada: Any, atual: Any, isentos: frozenset[str] = frozenset()) -> list[str]:
     """Problemas da resposta atual frente à congelada (lista vazia = compatível).
 
@@ -270,6 +293,7 @@ def incompatibilidades(ferramenta: str, congelada: Any, atual: Any, isentos: fro
             continue
         if not tipos <= a[caminho] | {"null"} or ("null" not in tipos and a[caminho] == {"null"}):
             erros.append(f"tipo mudou em {caminho}: {sorted(tipos)} -> {sorted(a[caminho])}")
+    erros.extend(_por_elemento(ferramenta, congelada, atual, "", isentos, False))
     ef, ea = estados(congelada), estados(atual)
     for caminho, valores in ef.items():
         if _isento(ferramenta, caminho, isentos):

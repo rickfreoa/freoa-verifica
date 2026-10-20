@@ -18,16 +18,30 @@ pytestmark = pytest.mark.repositorio
 TESTES = Path(__file__).resolve().parent
 # Único arquivo de scripts/ que o job copia (ci.yml).
 PERMITIDO = "instalar-freoa-verifica.ps1"
-CAMINHO = re.compile(r"(?:^|[\\/])(?:scripts|freoa_verifica)(?:[\\/]|$)")
+CAMINHO = re.compile(r"(?:^|[\\/])(?:docs|scripts|freoa_verifica)(?:[\\/]|$)")
 
 
 def _caminhos_proibidos(no: ast.AST) -> list[str]:
     achados = []
+    pais = {id(f): p for p in ast.walk(no) for f in ast.iter_child_nodes(p)}
     for n in ast.walk(no):
         if isinstance(n, ast.Constant) and isinstance(n.value, str) and CAMINHO.search(n.value):
-            if PERMITIDO not in n.value:
-                achados.append(n.value)
+            if PERMITIDO in n.value:
+                continue
+            # "docs" solto é chave de dicionário em muito teste; só conta como operando de caminho
+            if not re.search(r"[\\/]", n.value) and not _operando_de_caminho(pais.get(id(n))):
+                continue
+            achados.append(n.value)
     return achados
+
+
+def _operando_de_caminho(pai: ast.AST | None) -> bool:
+    if isinstance(pai, ast.BinOp):
+        return isinstance(pai.op, ast.Div)
+    if isinstance(pai, ast.Call):
+        f = pai.func
+        return (f.id if isinstance(f, ast.Name) else getattr(f, "attr", "")) in {"Path", "open", "joinpath", "join"}
+    return False
 
 
 def _selecionados(copia: Path) -> dict[str, set[str]]:
@@ -74,6 +88,23 @@ def _violacoes(copia: Path, selecao: dict[str, set[str]]) -> list[str]:
     return violacoes
 
 
+def test_selecao_ancorada_em_arquivo_roda_na_copia_isolada():
+    """Execução efetiva (B2-02): os arquivos que resolvem caminho por `__file__` rodam numa cópia só com
+    `tests/` e o instalador, como no job da wheel; leitura de `docs/`, `scripts/` ou do pacote por caminho falha."""
+    with tempfile.TemporaryDirectory() as tmp:
+        copia = Path(tmp)
+        shutil.copytree(TESTES, copia / "tests", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        (copia / "scripts").mkdir()
+        shutil.copy(TESTES.parent / "scripts" / PERMITIDO, copia / "scripts" / PERMITIDO)
+        alvos = sorted(a for a in _selecionados(copia) if "__file__" in (copia / a).read_text(encoding="utf-8-sig"))
+        alvos = [a for a in alvos if Path(a).name != Path(__file__).name]
+        r = subprocess.run(
+            [sys.executable, "-m", "pytest", *alvos, "-q", "-m", "not live and not repositorio", "-p", "no:cacheprovider"],
+            cwd=copia, env={**os.environ, "PYTHONSAFEPATH": "1"}, capture_output=True, text=True, timeout=900,
+        )
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-1000:]
+
+
 def test_violacoes_acusa_teste_selecionado_com_caminho(tmp_path):
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_x.py").write_text(
@@ -87,3 +118,9 @@ def test_detector_pega_caminho_proibido():
     assert _caminhos_proibidos(ast.parse('p = RAIZ / "scripts" / "x.py"'))
     assert _caminhos_proibidos(ast.parse('p = "freoa_verifica/captura.py"'))
     assert not _caminhos_proibidos(ast.parse('p = "scripts/instalar-freoa-verifica.ps1"'))
+
+
+def test_detector_docs_so_como_operando_de_caminho():
+    assert _caminhos_proibidos(ast.parse('p = Path(__file__).parents[2] / "docs" / "CONTRATO.md"'))
+    assert _caminhos_proibidos(ast.parse('open("docs/CONTRATO.md")'))
+    assert not _caminhos_proibidos(ast.parse('d = {"docs": []}; x = i.get("docs")'))

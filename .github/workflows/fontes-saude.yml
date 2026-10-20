@@ -12,6 +12,11 @@ permissions:
   issues: write
   contents: read
 
+# Uma execução por vez: a releitura da issue não é escrita condicional (decisão 0054).
+concurrency:
+  group: saude-das-fontes
+  cancel-in-progress: false
+
 jobs:
   live:
     runs-on: ubuntu-latest

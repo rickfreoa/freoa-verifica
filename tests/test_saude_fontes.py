@@ -125,6 +125,36 @@ def test_junit_com_falha_que_o_json_nao_registra_sai_3(tmp_path):
     assert gh.chamadas == []
 
 
+def test_junit_solicitado_e_ausente_sai_3_antes_da_api(tmp_path):
+    gh = FakeGh(corpo_de(OK))
+    assert rodar(tmp_path, relatorio(OK), gh, "--junit", str(tmp_path / "ausente.xml")) == 3
+    assert gh.chamadas == []
+
+
+def _com_testes(fonte_estado, *testes_estados):
+    rel = relatorio({"bcb": ("ok", None)})
+    rel["fontes"]["bcb"]["estado"] = fonte_estado
+    rel["fontes"]["bcb"]["testes"] = [{"nome": f"t{i}", "estado": e} for i, e in enumerate(testes_estados)]
+    return rel
+
+
+@pytest.mark.parametrize("rel", [
+    relatorio({"bcb": ("not_run", None)}),                 # completa: true com fonte not_run
+    _com_testes("ok", "ok", "not_run"),                    # teste sem fase final
+    _com_testes("ok", "ok", "regressao"),                  # fonte verde com teste vermelho (B2-06)
+    _com_testes("ok", "ok", None),                         # teste sem estado
+], ids=["fonte_not_run", "teste_not_run", "fonte_ignora_teste", "teste_sem_estado"])
+def test_contradicoes_do_relatorio_saem_3_sem_chamar_a_api(tmp_path, rel):
+    gh = FakeGh(corpo_de(OK))
+    assert rel["completa"] is True
+    assert rodar(tmp_path, rel, gh) == 3
+    assert gh.chamadas == []
+
+
+def test_relatorio_coerente_com_testes_passa(tmp_path):
+    assert rodar(tmp_path, _com_testes("regressao", "ok", "regressao"), FakeGh(corpo_de(OK))) == 1
+
+
 @pytest.mark.parametrize("falha", ["GET", "POST", "PATCH"])
 def test_falha_da_api_sai_2_sem_perder_estado(tmp_path, falha):
     antigo = corpo_de(OK)
@@ -203,3 +233,40 @@ def test_conftest_skip_comum_e_sessao_interrompida_nao_sao_completas(pytester):
     int_ = _sessao(pytester, ["assert False", "pass"], extra=("-x",))
     assert int_["completa"] is False  # o segundo teste não rodou
     assert int_["fontes"]["bcb"]["estado"] == "regressao"
+
+
+# --- B2-08: serialização e estado antigo ----------------------------------------------------
+
+def test_workflow_serializa_as_execucoes_sem_cancelar():
+    yml = (RAIZ / ".github" / "workflows" / "fontes-saude.yml").read_text(encoding="utf-8")
+    assert "concurrency:" in yml and "group: saude-das-fontes" in yml and "cancel-in-progress: false" in yml
+
+
+def _rel_em(inicio, run_id, fontes):
+    return {**relatorio(fontes), "inicio": inicio, "run_id": run_id}
+
+
+def test_estado_grava_run_id_e_inicio(tmp_path):
+    gh = FakeGh()
+    rodar(tmp_path, _rel_em("2026-10-19T09:00:00+00:00", "11", OK), gh)
+    assert sf._execucao(gh.issue["body"]) == {"inicio": "2026-10-19T09:00:00+00:00", "run_id": "11"}
+
+
+def test_execucao_antiga_nao_apaga_a_regressao_da_mais_nova(tmp_path):
+    nova = _rel_em("2026-10-19T10:00:00+00:00", "12", REGRESSAO)
+    gh = FakeGh(sf.corpo(nova, sf.conjunto(nova)))
+    antigo = gh.issue["body"]
+    # A (mais antiga, sucesso) chega depois de B (mais nova, regressão) ter gravado
+    assert rodar(tmp_path, _rel_em("2026-10-19T09:00:00+00:00", "11", OK), gh) == 0
+    assert gh.escritas() == [] and gh.issue["body"] == antigo and gh.comentarios == []
+    assert sf._anterior(gh.issue["body"]) == sf.conjunto(nova)
+
+
+def test_execucao_mais_nova_substitui_a_antiga_e_corpo_sem_marcador_e_sobrescrito(tmp_path):
+    antiga = _rel_em("2026-10-19T09:00:00+00:00", "11", OK)
+    gh = FakeGh(sf.corpo(antiga, sf.conjunto(antiga)))
+    assert rodar(tmp_path, _rel_em("2026-10-19T10:00:00+00:00", "12", REGRESSAO), gh) == 1
+    assert sf._execucao(gh.issue["body"])["run_id"] == "12" and len(gh.comentarios) == 1
+    legado = FakeGh(corpo_de(OK).split("<!-- execucao")[0])  # corpo da versão anterior: sem marcador
+    assert rodar(tmp_path, _rel_em("2026-10-19T10:00:00+00:00", "12", OK), legado) == 0
+    assert sf._execucao(legado.issue["body"])["run_id"] == "12"

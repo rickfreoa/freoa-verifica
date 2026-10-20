@@ -3,7 +3,8 @@
 
 Códigos de saída: 0 tudo ok ou só indisponibilidade ambiental; 1 há `regressao` ou `recusa_identificado`;
 2 erro do próprio script (inclui falha da API); 3 execução incompleta (JSON ausente, truncado ou
-`completa` falso; a issue não é tocada).
+`completa` falso, JUnit pedido e ausente, ou contradição entre `completa`, fontes e testes; a issue não é
+tocada nem a API chamada).
 
 A API do GitHub é usada por `gh api`; o token vem do ambiente (`GH_TOKEN`), nunca do código.
 """
@@ -17,12 +18,15 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 
 ROTULO = "saude-das-fontes"
 TITULO = "Saúde das fontes oficiais"
 _MARCADOR = re.compile(r"<!-- estado: (\{.*?\}) -->", re.S)
+_EXECUCAO = re.compile(r"<!-- execucao: (\{.*?\}) -->", re.S)
 _ESTADOS = {"ok", "unavailable", "regressao", "not_run"}
+_PRIORIDADE = ("regressao", "unavailable", "not_run", "ok")  # igual à de tests/live/conftest.py
 
 EXIT_OK, EXIT_REGRESSAO, EXIT_ERRO, EXIT_INCOMPLETA = 0, 1, 2, 3
 
@@ -50,6 +54,19 @@ def gh_api(metodo: str, caminho: str, corpo: dict | None = None):
         raise GhErro("resposta da API não é JSON") from exc
 
 
+def _sem_contradicao(fontes: dict) -> None:
+    """`completa: true` não convive com fonte ou teste `not_run`, nem com estado de fonte que ignora seus testes."""
+    for nome, f in fontes.items():
+        testes = f.get("testes") or []
+        estados = [t.get("estado") if isinstance(t, dict) else None for t in testes]
+        if f["estado"] == "not_run" or "not_run" in estados:
+            raise Incompleta(f"completa=true com {nome} not_run")
+        if any(e not in _ESTADOS for e in estados):
+            raise Incompleta(f"teste de {nome} sem estado final")
+        if estados and min(estados, key=_PRIORIDADE.index) != f["estado"]:
+            raise Incompleta(f"estado de {nome} contradiz seus testes")
+
+
 def carregar(caminho: Path, junit: Path | None) -> dict:
     try:
         rel = json.loads(caminho.read_text(encoding="utf-8"))
@@ -59,7 +76,10 @@ def carregar(caminho: Path, junit: Path | None) -> dict:
     if (not isinstance(fontes, dict) or not fontes or rel.get("completa") is not True
             or any(not isinstance(f, dict) or f.get("estado") not in _ESTADOS for f in fontes.values())):
         raise Incompleta("relatório inválido ou com completa != true")
-    if junit is not None and junit.exists():
+    _sem_contradicao(fontes)
+    if junit is not None:
+        if not junit.exists():  # XML pedido e ausente: o runner não terminou o que devia registrar
+            raise Incompleta("JUnit solicitado e ausente")
         try:
             raiz = ET.parse(junit).getroot()
         except ET.ParseError as exc:
@@ -93,7 +113,26 @@ def corpo(rel: dict, atual: dict) -> str:
     return "\n".join([
         f"Commit: `{rel.get('commit')}` · Execução: {rel.get('fim')}", "", *linhas, "",
         f"<!-- estado: {json.dumps(atual, sort_keys=True, ensure_ascii=False)} -->",
+        f"<!-- execucao: {json.dumps({'run_id': rel.get('run_id'), 'inicio': rel.get('inicio')}, sort_keys=True)} -->",
     ])
+
+
+def _execucao(texto: str | None) -> dict:
+    m = _EXECUCAO.search(texto or "")
+    try:
+        return json.loads(m.group(1)) if m else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _posterior(gravado, nosso) -> bool:
+    """O `inicio` gravado é posterior ao nosso? Sem `inicio` gravado (corpo antigo), nunca."""
+    if not gravado:
+        return False
+    try:
+        return datetime.fromisoformat(gravado) > datetime.fromisoformat(nosso)
+    except (TypeError, ValueError):
+        return str(gravado) > str(nosso)
 
 
 def _anterior(texto: str | None) -> dict | None:
@@ -127,6 +166,9 @@ def atualizar_issue(gh, repo: str, rel: dict) -> str:
         return "issue criada"
     # Outra execução pode ter escrito desde a primeira leitura: relê imediatamente antes de decidir e escrever.
     issue = gh("GET", f"repos/{repo}/issues/{issue['number']}") or issue
+    if _posterior(_execucao(issue.get("body")).get("inicio"), rel.get("inicio")):
+        # Execução mais nova já gravou: escrever o nosso resultado antigo apagaria o dela (B2-08).
+        return "issue não escrita: o estado gravado é de execução posterior"
     antes = _anterior(issue.get("body"))
     comentou = antes != atual
     # Comentário antes do corpo: se o PATCH falhar, o estado antigo permanece e a próxima execução repete.
