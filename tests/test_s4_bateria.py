@@ -342,3 +342,40 @@ def test_cli_pos_instalacao(home, tmp_path, capsys):
     with pytest.raises(SystemExit) as e:
         cli.main(["acervo", "conferir", "--home", str(home), "--manifesto", str(arq), "--pos-instalacao", "--json"])
     assert e.value.code == 0 and json.loads(capsys.readouterr().out)["origem"] == "nao_aplicavel_pos_instalacao"
+
+
+def _pendencia(home, status="indisponivel"):
+    with Verifica(home) as svc:
+        svc.conn.execute("INSERT INTO sync_state(id, fonte, chave, status, motivo) VALUES ('p','stj_resource','resource:r2:None',?,'http_503')", (status,))
+        svc.conn.commit()
+
+
+def test_manifesto_inclui_pendencias_em_origem(home, tmp_path):
+    # FIX5/F-03: a pendência não desaparece do manifesto canônico.
+    _pendencia(home)
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)
+    m = json.loads(arq.read_text(encoding="utf-8"))
+    assert [(p["fonte"], p["status"]) for p in m["origem"]["pendencias"]] == [("stj_resource", "indisponivel")]
+    assert "pendencias" not in m["conteudo"]
+
+
+def test_pendencias_de_origem_so_se_comparam_no_estrito(home, tmp_path):
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)  # manifesto sem pendências
+    assert json.loads(arq.read_text(encoding="utf-8"))["origem"]["pendencias"] == []
+    _pendencia(home)
+    r = bateria.executar(home, manifesto=arq)
+    assert r["status"] == "ok", r["falhas"]
+    r = bateria.executar(home, manifesto=arq, estrito=True)
+    assert {"pendencia", "contagem_divergente"} <= _codigos(r)
+    assert any(f["mensagem"].startswith("pendencias") for f in r["falhas"] if f["codigo"] == "contagem_divergente")
+
+
+def test_pendencias_de_origem_nao_se_aplicam_pos_instalacao(home, tmp_path):
+    _pendencia(home)
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)
+    _instalado(home)
+    r = bateria.executar(home, manifesto=arq, estrito=True, pos_instalacao=True)
+    assert r["status"] == "ok", r["falhas"]

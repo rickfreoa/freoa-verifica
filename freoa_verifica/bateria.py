@@ -246,6 +246,11 @@ def conferir(dados: dict[str, Any], manifesto: dict[str, Any] | None = None, *, 
     if manifesto is not None:
         (cont_m, orig_m), (cont_a, orig_a) = _secoes_do_manifesto(manifesto), _secoes(dados["contagens"])
         if origem_aplicavel(dados, pos_instalacao=pos_instalacao):
+            # Pendências são origem, mas só se comparam no estrito (regra 5); manifesto antigo não as tem.
+            if not estrito or "pendencias" not in orig_m:
+                orig_m = {k: v for k, v in orig_m.items() if k != "pendencias"}
+            else:
+                orig_a = {**orig_a, "pendencias": dados["pendencias"]}
             cont_m, cont_a = {**cont_m, **orig_m}, {**cont_a, **orig_a}
         esperado, obtido = _achatar(cont_m), _achatar(cont_a)
         for caminho in sorted(set(esperado) | set(obtido)):
@@ -262,6 +267,7 @@ def conferir(dados: dict[str, Any], manifesto: dict[str, Any] | None = None, *, 
 def manifesto_canonico(dados: dict[str, Any]) -> str:
     """Manifesto congelado: versão, recorte, `conteudo` (o que o snapshot carrega) e `origem` (sync_state do produtor)."""
     conteudo, origem = _secoes(dados["contagens"])
+    origem["pendencias"] = dados["pendencias"]
     corpo = {"manifesto_versao": dados["manifesto_versao"], "recorte": dados["recorte"],
              "conteudo": conteudo, "origem": origem}
     return json.dumps(corpo, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
