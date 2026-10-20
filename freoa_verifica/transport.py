@@ -802,6 +802,14 @@ def _fetch_once(
             _attach_http(exc, response)
             raise
         except (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
+            por_prazo = (
+                slow.is_set() or isinstance(exc, TimeoutError) or timed_out.is_set()
+                or time.monotonic() >= deadline
+            )
+            if response is not None and not por_prazo:
+                # Falha depois de recebido o status/cabeçalho (IncompleteRead, chunk inválido, reset
+                # no corpo): resposta inválida, não indisponibilidade ambiental (decisão 0045).
+                raise RespostaInvalida(str(exc), http=_failure_http(response)) from exc
             if slow.is_set():
                 raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response)) from exc
             if isinstance(exc, TimeoutError) or timed_out.is_set() or time.monotonic() >= deadline:
