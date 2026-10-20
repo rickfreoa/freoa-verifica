@@ -24,6 +24,7 @@ Origem: plano `docs/PLANO-1.3.0.md` e comparativo com o juscraper (`docs/auditor
 - Filtros de data propagados (decisão 0053): TJDFT filtra localmente, TJSP usa `dt_inicio`/`dt_fim`, STJ filtra em SQL. Cada conector declara em `filtros` o que aplica (`remoto` ou `local`); a resposta traz `filtros_nao_aplicados`.
 - Comunica CNJ: não sondado nesta versão; conector previsto para a 1.4.0 (decisão 0047).
 - Cobertura do STJ continua limitada ao que é adquirido: íntegras do STJ não estão implementadas (`docs/FONTES.md`).
+- Fallback entre fontes (decisão 0058, revista): na mesma fonte só ausência explícita autoriza a requisição seguinte (F-05, F-07); entre fontes oficiais distintas (Planalto → Senado, TJSP → DataJud) qualquer `Unavailable` permite a próxima, com a indisponibilidade das anteriores em `fontes_consultadas` (aditivo, experimental) e proveniência da fonte que respondeu. Cada fonte é consultada uma vez; erro não-`Unavailable` interrompe. No CNJ, a confirmação pelo DataJud vale como confirmação do processo, nunca como texto do TJSP.
 
 ### Pesquisa e MCP
 
@@ -56,7 +57,7 @@ Origem: plano `docs/PLANO-1.3.0.md` e comparativo com o juscraper (`docs/auditor
 
 - Motivos de indisponibilidade: `desafio_http_403` passa a `http_403` (e `http_401` é novo); `desafio_corpo_vazio` passa a `corpo_vazio`. `desafio_<tipo>` fica só para assinatura identificada (decisão 0045).
 - `CandidateList.total` desconhecido sai como `null`, não como o número de itens lidos (decisão 0055).
-- **Planalto ao vivo indisponível:** o Planalto encerra a conexão do cliente identificado sem responder (decisão 0048). A atualização ao vivo da legislação federal fica indisponível até o Planalto aceitar o cliente identificado. O acervo instalado não foi alterado e continua atendendo consultas sem rede.
+- **Planalto ao vivo indisponível:** o Planalto encerra a conexão do cliente identificado sem responder (decisão 0048). A atualização ao vivo da legislação federal fica indisponível até o Planalto aceitar o cliente identificado; a captura federal ao vivo passa ao Senado, que aceita o cliente identificado, com a recusa do Planalto declarada em `fontes_consultadas` (decisão 0058). O acervo instalado não foi alterado e continua atendendo consultas sem rede.
 - Release passa a rascunho até a auditoria dos bytes publicados; a publicação na PyPI só ocorre depois da publicação da release (decisão 0050).
 - Instalador exige attestation; a instalação sem verificação só ocorre com `-SemAttestation` explícito (decisão 0051).
 

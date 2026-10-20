@@ -45,6 +45,7 @@ class Evidence:
     path: str | None = None
     span: tuple[int, int] | None = None
     trecho_oficial: str | None = None
+    fontes_consultadas: list[dict] | None = None  # experimental; só quando fonte anterior ficou indisponível (0058)
 
 
 @dataclass
@@ -81,6 +82,7 @@ class ResolvedWork:
     amending_act_texts: dict[str, str] = field(default_factory=dict)
     persisted_incomplete: bool = False
     caminhos_conhecidos: frozenset[str] = frozenset()  # dispositivos de qualquer captura canônica da obra (0034)
+    fontes_consultadas: list[dict] = field(default_factory=list)  # fontes anteriores sem resposta na captura (0058)
 
 
 class Resolver(Protocol):
@@ -151,6 +153,7 @@ def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, sp
         path=path,
         span=span,
         trecho_oficial=t,
+        fontes_consultadas=rw.fontes_consultadas or None,
     )
 
 
@@ -611,7 +614,8 @@ def _result_to_json(result: VerificationResult) -> dict[str, Any]:
         return {
             "status": d.status,
             "reason_code": d.reason_code,
-            "evidence": [{**asdict(e), "span": list(e.span) if e.span is not None else None}
+            "evidence": [{**{k: v for k, v in asdict(e).items() if k != "fontes_consultadas" or v},
+                          "span": list(e.span) if e.span is not None else None}
                          for e in d.evidence],
         }
 
