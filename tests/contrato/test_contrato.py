@@ -95,6 +95,24 @@ def test_negativo_estado_diferente_reprova():
     assert any("estados mudaram em identity.status" in e for e in erros)
 
 
+def test_negativo_campo_removido_de_um_unico_item_reprova():
+    c = _congelada(caso="pesquisar_jurisprudencia_textual")
+    assert len(c["itens"]) >= 2 and all("ementa" in i for i in c["itens"])
+    adulterada = copy.deepcopy(c)
+    del adulterada["itens"][0]["ementa"]  # os outros itens ainda têm `ementa`
+    erros = h.incompatibilidades("pesquisar_jurisprudencia", c, adulterada, DEPRECATED | EXPERIMENTAL)
+    assert any("campo removido: itens[].ementa (elemento 0)" in e for e in erros)
+    assert h.incompatibilidades("pesquisar_jurisprudencia", c, copy.deepcopy(c), DEPRECATED | EXPERIMENTAL) == []
+
+
+def test_listas_heterogeneas_preservam_variantes_legitimas():
+    c = {"itens": [{"id": 1, "ementa": "x"}, {"id": 2, "trecho_inteiro_teor": "y"}]}
+    atual = {"itens": [{"id": 1, "ementa": "x", "novo": 1}, {"id": 2, "trecho_inteiro_teor": "y"}]}
+    assert h.incompatibilidades("t", c, atual) == []
+    trocado = {"itens": [{"id": 1, "trecho_inteiro_teor": "x"}, {"id": 2, "trecho_inteiro_teor": "y"}]}
+    assert any("itens[].ementa (elemento 0)" in e for e in h.incompatibilidades("t", c, trocado))
+
+
 def test_campo_novo_e_permitido():
     c = _congelada()
     ampliada = copy.deepcopy(c)
