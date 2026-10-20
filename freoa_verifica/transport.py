@@ -653,6 +653,10 @@ def _fetch_once(
     | TransporteLento (taxa mínima)              | sim              | resposta_inesperada  | não       |
     | EmptyBody                                  | sim              | resposta_inesperada  | não       |
     | OSError/SSL/HTTP com resposta iniciada     | sim              | resposta_inesperada  | não       |
+    | HTTPException ao ler status/cabeçalhos     | sim (bytes)      | resposta_inesperada  | não       |
+    | (LineTooLong, BadStatusLine, protocolo     |                  |                      |           |
+    |  desconhecido, cabeçalhos em excesso)      |                  |                      |           |
+    | RemoteDisconnected (fechou sem nenhum byte)| não              | fonte_fora           | sim       |
     | prazo esgotado no corpo (aqui ou em fetch) | sim              | resposta_inesperada  | não       |
     | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
     | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
@@ -707,6 +711,7 @@ def _fetch_once(
         timer.daemon = True
         timer.start()
         response = None
+        lendo_status = False
         try:
             req_headers = _contact_headers()
             req_headers.update(req_extra)
@@ -721,7 +726,9 @@ def _fetch_once(
                 current_method, target, body=current_body, headers=req_headers
             )
             network_state["socket"] = getattr(connection, "sock", None)
+            lendo_status = True
             response = connection.getresponse()
+            lendo_status = False
             if progresso is not None:
                 progresso.set()
             if session is not None:
@@ -887,6 +894,11 @@ def _fetch_once(
             _attach_http(exc, response)
             raise
         except (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
+            if lendo_status and not isinstance(exc, OSError) and not slow.is_set():
+                # O servidor já enviou bytes, mas a linha de status ou os cabeçalhos são inválidos
+                # (LineTooLong, BadStatusLine, UnknownProtocol, cabeçalhos em excesso). Encerramento
+                # sem byte algum é RemoteDisconnected, que é OSError e segue como fonte_fora.
+                raise RespostaInvalida(str(exc)) from exc
             if response is not None and not slow.is_set():
                 # Falha depois de recebido o status/cabeçalho (IncompleteRead, chunk inválido, reset
                 # ou prazo no corpo): resposta inválida, não indisponibilidade ambiental (decisão 0045).
