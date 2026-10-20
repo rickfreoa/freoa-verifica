@@ -2113,14 +2113,17 @@ class Verifica:
         # Tribunal implicado: o do conector do segmento J.TR; senão o do acervo; senão o próprio segmento (sem suporte).
         base["cobertura"] = [self._item_cobertura(
             conector_id or tribunal_do_acervo or f"CNJ {cnj[16:20]}", vivo=vivo, motivo_vivo=motivo_vivo)]
+        base["truncado"] = self._truncado_da_cobertura(base["cobertura"])
         if itens:
             return {**base, "status": "encontrada", "itens": itens, "resultados": itens,
                     "total_parcial": len(itens), "fontes": fontes}
         consultada = fontes.get(conector_id or "", {}).get("status") == "ok"
+        categorica = consultada and not base["truncado"]  # leitura cortada não sustenta negativa (B2-03)
         return {**base, "fontes": fontes,
-                "status": "nao_encontrado_na_fonte" if consultada else "nao_confirmado_no_acervo",
+                "status": "nao_encontrado_na_fonte" if categorica else "nao_confirmado_no_acervo",
                 "escopo": (f"busca oficial {conector_id} pelo número" if consultada else "acervo local"),
-                "aviso": ("a fonte oficial não retornou registro com este número" if consultada
+                "aviso": ("a fonte oficial não retornou registro com este número" if categorica
+                          else "a leitura da fonte oficial foi truncada; ausência não demonstra inexistência" if consultada
                           else "processo não localizado no acervo local; ausência não demonstra inexistência")}
 
     @staticmethod
@@ -2168,6 +2171,7 @@ class Verifica:
             itens.append(item)
         rel = [{**self._decisao_item(r), "relacao": "incidente_do_mesmo_processo"} for r in incidentes]
         return {**base, "itens": itens, "resultados": itens, "relacionados": rel, "cobertura": cobertura,
+                "truncado": self._truncado_da_cobertura(cobertura),
                 "total_parcial": len(itens), "evidencia": evidence}
 
     def _peso_idf(self):
@@ -2239,6 +2243,11 @@ class Verifica:
             "truncado_local": truncado_local or bool(vivo.get("cortou_no_limite")),
             "indisponivel": indisponivel,
         }
+
+    @staticmethod
+    def _truncado_da_cobertura(cobertura) -> bool:
+        """Corte registrado em qualquer item de `cobertura` (local ou remoto) torna o topo `truncado` (B2-03)."""
+        return isinstance(cobertura, list) and any(c["truncado_remoto"] or c["truncado_local"] for c in cobertura)
 
     def _juris_textual(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
         offset = _decode_cursor(cursor)
@@ -2406,8 +2415,7 @@ class Verifica:
                 motivos_vivo[cid] = "limite"  # a consulta ao vivo nem começou: a página já estava cheia
             cobertura.append(self._item_cobertura(
                 t, vivo=vivos.get(cid), motivo_vivo=motivos_vivo.get(cid), truncado_local=t in courts_cortados))
-        truncado_remoto = any(c["truncado_remoto"] for c in cobertura)
-        truncado = truncado_local or truncado_remoto  # o cursor só pagina o que é local
+        truncado = truncado_local or self._truncado_da_cobertura(cobertura)  # o cursor só pagina o que é local
         return {
             **_status_com_falhas("parcial" if truncado else "ok", _falhas_de_fonte(fontes_status), len(page)),
             "itens": page,
