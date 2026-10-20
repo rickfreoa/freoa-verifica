@@ -5,7 +5,10 @@ Ativa só dentro de `with guarda.ativar():` (a sincronização da semente). Em `
 1. a identidade efetiva da requisição é método + URL normalizada + corpo; não depende do papel
    (obra principal, alteradora) nem do conector que a pede;
 2. o primeiro desfecho (resposta capturada ou `Unavailable`) é reaproveitado por todo caminho que
-   repete a identidade, sem novo pedido e sem novo incremento no breaker;
+   repete a identidade, sem novo pedido e sem novo incremento no breaker. A captura guardada só é entregue
+   depois de revalidada contra a política da chamada atual (host, caminho, MIME, tamanho, redirecionamentos,
+   desafio), sem rede; a política não entra na chave, e uma falha guardada só vale para a mesma política
+   (FIX11/F-16). O desfecho guardado é o final do conector, depois de `reclassificar` (FIX11/F-11);
 3. por fonte (host): depois de `Unavailable` com categoria `ambiental_desafio` ou
    `recusa_identificado`, nenhuma nova requisição àquele host na execução; as seguintes recebem a
    mesma categoria, sem rede, e ficam pendentes. O host bloqueado é o inicial e o de cada salto da
@@ -47,7 +50,7 @@ class GuardaExecucao:
         self.limite_bytes = limite_bytes
         self._sucessos: OrderedDict[tuple, object] = OrderedDict()
         self._bytes = 0
-        self._falhas: dict[tuple, Unavailable] = {}
+        self._falhas: dict[tuple, tuple[Unavailable, object]] = {}  # chave -> (falha, política da chamada)
         self.bloqueios: dict[str, Unavailable] = {}  # host -> primeira falha que bloqueou a fonte
         self.requisicoes = 0  # chamadas que de fato chegaram à rede (para testes e diagnóstico)
 
@@ -79,18 +82,39 @@ class GuardaExecucao:
         if bloqueio is not None:
             raise _copia(bloqueio, bloqueio_fonte=host)
 
-    def executar(self, method: str, url: str, body: bytes | None, *, cacheavel: bool, baixar: Callable):
+    def _bloquear(self, host: str, exc: Unavailable) -> None:
+        if exc.categoria in BLOQUEIAM_A_FONTE:
+            for recusante in self._hosts_recusantes(host, exc):
+                self.bloqueios.setdefault(recusante, exc)
+
+    def executar(
+        self, method: str, url: str, body: bytes | None, *, cacheavel: bool, baixar: Callable,
+        revalidar: Callable | None = None, politica: object = None,
+    ):
+        """`revalidar(resp)` confere a captura guardada contra a política da chamada atual, sem rede (F-16).
+
+        A chave é só a identidade efetiva; a política (`politica`) não entra nela. Uma falha guardada só vale
+        para chamada de mesma política: outra política pode ter aceitado a resposta que a primeira recusou.
+        """
         host = _host_canonico(urlsplit(url))
         bloqueio = self.bloqueios.get(host)
         if bloqueio is not None:
             raise _copia(bloqueio, url=url, bloqueio_fonte=host)
         chave = identidade_requisicao(method, url, body)
         if cacheavel:
-            if chave in self._falhas:
-                raise _copia(self._falhas[chave])
+            falha = self._falhas.get(chave)
+            if falha is not None and falha[1] == politica:
+                raise _copia(falha[0])
             if chave in self._sucessos:
+                guardada = self._sucessos[chave]
+                if revalidar is not None:
+                    try:
+                        revalidar(guardada)
+                    except Unavailable as exc:
+                        self._bloquear(host, exc)
+                        raise
                 self._sucessos.move_to_end(chave)
-                return self._sucessos[chave]
+                return guardada
         self.requisicoes += 1
         try:
             resp = baixar()
@@ -98,10 +122,8 @@ class GuardaExecucao:
             if exc.reason == "orcamento":
                 raise
             if cacheavel:
-                self._falhas[chave] = exc
-            if exc.categoria in BLOQUEIAM_A_FONTE:
-                for recusante in self._hosts_recusantes(host, exc):
-                    self.bloqueios.setdefault(recusante, exc)
+                self._falhas[chave] = (exc, politica)
+            self._bloquear(host, exc)
             raise
         if cacheavel:
             tamanho = len(getattr(resp, "body", b"") or b"")

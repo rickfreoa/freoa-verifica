@@ -540,6 +540,35 @@ def validate_reference(
     return host, target
 
 
+def revalidar_captura(
+    resp: "Response",
+    *,
+    allowed_hosts: frozenset[str],
+    allowed_path_prefixes: dict[str, tuple[str, ...]] | None = None,
+    allowed_mimes: frozenset[str] | None = None,
+    max_bytes: int = MAX_BYTES,
+    max_redirects: int = MAX_REDIRECTS,
+) -> None:
+    """Confere uma captura já feita contra a política da chamada ATUAL, sem rede (FIX11/F-16).
+
+    Mesmas verificações que `fetch` aplica ao vivo, com as mesmas exceções: host e caminho da URL pedida
+    e de cada redirecionamento, número de redirecionamentos, MIME e tamanho (declarado e recebido).
+    Levanta a exceção que a chamada receberia sem cache.
+    """
+    mimes = DEFAULT_ALLOWED_MIMES if allowed_mimes is None else allowed_mimes
+    for alvo in (resp.url, *resp.redirects):
+        validate_reference(alvo, allowed_hosts, allowed_path_prefixes=allowed_path_prefixes)
+    if len(resp.redirects) > max_redirects:
+        raise BlockedHost("Limite de redirecionamentos excedido")
+    if not _mime_allowed(resp.mime, mimes):
+        raise RespostaInvalida(f"MIME não permitido: {resp.mime or '(ausente)'}", http=resp.http)
+    declarado = resp.headers.get("content-length")
+    if declarado is not None and declarado.isdigit() and int(declarado) > max_bytes:
+        raise TooLarge("Corpo declarado acima do limite", http=resp.http)
+    if resp.size > max_bytes:
+        raise TooLarge("Corpo baixado acima do limite", http=resp.http)
+
+
 # portado de freoa-verifica/core.py:_public_unicast
 def _public_unicast(address: str) -> bool:
     ip = ipaddress.ip_address(address)

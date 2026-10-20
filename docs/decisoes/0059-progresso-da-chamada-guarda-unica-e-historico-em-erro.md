@@ -75,3 +75,11 @@ A rodada 5 achou variantes das mesmas classes; a emenda troca os remendos por me
   dentro do `baixar` que a guarda executa; o Planalto passa `_reclassificar_recusa` (decisão 0048), de modo que o
   fechamento sem resposta, já `recusa_identificado`, bloqueia o host para o resto da execução (a segunda lei não faz
   pedido e o breaker conta uma falha). Fora da guarda a reclassificação é a mesma.
+- **Política da chamada atual sobre a captura guardada (F-16).** A chave do cache segue a identidade efetiva; a
+  política não entra nela. Antes de entregar uma captura guardada, `connector_fetch` a revalida, sem rede, contra a
+  política da chamada atual: `transport.revalidar_captura` (allowlist de host e caminho da URL pedida e de cada
+  redirecionamento, número de redirecionamentos, MIME, `max_bytes` declarado e recebido) e a detecção de desafio com os
+  parâmetros da chamada. A recusa é a mesma exceção que o transporte levantaria ao vivo (mesmo mapeamento para
+  `Unavailable`); desafio visto na revalidação bloqueia a fonte como se visto ao vivo. Simetricamente, uma falha
+  guardada só é reaproveitada por chamada de mesma política: outra política pode ter aceitado a resposta que a primeira
+  recusou, e nesse caso a guarda faz o pedido.
