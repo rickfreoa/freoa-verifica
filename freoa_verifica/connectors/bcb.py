@@ -222,22 +222,28 @@ class BcbConnector(Connector):
             parts = key.split(":", 2)
             if len(parts) == 3:
                 tipo, numero = parts[1], parts[2]
-                try:
-                    found = self.search("", tipo=tipo, numero=numero, limite=1)
-                except Unavailable:
-                    found = []
+                found = self._buscar_ou_ausente(tipo, numero, 1)
                 return found[0] if found else self._synthetic(tipo, numero)
         if isinstance(key, dict):
             tipo = key.get("tipo") or "Resolução CMN"
             numero = key.get("numero")
             if numero is None:
                 return None
-            try:
-                found = self.search("", tipo=tipo, numero=numero, limite=3)
-            except Unavailable:
-                found = []
+            found = self._buscar_ou_ausente(tipo, numero, 3)
             return found[0] if found else self._synthetic(tipo, numero)
         return None
+
+    def _buscar_ou_ausente(self, tipo: Any, numero: Any, limite: int) -> list:
+        """Só ausência explícita (resultado vazio estruturado ou 404) autoriza o endpoint de conteúdo.
+
+        Desafio, recusa, `fonte_fora` esgotada e resposta inválida propagam com a categoria original.
+        """
+        try:
+            return self.search("", tipo=tipo, numero=numero, limite=limite)
+        except Unavailable as exc:
+            if exc.reason == "http_404":
+                return []
+            raise
 
     def _synthetic(self, tipo: Any, numero: Any) -> Candidate:
         n = _clean_numero(numero)
