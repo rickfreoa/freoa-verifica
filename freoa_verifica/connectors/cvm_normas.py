@@ -208,11 +208,11 @@ class CvmNormasConnector(Connector):
                     max_bytes=20 * 1024 * 1024,
                 )
             except Unavailable as exc:
+                # Só a ausência explícita da representação autoriza tentar a próxima; desafio,
+                # recusa, fonte fora esgotada e resposta inválida interrompem e propagam.
+                if exc.reason not in {"http_404", "http_410"}:
+                    raise
                 last = exc
-                if exc.reason.startswith("http_404"):
-                    continue
-                # alguns anexos podem falhar; tenta próximo
-                continue
         raise last or Unavailable("sem_documento")
 
     def fetch_situacao(self, candidate: Candidate) -> Response:
