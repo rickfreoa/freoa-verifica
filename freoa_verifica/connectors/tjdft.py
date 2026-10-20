@@ -233,6 +233,7 @@ class TjdftConnector(Connector):
             raise Unavailable(f"http_{resp.status}")
         data = _load(resp)
         hits = data["hits"]["value"] if isinstance(data.get("hits"), dict) else None
+        relacao = data["hits"].get("relation") if isinstance(data.get("hits"), dict) else None
         if isinstance(hits, bool) or not isinstance(hits, int) or hits < 0:
             raise Unavailable("tjdft_hits_invalido")
         regs = data.get("registros")
@@ -253,7 +254,7 @@ class TjdftConnector(Connector):
             out.append(cand)
         while len(self._capturas) > _CACHE_MAX:
             self._capturas.pop(next(iter(self._capturas)))
-        return CandidateList(out, total=hits)
+        return CandidateList(out, total=hits, total_exato=None if relacao is None else relacao == "eq")
 
     def resolve(self, key: Any) -> Candidate | None:
         if isinstance(key, dict):

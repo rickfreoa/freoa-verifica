@@ -11,4 +11,7 @@ EXPERIMENTAL: frozenset[str] = frozenset({
     "listar_fontes:fontes[].ultimo_health",
     "buscar_legislacao:tesauro",
     "pesquisar_jurisprudencia:tesauro",
+    # Lista por tribunal (decisão 0055). `[]` deixa de fora o objeto `cobertura` de `nao_confirmado_no_acervo`, estável.
+    "pesquisar_jurisprudencia:cobertura[]",
+    "pesquisar_jurisprudencia:cobertura_por_tribunal",
 })

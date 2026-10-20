@@ -16,6 +16,7 @@ from urllib.parse import urlencode
 
 from freoa_verifica.connectors.base import (
     Candidate,
+    CandidateList,
     Connector,
     HealthProbe,
     HealthReport,
@@ -257,7 +258,7 @@ class StjConnector(Connector):
             cur = conn.execute(f"SELECT COUNT(*) AS n FROM fts_stj WHERE {where}", params)
             n = int(cur.fetchone()["n"])
             if n == 0:
-                return []
+                return CandidateList([], total=0, total_exato=True)
             rows = conn.execute(
                 """
                 SELECT key, title, ementa, organ, rapporteur, decision_date, class_name, payload
@@ -280,7 +281,7 @@ class StjConnector(Connector):
                     metadata=meta,
                 )
             )
-        return out
+        return CandidateList(out, total=n, total_exato=True)  # COUNT do índice local
 
     def resolve(self, key: Any) -> Candidate | None:
         if isinstance(key, dict) and key.get('classe') and key.get('numero'):
