@@ -2,10 +2,12 @@
 import copy
 import hashlib
 import json
+import re
 
 import pytest
 
 from freoa_verifica.connectors import tjdft
+from freoa_verifica.connectors.tjdft import avaliar_inteiro_teor
 from freoa_verifica.connectors.base import Candidate, Unavailable
 from freoa_verifica.courts import normalize_court
 from freoa_verifica.service import Verifica
@@ -318,6 +320,64 @@ def test_acordao_sem_requisito_vira_ementa_com_motivo(conn, motivo, altera):
     p, _ = _parse(conn, data, rec)
     assert (p.profile, p.text, p.ementa) == ("tjdft_ementa", "", rec["ementa"])
     assert p.metadata["integra_motivo"] == motivo and "documento" not in p.metadata
+
+
+def _com_numero(rec, trocar):
+    rec["inteiroTeor"] = rec["inteiroTeor"].replace(rec["processo"], trocar)
+
+
+@pytest.mark.parametrize("trocar", [
+    lambda n: "999" + n + "999",            # prefixo e sufixo numéricos (mutante do auditor)
+    lambda n: "999" + n,
+    lambda n: n + "999",
+    lambda n: n[:-1] + "1",                 # outro processo
+    lambda n: n + "-5",                     # prolongado por hífen
+    lambda n: n + ".5",                     # prolongado por ponto e dígito
+    lambda n: "1" + n,
+], ids=["pre_suf", "prefixo", "sufixo", "outro_processo", "hifen", "ponto_digito", "um_digito_antes"])
+def test_integra_com_numero_so_por_substring_ou_outro_processo_e_rejeitada(conn, trocar):
+    """B3-06: o número tem de aparecer isolado e igual ao do registro."""
+    data = _integra()
+    rec = _acordao(data)
+    _com_numero(rec, trocar(rec["processo"]))
+    assert avaliar_inteiro_teor(rec) == (None, "integra_processo_divergente")
+    p, _ = _parse(conn, data, rec)
+    assert p.profile == "tjdft_ementa" and p.text == ""
+
+
+@pytest.mark.parametrize("trocar", [
+    lambda n: re.sub(r"\D", "", n),         # sem máscara
+    lambda n: f"{n}.",                      # ponto final de frase
+    lambda n: f"(proc. {n}),",
+    lambda n: f"nº{n}",
+], ids=["sem_mascara", "ponto_final", "parenteses", "colado_a_letra"])
+def test_integra_com_numero_isolado_com_ou_sem_mascara_e_aceita(trocar):
+    rec = _acordao(_integra())
+    _com_numero(rec, trocar(rec["processo"]))
+    assert avaliar_inteiro_teor(rec)[0] == rec["inteiroTeor"]
+
+
+def test_registro_com_processo_sem_mascara_confere_com_texto_mascarado():
+    rec = _acordao(_integra())
+    rec["processo"] = re.sub(r"\D", "", rec["processo"])
+    assert avaliar_inteiro_teor(rec)[0] is not None
+
+
+def test_processo_do_registro_fora_do_formato_cnj_nao_prova_nada():
+    rec = _acordao(_integra())
+    rec["processo"] = "12345"
+    rec["inteiroTeor"] += " 12345"
+    assert avaliar_inteiro_teor(rec) == (None, "integra_processo_divergente")
+
+
+def test_ponta_a_ponta_numero_com_prefixo_nao_entrega_integra(svc, conn):
+    data = _integra()
+    rec = _acordao(data)
+    _com_numero(rec, "999" + rec["processo"] + "999")
+    for c in _search(conn, data):
+        svc._index_candidate_juris(conn, c)
+    r = svc.obter_decisao(rec["identificador"], tribunal="tjdft", parte="inteiro_teor")
+    assert (r["status"], r["texto"], r["motivo_integra"]) == ("parte_indisponivel", None, "integra_processo_divergente")
 
 
 def test_acordao_sem_texto_nao_tem_motivo(conn):

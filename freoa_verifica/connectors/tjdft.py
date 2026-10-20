@@ -131,6 +131,23 @@ def consulta_oficial(q: str) -> str:
     return " ".join(frases + resto.split())
 
 
+# Número CNJ (com ou sem máscara) isolado: nenhum dígito, hífen ou ponto-seguido-de-dígito o prolonga.
+# O ponto final de frase não conta como extensão do número.
+_CNJ_NO_TEXTO = re.compile(r"(?<![\d-])(?<!\d\.)\d{7}-?\d{2}\.?\d{4}\.?\d\.?\d{2}\.?\d{4}(?![\d-])(?!\.\d)")
+
+
+def _cnj_digitos(valor: str) -> str | None:
+    """20 dígitos do número CNJ, ou None se `valor` (máscara opcional) não tiver essa forma."""
+    digitos = re.sub(r"[.\-]", "", valor.strip())
+    return digitos if re.fullmatch(r"\d{20}", digitos) else None
+
+
+def _traz_o_processo(processo: str, text: str) -> bool:
+    """O texto cita, como número inteiro, o mesmo processo do registro (igualdade exata em 20 dígitos)."""
+    esperado = _cnj_digitos(processo)
+    return esperado is not None and any(_cnj_digitos(m.group()) == esperado for m in _CNJ_NO_TEXTO.finditer(text))
+
+
 def avaliar_inteiro_teor(rec: dict[str, Any]) -> tuple[str | None, str | None]:
     """(texto, None) se o registro traz a íntegra do próprio processo; senão (None, motivo) quando havia texto a
     avaliar, ou (None, None) quando não havia (decisões 0041 e 0046). Vale para acórdãos e monocráticas."""
@@ -149,7 +166,7 @@ def avaliar_inteiro_teor(rec: dict[str, Any]) -> tuple[str | None, str | None]:
             falha = "integra_placeholder"
         elif len(text) < MIN_INTEIRO_TEOR:
             falha = "integra_curta"
-        elif not processo or processo not in text:
+        elif not _traz_o_processo(processo, text):
             falha = "integra_processo_divergente"
         elif not any(p in n for p in _DISPOSITIVO):
             falha = "integra_sem_dispositivo"
