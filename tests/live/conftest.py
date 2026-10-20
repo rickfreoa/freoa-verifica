@@ -96,12 +96,26 @@ def pytest_sessionfinish(session, exitstatus):
     os.replace(tmp, destino)
 
 
+_FASES: dict[str, dict] = {}  # nodeid -> {fase: (estado, categoria, motivo)}
+
+
+def _consolidar_fases(item, fases: dict) -> None:
+    """Resultado do teste só depois de setup, call e teardown: o pior estado prevalece (B2-06)."""
+    if not fases:
+        return _registrar(item, "not_run", None, "sem_fase_executada")
+    pior = min(fases.values(), key=lambda f: _PRIORIDADE.index(f[0]))
+    if pior[0] == "ok" and "call" not in fases:
+        pior = ("not_run", None, "sem_fase_call")
+    _registrar(item, *pior)
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
-    if call.when not in {"setup", "call"} or item.get_closest_marker("live") is None:
+    if item.get_closest_marker("live") is None:
         return
     report = outcome.get_result()
+    fases = _FASES.setdefault(item.nodeid, {})
     exc = call.excinfo.value if call.excinfo is not None else None
     if (
         call.when == "call"
@@ -111,12 +125,14 @@ def pytest_runtest_makereport(item, call):
     ):
         report.outcome = "skipped"
         report.wasxfail = f"{exc.categoria}:{exc.reason}"
-        _registrar(item, "unavailable", exc.categoria, exc.reason)
+        fases["call"] = ("unavailable", exc.categoria, exc.reason)
     elif exc is not None and not report.skipped:
         tipada = isinstance(exc, Unavailable)
-        _registrar(item, "regressao", (exc.categoria if tipada else None) or "regressao",
-                   (exc.reason if tipada else str(exc))[:200])
+        fases[call.when] = ("regressao", (exc.categoria if tipada else None) or "regressao",
+                            (exc.reason if tipada else str(exc))[:200])
     elif report.skipped:
-        _registrar(item, "not_run", None, "skipped")
+        fases[call.when] = ("not_run", None, "skipped")
     elif call.when == "call":
-        _registrar(item, "ok")
+        fases["call"] = ("ok", None, None)
+    if call.when == "teardown":
+        _consolidar_fases(item, _FASES.pop(item.nodeid, {}))
