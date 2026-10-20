@@ -229,20 +229,35 @@ def _failure_http(response) -> HTTPMetadata | None:
         return None
 
 
+_AMOSTRA_DESAFIO = 65536
+
+
 def _desafio_na_resposta(response) -> str | None:
-    """Tipo de desafio visto em resposta de erro (cabeçalho de borda ou amostra do corpo)."""
+    """Tipo de desafio visto em resposta de erro (cabeçalho de borda ou amostra do corpo).
+
+    Lê em laço até 64 KiB ou o fim do corpo, qualquer que seja a fragmentação, e procura o marcador
+    no buffer acumulado. Só "examinado por completo e sem marcador" mantém a classificação por
+    status; framing inválido, corpo incompleto ou leitura impossível é `RespostaInvalida`.
+    """
     from freoa_verifica.connectors.challenge import detect_challenge  # import tardio: challenge importa este módulo
 
     try:
         headers = dict(response.getheaders())
         reader = getattr(response, "read1", None) or response.read
-        amostra = reader(65536) or b""
+        amostra = bytearray()
+        while len(amostra) < _AMOSTRA_DESAFIO:
+            bloco = reader(_AMOSTRA_DESAFIO - len(amostra))
+            if not bloco:
+                if getattr(response, "length", None):  # Content-Length não satisfeito: EOF prematuro
+                    raise http.client.IncompleteRead(bytes(amostra), response.length)
+                break
+            amostra += bloco
     except (OSError, http.client.HTTPException, ValueError) as exc:
-        # Impossível examinar não é "sem marcador" (FIX9/F-13): erro de framing/protocolo propaga.
+        # Impossível examinar não é "sem marcador" (FIX10/F-13): erro de framing/protocolo propaga.
         raise RespostaInvalida(
             f"Corpo da resposta de erro ilegível: {exc}", http=_failure_http(response)
         ) from exc
-    found = detect_challenge(status=response.status, headers=headers, body=amostra)
+    found = detect_challenge(status=response.status, headers=headers, body=bytes(amostra))
     return str(found.args[0]) if found is not None and found.args else None
 
 
