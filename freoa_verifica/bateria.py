@@ -233,6 +233,28 @@ def manifesto_canonico(dados: dict[str, Any]) -> str:
     return json.dumps(corpo, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
 
 
+def _destino_proibido(home: Path | str, gravar: Path | str) -> str | None:
+    """Motivo da recusa se `gravar` cai no home auditado (qualquer arquivo dele) ou é alias de um arquivo seu."""
+    raiz = Path(os.path.realpath(home))
+    destino = Path(os.path.realpath(gravar))
+    if destino == raiz or raiz in destino.parents:
+        return f"destino dentro do acervo auditado: {destino}"
+    try:
+        st = destino.stat()
+    except OSError:
+        return None  # ainda não existe: não há alias
+    if st.st_nlink > 1:  # hardlink: mesmo (dispositivo, inode) de algum arquivo do home
+        for pasta, _, nomes in os.walk(raiz):
+            for nome in nomes:
+                try:
+                    o = os.stat(os.path.join(pasta, nome))
+                except OSError:
+                    continue
+                if (o.st_dev, o.st_ino) == (st.st_dev, st.st_ino):
+                    return f"destino é alias (hardlink) de {os.path.join(pasta, nome)}"
+    return None
+
+
 def executar(home: Path | str, *, manifesto: Path | str | None = None, gravar: Path | str | None = None,
              estrito: bool = False, recorte: dict[str, str | None] | None = None,
              sem_blobs: bool = False) -> dict[str, Any]:
@@ -242,6 +264,8 @@ def executar(home: Path | str, *, manifesto: Path | str | None = None, gravar: P
     """
     ref = None
     recorte = {k: v for k, v in (recorte or {}).items() if v} or None  # sem datas: herda o manifesto
+    if gravar and (motivo := _destino_proibido(home, gravar)):
+        return {"status": "erro", "motivo": f"ValueError: {motivo}", "falhas": []}
     try:
         if manifesto:
             ref = json.loads(Path(manifesto).read_text(encoding="utf-8"))
