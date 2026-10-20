@@ -125,6 +125,7 @@ def test_isencao_vale_para_o_que_esta_sob_o_caminho():
 # Documento e versão do contrato
 # ----------------------------------------------------------------------------------------------
 
+@pytest.mark.repositorio
 def test_volateis_do_codigo_estao_no_documento():
     md = CONTRATO_MD.read_text(encoding="utf-8")
     secao = md.split("## Voláteis", 1)[1].split("\n## ", 1)[0]
@@ -132,6 +133,7 @@ def test_volateis_do_codigo_estao_no_documento():
     assert declarados >= h.VOLATEIS_CHAVES | h.VOLATEIS_HASH_CHAVES
 
 
+@pytest.mark.repositorio
 def test_estados_congelados_estao_enumerados_no_documento():
     md = CONTRATO_MD.read_text(encoding="utf-8")
     faltando = set()
@@ -174,6 +176,7 @@ def test_cobertura_nos_tres_adaptadores(ambiente, adaptador):
     assert c["tribunal"] == "STJ" and c["total_remoto"] is None  # acervo só: nunca zero inventado
 
 
+@pytest.mark.repositorio
 def test_cobertura_e_experimental_e_documentada():
     assert "pesquisar_jurisprudencia:cobertura[]" in EXPERIMENTAL
     md = CONTRATO_MD.read_text(encoding="utf-8")
