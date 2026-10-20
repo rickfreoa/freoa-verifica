@@ -773,7 +773,7 @@ def _fetch_once(
                 current_method, target, body=current_body, headers=req_headers
             )
             network_state["socket"] = getattr(connection, "sock", None)
-            if connection.sock is not None:
+            if getattr(connection, "sock", None) is not None:
                 connection.sock = _SoqueteObservado(connection.sock, iniciada)
             lendo_status = True
             response = connection.getresponse()

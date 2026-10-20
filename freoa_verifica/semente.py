@@ -933,6 +933,7 @@ class SementeSync:
 
     def run(self) -> dict[str, Any]:
         self.progress("início sync semente")
+        self._failed.clear()  # "falhou nesta execução" vale por execução
         self._capturar_pendentes_iniciais()
         steps = [
             ("planalto", self.sync_planalto),
