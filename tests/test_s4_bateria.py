@@ -159,3 +159,23 @@ def test_cli_codigo_de_saida(home, tmp_path, capsys):
     with pytest.raises(SystemExit) as e:
         cli.main(["acervo", "conferir", "--home", str(home), "--manifesto", str(arq)])
     assert e.value.code == 1
+
+
+def test_cli_sem_datas_herda_recorte_do_manifesto(home, tmp_path, capsys):
+    """B3-02: a CLI efetiva sem flags de data usa o recorte congelado (mudança dentro do mesmo mês)."""
+    arq = tmp_path / "m.json"
+    with pytest.raises(SystemExit) as e:
+        cli.main(["acervo", "conferir", "--home", str(home), "--gravar-manifesto", str(arq),
+                  "--recorte-desde", "2026-02-05", "--recorte-ate", "2026-03-31", "--json"])
+    assert e.value.code == 0
+    capsys.readouterr()
+    with Verifica(home) as svc:
+        svc.conn.execute("UPDATE decision SET judgment_date='2026-02-01' WHERE official_id='d1'")
+        svc.conn.commit()
+        svc.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    with pytest.raises(SystemExit) as e:
+        cli.main(["acervo", "conferir", "--home", str(home), "--manifesto", str(arq), "--json"])
+    saida = json.loads(capsys.readouterr().out)
+    assert e.value.code == 1 and saida["status"] == "falha"
+    assert saida["recorte"] == {"desde": "2026-02-05", "ate": "2026-03-31"}
+    assert "data_fora_do_recorte" in _codigos(saida)

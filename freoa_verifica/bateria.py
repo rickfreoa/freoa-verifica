@@ -194,6 +194,7 @@ def executar(home: Path | str, *, manifesto: Path | str | None = None, gravar: P
              estrito: bool = False, recorte: dict[str, str | None] | None = None) -> dict[str, Any]:
     """Resultado completo (`status` ok/falha/erro). Nunca escreve no home; só em `gravar`."""
     ref = None
+    recorte = {k: v for k, v in (recorte or {}).items() if v} or None  # sem datas: herda o manifesto
     try:
         if manifesto:
             ref = json.loads(Path(manifesto).read_text(encoding="utf-8"))
