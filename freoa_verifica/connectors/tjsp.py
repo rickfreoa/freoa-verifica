@@ -22,6 +22,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch, form_body
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
+from freoa_verifica.texto_resposta import texto_da_resposta
 from freoa_verifica.transport import Response, Session
 
 _HOST = "esaj.tjsp.jus.br"
@@ -225,7 +226,7 @@ class TjspConnector(Connector):
                 text=text,
                 documents=[{"url": resp.final_url, "label": "inteiro_teor"}],
             )
-        text = _decode_html(resp.body, resp.headers)
+        text = _decode_html(resp.body, {"content-type": resp.content_type or resp.headers.get("content-type", "")})
         return ParsedDecision(
             profile="tjsp_html",
             kind="acordao",
@@ -237,26 +238,9 @@ class TjspConnector(Connector):
 
 
 def _decode_html(body: bytes, headers: dict[str, str] | None = None) -> str:
-    """Decodifica conforme charset do cabeçalho/meta; senão utf-8 → windows-1252."""
-    charset: str | None = None
-    if headers:
-        ct = headers.get("content-type") or headers.get("Content-Type") or ""
-        m = re.search(r"charset=([\w-]+)", ct, re.I)
-        if m:
-            charset = m.group(1)
-    if not charset:
-        m = re.search(br"charset=['\"]?([\w-]+)", body[:8192], re.I)
-        if m:
-            charset = m.group(1).decode("ascii", errors="ignore")
-    if charset:
-        try:
-            return body.decode(charset)
-        except (LookupError, UnicodeDecodeError):
-            pass
-    try:
-        return body.decode("utf-8")
-    except UnicodeDecodeError:
-        return body.decode("windows-1252", errors="replace")
+    """Função única (BOM → charset do cabeçalho → meta → utf-8); inválido é `RespostaInvalida` (0061)."""
+    h = headers or {}
+    return texto_da_resposta(body, h.get("content-type") or h.get("Content-Type"))
 
 
 def _parse_results(

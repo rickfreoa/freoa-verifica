@@ -22,6 +22,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
+from freoa_verifica.texto_resposta import texto_da_resposta
 from freoa_verifica.transport import Response
 
 _FEED = "https://conteudo.cvm.gov.br/feed/decisoes.xml"
@@ -214,7 +215,7 @@ class CvmColegiadoConnector(Connector):
             if exc.reason in {'http_404','http_410'}:
                 return self._search_portal(q,limite=limite,ano=ano)
             raise
-        text = resp.body.decode("utf-8", errors="replace")
+        text = texto_da_resposta(resp.body, resp.content_type or resp.headers.get("content-type"))
         if _MAINTENANCE.search(text):
             raise Unavailable("resposta_invalida")
         tree = lxml_html.fromstring(resp.body)
