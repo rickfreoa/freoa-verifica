@@ -233,3 +233,40 @@ def test_conftest_skip_comum_e_sessao_interrompida_nao_sao_completas(pytester):
     int_ = _sessao(pytester, ["assert False", "pass"], extra=("-x",))
     assert int_["completa"] is False  # o segundo teste não rodou
     assert int_["fontes"]["bcb"]["estado"] == "regressao"
+
+
+# --- B2-08: serialização e estado antigo ----------------------------------------------------
+
+def test_workflow_serializa_as_execucoes_sem_cancelar():
+    yml = (RAIZ / ".github" / "workflows" / "fontes-saude.yml").read_text(encoding="utf-8")
+    assert "concurrency:" in yml and "group: saude-das-fontes" in yml and "cancel-in-progress: false" in yml
+
+
+def _rel_em(inicio, run_id, fontes):
+    return {**relatorio(fontes), "inicio": inicio, "run_id": run_id}
+
+
+def test_estado_grava_run_id_e_inicio(tmp_path):
+    gh = FakeGh()
+    rodar(tmp_path, _rel_em("2026-10-19T09:00:00+00:00", "11", OK), gh)
+    assert sf._execucao(gh.issue["body"]) == {"inicio": "2026-10-19T09:00:00+00:00", "run_id": "11"}
+
+
+def test_execucao_antiga_nao_apaga_a_regressao_da_mais_nova(tmp_path):
+    nova = _rel_em("2026-10-19T10:00:00+00:00", "12", REGRESSAO)
+    gh = FakeGh(sf.corpo(nova, sf.conjunto(nova)))
+    antigo = gh.issue["body"]
+    # A (mais antiga, sucesso) chega depois de B (mais nova, regressão) ter gravado
+    assert rodar(tmp_path, _rel_em("2026-10-19T09:00:00+00:00", "11", OK), gh) == 0
+    assert gh.escritas() == [] and gh.issue["body"] == antigo and gh.comentarios == []
+    assert sf._anterior(gh.issue["body"]) == sf.conjunto(nova)
+
+
+def test_execucao_mais_nova_substitui_a_antiga_e_corpo_sem_marcador_e_sobrescrito(tmp_path):
+    antiga = _rel_em("2026-10-19T09:00:00+00:00", "11", OK)
+    gh = FakeGh(sf.corpo(antiga, sf.conjunto(antiga)))
+    assert rodar(tmp_path, _rel_em("2026-10-19T10:00:00+00:00", "12", REGRESSAO), gh) == 1
+    assert sf._execucao(gh.issue["body"])["run_id"] == "12" and len(gh.comentarios) == 1
+    legado = FakeGh(corpo_de(OK).split("<!-- execucao")[0])  # corpo da versão anterior: sem marcador
+    assert rodar(tmp_path, _rel_em("2026-10-19T10:00:00+00:00", "12", OK), legado) == 0
+    assert sf._execucao(legado.issue["body"])["run_id"] == "12"

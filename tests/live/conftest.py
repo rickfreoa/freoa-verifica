@@ -84,6 +84,7 @@ def pytest_sessionfinish(session, exitstatus):
     completa = int(exitstatus) in (0, 1) and all(t["estado"] != "not_run" for t in testes.values())
     relatorio = {
         "commit": _commit(),
+        "run_id": os.environ.get("GITHUB_RUN_ID"),
         "inicio": _SAUDE["inicio"],
         "fim": datetime.now(timezone.utc).isoformat(),
         "completa": completa,

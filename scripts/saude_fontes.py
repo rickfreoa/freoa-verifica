@@ -18,11 +18,13 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 
 ROTULO = "saude-das-fontes"
 TITULO = "Saúde das fontes oficiais"
 _MARCADOR = re.compile(r"<!-- estado: (\{.*?\}) -->", re.S)
+_EXECUCAO = re.compile(r"<!-- execucao: (\{.*?\}) -->", re.S)
 _ESTADOS = {"ok", "unavailable", "regressao", "not_run"}
 _PRIORIDADE = ("regressao", "unavailable", "not_run", "ok")  # igual à de tests/live/conftest.py
 
@@ -111,7 +113,26 @@ def corpo(rel: dict, atual: dict) -> str:
     return "\n".join([
         f"Commit: `{rel.get('commit')}` · Execução: {rel.get('fim')}", "", *linhas, "",
         f"<!-- estado: {json.dumps(atual, sort_keys=True, ensure_ascii=False)} -->",
+        f"<!-- execucao: {json.dumps({'run_id': rel.get('run_id'), 'inicio': rel.get('inicio')}, sort_keys=True)} -->",
     ])
+
+
+def _execucao(texto: str | None) -> dict:
+    m = _EXECUCAO.search(texto or "")
+    try:
+        return json.loads(m.group(1)) if m else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _posterior(gravado, nosso) -> bool:
+    """O `inicio` gravado é posterior ao nosso? Sem `inicio` gravado (corpo antigo), nunca."""
+    if not gravado:
+        return False
+    try:
+        return datetime.fromisoformat(gravado) > datetime.fromisoformat(nosso)
+    except (TypeError, ValueError):
+        return str(gravado) > str(nosso)
 
 
 def _anterior(texto: str | None) -> dict | None:
@@ -145,6 +166,9 @@ def atualizar_issue(gh, repo: str, rel: dict) -> str:
         return "issue criada"
     # Outra execução pode ter escrito desde a primeira leitura: relê imediatamente antes de decidir e escrever.
     issue = gh("GET", f"repos/{repo}/issues/{issue['number']}") or issue
+    if _posterior(_execucao(issue.get("body")).get("inicio"), rel.get("inicio")):
+        # Execução mais nova já gravou: escrever o nosso resultado antigo apagaria o dela (B2-08).
+        return "issue não escrita: o estado gravado é de execução posterior"
     antes = _anterior(issue.get("body"))
     comentou = antes != atual
     # Comentário antes do corpo: se o PATCH falhar, o estado antigo permanece e a próxima execução repete.
