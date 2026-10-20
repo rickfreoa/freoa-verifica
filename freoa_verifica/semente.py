@@ -885,7 +885,7 @@ class SementeSync:
                 self._sleep()
             item = self._tentar_uma_vez(
                 (checkpoint, key),
-                lambda: self.svc._index_candidate_juris(connector, cand, propagar_indisponibilidade=True),
+                lambda: self.svc._index_candidate_juris(connector, cand),
             )
             if not item or not item.get("capture_id"):
                 raise Unavailable("sem_evidencia_capturada")
