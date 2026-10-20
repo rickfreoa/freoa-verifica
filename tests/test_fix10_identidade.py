@@ -48,7 +48,8 @@ def test_query_ordenada_mas_valores_distintos_seguem_distintos():
     assert transport.identidade_requisicao("GET", base) != transport.identidade_requisicao("GET", "https://outro.gov.br/x")
 
 
-@pytest.mark.parametrize("nome", [n for n in VARIANTES if n != "normal"])
+# "fragmento" fica de fora: o transporte recusa fragmento e a entrada atual é validada antes do cache (FIX12/F-16)
+@pytest.mark.parametrize("nome", [n for n in VARIANTES if n not in ("normal", "fragmento")])
 @pytest.mark.parametrize(
     "resposta,pedidos,incrementos",
     [

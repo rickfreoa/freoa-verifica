@@ -123,8 +123,10 @@ def test_session_cookies_not_in_receipt(monkeypatch):
 
             def request(self, method, target, body=None, headers=None):
                 self._c.request(method, target, body=body, headers=headers or {})
+                self.sock = self._c.sock  # o transporte observa o soquete para validar os bytes brutos
 
             def getresponse(self):
+                self._c.sock = self.sock
                 return self._c.getresponse()
 
             def close(self):
