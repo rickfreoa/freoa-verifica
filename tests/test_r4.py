@@ -452,7 +452,7 @@ def test_legacy_completed_context_retries_pending_children(tmp_path,monkeypatch)
         sync=SementeSync(s,rate_delay=0)
         sync.corpus={'planalto':[{'tipo':'LEI','numero':'8765','ano':1999}], 'leis_principais_alteradores':[{'tipo':'LEI','numero':'8765','ano':1999}]}
         sync.state.set('alterador_contexto','LEI:8765:1999','concluido')
-        sync.state.set('alterador','LEI:8766:2000','indisponivel',motivo='transporte_Timeout')
+        sync.state.set('alterador','LEI:8766:2000','indisponivel',motivo='transporte_Timeout',payload={'categoria':'fonte_fora'})
         monkeypatch.setattr(sync,'_index_legis',lambda *a,**kw:('pulado',None))
         calls=[]
         def resolve(*a,**kw):
@@ -486,7 +486,7 @@ def test_orphan_pending_checkpoint_is_retried_without_current_reference(tmp_path
     from freoa_verifica.semente import SementeSync
     with Verifica(tmp_path) as s:
         sync=SementeSync(s,rate_delay=0);sync.corpus={'planalto':[]}
-        sync.state.set('alterador','LEI:8766:2000','indisponivel',motivo='transporte_Timeout')
+        sync.state.set('alterador','LEI:8766:2000','indisponivel',motivo='transporte_Timeout',payload={'categoria':'fonte_fora'})
         calls=[]
         def index(fonte,key,**kw):
             calls.append((key,kw['work_key']));sync.state.set(fonte,key,'parseado');return 'parseado',None

@@ -81,14 +81,14 @@ def test_drip_closes_socket_and_releases_worker(monkeypatch, mode):
         stop.set(); server.shutdown(); server.server_close(); thread.join(2)
 
 
-def test_transient_requeued_after_other_items(tmp_path, monkeypatch):
+def test_transient_not_requeued_in_same_run(tmp_path, monkeypatch):
     monkeypatch.delenv('FV_OFFLINE', raising=False)
     calls = []
     class Connector(LegisConnector):
         def fetch(self, cand):
             calls.append(cand.key)
             if cand.key == '99991' and calls.count(cand.key) == 1:
-                raise Unavailable('transporte_Timeout')
+                raise Unavailable('transporte_Timeout', 'fonte_fora')
             self.failed = False
             return super().fetch(cand)
     with Verifica(tmp_path) as svc:
@@ -96,9 +96,10 @@ def test_transient_requeued_after_other_items(tmp_path, monkeypatch):
         engine = SementeSync(svc, fontes=['planalto'], rate_delay=0)
         engine.corpus['planalto'] = [{'tipo':'LEI','numero':n,'ano':2000} for n in ['99991','99992']]
         result = engine.run()
-        assert calls == ['99991', '99992', '99991']
-        assert result['fontes'][0]['indisponiveis'] == 0
-        assert result['fontes'][0]['parseados'] == 2
+        assert calls == ['99991', '99992']  # F-04: repetição só no transporte; a pendência fica para a próxima execução
+        assert result['fontes'][0]['indisponiveis'] == 1
+        assert result['fontes'][0]['parseados'] == 1
+        assert engine.state.get('planalto', 'LEI:99991:2000')['status'] == 'indisponivel'
 
 
 def test_stj_monthly_resource_limit_cache_and_proof(tmp_path, monkeypatch):
@@ -168,23 +169,18 @@ def test_stj_cache_reopens_and_expires(tmp_path, monkeypatch):
         assert len(calls)==2
 
 
-def test_retry_waits_for_breaker_and_preserves_terminal_reason(tmp_path, monkeypatch):
+def test_no_requeue_in_run_and_terminal_reason_preserved(tmp_path, monkeypatch):
     import freoa_verifica.semente as seed
-    times=[100.0]
     waits=[]
-    monkeypatch.setattr(seed.time,'monotonic',lambda:times[0])
-    def sleep(seconds):
-        waits.append(seconds); times[0]+=seconds
-    monkeypatch.setattr(seed.time,'sleep',sleep)
-    monkeypatch.setattr(tr,'circuit_retry_after',lambda:3.0)
+    monkeypatch.setattr(seed.time,'sleep',waits.append)
     monkeypatch.delenv('FV_OFFLINE',raising=False)
     with Verifica(tmp_path) as svc:
         svc._connectors['planalto']=LegisConnector()
         engine=SementeSync(svc,fontes=['planalto'],rate_delay=0)
         engine.corpus['planalto']=[{'tipo':'LEI','numero':'99991','ano':2000}]
         result=engine.run()
-        assert svc._connectors['planalto'].calls == 3
-        assert sum(waits)==6.0
+        assert svc._connectors['planalto'].calls == 1
+        assert waits==[]
         assert result['fontes'][0]['motivos']=={'transitorio':1}
         assert engine.state.get('planalto','LEI:99991:2000')['motivo']=='transitorio'
 
@@ -227,13 +223,13 @@ def test_amending_context_failure_does_not_discard_remaining_queue(tmp_path, mon
         monkeypatch.setattr(engine,'_resolve_alteradores',context)
         result=engine.run()
         assert c.calls==2
-        assert len(calls)==2
+        assert len(calls)==1  # F-04: o contexto falho fica pendente para a próxima execução
         assert engine.state.done('planalto','LEI:99992:2000')
-        assert engine.state.get('alterador_contexto','LEI:99991:2000')['status']=='concluido'
-        assert result['fontes'][0]['indisponiveis']==0
+        assert engine.state.get('alterador_contexto','LEI:99991:2000')['status']=='indisponivel'
+        assert result['fontes'][0]['indisponiveis']==1
 
 
-def test_recovered_source_is_not_requeued_again(tmp_path, monkeypatch):
+def test_failed_source_is_not_requeued(tmp_path, monkeypatch):
     monkeypatch.delenv('FV_OFFLINE',raising=False)
     with Verifica(tmp_path) as svc:
         engine=SementeSync(svc,fontes=['planalto'],rate_delay=0)
@@ -243,8 +239,8 @@ def test_recovered_source_is_not_requeued_again(tmp_path, monkeypatch):
             if len(calls)==1: raise Unavailable('transporte_Timeout')
         monkeypatch.setattr(engine,'sync_planalto',source)
         result=engine.run()
-        assert len(calls)==2
-        assert result['fontes'][0]['indisponiveis']==0
+        assert len(calls)==1  # F-04: sem reexecução na mesma passagem
+        assert result['fontes'][0]['indisponiveis']==1
 
 
 def test_successful_bcb_discovery_replaces_old_failure(tmp_path, monkeypatch):
