@@ -31,10 +31,6 @@ CLASSES = [
     BcbConnector, CvmColegiadoConnector, CvmNormasConnector, DatajudConnector, PlanaltoConnector,
     SenadoConnector, StfConnector, StjConnector, TcuConnector, TjdftConnector, TjspConnector,
 ]
-UA_1_2_0 = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
 HOST = "example.org"
 URL = f"https://{HOST}/x"
 HOSTS = frozenset({HOST})
@@ -47,14 +43,74 @@ def test_string_identificada_contem_versao_e_repositorio():
     assert __version__ in ih.USER_AGENT_IDENTIFICADO
 
 
-def test_ua_de_navegador_e_exatamente_o_da_1_2_0():
-    assert ih.USER_AGENT_NAVEGADOR_1_2_0 == UA_1_2_0
-
-
-def test_tabela_cobre_todos_os_conectores_e_so_planalto_e_excecao():
+def test_tabela_cobre_todos_os_conectores_sem_excecao_de_navegador():
     assert set(ih.UA_POR_CONECTOR) == {c.id for c in CLASSES}
-    assert {k for k, v in ih.UA_POR_CONECTOR.items() if v != ih.MODO_IDENTIFICADO} == {"planalto"}
-    assert ih.UA_POR_CONECTOR["planalto"] == "navegador_1_2_0"
+    assert set(ih.UA_POR_CONECTOR.values()) == {ih.MODO_IDENTIFICADO}
+    with pytest.raises(ValueError):
+        ih.user_agent_do_modo("navegador_1_2_0")  # modo removido (0048): sem troca silenciosa de identidade
+
+
+@pytest.mark.repositorio
+def test_codigo_nao_contem_user_agent_de_navegador():
+    raiz = Path(__file__).resolve().parents[1] / "freoa_verifica"
+    assert [a.name for a in raiz.rglob("*.py") if "Mozilla" in a.read_text(encoding="utf-8")] == []
+
+
+def _planalto_com(monkeypatch, roteiro):
+    """Planalto com transporte simulado; `roteiro` é a lista de erros/respostas por pedido."""
+    pedidos = []
+
+    def falso(url, **kw):
+        pedidos.append(kw["headers"]["User-Agent"])
+        item = roteiro[min(len(pedidos), len(roteiro)) - 1]
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(httputil, "transport_fetch", falso)
+    monkeypatch.setattr("freoa_verifica.connectors.planalto.time.sleep", lambda s: None)
+    c = PlanaltoConnector()
+    return c, c.resolve({"tipo": "LEI", "numero": 6404, "ano": 1976}), pedidos
+
+
+def test_planalto_pede_com_o_ua_identificado(monkeypatch):
+    ok = tr.Response(URL, URL, 200, {}, b"ok", hashlib.sha256(b"ok").hexdigest(), "2026-01-01T00:00:00+00:00", [], "text/plain")
+    c, cand, pedidos = _planalto_com(monkeypatch, [ok])
+    c.fetch(cand)
+    assert pedidos == [ih.USER_AGENT_IDENTIFICADO]
+
+
+def test_planalto_falha_de_conexao_sem_resposta_e_recusa_identificado(monkeypatch):
+    c, cand, pedidos = _planalto_com(monkeypatch, [tr.TransportError("conexão encerrada")])
+    with pytest.raises(Unavailable) as ei:
+        c.fetch(cand)
+    u = ei.value
+    assert (u.reason, u.categoria) == ("recusa_identificado_planalto", "recusa_identificado")
+    assert u.evidencia["decisao"] == "0048" and u.evidencia["marcador"] == "transporte:TransportError"
+    assert pedidos == [ih.USER_AGENT_IDENTIFICADO]  # nenhum segundo pedido, com outro UA ou não
+
+
+def test_planalto_timeout_antes_de_qualquer_resposta_tambem_e_recusa_identificado(monkeypatch):
+    c, cand, pedidos = _planalto_com(monkeypatch, [tr.Timeout("prazo")] * 3)
+    with pytest.raises(Unavailable) as ei:
+        c.fetch(cand)
+    assert ei.value.categoria == "recusa_identificado"
+    assert set(pedidos) == {ih.USER_AGENT_IDENTIFICADO}
+
+
+def test_planalto_503_segue_a_classificacao_geral(monkeypatch):
+    c, cand, pedidos = _planalto_com(monkeypatch, [tr.HTTPStatusError(503)])
+    with pytest.raises(Unavailable) as ei:
+        c.fetch(cand)
+    assert (ei.value.reason, ei.value.categoria) == ("http_503", "fonte_fora")
+    assert set(pedidos) == {ih.USER_AGENT_IDENTIFICADO}
+
+
+def test_planalto_403_continua_recusa_identificado_por_resposta(monkeypatch):
+    c, cand, _ = _planalto_com(monkeypatch, [tr.HTTPStatusError(403)])
+    with pytest.raises(Unavailable) as ei:
+        c.fetch(cand)
+    assert (ei.value.reason, ei.value.categoria) == ("http_403", "recusa_identificado")
 
 
 def test_defaults_vem_da_fonte_unica():
@@ -75,8 +131,7 @@ def test_cada_conector_envia_o_ua_da_tabela(cls, monkeypatch):
 
     monkeypatch.setattr(httputil, "transport_fetch", falso)
     httputil.connector_fetch(URL, hosts=HOSTS, path_prefixes=None, mimes=frozenset({"text/plain"}), user_agent=cls.user_agent)
-    esperado = UA_1_2_0 if cls.id == "planalto" else ih.USER_AGENT_IDENTIFICADO
-    assert vistos == [esperado]
+    assert vistos == [ih.USER_AGENT_IDENTIFICADO]
 
 
 @pytest.mark.repositorio
