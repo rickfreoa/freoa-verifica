@@ -89,13 +89,17 @@ class GuardaExecucao:
 
     def executar(
         self, method: str, url: str, body: bytes | None, *, cacheavel: bool, baixar: Callable,
-        revalidar: Callable | None = None, politica: object = None,
+        revalidar: Callable | None = None, politica: object = None, entrada: Callable | None = None,
     ):
-        """`revalidar(resp)` confere a captura guardada contra a política da chamada atual, sem rede (F-16).
+        """`entrada()` valida a URL solicitada nesta chamada, antes de qualquer cache (FIX12/F-16).
+
+        `revalidar(resp)` confere a captura guardada contra a política da chamada atual, sem rede (F-16).
 
         A chave é só a identidade efetiva; a política (`politica`) não entra nela. Uma falha guardada só vale
         para chamada de mesma política: outra política pode ter aceitado a resposta que a primeira recusou.
         """
+        if entrada is not None:
+            entrada()
         host = _host_canonico(urlsplit(url))
         bloqueio = self.bloqueios.get(host)
         if bloqueio is not None:

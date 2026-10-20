@@ -21,6 +21,7 @@ from freoa_verifica.transport import (
     fetch as transport_fetch,
     revalidar_captura,
 )
+from freoa_verifica import transport as _transporte
 
 _MAX_BYTES = 10 * 1024 * 1024
 _MAX_REDIRECTS = 3
@@ -60,6 +61,7 @@ def connector_fetch(
         cacheavel=kw.get("session") is None and kw.get("sink") is None,
         baixar=lambda: baixar(antes_do_salto=guarda.antes_do_salto),
         revalidar=lambda resp: _revalidar(resp, url, **kw),
+        entrada=lambda: _validar_entrada(url, kw["hosts"], kw.get("path_prefixes")),
         politica=_politica(kw),
     )
 
@@ -73,6 +75,14 @@ def _politica(kw: Mapping[str, Any]) -> tuple:
         kw.get("check_challenge", True), kw.get("ignore_challenge_kinds") or frozenset(),
         kw.get("expected_content"),
     )
+
+
+def _validar_entrada(url: str, hosts, path_prefixes) -> None:
+    """Mesma validação de entrada do transporte sobre a URL SOLICITADA, sem rede (FIX12/F-16)."""
+    try:
+        _transporte.validate_reference(url, hosts, allowed_path_prefixes=path_prefixes)
+    except Exception as exc:
+        raise _mapear_erro(exc, url) from exc
 
 
 def _revalidar(resp: Response, url: str, *, hosts, path_prefixes, mimes, max_bytes=_MAX_BYTES,
