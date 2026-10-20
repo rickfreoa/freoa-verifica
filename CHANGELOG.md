@@ -24,6 +24,7 @@ Origem: plano `docs/PLANO-1.3.0.md` e comparativo com o juscraper (`docs/auditor
 - Filtros de data propagados (decisão 0053): TJDFT filtra localmente, TJSP usa `dt_inicio`/`dt_fim`, STJ filtra em SQL. Cada conector declara em `filtros` o que aplica (`remoto` ou `local`); a resposta traz `filtros_nao_aplicados`.
 - Comunica CNJ: não sondado nesta versão; conector previsto para a 1.4.0 (decisão 0047).
 - Cobertura do STJ continua limitada ao que é adquirido: íntegras do STJ não estão implementadas (`docs/FONTES.md`).
+- Auditoria final, rodada 4 (decisão 0059): o progresso de resposta vale para toda a cadeia de redirecionamentos (F-06, `saltos` na evidência); a semente tem guarda única por chave de requisição em todos os caminhos (F-08); `fontes_consultadas` acompanha as saídas de erro, com `categoria: "regressao"` para erro de programação (F-09); a confirmação CNJ reaproveita a resposta capturada e interrompe o TJSP diante de `Unavailable` (F-10).
 - Fallback entre fontes (decisão 0058, revista): na mesma fonte só ausência explícita autoriza a requisição seguinte (F-05, F-07); entre fontes oficiais distintas (Planalto → Senado, TJSP → DataJud) qualquer `Unavailable` permite a próxima, com a indisponibilidade das anteriores em `fontes_consultadas` (aditivo, experimental) e proveniência da fonte que respondeu. Cada fonte é consultada uma vez; erro não-`Unavailable` interrompe. No CNJ, a confirmação pelo DataJud vale como confirmação do processo, nunca como texto do TJSP.
 
 ### Pesquisa e MCP
