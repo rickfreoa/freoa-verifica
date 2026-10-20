@@ -112,7 +112,8 @@ def _authenticated_output(method):
             return result
         except SourceUnavailable as exc:
             return {"status": "unavailable", "motivo": exc.reason,
-                    "reason_code": exc.reason}
+                    "reason_code": exc.reason,
+                    **({"fontes_consultadas": exc.fontes_consultadas} if exc.fontes_consultadas else {})}
     return checked
 
 
@@ -898,9 +899,11 @@ class Verifica:
                                     "categoria": exc.categoria})
             except Exception as exc:  # noqa: BLE001 — captura sob demanda
                 errors.append(f"{cid}:{type(exc).__name__}")
+                consultadas.append({"fonte": cid, "resultado": "erro", "motivo": type(exc).__name__,
+                                    "categoria": "regressao"})
                 break  # erro de programação ou de parse não passa adiante
         if errors:
-            raise SourceUnavailable(";".join(errors[:3]))
+            raise SourceUnavailable(";".join(errors[:3]), consultadas)
         return None
 
     def _resolve(self, work: WorkKey, requested_work_date=None, *, strict: bool = False) -> ResolvedWork | list[ResolvedWork] | None:
@@ -1187,6 +1190,8 @@ class Verifica:
         except SourceUnavailable as exc:
             out["status"] = "indisponivel"
             out["motivo"] = exc.reason
+            if exc.fontes_consultadas:
+                out["fontes_consultadas"] = exc.fontes_consultadas
             return out
         if resolved is None:
             out["status"] = "inexistente"
@@ -1474,7 +1479,8 @@ class Verifica:
                     "identity": {
                         "status": "not_found" if mismatch else "unavailable",
                         "reason_code": "IDENTIDADE_DIVERGENTE" if mismatch else exc.reason,
-                        "evidence": [],
+                        "evidence": ([{"fontes_consultadas": exc.fontes_consultadas}]  # experimental (0058)
+                                     if not mismatch and exc.fontes_consultadas else []),
                     },
                     "text": {
                         "status": "not_assessed",
@@ -1987,11 +1993,11 @@ class Verifica:
         tribunal = court_from_cnj(digits)
         if tribunal is None:
             return 'nao_confirmado_no_acervo', {'escopo':'tribunal sem rota configurada'}
+        # TJSP e DataJud são fontes distintas: falha do TJSP não impede o DataJud, mas fica declarada (0058).
+        consultadas: list[dict] = []
         try:
             # cjsg pode identificar julgamento; DataJud confirma somente o processo.
             connector = self._get('tjsp')
-            # TJSP e DataJud são fontes distintas: falha do TJSP não impede o DataJud, mas fica declarada (0058).
-            consultadas: list[dict] = []
             try:
                 found = connector.search(cite.raw, numero_processo=cite.raw, limite=5) if tribunal == 'tjsp' else []
                 for cand in found:
@@ -2001,7 +2007,9 @@ class Verifica:
                         continue
                     if judgment_date and parsed.judgment_date != judgment_date:
                         continue
-                    result = self._index_candidate_juris(connector,cand)
+                    # Reaproveita a resposta já capturada; Unavailable do indexador interrompe a fonte.
+                    result = self._index_candidate_juris(connector, cand, captured_response=response,
+                                                         propagar_indisponibilidade=True)
                     if result and result.get('capture_id'):
                         return 'encontrada', result
             except Unavailable as exc:
@@ -2021,12 +2029,17 @@ class Verifica:
                 cap = repo.save_capture(self.conn,resp,connector.id,home=self.home)
                 return 'processo_confirmado', {'capture_id':cap,'sha256':resp.sha256,'url':resp.final_url,'fetched_at':resp.fetched_at,'escopo':'processo; não julgamento', **declaradas}
             except Unavailable as exc:
-                return 'indisponivel', {'motivo':exc.reason,'escopo':'processo; não julgamento', **declaradas, **exc.classificacao()}
+                consultadas.append({'fonte':'datajud','resultado':'indisponivel','motivo':exc.reason,'categoria':exc.categoria})
+                return 'indisponivel', {'motivo':exc.reason,'escopo':'processo; não julgamento', 'fontes_consultadas':consultadas, **exc.classificacao()}
+            except Exception as exc:
+                consultadas.append({'fonte':'datajud','resultado':'erro','motivo':type(exc).__name__,'categoria':'regressao'})
+                return 'indisponivel', {'motivo':type(exc).__name__,'escopo':'processo; não julgamento', 'fontes_consultadas':consultadas}
         except Unavailable as exc:
             return 'indisponivel', {'motivo':exc.reason,'escopo':'processo; não julgamento', **exc.classificacao()}
 
         except Exception as exc:
-            return 'indisponivel', {'motivo':type(exc).__name__,'escopo':'processo; não julgamento'}
+            consultadas.append({'fonte':'tjsp','resultado':'erro','motivo':type(exc).__name__,'categoria':'regressao'})
+            return 'indisponivel', {'motivo':type(exc).__name__,'escopo':'processo; não julgamento', 'fontes_consultadas':consultadas}
 
     @staticmethod
     def _trecho_apos_aspas(texto: str, start: int) -> str | None:
@@ -2529,7 +2542,10 @@ class Verifica:
             self._last_juris_capture = (response.body,key,capture_id)
         return capture_id
 
-    def _index_candidate_juris(self, connector, cand: Candidate, captured_response=None) -> dict[str, Any] | None:
+    def _index_candidate_juris(self, connector, cand: Candidate, captured_response=None, *,
+                               propagar_indisponibilidade: bool = False) -> dict[str, Any] | None:
+        """`propagar_indisponibilidade`: Unavailable do conector sobe ao controlador da cadeia em vez de
+        virar candidato só com metadados (a confirmação CNJ interrompe a fonte e declara a falha)."""
         meta = cand.metadata or {}
         court = str(meta.get("court") or connector.authority or connector.id).upper()
         class_name = meta.get("classe") or meta.get("class") or meta.get("class_name")
@@ -2631,7 +2647,9 @@ class Verifica:
                     class_=str(class_name or ""),
                     official_id=parsed.official_id,
                 )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            if propagar_indisponibilidade and isinstance(exc, Unavailable):
+                raise
             # Download/parse falhou: permanece metadados, sem capture_id.
             capture_id = None
             nivel = "metadados"
