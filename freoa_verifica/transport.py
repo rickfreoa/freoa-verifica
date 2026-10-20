@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import http.client
+import io
 import ipaddress
 import os
 import random
@@ -464,6 +465,49 @@ def validate_url(
 
 
 # portado de freoa-verifica/core.py:PinnedHTTPSConnection
+class _LeitorObservado(io.RawIOBase):
+    """Leitura crua do soquete que sinaliza `iniciada` no primeiro byte recebido (FIX7/F-06).
+
+    Observa `recv_into`, abaixo do buffer do `http.client`: linha de status ou cabeçalho incompletos
+    já contam como resposta iniciada.
+    """
+
+    def __init__(self, soquete, iniciada: threading.Event) -> None:
+        super().__init__()
+        # `makefile` sem buffer mantém a contagem de referências que adia o fechamento do soquete.
+        self._cru = soquete.makefile("rb", buffering=0)
+        self._iniciada = iniciada
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, b):
+        n = self._cru.readinto(b)
+        if n:
+            self._iniciada.set()
+        return n
+
+    def close(self) -> None:
+        try:
+            self._cru.close()
+        finally:
+            super().close()
+
+
+class _SoqueteObservado:
+    """Delega ao soquete real; só `makefile` muda, para observar o primeiro byte da resposta."""
+
+    def __init__(self, soquete, iniciada: threading.Event) -> None:
+        self._soquete = soquete
+        self._iniciada = iniciada
+
+    def makefile(self, *a, **kw):
+        return io.BufferedReader(_LeitorObservado(self._soquete, self._iniciada))
+
+    def __getattr__(self, nome):
+        return getattr(self._soquete, nome)
+
+
 class PinnedHTTPSConnection(http.client.HTTPSConnection):
     def __init__(self, host: str, ip: str, *, timeout: float = 10.0):
         super().__init__(host, 443, timeout=timeout, context=ssl.create_default_context())
@@ -656,6 +700,8 @@ def _fetch_once(
     | HTTPException ao ler status/cabeçalhos     | sim (bytes)      | resposta_inesperada  | não       |
     | (LineTooLong, BadStatusLine, protocolo     |                  |                      |           |
     |  desconhecido, cabeçalhos em excesso)      |                  |                      |           |
+    | prazo/reset com cabeçalho incompleto       | sim (qualquer    | resposta_inesperada  | não       |
+    |  (≥1 byte lido do soquete)                 |  byte)           |                      |           |
     | RemoteDisconnected (fechou sem nenhum byte)| não              | fonte_fora           | sim       |
     | prazo esgotado no corpo (aqui ou em fetch) | sim              | resposta_inesperada  | não       |
     | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
@@ -687,8 +733,9 @@ def _fetch_once(
         # Prazo do soquete acompanha o timeout da captura (CKAN/STJ ~25–90s).
         connection = PinnedHTTPSConnection(host, ip, timeout=max(1.0, remaining))
         connection.capture_deadline = deadline
-        if progresso is not None:
-            progresso.clear()
+        # Compartilhado com o controlador externo de prazo: qualquer byte de resposta já o aciona.
+        iniciada = progresso if progresso is not None else threading.Event()
+        iniciada.clear()
         timed_out = threading.Event()
         slow = threading.Event()
         finished = threading.Event()
@@ -726,11 +773,12 @@ def _fetch_once(
                 current_method, target, body=current_body, headers=req_headers
             )
             network_state["socket"] = getattr(connection, "sock", None)
+            if getattr(connection, "sock", None) is not None:
+                connection.sock = _SoqueteObservado(connection.sock, iniciada)
             lendo_status = True
             response = connection.getresponse()
             lendo_status = False
-            if progresso is not None:
-                progresso.set()
+            iniciada.set()
             if session is not None:
                 session.absorb_response(url, response)
             if response.status in (301, 302, 303, 307, 308):
@@ -894,10 +942,13 @@ def _fetch_once(
             _attach_http(exc, response)
             raise
         except (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
-            if lendo_status and not isinstance(exc, OSError) and not slow.is_set():
+            if response is None and not slow.is_set() and (
+                iniciada.is_set() or (lendo_status and not isinstance(exc, OSError))
+            ):
                 # O servidor já enviou bytes, mas a linha de status ou os cabeçalhos são inválidos
-                # (LineTooLong, BadStatusLine, UnknownProtocol, cabeçalhos em excesso). Encerramento
-                # sem byte algum é RemoteDisconnected, que é OSError e segue como fonte_fora.
+                # (LineTooLong, BadStatusLine, UnknownProtocol, cabeçalhos em excesso) ou foram
+                # interrompidos (prazo, reset) antes de completar. Encerramento sem byte algum é
+                # RemoteDisconnected, que é OSError e segue como fonte_fora.
                 raise RespostaInvalida(str(exc)) from exc
             if response is not None and not slow.is_set():
                 # Falha depois de recebido o status/cabeçalho (IncompleteRead, chunk inválido, reset

@@ -176,7 +176,8 @@ class SementeSync:
         self.state = SyncState(svc.conn)
         self.corpus = load_corpus()
         self.stats: dict[str, FonteStats] = {}
-        self._failed: dict[tuple[str, str], str] = {}
+        self._failed: dict[tuple[str, str], str] = {}  # falhou nesta execução: nunca retentada nela
+        self._pendentes_iniciais: set[str] | None = None
 
     def _stats(self, fonte: str) -> FonteStats:
         fonte = fonte.removesuffix("_doc")
@@ -236,6 +237,8 @@ class SementeSync:
         if self.state.done(fonte, chave):
             self._stats(fonte).pulados += 1
             return "pulado", None
+        if (fonte, chave) in self._failed:
+            return "indisponivel", None  # já falhou nesta execução; repetição só na próxima
         try:
             conn_obj = self.svc._get(connector_id)
             key = {
@@ -291,9 +294,15 @@ class SementeSync:
             self._mark_indisponivel(fonte, chave, f"{type(exc).__name__}:{exc}"[:200])
             return "indisponivel", None
 
+    def _capturar_pendentes_iniciais(self) -> None:
+        rows = self.svc.conn.execute("SELECT chave FROM sync_state WHERE fonte='alterador' AND status='indisponivel'").fetchall()
+        self._pendentes_iniciais = {r[0] for r in rows}
+
     def sync_planalto(self) -> None:
         if not self._want("planalto"):
             return
+        if self._pendentes_iniciais is None:
+            self._capturar_pendentes_iniciais()
         # Checkpoints legados de contexto podiam estar concluídos com filhos pendentes.
         pending = self.svc.conn.execute("SELECT 1 FROM sync_state WHERE fonte='alterador' AND status='indisponivel' LIMIT 1").fetchone()
         if pending:
@@ -343,7 +352,8 @@ class SementeSync:
         if self.max_itens is not None:
             pending_rows = pending_rows[:self.max_itens]
         for row in pending_rows:
-            if not _transient(row):
+            # Só pendências existentes na entrada da execução; falha desta execução fica para a próxima.
+            if row['chave'] not in self._pendentes_iniciais or not _transient(row):
                 continue
             parts = row['chave'].split(':')
             if len(parts) != 3 or not parts[2].isdigit():
@@ -923,6 +933,8 @@ class SementeSync:
 
     def run(self) -> dict[str, Any]:
         self.progress("início sync semente")
+        self._failed.clear()  # "falhou nesta execução" vale por execução
+        self._capturar_pendentes_iniciais()
         steps = [
             ("planalto", self.sync_planalto),
             ("cvm_normas", self.sync_cvm),

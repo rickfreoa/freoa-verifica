@@ -69,8 +69,10 @@ def test_drip_closes_socket_and_releases_worker(monkeypatch, mode):
     tr.reset_guards()
     started = time.monotonic()
     try:
-        # B3-01: prazo vencido depois do status 200 é resposta inválida; sem status segue Timeout.
-        error = {'slow': tr.TransporteLento, 'chunked': tr.TransporteLento, 'deadline': tr.RespostaInvalida}.get(mode, tr.Timeout)
+        # B3-01: prazo vencido depois do status 200 é resposta inválida; FIX7/F-06: qualquer byte de
+        # resposta (inclusive cabeçalho incompleto) também. Sem byte algum segue Timeout.
+        error = {'slow': tr.TransporteLento, 'chunked': tr.TransporteLento, 'deadline': tr.RespostaInvalida,
+                 'headers': tr.RespostaInvalida}.get(mode, tr.Timeout)
         with pytest.raises(error):
             tr.fetch('https://example.com/', allowed_hosts=frozenset({'example.com'}), timeout=6 if mode in {'slow', 'chunked'} else 2.2)
         assert time.monotonic() - started < 4
