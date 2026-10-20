@@ -17,7 +17,7 @@ from freoa_verifica.transport import Response
 from tests.fixture_util import load_fixture
 
 URL = "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
-CORPO_SEM_DATAS = {"query": "sociedade", "pagina": 0, "tamanho": 20}
+CORPO_SEM_DATAS = {"query": "sociedade", "pagina": 0, "tamanho": 20, "retornaInteiroTeor": True}  # 0046
 
 
 @pytest.fixture

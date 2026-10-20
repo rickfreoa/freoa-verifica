@@ -61,7 +61,11 @@ def test_requisicao_post_json_pelo_transporte(conn):
     assert url == URL and kw["method"] == "POST" and kw["hosts"] == {"jurisdf.tjdft.jus.br"}
     assert kw["path_prefixes"] == {"jurisdf.tjdft.jus.br": ("/api/v1/pesquisa",)} and kw["mimes"] == {"application/json"}
     assert json.loads(kw["body"]) == {"query": "\"acordo de acionistas\"", "pagina": 0, "tamanho": 3,  # locucoes-1
+                                       "retornaInteiroTeor": True,
                                        "termosAcessorios": [{"campo": "base", "valor": "acordaos"}]}
+    _search(conn, _load("acordo_acionistas"), "x")
+    corpo = json.loads(conn.state["calls"][1][1]["body"])
+    assert corpo["retornaInteiroTeor"] is True and not {"inteiroTeor", "termosAcessorios"} & corpo.keys()
 
 
 def test_acordao_so_ementa(conn):
@@ -270,3 +274,94 @@ def test_consulta_oficial_poe_locucoes_entre_aspas(conn):
     _search(conn, _load("vazio"), "apuracao de haveres")
     corpo = json.loads(conn.state["calls"][-1][1]["body"])
     assert corpo["query"] == '"apuração de haveres"'
+
+
+# Decisão 0046: íntegra de acórdão pela API (`retornaInteiroTeor`); captura real tjdft_busca_integra.
+def _integra():
+    return _load("busca_integra")
+
+
+def _acordao(data, i=0):
+    return [r for r in data["registros"] if r["base"] == "acordaos"][i]
+
+
+def test_acordao_integro_aceito(conn):
+    data = _integra()
+    rec = _acordao(data)
+    p, _ = _parse(conn, data, rec)
+    assert (p.profile, p.kind, p.metadata["documento"]) == ("tjdft_inteiro_teor", "acordao", "inteiro_teor")
+    assert p.text == rec["inteiroTeor"] and rec["processo"] in p.text and p.ementa == rec["ementa"]
+    assert "integra_motivo" not in p.metadata
+
+
+def test_monocratica_real_cujo_texto_nao_traz_o_proprio_processo(conn):
+    data = _integra()
+    mono = _por_sub(data, "decisoes-monocraticas")
+    assert mono["processo"] not in mono["inteiroTeor"]
+    p, _ = _parse(conn, data, mono)
+    assert (p.profile, p.text, p.metadata["integra_motivo"]) == ("tjdft_ementa", "", "integra_processo_divergente")
+
+
+@pytest.mark.parametrize("motivo, altera", [
+    ("integra_placeholder", lambda r: r.update(inteiroTeor="Inteiro Teor indisponível. " + r["inteiroTeor"])),
+    ("integra_processo_divergente", lambda r: r.update(inteiroTeor=r["inteiroTeor"].replace(r["processo"], "0000000-00.0000.0.00.0000"))),
+    # Fragmento inicial: tem o número e o dispositivo (ementa), mas termina antes do fecho.
+    ("integra_sem_fecho", lambda r: r.update(inteiroTeor=r["inteiroTeor"][:r["inteiroTeor"].index("DECISÃO\n")])),
+    ("integra_curta", lambda r: r.update(inteiroTeor=f"Acórdão {r['processo']}. Ante o exposto, unânime.")),
+    ("integra_sem_dispositivo", lambda r: r.update(inteiroTeor=r["processo"] + " texto qualquer " * 100 + " DECISÃO unânime")),
+])
+def test_acordao_sem_requisito_vira_ementa_com_motivo(conn, motivo, altera):
+    data = _integra()
+    rec = _acordao(data)
+    altera(rec)
+    p, _ = _parse(conn, data, rec)
+    assert (p.profile, p.text, p.ementa) == ("tjdft_ementa", "", rec["ementa"])
+    assert p.metadata["integra_motivo"] == motivo and "documento" not in p.metadata
+
+
+def test_acordao_sem_texto_nao_tem_motivo(conn):
+    data = _integra()
+    rec = _acordao(data)
+    rec.pop("inteiroTeor")
+    p, _ = _parse(conn, data, rec)
+    assert p.profile == "tjdft_ementa" and "integra_motivo" not in p.metadata
+
+
+def test_ponta_a_ponta_acordao_integro_e_motivo_da_indisponibilidade(svc, conn):
+    data = _integra()
+    bom, ruim = _acordao(data, 0), _acordao(data, 1)
+    ruim["inteiroTeor"] = ruim["inteiroTeor"].replace(ruim["processo"], "0000000-00.0000.0.00.0000")
+    cands = _search(conn, data)
+    for c in cands:
+        svc._index_candidate_juris(conn, c)
+    r = svc.obter_decisao(bom["identificador"], tribunal="tjdft", parte="inteiro_teor")
+    assert r["status"] == "encontrada" and r["texto"].startswith(bom["inteiroTeor"][:200])
+    r = svc.obter_decisao(ruim["identificador"], tribunal="tjdft", parte="inteiro_teor")
+    assert (r["status"], r["texto"], r["motivo_integra"]) == ("parte_indisponivel", None, "integra_processo_divergente")
+    assert svc.obter_decisao(ruim["identificador"], tribunal="tjdft")["parte_entregue"] == "ementa"
+
+
+def test_registro_duplicado_nao_duplica_decisao(svc, conn):
+    data = _integra()
+    rec = _acordao(data)
+    data["registros"].append(copy.deepcopy(rec))  # mesmo uuid e identificador
+    cands = _search(conn, data)
+    cand = next(c for c in cands if c.metadata["uuid"] == rec["uuid"])
+    with pytest.raises(Unavailable):
+        conn.parse_candidate(conn.fetch(cand), cand)
+    for c in cands:
+        svc._index_candidate_juris(conn, c)
+    n = svc.conn.execute("SELECT COUNT(*) FROM decision WHERE court='TJDFT' AND number IN (?, ?)",
+                        (rec["identificador"], rec["processo"])).fetchone()[0]
+    assert n == 1
+    docs = svc.conn.execute("SELECT COUNT(*) FROM decision_document d JOIN decision x ON x.id=d.decision_id "
+                            "WHERE x.number=?", (rec["processo"],)).fetchone()[0]
+    assert docs == 0  # registro ambíguo: nada é gravado como íntegra
+
+
+def test_obtencao_de_documento_tambem_pede_a_integra(conn):
+    data = _integra()
+    cand = _search(conn, data)[0]
+    conn._capturas.clear()
+    conn.fetch(cand)
+    assert all(json.loads(kw["body"])["retornaInteiroTeor"] is True for _, kw in conn.state["calls"])

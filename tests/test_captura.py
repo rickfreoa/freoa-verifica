@@ -77,7 +77,7 @@ def test_search_usa_o_construtor(monkeypatch):
     tjdft.TjdftConnector().search("acordo de acionistas", base="acordaos", limite=7)
     assert json.loads(vistos[0]) == tjdft.build_search_payload(
         tjdft.consulta_oficial("acordo de acionistas"), pagina=0, tamanho=7,
-        extras={"termosAcessorios": [{"campo": "base", "valor": "acordaos"}]},
+        extras={"retornaInteiroTeor": True, "termosAcessorios": [{"campo": "base", "valor": "acordaos"}]},
     )
 
 
