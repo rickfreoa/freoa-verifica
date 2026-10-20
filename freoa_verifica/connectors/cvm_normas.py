@@ -20,6 +20,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch, form_body
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
 from freoa_verifica.parsers.model import Issue, ParsedDocument
 from freoa_verifica.transport import Response, Session
@@ -99,7 +100,7 @@ class CvmNormasConnector(Connector):
     hosts = _HOSTS
     path_prefixes = _PREFIXES
     mimes = _MIMES
-    user_agent = "browser"
+    user_agent = UA_POR_CONECTOR["cvm_normas"]
     coverage = {
         "colecoes": list(_INDEX.keys()),
         "periodo": "acervo portal",

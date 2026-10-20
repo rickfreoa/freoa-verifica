@@ -21,6 +21,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.transport import Response
 
 _FEED = "https://conteudo.cvm.gov.br/feed/decisoes.xml"
@@ -56,7 +57,7 @@ class CvmColegiadoConnector(Connector):
     hosts = _HOSTS
     path_prefixes = _PREFIXES
     mimes = _MIMES
-    user_agent = "browser"
+    user_agent = UA_POR_CONECTOR["cvm_colegiado"]
     filtros = {"desde": "remoto"}  # só o ano de `desde` (granularidade anual); `ate` não chega à fonte (0053)
     coverage = {
         "colecoes": ["decisoes_colegiado", "atas"],

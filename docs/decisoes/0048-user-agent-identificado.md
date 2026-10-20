@@ -32,3 +32,12 @@ A leitura de que o encerramento seletivo de conexão não é "controle de acesso
 ## TJSP
 
 O `cjsg` exibe CAPTCHA independentemente do UA. O conector passa ao UA identificado e continua respondendo `unavailable(desafio)`; a afirmação do `FONTES.md` de que a busca está protegida fica confirmada por amostra (n = 2, ambas com desafio). Nenhuma mudança de comportamento além do UA.
+
+## Implementação
+
+- `freoa_verifica/identidade_http.py`: fonte única (`USER_AGENT_IDENTIFICADO`, `USER_AGENT_NAVEGADOR_1_2_0`, tabela `UA_POR_CONECTOR`). Modo desconhecido é `ValueError`; não há fallback.
+- Removidos os defaults divergentes: `DEFAULT_USER_AGENT` (`transport.py`), `IDENTIFIED_USER_AGENT` (`connectors/base.py`) e o modo `"browser"` (`connectors/httputil.py`). `transport._contact_headers`, `httputil.ua_header` e `captura.UA_IDENTIFICADO` importam do módulo novo.
+- Cada conector declara `user_agent = UA_POR_CONECTOR["<id>"]`; só `planalto` resolve para `navegador_1_2_0`.
+- 401/403 sem marcador de desafio seguem como `Unavailable(categoria="recusa_identificado")` (S2). O transporte passou a ler uma amostra (64 KiB) do corpo de respostas de erro e a registrar o desafio provado em `HTTPStatusError.desafio`; com marcador, a categoria é `ambiental_desafio`.
+- Repetição limitada (T1) em `transport.fetch(repeticao=2, idempotente=False)`: só 502/503/504 sem marcador e falha de conexão/leitura; POST apenas com `idempotente=True`; 403, 429 e desafio nunca repetem; espera por `Retry-After` ou backoff de 1 s e 2 s com jitter de até 25%, sempre dentro do prazo total; `Retry-After` passa a constar dos cabeçalhos registrados; o circuit breaker conta uma falha por chamada lógica.
+- Testes: `tests/test_user_agent_repeticao.py`.

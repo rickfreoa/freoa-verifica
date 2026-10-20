@@ -375,5 +375,5 @@ def test_user_agent_do_conector_em_todos_os_modos(envios, tmp_path, monkeypatch)
     captura.capturar("tjsp", {"termo": "x"}, destino=tmp_path, sonda=True, chave="b")
     r = captura.capturar("datajud", url=_url_base("datajud"), destino=tmp_path, sonda=True, chave="d")
     assert r.user_agent == httputil.ua_header("identified")["User-Agent"]
-    assert envios[0]["headers"]["User-Agent"] == httputil.ua_header("browser")["User-Agent"]
+    assert envios[0]["headers"]["User-Agent"] == httputil.ua_header("identified")["User-Agent"]
     assert envios[-1]["headers"]["User-Agent"] == r.user_agent

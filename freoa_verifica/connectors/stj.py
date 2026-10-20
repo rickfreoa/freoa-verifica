@@ -26,6 +26,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.authority import normalize_species
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.transport import Response
 
 _MESES_REVALIDADOS = 2
@@ -122,7 +123,7 @@ class StjConnector(Connector):
         "stj.jus.br": ("/websecstj/",),
     }
     mimes = _JSON_MIMES
-    user_agent = "browser"
+    user_agent = UA_POR_CONECTOR["stj"]
     coverage = {
         # Declara só o que o sync adquire: espelhos (ementa) e precedentes qualificados. A coleção oficial
         # de íntegras existe no portal, mas a aquisição não está implementada (avaliação externa, A12).

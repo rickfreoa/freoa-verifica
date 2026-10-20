@@ -18,6 +18,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.parsers.planalto import parse_planalto
 from freoa_verifica.transport import HTTPStatusError, Response
 
@@ -149,7 +150,7 @@ class PlanaltoConnector(Connector):
         "planalto.gov.br": ("/ccivil_03/",),
     }
     mimes = frozenset({"text/html", "application/xhtml+xml", "text/plain"})
-    user_agent = "browser"
+    user_agent = UA_POR_CONECTOR["planalto"]  # exceção da decisão 0048
     coverage = {
         "colecoes": ["leis", "lcp", "decreto-lei", "constituicao"],
         "periodo": "variavel por espécie",

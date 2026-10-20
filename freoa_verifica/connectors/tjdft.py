@@ -24,6 +24,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.transport import Response
 
 _HOST = "jurisdf.tjdft.jus.br"
@@ -185,7 +186,7 @@ class TjdftConnector(Connector):
     hosts = frozenset({_HOST})
     path_prefixes = {_HOST: ("/api/v1/pesquisa",)}
     mimes = frozenset({"application/json"})
-    user_agent = "identified"
+    user_agent = UA_POR_CONECTOR["tjdft"]
     # Forma de data em `termosAcessorios` sem fixture que a comprove: o filtro de data é local (0053).
     filtros = {"desde": "local", "ate": "local"}
     coverage = {

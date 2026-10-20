@@ -17,6 +17,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.transport import Response
 
 _TIPOS = frozenset({"LEI", "LCP", "DEL", "MPV", "DEC", "EMC", "DLG", "DSN"})
@@ -88,7 +89,7 @@ class SenadoConnector(Connector):
         "normas.leg.br": ("/api/", "/"),
     }
     mimes = _JSON_MIMES | frozenset({"text/html", "application/xhtml+xml", "text/xml", "application/xml"})
-    user_agent = "browser"
+    user_agent = UA_POR_CONECTOR["senado"]
     coverage = {
         "colecoes": sorted(_TIPOS),
         "periodo": "acervo Sigen",

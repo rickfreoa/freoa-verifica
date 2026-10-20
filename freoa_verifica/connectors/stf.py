@@ -21,6 +21,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.challenge import detect_challenge, unavailable_from_challenge
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.transport import Response
 
 _HOSTS = frozenset(
@@ -58,7 +59,7 @@ class StfConnector(Connector):
     hosts = _HOSTS
     path_prefixes = _PREFIXES
     mimes = _MIMES
-    user_agent = "browser"
+    user_agent = UA_POR_CONECTOR["stf"]
     coverage = {
         "colecoes": ["processos", "decisoes", "repercussao_geral", "sumulas", "sumulas_vinculantes"],
         "periodo": "acervo portal",
