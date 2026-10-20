@@ -1,13 +1,63 @@
 # Histórico de versões
 
-## Não lançado (1.3.0)
+## 1.3.0 — 20/10/2026
 
-- User-Agent identificado em todos os conectores, sem exceção (decisão 0048): `freoa-verifica/<versão> (+https://github.com/rickfreoa/freoa-verifica)`, de fonte única; a string de navegador da 1.2.0 e o modo `navegador_1_2_0` foram removidos. **Perda de cobertura ao vivo:** o Planalto encerra a conexão do cliente identificado sem responder; falha de transporte anterior a qualquer resposta vira `unavailable(recusa_identificado_planalto)` com categoria `recusa_identificado` (não ambiental, vermelha na saúde das fontes), sem nova tentativa com outro UA. Respostas HTTP (5xx etc.) seguem a classificação geral. O acervo instalado continua atendendo consultas sem rede; a atualização ao vivo da legislação federal fica indisponível até o Planalto aceitar o cliente identificado.
-- Correções da auditoria do bloco 3: timeout depois do status ou do primeiro byte do corpo é `resposta_inesperada`, não `fonte_fora` (B3-01); `fv acervo conferir` sem datas herda o recorte do manifesto (B3-02); `--gravar-manifesto` recusa destino dentro do acervo auditado e seus aliases, resolvido antes de abrir o banco (B3-03); a bateria confere existência, tamanho e sha256 dos blobs das capturas e `--sem-blobs` deixa o resultado `parcial` (saída 2) (B3-04); íntegra do TJDFT exige o número CNJ do registro isolado e igual, não substring (B3-06); o verificador de contrato compara tipo e nulidade por elemento de lista (B3-07).
+Origem: plano `docs/PLANO-1.3.0.md` e comparativo com o juscraper (`docs/auditoria/2026-10-19-comparativo-juscraper.md`). Decisões 0045 a 0057.
 
-- Bateria do snapshot (decisão 0057): `fv acervo conferir` confere o acervo em modo somente leitura (contagens por fonte, órgão e mês do STJ, recursos CKAN, pendências do `sync_state`; duplicatas, decisões sem captura, datas fora do recorte, derivados antigos) e compara com manifesto congelado (`--gravar-manifesto`, `--manifesto`; `--estrito` inclui pendências). Sai com 1 em qualquer divergência.
+### Evidência e contrato
 
-- Indisponibilidade classificada (decisão 0045): `Unavailable` ganha `categoria` e `evidencia`; saída JSON ganha `categoria` e `evidencia_indisponibilidade` (aditivo). Códigos de motivo novos: `http_401`, `http_403` (antes `desafio_http_403` para qualquer 403) e `corpo_vazio` (antes `desafio_corpo_vazio`); `desafio_<tipo>` fica só para assinatura identificada. Testes live: desafio ambiental ou fonte fora, com evidência, viram xfail.
+- Indisponibilidade classificada (decisão 0045): `Unavailable` ganha `categoria` e `evidencia`; a saída JSON ganha `categoria` e `evidencia_indisponibilidade` (aditivo). Categorias por prova positiva: `ambiental_desafio`, `fonte_fora`, `recusa_identificado`, `resposta_inesperada` e `regressao`; sem prova, `categoria` é `null`. Testes live: desafio ambiental ou fonte fora, com evidência, viram xfail.
+- Contrato JSON 1 (`docs/CONTRATO.md`): campos, estados, nulidade e mudanças aditivas. `CONTRATO_VERSAO = "1"` e campo `contrato` em `listar_fontes` (aditivo).
+- Respostas da 1.2.0 congeladas em `tests/contrato/esperado/` (Python, MCP e REST), com teste de compatibilidade que normaliza só os campos voláteis documentados.
+- Verificador de contrato compara campos por elemento de lista, tipo e nulidade (B2-05, B3-07).
+- Captura reproduzível (decisão 0049): a busca do TJDFT tem origem única (`build_search_payload`); `captura.capturar` monta a requisição pelos `build_*` e a envia por `connector_fetch`; `scripts/capturar_fixture.py` é o caminho para nova captura.
+- Fixtures com proveniência (decisão 0052): todo arquivo de `tests/fixtures/` consta de `FIXTURES.json`, com categoria `captura_real` ou `sintetica`.
+- Bateria do snapshot (decisão 0057): `fv acervo conferir` confere o acervo em modo somente leitura (contagens por fonte, órgão e mês do STJ, recursos CKAN, pendências do `sync_state`, duplicatas, decisões sem captura, datas fora do recorte, derivados antigos) e compara com manifesto congelado (`--gravar-manifesto`, `--manifesto`; `--estrito` inclui pendências). Sai com 1 em qualquer divergência.
+- Correções da auditoria do bloco 3: `fv acervo conferir` sem datas herda o recorte do manifesto (B3-02); `--gravar-manifesto` recusa destino dentro do acervo auditado e seus aliases, resolvido antes de abrir o banco (B3-03); a bateria confere existência, tamanho e sha256 dos blobs das capturas, e `--sem-blobs` deixa o resultado `parcial` (saída 2) (B3-04).
+
+### Fontes
+
+- TJDFT: texto integral pela API pública com `retornaInteiroTeor: true` (decisão 0046). Acórdãos passam a trazer a íntegra quando o campo vem preenchido; a regra do fecho decisório vale também para acórdãos.
+- TJDFT: a íntegra exige o número CNJ do registro isolado e igual, de 20 dígitos, não substring (B3-06).
+- TJDFT: data em `termosAcessorios` não é enviada, porque não há fixture da forma aceita (decisão 0053).
+- Filtros de data propagados (decisão 0053): TJDFT filtra localmente, TJSP usa `dt_inicio`/`dt_fim`, STJ filtra em SQL. Cada conector declara em `filtros` o que aplica (`remoto` ou `local`); a resposta traz `filtros_nao_aplicados`.
+- Comunica CNJ: não sondado nesta versão; conector previsto para a 1.4.0 (decisão 0047).
+- Cobertura do STJ continua limitada ao que é adquirido: íntegras do STJ não estão implementadas (`docs/FONTES.md`).
+
+### Pesquisa e MCP
+
+- `listar_fontes`: capacidade, recorte do acervo instalado e tipos de documento (decisão 0056).
+- Instruções do servidor MCP com fluxo em quatro passos e descrições por ferramenta, com estados possíveis e recorte; testes do texto exposto (decisão 0056).
+- Bloco `cobertura` em `pesquisar_jurisprudencia`, por tribunal, com truncamento remoto. `CandidateList.total` é `int | None` e `total_exato` declara se o total é exato, cota inferior ou desconhecido (decisão 0055).
+
+### Saúde das fontes
+
+- Os testes live gravam `saude-fontes.json` ao fim da sessão: `commit`, `inicio`, `fim`, `completa` e, por fonte, `estado` (`ok`, `unavailable`, `regressao`, `not_run`), `categoria`, `motivo` e testes (decisão 0054).
+- Desafio ambiental ou fonte fora, com evidência, vira xfail; regressão e recusa ao identificado seguem como falha.
+- O workflow semanal `saude-das-fontes` não mascara o resultado. A issue viva guarda `run_id` e início; execução posterior não grava sobre a anterior (B2-07, B2-08).
+
+### Transporte
+
+- User-Agent identificado em todos os conectores, sem exceção (decisão 0048): `freoa-verifica/<versão> (+https://github.com/rickfreoa/freoa-verifica)`, de fonte única. A string de navegador da 1.2.0 e o modo `navegador_1_2_0` foram removidos.
+- Planalto: falha de transporte anterior a qualquer resposta vira `unavailable(recusa_identificado_planalto)`, categoria `recusa_identificado`, sem nova tentativa com outro UA. Respostas HTTP (5xx etc.) seguem a classificação geral.
+- Timeout depois do status ou do primeiro byte do corpo é `resposta_inesperada`, não `fonte_fora` (B3-01). Falha de protocolo com resposta recebida (tipo inválido, framing, tamanho acima do limite) segue o mesmo caminho (decisão 0045, emenda FIX1). Prazo vencido depois do status 200 é `RespostaInvalida` (B3-01).
+- `detect_challenge` não infere desafio por 202 com corpo vazio sem cabeçalho de borda ou assinatura (A11).
+
+### Distribuição e CI
+
+- Dependências de CI e de build vêm de locks com hashes (`requirements/ci.lock`, `build.lock`, `lint.lock`), instaladas com `--require-hashes`; a wheel entra com `--no-deps`. `scripts/atualizar_lock.{sh,ps1}` regeram os locks (decisão 0050).
+- Matriz de testes em Python 3.11 a 3.14, em Ubuntu e Windows. Testes que leem o checkout são marcados `repositorio`. Ruff com baseline e catraca.
+- `release.yml` cria a release como rascunho e não publica na PyPI; `pypi.yml` roda depois da publicação (decisão 0050).
+- Instalador Windows: `-Versao` com padrão `1.3.0`; attestation obrigatória. `gh` ausente ou verificação falha aborta a instalação. `-SemAttestation` é explícito e grava `attestation_verificada: false`. Sucesso grava `instalacao.json` com versão, `sha256_wheel`, digest do snapshot e attestation (decisão 0051).
+- `fv snapshot install` sem `--arquivo` consulta só a release `v<versão>`. Release ausente, rascunho ou sem o asset da versão falha com motivo explícito, sem busca em releases anteriores (decisão 0051).
+
+### Mudanças incompatíveis e perdas declaradas
+
+- Motivos de indisponibilidade: `desafio_http_403` passa a `http_403` (e `http_401` é novo); `desafio_corpo_vazio` passa a `corpo_vazio`. `desafio_<tipo>` fica só para assinatura identificada (decisão 0045).
+- `CandidateList.total` desconhecido sai como `null`, não como o número de itens lidos (decisão 0055).
+- **Planalto ao vivo indisponível:** o Planalto encerra a conexão do cliente identificado sem responder (decisão 0048). A atualização ao vivo da legislação federal fica indisponível até o Planalto aceitar o cliente identificado. O acervo instalado não foi alterado e continua atendendo consultas sem rede.
+- Release passa a rascunho até a auditoria dos bytes publicados; a publicação na PyPI só ocorre depois da publicação da release (decisão 0050).
+- Instalador exige attestation; a instalação sem verificação só ocorre com `-SemAttestation` explícito (decisão 0051).
 
 ## 1.2.0 (19/10/2026)
 

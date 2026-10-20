@@ -6,6 +6,8 @@ import subprocess
 
 import pytest
 
+from freoa_verifica import __version__
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/instalar-freoa-verifica.ps1"
 
 
@@ -16,7 +18,7 @@ def test_installer_native_failure_stops(tmp_path):
         pytest.skip("PowerShell não disponível")
     script = tmp_path / SCRIPT.name
     shutil.copyfile(SCRIPT, script)
-    (tmp_path / "freoa_verifica-1.2.0-py3-none-any.whl").write_bytes(b"wheel falso")
+    (tmp_path / f"freoa_verifica-{__version__}-py3-none-any.whl").write_bytes(b"wheel falso")
     (tmp_path / "gh.cmd").write_text("@echo off\r\nexit /b 37\r\n")
     env = dict(os.environ, USERPROFILE=str(tmp_path / "user"), LOCALAPPDATA=str(tmp_path / "local"))
     env["PATH"] = str(tmp_path) + os.pathsep + env["PATH"]
@@ -64,7 +66,7 @@ def test_without_gh_records_warning_and_python_failure(tmp_path):
         pytest.skip("PowerShell não disponível")
     script = tmp_path / SCRIPT.name
     shutil.copyfile(SCRIPT, script)
-    (tmp_path / "freoa_verifica-1.2.0-py3-none-any.whl").write_bytes(b"wheel falso")
+    (tmp_path / f"freoa_verifica-{__version__}-py3-none-any.whl").write_bytes(b"wheel falso")
     (tmp_path / "python.cmd").write_text("@echo off\r\nexit /b 23\r\n")
     wrapper = tmp_path / "wrapper.ps1"
     wrapper.write_text("""
