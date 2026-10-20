@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlencode
 
-from freoa_verifica.connectors.base import IDENTIFIED_USER_AGENT, Unavailable
+from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.connectors.challenge import (
     detect_challenge,
     map_transport_error,
     unavailable_from_challenge,
 )
+from freoa_verifica.identidade_http import user_agent_do_modo
 from freoa_verifica.limites import restante
 from freoa_verifica.transport import (
-    DEFAULT_USER_AGENT,
     Response,
     Session,
     fetch as transport_fetch,
@@ -22,9 +22,7 @@ from freoa_verifica.transport import (
 
 
 def ua_header(mode: str) -> dict[str, str]:
-    if mode == "identified":
-        return {"User-Agent": IDENTIFIED_USER_AGENT}
-    return {"User-Agent": DEFAULT_USER_AGENT}
+    return {"User-Agent": user_agent_do_modo(mode)}
 
 
 def connector_fetch(
@@ -33,7 +31,7 @@ def connector_fetch(
     hosts: frozenset[str],
     path_prefixes: dict[str, tuple[str, ...]] | None,
     mimes: frozenset[str],
-    user_agent: str = "browser",
+    user_agent: str = "identified",
     method: str = "GET",
     body: bytes | None = None,
     headers: Mapping[str, str] | None = None,

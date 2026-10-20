@@ -124,6 +124,10 @@ def map_transport_error(exc: BaseException, url: str | None = None) -> Unavailab
     if isinstance(exc, HTTPStatusError):
         ev = {"status": exc.status, **base}
         headers = dict(getattr(http, "headers", ()) or ())
+        if "retry-after" in headers:
+            ev["retry_after"] = headers["retry-after"]
+        if getattr(exc, "desafio", None):
+            return Unavailable(f"desafio_{exc.desafio}", "ambiental_desafio", {**ev, "marcador": exc.desafio})
         for nome, kind in _HEADER_MARKERS:  # hoje o transporte só retém 4 cabeçalhos; vale se reter mais
             if nome in headers:
                 return Unavailable(f"desafio_{kind}", "ambiental_desafio", {**ev, "cabecalho": nome})

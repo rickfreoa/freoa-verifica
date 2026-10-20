@@ -18,6 +18,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.transport import Response
 
 _API = "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos"
@@ -61,7 +62,7 @@ class TcuConnector(Connector):
     hosts = _HOSTS
     path_prefixes = _PREFIXES
     mimes = _MIMES
-    user_agent = "identified"  # UA de navegador cai em desafio F5/TSPD
+    user_agent = UA_POR_CONECTOR["tcu"]  # UA de navegador cai em desafio F5/TSPD
     coverage = {
         "colecoes": ["acordaos"],
         "periodo": "acervo API recupera-acordaos",

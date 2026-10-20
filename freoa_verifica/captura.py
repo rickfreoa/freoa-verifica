@@ -24,9 +24,10 @@ from freoa_verifica.connectors import tjdft, tjsp
 from freoa_verifica.connectors.base import Unavailable, registry
 from freoa_verifica.connectors.challenge import map_transport_error
 from freoa_verifica.connectors.httputil import connector_fetch, form_body, ua_header
+from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.transport import BlockedHost, HTTPStatusError, Session, validate_reference
 
-UA_IDENTIFICADO = f"freoa-verifica/{__version__} (+https://github.com/rickfreoa/freoa-verifica)"
+UA_IDENTIFICADO = USER_AGENT_IDENTIFICADO
 UA_MODOS = ("identificado", "conector")
 CHAVE = re.compile(r"[a-z0-9_]+")
 ORIGEM_METADADOS = "captura_instrumento"

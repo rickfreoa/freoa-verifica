@@ -9,12 +9,7 @@ from typing import Any, ClassVar, Literal
 from freoa_verifica.parsers.model import ParsedDocument
 from freoa_verifica.transport import Response
 
-UserAgentMode = Literal["browser", "identified"]
-
-IDENTIFIED_USER_AGENT = (
-    "FREOA-Verifica/1.0 (+https://github.com/rickfreoa/freoa-verifica; "
-    "uso-identificado; contato via FV_CONTACT)"
-)
+UserAgentMode = Literal["identified", "navegador_1_2_0"]
 
 
 CATEGORIAS_INDISPONIBILIDADE = (
@@ -129,7 +124,7 @@ class Connector(ABC):
     hosts: ClassVar[frozenset[str]]
     path_prefixes: ClassVar[dict[str, tuple[str, ...]]]
     mimes: ClassVar[frozenset[str]]
-    user_agent: ClassVar[UserAgentMode] = "browser"
+    user_agent: ClassVar[UserAgentMode] = "identified"
     coverage: ClassVar[dict[str, Any]] = {}
     # Filtros públicos que a busca ao vivo aplica na origem: "remoto" (parâmetro da fonte) ou "local"
     # (no próprio conector, sobre o recuperado). Ausente = não aplicado (docs/FILTROS.md).

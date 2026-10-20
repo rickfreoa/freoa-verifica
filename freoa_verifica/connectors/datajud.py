@@ -19,6 +19,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.transport import Response
 
 # Chave pública documentada na wiki DataJud (não é segredo).
@@ -60,7 +61,7 @@ class DatajudConnector(Connector):
     hosts = _HOSTS
     path_prefixes = _PREFIXES
     mimes = _MIMES
-    user_agent = "identified"
+    user_agent = UA_POR_CONECTOR["datajud"]
     coverage = {
         "colecoes": ["metadados_processuais"],
         "periodo": "conforme tribunal",

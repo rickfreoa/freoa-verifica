@@ -9,6 +9,7 @@ import hashlib
 import http.client
 import ipaddress
 import os
+import random
 import re
 import socket
 import ssl
@@ -25,21 +26,18 @@ from queue import Empty, Queue
 from urllib.parse import unquote, urljoin, urlsplit
 from urllib.request import Request as _UrlLibRequest
 
+from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
+
 # --- cabeçalhos de recibo HTTP ---
 # portado de freoa-verifica/http_receipts.py (HEADER_NAMES / _valid_header)
 
-HEADER_NAMES = frozenset({"date", "last-modified", "content-type", "content-length"})
+HEADER_NAMES = frozenset({"date", "last-modified", "content-type", "content-length", "retry-after"})
 _MIME = re.compile(
     r"[a-z0-9.+-]{1,64}/[a-z0-9.+-]{1,64}"
     r"(?:;[ ]*charset=(?:utf-8|utf-16|iso-8859-1|windows-1252|us-ascii))?",
     re.I,
 )
 
-DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
 DNS_TIMEOUT = 10.0
 MIN_BYTES_PER_SECOND = 2048
 SLOW_WINDOW = 30.0
@@ -108,8 +106,11 @@ class HTTPStatusError(TransportError):
         message: str | None = None,
         *,
         http: HTTPMetadata | None = None,
+        desafio: str | None = None,
     ):
         self.status = status
+        # Tipo do desafio (CAPTCHA/WAF) provado na resposta de erro; None = sem marcador.
+        self.desafio = desafio
         super().__init__(message or f"HTTP {status}", http=http)
 
 
@@ -160,7 +161,9 @@ def _valid_header(name: str, value: str) -> bool:
         return False
     if not 1 <= len(value) <= 192 or any(ord(c) < 32 or ord(c) > 126 for c in value):
         return False
-    if name in {"date", "last-modified"}:
+    if name == "retry-after" and re.fullmatch(r"[0-9]{1,9}", value):
+        return True
+    if name in {"date", "last-modified", "retry-after"}:
         try:
             parsed = parsedate_to_datetime(value)
             return format_datetime(parsed, usegmt=True) == value
@@ -224,9 +227,23 @@ def _failure_http(response) -> HTTPMetadata | None:
         return None
 
 
+def _desafio_na_resposta(response) -> str | None:
+    """Tipo de desafio visto em resposta de erro (cabeçalho de borda ou amostra do corpo)."""
+    from freoa_verifica.connectors.challenge import detect_challenge  # import tardio: challenge importa este módulo
+
+    try:
+        headers = dict(response.getheaders())
+        reader = getattr(response, "read1", None) or response.read
+        amostra = reader(65536) or b""
+        found = detect_challenge(status=response.status, headers=headers, body=amostra)
+    except Exception:
+        return None
+    return str(found.args[0]) if found is not None and found.args else None
+
+
 def _contact_headers() -> dict[str, str]:
     contact = (os.environ.get("FV_CONTACT") or "").strip()
-    headers = {"User-Agent": DEFAULT_USER_AGENT, "Accept-Encoding": "identity"}
+    headers = {"User-Agent": USER_AGENT_IDENTIFICADO,"Accept-Encoding": "identity"}
     if contact:
         headers["From"] = contact
     return headers
@@ -560,6 +577,42 @@ def circuit_retry_after() -> float:
                         for b in breakers if b.opened_at is not None])
 
 
+REPETICOES_PADRAO = 2
+_STATUS_REPETIVEIS = frozenset({502, 503, 504})
+_dormir = time.sleep  # trocáveis nos testes
+_sortear = random.uniform
+
+
+def _retry_after(falha: HTTPStatusError) -> float | None:
+    """Segundos de `Retry-After` (inteiro ou data HTTP); None se ausente ou inválido."""
+    valor = dict(falha.http.headers).get("retry-after") if falha.http is not None else None
+    if valor is None:
+        return None
+    if valor.isdigit():
+        return float(valor)
+    try:
+        alvo = parsedate_to_datetime(valor)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return max(0.0, (alvo - datetime.now(timezone.utc)).total_seconds())
+
+
+def _espera_antes_de_repetir(falha: Exception, repeticoes: int, deadline: float) -> float | None:
+    """Espera até a próxima tentativa, ou None se a falha não é repetível ou a espera não cabe no prazo."""
+    if isinstance(falha, HTTPStatusError):
+        if falha.status not in _STATUS_REPETIVEIS or falha.desafio:
+            return None
+        espera = _retry_after(falha)
+    elif type(falha) in (TransportError, Timeout):
+        espera = None
+    else:
+        return None
+    if espera is None:
+        base = float(2**repeticoes)  # 1s, 2s
+        espera = base + _sortear(0.0, 0.25 * base)
+    return espera if espera < deadline - time.monotonic() else None
+
+
 def _attach_http(exc: BaseException, response) -> None:
     http_meta = _failure_http(response)
     if http_meta is None:
@@ -680,7 +733,9 @@ def _fetch_once(
                 continue
             if response.status != 200:
                 raise HTTPStatusError(
-                    response.status, http=_failure_http(response)
+                    response.status,
+                    http=_failure_http(response),
+                    desafio=_desafio_na_resposta(response),
                 )
             encoding = response.getheader("Content-Encoding")
             if encoding is not None and encoding.strip().lower() != "identity":
@@ -843,12 +898,19 @@ def fetch(
     max_redirects: int = MAX_REDIRECTS,
     session: Session | None = None,
     sink: str | os.PathLike | None = None,
+    repeticao: int = REPETICOES_PADRAO,
+    idempotente: bool = False,
 ) -> Response:
     """Baixa URL HTTPS com IP fixado, validando cada redirecionamento.
 
     `sink` grava atomicamente em arquivo; body vazio, size e sha256 preenchidos.
     `session` opcional: CookieJar efêmero por consulta (cookies fora dos recibos).
+    `repeticao`: máximo de repetições (além da primeira tentativa) após 502/503/504 sem marcador
+    de desafio ou falha de conexão/leitura; POST só repete com `idempotente=True`. 403, 429 e
+    desafio nunca repetem. A espera cabe no prazo total; senão a falha original é devolvida.
     """
+    if isinstance(repeticao, bool) or not isinstance(repeticao, int) or repeticao < 0:
+        raise ValueError("repeticao inválida")
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or not 1 <= max_bytes <= (4 * 1024**3 if sink is not None else 50 * 1024 * 1024):
         raise ValueError("max_bytes inválido")
     if not isinstance(max_redirects, int) or max_redirects < 0:
@@ -888,7 +950,6 @@ def fetch(
             breaker = _circuit_breaker(host_hint)
             breaker.before_call()
             try:
-                limiter.acquire(timeout=max(0.0, deadline - time.monotonic()))
                 output = None
                 if sink is not None:
                     output = tempfile.NamedTemporaryFile(
@@ -896,21 +957,37 @@ def fetch(
                     )
                     temporary.append(Path(output.name))
                 try:
-                    result = _fetch_once(
-                        url,
-                        method=method,
-                        body=body,
-                        caller_headers=caller_headers,
-                        allowed_hosts=allowed_hosts,
-                        allowed_path_prefixes=allowed_path_prefixes,
-                        allowed_mimes=mimes,
-                        max_bytes=max_bytes,
-                        max_redirects=max_redirects,
-                        deadline=deadline,
-                        **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
-                        session=session,
-                        **({"sink": output} if output is not None else {}),
-                    )
+                    repeticoes = 0
+                    while True:
+                        limiter.acquire(timeout=max(0.0, deadline - time.monotonic()))
+                        if output is not None:
+                            output.seek(0)
+                            output.truncate()
+                        try:
+                            result = _fetch_once(
+                                url,
+                                method=method,
+                                body=body,
+                                caller_headers=caller_headers,
+                                allowed_hosts=allowed_hosts,
+                                allowed_path_prefixes=allowed_path_prefixes,
+                                allowed_mimes=mimes,
+                                max_bytes=max_bytes,
+                                max_redirects=max_redirects,
+                                deadline=deadline,
+                                **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
+                                session=session,
+                                **({"sink": output} if output is not None else {}),
+                            )
+                            break
+                        except Exception as falha:
+                            espera = None
+                            if repeticoes < repeticao and (method != "POST" or idempotente):
+                                espera = _espera_antes_de_repetir(falha, repeticoes, deadline)
+                            if espera is None:
+                                raise
+                            repeticoes += 1
+                            _dormir(espera)
                 finally:
                     if output is not None:
                         output.close()

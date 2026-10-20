@@ -18,6 +18,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.parsers.bcb_json import parse_bcb_json
 from freoa_verifica.transport import Response
 
@@ -78,7 +79,7 @@ class BcbConnector(Connector):
         "normativos.bcb.gov.br": ("/Lists/",),
     }
     mimes = _JSON_MIMES | frozenset({"application/pdf"})
-    user_agent = "browser"
+    user_agent = UA_POR_CONECTOR["bcb"]
     coverage = {
         "colecoes": [
             "Resolução BCB",

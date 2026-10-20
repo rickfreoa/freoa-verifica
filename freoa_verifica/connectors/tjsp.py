@@ -21,6 +21,7 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.connectors.httputil import connector_fetch, form_body
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.transport import Response, Session
 
 _HOST = "esaj.tjsp.jus.br"
@@ -96,7 +97,7 @@ class TjspConnector(Connector):
     hosts = _HOSTS
     path_prefixes = _PREFIXES
     mimes = _MIMES
-    user_agent = "browser"
+    user_agent = UA_POR_CONECTOR["tjsp"]
     filtros = {"desde": "remoto", "ate": "remoto"}  # datas de julgamento (0053)
     coverage = {
         "colecoes": ["acordãos_cjsg"],
