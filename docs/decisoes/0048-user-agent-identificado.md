@@ -40,6 +40,7 @@ O `cjsg` exibe CAPTCHA independentemente do UA. O conector usa o UA identificado
 
 - `freoa_verifica/identidade_http.py`: fonte única (`USER_AGENT_IDENTIFICADO`, tabela `UA_POR_CONECTOR`). Modo desconhecido é `ValueError`; não há fallback.
 - Removidos os defaults divergentes: `DEFAULT_USER_AGENT` (`transport.py`), `IDENTIFIED_USER_AGENT` (`connectors/base.py`) e o modo `"browser"` (`connectors/httputil.py`).
+- Cada conector declara `user_agent = UA_POR_CONECTOR["<id>"]`; todos resolvem para o identificado. `connectors/planalto.py`: `_reclassificar_recusa` aplica a regra do Planalto na obtenção do documento e na sonda de saúde.
 - 401/403 sem marcador de desafio são `Unavailable(categoria="recusa_identificado")` (decisão 0045). O transporte lê uma amostra (64 KiB) do corpo de respostas de erro e registra o desafio provado; com marcador, a categoria é `ambiental_desafio`.
 - Repetição limitada (T1) em `transport.fetch(repeticao=2, idempotente=False)`: só 502/503/504 sem marcador e falha de conexão sem resposta; POST apenas com `idempotente=True`; 403, 429 e desafio nunca repetem; espera por `Retry-After` ou backoff de 1 s e 2 s com jitter de até 25%, sempre dentro do prazo total; o circuit breaker conta uma falha por chamada lógica.
 - Testes: `tests/test_user_agent_repeticao.py`.

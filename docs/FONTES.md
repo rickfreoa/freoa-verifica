@@ -23,7 +23,7 @@ snapshot 1.1.0 reprocessado com o código 1.2.0 e da semente TJDFT. Instalado em
 
 | Fonte | O que entra e qual prova | Limite |
 |---|---|---|
-| Planalto | HTML oficial com hash; árvore de dispositivos sob sentinelas (ADCT com escopo próprio); redações e atos alteradores presentes na página; parse em processo isolado com limites. | História anterior só quando riscada na própria página; data do ato não é início de vigência (decisão 0002). |
+| Planalto | HTML oficial com hash; árvore de dispositivos sob sentinelas (ADCT com escopo próprio); redações e atos alteradores presentes na página; parse em processo isolado com limites. | História anterior só quando riscada na própria página; data do ato não é início de vigência (decisão 0002). **Sem atualização ao vivo na 1.3.0:** o Planalto encerra a conexão do cliente que se identifica (UA `freoa-verifica/<versão>`, sem exceção de navegador; decisão 0048), e o pedido ao vivo responde `unavailable(recusa_identificado_planalto)`, categoria `recusa_identificado`, vermelha na saúde das fontes. O acervo instalado continua atendendo consultas sem rede. |
 | Senado | JSON de identificação e datas de atos alteradores. | Metadados não substituem o texto normativo. |
 | CVM normas | DOCX, PDF ou HTML oficial; página do ato capturada sempre (situação: revogação bloqueia vigência); PDF com estrutura inferida (decisão 0037). | Dispositivo junto a margem descartada fica `unknown`; redações antigas sem rasura ficam `ambiguous`. |
 | BCB/CMN | JSON oficial; situação e data de efeito declarada da revogação (decisão 0035); parse em processo isolado. | Circulares cujo JSON só remete a outro endereço respondem `DOCUMENTO_SEM_ESTRUTURA`. |

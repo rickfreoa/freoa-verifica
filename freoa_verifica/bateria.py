@@ -6,7 +6,9 @@ Somente leitura: o banco abre com `mode=ro` e nada aqui escreve no home. Não us
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -106,8 +108,42 @@ def _fora_do_recorte(conn: sqlite3.Connection, recorte: dict[str, str | None]) -
     return achados
 
 
-def coletar(conn: sqlite3.Connection, recorte: dict[str, str | None] | None = None) -> dict[str, Any]:
-    """Contagens (comparáveis com um manifesto) e defeitos do acervo."""
+def _blobs(conn: sqlite3.Connection, home: Path) -> dict[str, Any]:
+    """Existência, tamanho e sha256 dos blobs referenciados por captura. Somente leitura:
+    o caminho é montado aqui porque `store.blobs.blob_path` cria diretórios."""
+    problemas: dict[str, list[str]] = {"ausentes": [], "tamanho_divergente": [], "hash_divergente": []}
+    vistos = conn.execute("SELECT sha256, MIN(size) AS menor, MAX(size) AS maior FROM capture GROUP BY sha256").fetchall()
+    for r in vistos:
+        digest = str(r["sha256"]).lower()
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            problemas["hash_divergente"].append(f"{r['sha256']} (sha256 inválido)")
+            continue
+        arq = home / "blobs" / digest[:2] / digest[2:4] / digest
+        try:
+            tamanho = arq.stat().st_size
+        except OSError:
+            problemas["ausentes"].append(digest)
+            continue
+        if r["menor"] != r["maior"] or tamanho != r["maior"]:
+            problemas["tamanho_divergente"].append(digest)
+            continue
+        h = hashlib.sha256()
+        try:
+            with arq.open("rb") as f:
+                for bloco in iter(lambda: f.read(1 << 20), b""):
+                    h.update(bloco)
+        except OSError:
+            problemas["ausentes"].append(digest)
+            continue
+        if h.hexdigest() != digest:
+            problemas["hash_divergente"].append(digest)
+    return {"verificados": len(vistos),
+            **{k: {"n": len(v), "amostra": v[:_AMOSTRA]} for k, v in problemas.items()}}
+
+
+def coletar(conn: sqlite3.Connection, recorte: dict[str, str | None] | None = None,
+            home: Path | str | None = None) -> dict[str, Any]:
+    """Contagens (comparáveis com um manifesto) e defeitos do acervo. Com `home`, confere também os blobs."""
     recorte = {k: v for k, v in (recorte or {}).items() if v} or None
     duplicatas = [dict(r) for r in conn.execute(
         "SELECT court AS tribunal, official_id, group_concat(id) AS ids FROM decision "
@@ -132,6 +168,7 @@ def coletar(conn: sqlite3.Connection, recorte: dict[str, str | None] | None = No
             "duplicatas": duplicatas,
             "decisoes_sem_captura": {"n": len(sem_captura), "amostra": sem_captura[:_AMOSTRA]},
             "datas_fora_do_recorte": _fora_do_recorte(conn, recorte) if recorte else [],
+            "blobs": _blobs(conn, Path(home)) if home is not None else None,
             "derivados_desatualizados": None if derivados.compativel(conn) else
             {"encontrada": versao, "esperada": derivados.DERIVED_VERSION},
         },
@@ -167,6 +204,12 @@ def conferir(dados: dict[str, Any], manifesto: dict[str, Any] | None = None, *, 
     for f in d["datas_fora_do_recorte"]:
         falhas.append({"codigo": "data_fora_do_recorte",
                        "mensagem": f"decisão {f['id']} ({f['tribunal']}): {f['campo']}={f['valor']!r} fora do recorte"})
+    codigos = {"ausentes": "blob_ausente", "tamanho_divergente": "blob_tamanho", "hash_divergente": "blob_hash"}
+    for campo, codigo in codigos.items():
+        grupo = (d.get("blobs") or {}).get(campo)
+        if grupo and grupo["n"]:
+            falhas.append({"codigo": codigo, "mensagem": f"{grupo['n']} blob(s) de captura: {campo.replace('_', ' ')} "
+                                                         f"(ex.: {', '.join(grupo['amostra'][:3])})"})
     if d["derivados_desatualizados"]:
         v = d["derivados_desatualizados"]
         falhas.append({"codigo": "derivado_desatualizado",
@@ -190,10 +233,39 @@ def manifesto_canonico(dados: dict[str, Any]) -> str:
     return json.dumps(corpo, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
 
 
+def _destino_proibido(home: Path | str, gravar: Path | str) -> str | None:
+    """Motivo da recusa se `gravar` cai no home auditado (qualquer arquivo dele) ou é alias de um arquivo seu."""
+    raiz = Path(os.path.realpath(home))
+    destino = Path(os.path.realpath(gravar))
+    if destino == raiz or raiz in destino.parents:
+        return f"destino dentro do acervo auditado: {destino}"
+    try:
+        st = destino.stat()
+    except OSError:
+        return None  # ainda não existe: não há alias
+    if st.st_nlink > 1:  # hardlink: mesmo (dispositivo, inode) de algum arquivo do home
+        for pasta, _, nomes in os.walk(raiz):
+            for nome in nomes:
+                try:
+                    o = os.stat(os.path.join(pasta, nome))
+                except OSError:
+                    continue
+                if (o.st_dev, o.st_ino) == (st.st_dev, st.st_ino):
+                    return f"destino é alias (hardlink) de {os.path.join(pasta, nome)}"
+    return None
+
+
 def executar(home: Path | str, *, manifesto: Path | str | None = None, gravar: Path | str | None = None,
-             estrito: bool = False, recorte: dict[str, str | None] | None = None) -> dict[str, Any]:
-    """Resultado completo (`status` ok/falha/erro). Nunca escreve no home; só em `gravar`."""
+             estrito: bool = False, recorte: dict[str, str | None] | None = None,
+             sem_blobs: bool = False) -> dict[str, Any]:
+    """Resultado completo (`status` ok/parcial/falha/erro). Nunca escreve no home; só em `gravar`.
+
+    `sem_blobs` pula a conferência dos bytes das capturas; sem falhas, o resultado é `parcial`, nunca `ok`.
+    """
     ref = None
+    recorte = {k: v for k, v in (recorte or {}).items() if v} or None  # sem datas: herda o manifesto
+    if gravar and (motivo := _destino_proibido(home, gravar)):
+        return {"status": "erro", "motivo": f"ValueError: {motivo}", "falhas": []}
     try:
         if manifesto:
             ref = json.loads(Path(manifesto).read_text(encoding="utf-8"))
@@ -202,15 +274,16 @@ def executar(home: Path | str, *, manifesto: Path | str | None = None, gravar: P
             recorte = recorte or ref.get("recorte")
         conn = abrir_somente_leitura(home)
         try:
-            dados = coletar(conn, recorte)
+            dados = coletar(conn, recorte, None if sem_blobs else home)
         finally:
             conn.close()
     except (OSError, ValueError, sqlite3.Error) as exc:
         return {"status": "erro", "motivo": f"{type(exc).__name__}: {exc}", "falhas": []}
     falhas = conferir(dados, ref, estrito=estrito)
-    resultado = {"status": "falha" if falhas else "ok", "falhas": falhas, **dados}
+    status = "falha" if falhas else ("parcial" if sem_blobs else "ok")
+    resultado = {"status": status, "falhas": falhas, **dados}
     if gravar:
-        if falhas:
+        if status != "ok":  # nem falha nem verificação parcial congelam um manifesto
             resultado["manifesto_gravado"] = False
         else:
             Path(gravar).write_text(manifesto_canonico(dados), encoding="utf-8")

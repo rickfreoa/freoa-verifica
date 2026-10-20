@@ -270,6 +270,9 @@ def _por_elemento(ferramenta: str, c: Any, a: Any, caminho: str, isentos: frozen
                 if em_lista:
                     erros.append(f"campo removido: {p}")
             else:
+                tc, ta = _tipo(v), _tipo(a[k])
+                if em_lista and tc != "null" and ta != tc:  # tipo e nulidade por elemento (B3-07)
+                    erros.append(f"tipo mudou em {p}: {[tc]} -> {[ta]}")
                 erros.extend(_por_elemento(ferramenta, v, a[k], p, isentos, em_lista))
     elif isinstance(c, list) and isinstance(a, list):
         for i, (vc, va) in enumerate(zip(c, a)):

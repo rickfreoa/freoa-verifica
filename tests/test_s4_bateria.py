@@ -1,6 +1,7 @@
 """S4 (decisão 0057): `fv acervo conferir` — bateria do snapshot, somente leitura."""
 import hashlib
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -36,6 +37,7 @@ def _decisao(svc, oid, *, orgao="PRIMEIRA TURMA", data="2026-02-10", captura=Tru
 
 @pytest.fixture
 def home(tmp_path):
+    tmp_path = tmp_path / "acervo"  # fora dele ficam os manifestos que os testes gravam
     with Verifica(tmp_path) as svc:
         _decisao(svc, "d1")
         _decisao(svc, "d2", orgao="SEGUNDA TURMA", data="2026-03-05")
@@ -159,3 +161,105 @@ def test_cli_codigo_de_saida(home, tmp_path, capsys):
     with pytest.raises(SystemExit) as e:
         cli.main(["acervo", "conferir", "--home", str(home), "--manifesto", str(arq)])
     assert e.value.code == 1
+
+
+def _blobs_do_home(home):
+    conn = sqlite3.connect(str(home / bateria.BANCO))
+    try:
+        return [home / "blobs" / s[:2] / s[2:4] / s for (s,) in conn.execute("SELECT sha256 FROM capture ORDER BY id")]
+    finally:
+        conn.close()
+
+
+def test_blob_ausente_falha(home):
+    """B3-04: captura sem os bytes não passa."""
+    alvo = _blobs_do_home(home)[0]
+    alvo.unlink()
+    r = bateria.executar(home)
+    assert r["status"] == "falha" and _codigos(r) == {"blob_ausente"}
+
+
+def test_blob_com_tamanho_ou_hash_divergente_falha(home):
+    a, b = _blobs_do_home(home)
+    a.write_bytes(b"curto")
+    b.write_bytes(b"x" * len(b.read_bytes()))  # mesmo tamanho, outros bytes
+    assert _codigos(bateria.executar(home)) == {"blob_tamanho", "blob_hash"}
+
+
+def test_sem_blobs_e_parcial_e_nao_grava_manifesto(home, tmp_path):
+    _blobs_do_home(home)[0].unlink()
+    arq = tmp_path / "m.json"
+    r = bateria.executar(home, sem_blobs=True, gravar=arq)
+    assert r["status"] == "parcial" and r["falhas"] == [] and r["defeitos"]["blobs"] is None
+    assert r["manifesto_gravado"] is False and not arq.exists()
+
+
+def test_verificacao_de_blobs_nao_cria_diretorios(tmp_path):
+    with Verifica(tmp_path) as svc:
+        _decisao(svc, "d1")
+        svc.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    raiz = tmp_path / "blobs"
+    for f in sorted(raiz.rglob("*"), reverse=True):
+        f.unlink() if f.is_file() else f.rmdir()
+    raiz.rmdir()
+    assert bateria.executar(tmp_path)["status"] == "falha"
+    assert not raiz.exists()
+
+
+def _recusado(home, destino):
+    antes = destino.read_bytes() if destino.exists() else None
+    r = bateria.executar(home, gravar=destino)
+    assert r["status"] == "erro" and "ValueError" in r["motivo"], r
+    assert (destino.read_bytes() if destino.exists() else None) == antes
+
+
+def test_gravar_manifesto_recusa_banco_e_blob_do_home(home):
+    """B3-03: o destino é resolvido antes de abrir o banco e nada dentro do home é sobrescrito."""
+    _recusado(home, home / bateria.BANCO)
+    _recusado(home, _blobs_do_home(home)[0])
+    _recusado(home, home / "novo" / ".." / "novo.json")
+    assert bateria.executar(home)["status"] == "ok"
+
+
+def test_gravar_manifesto_recusa_symlink_para_o_home(home, tmp_path):
+    ln = tmp_path / "ln.json"
+    try:
+        ln.symlink_to(home / bateria.BANCO)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink indisponível neste sistema")
+    _recusado(home, ln)
+
+
+def test_gravar_manifesto_recusa_hardlink_para_o_home(home, tmp_path):
+    hl = tmp_path / "hl.json"
+    try:
+        os.link(_blobs_do_home(home)[0], hl)
+    except OSError:
+        pytest.skip("hardlink indisponível neste sistema")
+    _recusado(home, hl)
+
+
+def test_cli_sem_blobs_sai_com_codigo_proprio(home, capsys):
+    with pytest.raises(SystemExit) as e:
+        cli.main(["acervo", "conferir", "--home", str(home), "--sem-blobs", "--json"])
+    assert e.value.code == 2 and json.loads(capsys.readouterr().out)["status"] == "parcial"
+
+
+def test_cli_sem_datas_herda_recorte_do_manifesto(home, tmp_path, capsys):
+    """B3-02: a CLI efetiva sem flags de data usa o recorte congelado (mudança dentro do mesmo mês)."""
+    arq = tmp_path / "m.json"
+    with pytest.raises(SystemExit) as e:
+        cli.main(["acervo", "conferir", "--home", str(home), "--gravar-manifesto", str(arq),
+                  "--recorte-desde", "2026-02-05", "--recorte-ate", "2026-03-31", "--json"])
+    assert e.value.code == 0
+    capsys.readouterr()
+    with Verifica(home) as svc:
+        svc.conn.execute("UPDATE decision SET judgment_date='2026-02-01' WHERE official_id='d1'")
+        svc.conn.commit()
+        svc.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    with pytest.raises(SystemExit) as e:
+        cli.main(["acervo", "conferir", "--home", str(home), "--manifesto", str(arq), "--json"])
+    saida = json.loads(capsys.readouterr().out)
+    assert e.value.code == 1 and saida["status"] == "falha"
+    assert saida["recorte"] == {"desde": "2026-02-05", "ate": "2026-03-31"}
+    assert "data_fora_do_recorte" in _codigos(saida)

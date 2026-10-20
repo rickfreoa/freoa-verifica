@@ -35,6 +35,17 @@ _ATO_RANGES: list[tuple[int, int, str]] = [
 ]
 
 
+def _reclassificar_recusa(exc: Unavailable) -> Unavailable:
+    """Decisão 0048: o Planalto encerra a conexão do cliente identificado sem responder. Falha de transporte
+    anterior a qualquer resposta (sem `status` na evidência) vira `recusa_identificado`, nunca `fonte_fora`,
+    para que a saúde das fontes não a trate como ambiental. Respostas HTTP seguem a classificação geral.
+    Não há nova tentativa com outro User-Agent."""
+    if exc.categoria == "fonte_fora" and exc.reason.startswith("transporte_") and "status" not in exc.evidencia:
+        return Unavailable("recusa_identificado_planalto", "recusa_identificado",
+                           {"decisao": "0048", "causa": exc.reason, **exc.evidencia})
+    return exc
+
+
 def _load_known_urls() -> dict[str, list[str]]:
     if not _URLS_PATH.is_file():
         return {}
@@ -150,7 +161,7 @@ class PlanaltoConnector(Connector):
         "planalto.gov.br": ("/ccivil_03/",),
     }
     mimes = frozenset({"text/html", "application/xhtml+xml", "text/plain"})
-    user_agent = UA_POR_CONECTOR["planalto"]  # exceção da decisão 0048
+    user_agent = UA_POR_CONECTOR["planalto"]
     coverage = {
         "colecoes": ["leis", "lcp", "decreto-lei", "constituicao"],
         "periodo": "variavel por espécie",
@@ -186,6 +197,7 @@ class PlanaltoConnector(Connector):
             )
             probes.append(HealthProbe("negativo", "failed", "esperava 404"))
         except Unavailable as exc:
+            exc = _reclassificar_recusa(exc)
             if "http_404" in exc.reason:
                 probes.append(HealthProbe("negativo", "ok", exc.reason))
             else:
@@ -269,7 +281,7 @@ class PlanaltoConnector(Connector):
                         break
                     if attempt < 2 and exc.reason in {"transporte_Timeout", "transporte_lento", "transporte_TransporteLento", "http_503", "http_502", "http_504"}:
                         continue
-                    raise
+                    raise _reclassificar_recusa(exc) from exc
         raise Unavailable(last_err.reason if last_err else "sem_url")
 
     def parse(self, resp: Response):

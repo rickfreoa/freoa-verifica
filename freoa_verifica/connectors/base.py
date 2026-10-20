@@ -9,7 +9,7 @@ from typing import Any, ClassVar, Literal
 from freoa_verifica.parsers.model import ParsedDocument
 from freoa_verifica.transport import Response
 
-UserAgentMode = Literal["identified", "navegador_1_2_0"]
+UserAgentMode = Literal["identified"]
 
 
 CATEGORIAS_INDISPONIBILIDADE = (

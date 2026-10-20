@@ -214,6 +214,8 @@ def build_parser() -> argparse.ArgumentParser:
     pc.add_argument("--recorte-desde", default=None, metavar="DATA", help="AAAA-MM-DD; início do recorte declarado")
     pc.add_argument("--recorte-ate", default=None, metavar="DATA", help="AAAA-MM-DD; fim do recorte declarado")
     pc.add_argument("--estrito", action="store_true", help="pendências do sync_state também falham")
+    pc.add_argument("--sem-blobs", action="store_true",
+                    help="não confere existência, tamanho e sha256 dos blobs das capturas; resultado fica 'parcial'")
     _add_json_flag(pc)
 
     p = sub.add_parser("runs", help="gerenciar execuções registradas")
@@ -261,9 +263,9 @@ def main(argv: list[str] | None = None) -> None:
         data = bateria.executar(
             args.home_conferir or args.home or data_home(), manifesto=args.manifesto,
             gravar=args.gravar_manifesto, estrito=args.estrito,
-            recorte={"desde": args.recorte_desde, "ate": args.recorte_ate})
+            recorte={"desde": args.recorte_desde, "ate": args.recorte_ate}, sem_blobs=args.sem_blobs)
         _print_result(data, as_json=as_json, titulo="Bateria do acervo")
-        raise SystemExit(0 if data["status"] == "ok" else 1)
+        raise SystemExit({"ok": 0, "parcial": 2}.get(data["status"], 1))
 
     with Verifica(home=args.home, registro=registro) as svc:
         if args.cmd == "runs":
