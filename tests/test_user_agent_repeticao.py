@@ -79,6 +79,7 @@ def test_cada_conector_envia_o_ua_da_tabela(cls, monkeypatch):
     assert vistos == [esperado]
 
 
+@pytest.mark.repositorio
 def test_todo_connector_fetch_dos_conectores_passa_user_agent():
     raiz = Path(__file__).resolve().parents[1] / "freoa_verifica" / "connectors"
     sem_ua = []
