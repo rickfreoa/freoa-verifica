@@ -20,3 +20,12 @@ Nada conferia o acervo candidato antes de exportar nem os bytes depois de instal
 - Roda no corpus candidato (passo 2 de `docs/RELEASE.md`) e de novo sobre o home instalado, contra o mesmo manifesto (passo 6).
 - Decisão gravada só com metadados (falha de download na captura) é "sem captura" e reprova a bateria: o acervo a publicar não deve tê-la.
 - `official_id` nulo não é detectado como duplicata (o esquema não identifica por ele).
+
+## Emenda (FIX4): conteúdo do snapshot × estado de sincronização
+
+Fato: o manifesto incluía `recursos_ckan`, lido do `sync_state` do produtor, que não viaja no snapshot. Após `fv snapshot install`, `--manifesto` falhava só por essas linhas.
+
+1. O manifesto passa a ter `conteudo` (o que o snapshot carrega: obras, decisões, fontes, STJ por órgão e mês, `derived_version`; os blobs são conferidos à parte) e `origem` (estado do produtor: `recursos_ckan`). Manifesto antigo (`contagens`, sem seções) continua legível: `recursos_ckan` é tratado como `origem`.
+2. `--manifesto` compara `conteudo` sempre; compara `origem` só se o acervo conferido tem linhas `stj_resource` no `sync_state`. Caso contrário o resultado traz `origem: "nao_aplicavel_pos_instalacao"` (não falha, e a omissão fica dita); quando conferida, `origem: "conferida"`.
+3. `--pos-instalacao` exige acervo sem `sync_state` (falha com `sync_state_presente` se houver qualquer linha) e compara só `conteudo`. Passo 6 de `docs/RELEASE.md` usa essa flag.
+4. Pendências continuam fora do manifesto: só falham com `--estrito`, como na regra 5.
