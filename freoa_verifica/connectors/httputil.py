@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from urllib.parse import urlencode
 
 from freoa_verifica.connectors.base import Unavailable
@@ -26,21 +26,35 @@ def ua_header(mode: str) -> dict[str, str]:
     return {"User-Agent": user_agent_do_modo(mode)}
 
 
-def connector_fetch(url: str, **kw: Any) -> Response:
+def connector_fetch(
+    url: str, *, reclassificar: Callable[[Unavailable], Unavailable] | None = None, **kw: Any
+) -> Response:
     """fetch + detecção de desafio; propaga Unavailable.
+
+    `reclassificar` é a regra do conector que dá o desfecho final à falha (ex.: Planalto, decisão 0048);
+    a guarda registra esse desfecho, não o intermediário do transporte (FIX11/F-11).
 
     Dentro de uma guarda de execução (`connectors.guarda`), a mesma requisição efetiva não se repete
     e uma fonte que desafiou ou recusou não é consultada de novo.
     """
+    def baixar(**extra: Any) -> Response:
+        try:
+            return _connector_fetch(url, **extra, **kw)
+        except Unavailable as exc:
+            final = reclassificar(exc) if reclassificar is not None else exc
+            if final is exc:
+                raise
+            raise final from exc
+
     guarda = guarda_ativa()
     if guarda is None:
-        return _connector_fetch(url, **kw)
+        return baixar()
     return guarda.executar(
         kw.get("method", "GET"),
         url,
         kw.get("body"),
         cacheavel=kw.get("session") is None and kw.get("sink") is None,
-        baixar=lambda: _connector_fetch(url, antes_do_salto=guarda.antes_do_salto, **kw),
+        baixar=lambda: baixar(antes_do_salto=guarda.antes_do_salto),
     )
 
 

@@ -70,3 +70,8 @@ A rodada 5 achou variantes das mesmas classes; a emenda troca os remendos por me
   tamanho `HEXDIG+` com extensão opcional (sem sinal, sublinhado, espaço ou `0x`), fim de chunk exatamente CRLF, e
   corpo terminado em `0 CRLF [trailer] CRLF`. Dados além do tamanho declarado, tamanho inválido e encerramento
   prematuro são `RespostaInvalida` em 200, 503 e demais status.
+- **Desfecho final na guarda (F-11).** A guarda registra o desfecho final da chamada ao conector, não o intermediário
+  do transporte. `connector_fetch(..., reclassificar=f)` aplica a regra do conector (`f(Unavailable) -> Unavailable`)
+  dentro do `baixar` que a guarda executa; o Planalto passa `_reclassificar_recusa` (decisão 0048), de modo que o
+  fechamento sem resposta, já `recusa_identificado`, bloqueia o host para o resto da execução (a segunda lei não faz
+  pedido e o breaker conta uma falha). Fora da guarda a reclassificação é a mesma.

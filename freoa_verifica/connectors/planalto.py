@@ -193,10 +193,10 @@ class PlanaltoConnector(Connector):
                 mimes=self.mimes,
                 user_agent=self.user_agent,
                 timeout=20.0,
+                reclassificar=_reclassificar_recusa,
             )
             probes.append(HealthProbe("negativo", "failed", "esperava 404"))
         except Unavailable as exc:
-            exc = _reclassificar_recusa(exc)
             if "http_404" in exc.reason:
                 probes.append(HealthProbe("negativo", "ok", exc.reason))
             else:
@@ -271,11 +271,11 @@ class PlanaltoConnector(Connector):
             try:
                 return connector_fetch(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
                     mimes=self.mimes, user_agent=self.user_agent, timeout=180.0,
-                    min_bytes_per_second=256, max_bytes=30 * 1024 * 1024)
+                    min_bytes_per_second=256, max_bytes=30 * 1024 * 1024, reclassificar=_reclassificar_recusa)
             except Unavailable as exc:
                 last_err = exc
                 if exc.reason != "http_404":
-                    raise _reclassificar_recusa(exc) from exc
+                    raise
         raise Unavailable(last_err.reason if last_err else "sem_url")
 
     def parse(self, resp: Response):
