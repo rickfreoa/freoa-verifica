@@ -263,3 +263,82 @@ def test_cli_sem_datas_herda_recorte_do_manifesto(home, tmp_path, capsys):
     assert e.value.code == 1 and saida["status"] == "falha"
     assert saida["recorte"] == {"desde": "2026-02-05", "ate": "2026-03-31"}
     assert "data_fora_do_recorte" in _codigos(saida)
+
+
+# --- FIX4 (decisão 0057, emenda): conteúdo do snapshot × estado de sincronização ---
+
+def _instalado(home):
+    """Acervo simulado de snapshot: mesmo conteúdo, sem sync_state."""
+    with Verifica(home) as svc:
+        svc.conn.execute("DELETE FROM sync_state")
+        svc.conn.commit()
+        svc.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+
+def test_manifesto_tem_conteudo_e_origem(home, tmp_path):
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)
+    m = json.loads(arq.read_text(encoding="utf-8"))
+    assert "contagens" not in m and "recursos_ckan" not in m["conteudo"]
+    assert m["conteudo"]["decisoes"] == 2 and m["origem"]["recursos_ckan"][0]["id"] == "r1"
+
+
+def test_pos_instalacao_confere_so_conteudo(home, tmp_path):
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)
+    _instalado(home)
+    r = bateria.executar(home, manifesto=arq, pos_instalacao=True)
+    assert r["status"] == "ok", r["falhas"]
+    assert r["origem"] == "nao_aplicavel_pos_instalacao"
+    r = bateria.executar(home, manifesto=arq)  # sem a flag e sem sync_state: também não aplicável, e dito
+    assert r["status"] == "ok" and r["origem"] == "nao_aplicavel_pos_instalacao"
+
+
+def test_origem_conferida_quando_ha_sync_state(home, tmp_path):
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)
+    assert bateria.executar(home, manifesto=arq)["origem"] == "conferida"
+    with Verifica(home) as svc:
+        svc.conn.execute("UPDATE sync_state SET payload_json=? WHERE id='s1'",
+                         (json.dumps({"sha256": "cd" * 32, "mes": "202602", "n": 2}),))
+        svc.conn.commit()
+    r = bateria.executar(home, manifesto=arq)
+    assert r["status"] == "falha" and any("recursos_ckan[r1]" in f["mensagem"] for f in r["falhas"])
+
+
+def test_pos_instalacao_continua_pegando_divergencia_de_conteudo(home, tmp_path):
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)
+    _instalado(home)
+    with Verifica(home) as svc:
+        _decisao(svc, "d3")
+    r = bateria.executar(home, manifesto=arq, pos_instalacao=True)
+    assert r["status"] == "falha" and _codigos(r) == {"contagem_divergente"}
+
+
+def test_pos_instalacao_falha_com_sync_state(home, tmp_path):
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)
+    r = bateria.executar(home, manifesto=arq, pos_instalacao=True)
+    assert r["status"] == "falha" and _codigos(r) == {"sync_state_presente"}
+
+
+def test_manifesto_antigo_sem_secoes_continua_legivel(home, tmp_path):
+    r0 = bateria.executar(home, recorte=RECORTE)
+    antigo = tmp_path / "antigo.json"
+    antigo.write_text(json.dumps({"manifesto_versao": 1, "recorte": RECORTE, "contagens": r0["contagens"]}),
+                      encoding="utf-8")
+    r = bateria.executar(home, manifesto=antigo)
+    assert r["status"] == "ok" and r["origem"] == "conferida"
+    _instalado(home)  # recursos_ckan do manifesto antigo é origem: não falha pós-instalação
+    r = bateria.executar(home, manifesto=antigo, pos_instalacao=True)
+    assert r["status"] == "ok", r["falhas"]
+
+
+def test_cli_pos_instalacao(home, tmp_path, capsys):
+    arq = tmp_path / "m.json"
+    bateria.executar(home, gravar=arq, recorte=RECORTE)
+    _instalado(home)
+    with pytest.raises(SystemExit) as e:
+        cli.main(["acervo", "conferir", "--home", str(home), "--manifesto", str(arq), "--pos-instalacao", "--json"])
+    assert e.value.code == 0 and json.loads(capsys.readouterr().out)["origem"] == "nao_aplicavel_pos_instalacao"

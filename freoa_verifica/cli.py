@@ -210,6 +210,8 @@ def build_parser() -> argparse.ArgumentParser:
     pc = ac.add_parser("conferir", help="bateria do snapshot: confere o acervo (somente leitura; decisão 0057)")
     pc.add_argument("--home", dest="home_conferir", default=None, metavar="DIR", help="diretório de dados a conferir")
     pc.add_argument("--manifesto", default=None, metavar="ARQ", help="compara com manifesto congelado")
+    pc.add_argument("--pos-instalacao", action="store_true",
+                    help="acervo instalado de snapshot: exige ausência de sync_state e compara só o conteúdo")
     pc.add_argument("--gravar-manifesto", default=None, metavar="ARQ", help="grava o manifesto congelado do recorte")
     pc.add_argument("--recorte-desde", default=None, metavar="DATA", help="AAAA-MM-DD; início do recorte declarado")
     pc.add_argument("--recorte-ate", default=None, metavar="DATA", help="AAAA-MM-DD; fim do recorte declarado")
@@ -263,7 +265,8 @@ def main(argv: list[str] | None = None) -> None:
         data = bateria.executar(
             args.home_conferir or args.home or data_home(), manifesto=args.manifesto,
             gravar=args.gravar_manifesto, estrito=args.estrito,
-            recorte={"desde": args.recorte_desde, "ate": args.recorte_ate}, sem_blobs=args.sem_blobs)
+            recorte={"desde": args.recorte_desde, "ate": args.recorte_ate}, sem_blobs=args.sem_blobs,
+            pos_instalacao=args.pos_instalacao)
         _print_result(data, as_json=as_json, titulo="Bateria do acervo")
         raise SystemExit({"ok": 0, "parcial": 2}.get(data["status"], 1))
 

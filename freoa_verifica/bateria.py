@@ -164,6 +164,8 @@ def coletar(conn: sqlite3.Connection, recorte: dict[str, str | None] | None = No
             "derived_version": versao,
         },
         "pendencias": _pendencias(conn),
+        "sync_state": {"linhas": conn.execute("SELECT COUNT(*) FROM sync_state").fetchone()[0],
+                       "stj_resource": conn.execute("SELECT COUNT(*) FROM sync_state WHERE fonte='stj_resource'").fetchone()[0]},
         "defeitos": {
             "duplicatas": duplicatas,
             "decisoes_sem_captura": {"n": len(sem_captura), "amostra": sem_captura[:_AMOSTRA]},
@@ -191,9 +193,36 @@ def _achatar(valor: Any, prefixo: str = "") -> dict[str, Any]:
     return {prefixo: valor}
 
 
-def conferir(dados: dict[str, Any], manifesto: dict[str, Any] | None = None, *, estrito: bool = False) -> list[dict[str, Any]]:
+# Contagens que vêm do estado de sincronização do produtor e não viajam no snapshot (decisão 0057, emenda).
+_ORIGEM = ("recursos_ckan",)
+ORIGEM_NAO_APLICAVEL = "nao_aplicavel_pos_instalacao"
+
+
+def _secoes(contagens: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(conteudo, origem) de um bloco de contagens; `origem` só com as chaves presentes."""
+    return ({k: v for k, v in contagens.items() if k not in _ORIGEM},
+            {k: contagens[k] for k in _ORIGEM if k in contagens})
+
+
+def _secoes_do_manifesto(manifesto: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    if "conteudo" in manifesto:
+        return manifesto["conteudo"], manifesto.get("origem") or {}
+    return _secoes(manifesto.get("contagens", {}))  # manifesto antigo, sem seções
+
+
+def origem_aplicavel(dados: dict[str, Any], *, pos_instalacao: bool = False) -> bool:
+    """A `origem` só se confere em acervo com `sync_state` da fonte (nunca em instalado de snapshot)."""
+    return not pos_instalacao and dados["sync_state"]["stj_resource"] > 0
+
+
+def conferir(dados: dict[str, Any], manifesto: dict[str, Any] | None = None, *, estrito: bool = False,
+             pos_instalacao: bool = False) -> list[dict[str, Any]]:
     """Lista de falhas (vazia = passa). Cada falha tem `codigo` e `mensagem` específicos."""
     falhas: list[dict[str, Any]] = []
+    if pos_instalacao and dados["sync_state"]["linhas"]:
+        falhas.append({"codigo": "sync_state_presente",
+                       "mensagem": f"--pos-instalacao exige acervo sem sync_state (instalado de snapshot); "
+                                   f"há {dados['sync_state']['linhas']} linha(s)"})
     d = dados["defeitos"]
     for dup in d["duplicatas"]:
         falhas.append({"codigo": "duplicata", "mensagem": f"{dup['tribunal']} {dup['official_id']}: ids internos {dup['ids']}"})
@@ -215,7 +244,10 @@ def conferir(dados: dict[str, Any], manifesto: dict[str, Any] | None = None, *, 
         falhas.append({"codigo": "derivado_desatualizado",
                        "mensagem": f"derived_version {v['encontrada']} (esperada {v['esperada']}); execute `fv acervo reconstruir`"})
     if manifesto is not None:
-        esperado, obtido = _achatar(manifesto.get("contagens", {})), _achatar(dados["contagens"])
+        (cont_m, orig_m), (cont_a, orig_a) = _secoes_do_manifesto(manifesto), _secoes(dados["contagens"])
+        if origem_aplicavel(dados, pos_instalacao=pos_instalacao):
+            cont_m, cont_a = {**cont_m, **orig_m}, {**cont_a, **orig_a}
+        esperado, obtido = _achatar(cont_m), _achatar(cont_a)
         for caminho in sorted(set(esperado) | set(obtido)):
             if esperado.get(caminho, "<ausente>") != obtido.get(caminho, "<ausente>"):
                 falhas.append({"codigo": "contagem_divergente",
@@ -228,8 +260,10 @@ def conferir(dados: dict[str, Any], manifesto: dict[str, Any] | None = None, *, 
 
 
 def manifesto_canonico(dados: dict[str, Any]) -> str:
-    """Manifesto congelado: só o que se compara (versão, recorte, contagens); JSON de chaves ordenadas."""
-    corpo = {k: dados[k] for k in ("manifesto_versao", "recorte", "contagens")}
+    """Manifesto congelado: versão, recorte, `conteudo` (o que o snapshot carrega) e `origem` (sync_state do produtor)."""
+    conteudo, origem = _secoes(dados["contagens"])
+    corpo = {"manifesto_versao": dados["manifesto_versao"], "recorte": dados["recorte"],
+             "conteudo": conteudo, "origem": origem}
     return json.dumps(corpo, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
 
 
@@ -257,7 +291,7 @@ def _destino_proibido(home: Path | str, gravar: Path | str) -> str | None:
 
 def executar(home: Path | str, *, manifesto: Path | str | None = None, gravar: Path | str | None = None,
              estrito: bool = False, recorte: dict[str, str | None] | None = None,
-             sem_blobs: bool = False) -> dict[str, Any]:
+             sem_blobs: bool = False, pos_instalacao: bool = False) -> dict[str, Any]:
     """Resultado completo (`status` ok/parcial/falha/erro). Nunca escreve no home; só em `gravar`.
 
     `sem_blobs` pula a conferência dos bytes das capturas; sem falhas, o resultado é `parcial`, nunca `ok`.
@@ -269,8 +303,8 @@ def executar(home: Path | str, *, manifesto: Path | str | None = None, gravar: P
     try:
         if manifesto:
             ref = json.loads(Path(manifesto).read_text(encoding="utf-8"))
-            if not isinstance(ref, dict) or "contagens" not in ref:
-                raise ValueError("manifesto sem 'contagens'")
+            if not isinstance(ref, dict) or not ({"contagens", "conteudo"} & ref.keys()):
+                raise ValueError("manifesto sem 'conteudo' nem 'contagens'")
             recorte = recorte or ref.get("recorte")
         conn = abrir_somente_leitura(home)
         try:
@@ -279,9 +313,11 @@ def executar(home: Path | str, *, manifesto: Path | str | None = None, gravar: P
             conn.close()
     except (OSError, ValueError, sqlite3.Error) as exc:
         return {"status": "erro", "motivo": f"{type(exc).__name__}: {exc}", "falhas": []}
-    falhas = conferir(dados, ref, estrito=estrito)
+    falhas = conferir(dados, ref, estrito=estrito, pos_instalacao=pos_instalacao)
     status = "falha" if falhas else ("parcial" if sem_blobs else "ok")
     resultado = {"status": status, "falhas": falhas, **dados}
+    if ref is not None:  # a omissão da origem é dita, nunca silenciosa
+        resultado["origem"] = "conferida" if origem_aplicavel(dados, pos_instalacao=pos_instalacao) else ORIGEM_NAO_APLICAVEL
     if gravar:
         if status != "ok":  # nem falha nem verificação parcial congelam um manifesto
             resultado["manifesto_gravado"] = False
