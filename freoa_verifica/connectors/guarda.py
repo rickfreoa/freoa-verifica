@@ -1,0 +1,97 @@
+"""Guarda de execução: uma requisição efetiva é feita no máximo uma vez por execução (FIX9/F-08, F-11).
+
+Ativa só dentro de `with guarda.ativar():` (a sincronização da semente). Em `connector_fetch`:
+
+1. a identidade efetiva da requisição é método + URL normalizada + corpo; não depende do papel
+   (obra principal, alteradora) nem do conector que a pede;
+2. o primeiro desfecho (resposta capturada ou `Unavailable`) é reaproveitado por todo caminho que
+   repete a identidade, sem novo pedido e sem novo incremento no breaker;
+3. por fonte (host): depois de `Unavailable` com categoria `ambiental_desafio` ou
+   `recusa_identificado`, nenhuma nova requisição àquele host na execução; as seguintes recebem a
+   mesma categoria, sem rede, e ficam pendentes.
+
+Requisições com `session` (estado de cookie) ou `sink` (arquivo) não entram no cache de desfechos, mas
+observam e respeitam o bloqueio por host. Respostas bem-sucedidas ficam num LRU limitado em bytes
+(`LIMITE_BYTES`); uma resposta expulsa pode ser pedida de novo. Falhas ficam todas.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import contextvars
+from collections import OrderedDict
+from typing import Callable
+from urllib.parse import urlsplit
+
+from freoa_verifica.connectors.base import Unavailable
+
+BLOQUEIAM_A_FONTE = frozenset({"ambiental_desafio", "recusa_identificado"})
+LIMITE_BYTES = 64 * 1024 * 1024
+_ATIVA: contextvars.ContextVar["GuardaExecucao | None"] = contextvars.ContextVar("guarda_execucao", default=None)
+
+
+def ativa() -> "GuardaExecucao | None":
+    return _ATIVA.get()
+
+
+def identidade(method: str, url: str, body: bytes | None) -> tuple:
+    p = urlsplit(url)
+    return (method.upper(), p.scheme.lower(), p.netloc.lower(), p.path or "/", p.query, body or b"")
+
+
+def _copia(exc: Unavailable, **extra) -> Unavailable:
+    return Unavailable(exc.reason, exc.categoria, {**exc.evidencia, **extra})
+
+
+class GuardaExecucao:
+    def __init__(self, limite_bytes: int = LIMITE_BYTES) -> None:
+        self.limite_bytes = limite_bytes
+        self._sucessos: OrderedDict[tuple, object] = OrderedDict()
+        self._bytes = 0
+        self._falhas: dict[tuple, Unavailable] = {}
+        self.bloqueios: dict[str, Unavailable] = {}  # host -> primeira falha que bloqueou a fonte
+        self.requisicoes = 0  # chamadas que de fato chegaram à rede (para testes e diagnóstico)
+
+    @contextlib.contextmanager
+    def ativar(self):
+        if _ATIVA.get() is self:
+            yield self
+            return
+        token = _ATIVA.set(self)
+        try:
+            yield self
+        finally:
+            _ATIVA.reset(token)
+
+    def executar(self, method: str, url: str, body: bytes | None, *, cacheavel: bool, baixar: Callable):
+        host = (urlsplit(url).hostname or "").lower()
+        bloqueio = self.bloqueios.get(host)
+        if bloqueio is not None:
+            raise _copia(bloqueio, url=url, bloqueio_fonte=host)
+        chave = identidade(method, url, body)
+        if cacheavel:
+            if chave in self._falhas:
+                raise _copia(self._falhas[chave])
+            if chave in self._sucessos:
+                self._sucessos.move_to_end(chave)
+                return self._sucessos[chave]
+        self.requisicoes += 1
+        try:
+            resp = baixar()
+        except Unavailable as exc:
+            if exc.reason == "orcamento":
+                raise
+            if cacheavel:
+                self._falhas[chave] = exc
+            if exc.categoria in BLOQUEIAM_A_FONTE and host:
+                self.bloqueios.setdefault(host, exc)
+            raise
+        if cacheavel:
+            tamanho = len(getattr(resp, "body", b"") or b"")
+            if tamanho <= self.limite_bytes:
+                self._sucessos[chave] = resp
+                self._bytes += tamanho
+                while self._bytes > self.limite_bytes and len(self._sucessos) > 1:
+                    _, velho = self._sucessos.popitem(last=False)
+                    self._bytes -= len(getattr(velho, "body", b"") or b"")
+        return resp
