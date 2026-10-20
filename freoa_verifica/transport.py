@@ -17,7 +17,7 @@ import ssl
 import threading
 import tempfile
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Callable
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -229,20 +229,35 @@ def _failure_http(response) -> HTTPMetadata | None:
         return None
 
 
+_AMOSTRA_DESAFIO = 65536
+
+
 def _desafio_na_resposta(response) -> str | None:
-    """Tipo de desafio visto em resposta de erro (cabeçalho de borda ou amostra do corpo)."""
+    """Tipo de desafio visto em resposta de erro (cabeçalho de borda ou amostra do corpo).
+
+    Lê em laço até 64 KiB ou o fim do corpo, qualquer que seja a fragmentação, e procura o marcador
+    no buffer acumulado. Só "examinado por completo e sem marcador" mantém a classificação por
+    status; framing inválido, corpo incompleto ou leitura impossível é `RespostaInvalida`.
+    """
     from freoa_verifica.connectors.challenge import detect_challenge  # import tardio: challenge importa este módulo
 
     try:
         headers = dict(response.getheaders())
         reader = getattr(response, "read1", None) or response.read
-        amostra = reader(65536) or b""
+        amostra = bytearray()
+        while len(amostra) < _AMOSTRA_DESAFIO:
+            bloco = reader(_AMOSTRA_DESAFIO - len(amostra))
+            if not bloco:
+                if getattr(response, "length", None):  # Content-Length não satisfeito: EOF prematuro
+                    raise http.client.IncompleteRead(bytes(amostra), response.length)
+                break
+            amostra += bloco
     except (OSError, http.client.HTTPException, ValueError) as exc:
-        # Impossível examinar não é "sem marcador" (FIX9/F-13): erro de framing/protocolo propaga.
+        # Impossível examinar não é "sem marcador" (FIX10/F-13): erro de framing/protocolo propaga.
         raise RespostaInvalida(
             f"Corpo da resposta de erro ilegível: {exc}", http=_failure_http(response)
         ) from exc
-    found = detect_challenge(status=response.status, headers=headers, body=amostra)
+    found = detect_challenge(status=response.status, headers=headers, body=bytes(amostra))
     return str(found.args[0]) if found is not None and found.args else None
 
 
@@ -276,9 +291,54 @@ def _normalize_caller_headers(headers: dict[str, str] | None) -> dict[str, str]:
     return normalized
 
 
+def _host_canonico(parsed) -> str:
+    """Host como o transporte o valida: minúsculo, IDNA, sem ponto final."""
+    host = (parsed.hostname or "").lower().rstrip(".")
+    try:
+        return host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return host
+
+
+_PERCENT = re.compile(r"%([0-9A-Fa-f]{2})")
+_NAO_RESERVADO = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
+
+def _percent_canonico(texto: str) -> str:
+    """`%7E` e `~` são o mesmo octeto: decodifica não reservados, maiusculiza o resto."""
+
+    def troca(m):
+        c = chr(int(m.group(1), 16))
+        return c if c in _NAO_RESERVADO else "%" + m.group(1).upper()
+
+    return _PERCENT.sub(troca, texto)
+
+
+def identidade_requisicao(metodo: str, url: str, corpo: bytes | None = None) -> tuple:
+    """Identidade efetiva de uma requisição, pela mesma canonicalização que valida o destino.
+
+    Esquema minúsculo, host IDNA minúsculo sem ponto final, porta padrão removida, caminho com
+    percent-encoding canônico, query ordenada, fragmento descartado. Cache e bloqueio da guarda de
+    execução usam só esta função.
+    """
+    parsed = urlsplit(url)
+    esquema = parsed.scheme.lower()
+    try:
+        porta = parsed.port
+    except ValueError:
+        porta = None
+    if porta == {"https": 443, "http": 80}.get(esquema):
+        porta = None
+    host = _host_canonico(parsed)
+    if porta is not None:
+        host = f"{host}:{porta}"
+    query = "&".join(sorted(_percent_canonico(parsed.query).split("&"))) if parsed.query else ""
+    return (metodo.upper(), esquema, host, _percent_canonico(parsed.path) or "/", query, corpo or b"")
+
+
 def _origin(url: str) -> tuple[str, str, int]:
     parsed = urlsplit(url)
-    host = (parsed.hostname or "").lower().rstrip(".")
+    host = _host_canonico(parsed)
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     return parsed.scheme.lower(), host, port
 
@@ -392,7 +452,7 @@ def validate_reference(
         raise BlockedHost("URL deve usar ASCII imprimível; percent-encode UTF-8")
     try:
         parsed = urlsplit(url)
-        host = (parsed.hostname or "").lower().rstrip(".")
+        host = _host_canonico(parsed)
         port = parsed.port
     except ValueError as exc:
         raise BlockedHost(str(exc)) from exc
@@ -794,6 +854,7 @@ def _percorrer(
     min_bytes_per_second: float | None = None,
     session: Session | None = None,
     sink: BinaryIO | None = None,
+    antes_do_salto: Callable[[str], None] | None = None,
 ) -> Response:
     """Percurso bruto dos saltos: levanta a exceção original; `_fetch_once` a classifica."""
     original = url
@@ -899,6 +960,13 @@ def _percorrer(
                         for name, value in req_extra.items()
                         if name.lower() not in _HOP_CREDENTIAL_HEADERS
                     }
+                if antes_do_salto is not None:
+                    # Controlador externo (guarda de execução): pode recusar o host seguinte, sem requisição.
+                    try:
+                        antes_do_salto(_host_canonico(urlsplit(next_url)))
+                    except Exception as recusa:
+                        recusa.sem_requisicao = True  # não é falha da fonte: o breaker não conta
+                        raise
                 url = next_url
                 continue
             if response.status != 200:
@@ -1056,6 +1124,7 @@ def fetch(
     sink: str | os.PathLike | None = None,
     repeticao: int = REPETICOES_PADRAO,
     idempotente: bool = False,
+    antes_do_salto: Callable[[str], None] | None = None,
 ) -> Response:
     """Baixa URL HTTPS com IP fixado, validando cada redirecionamento.
 
@@ -1064,6 +1133,8 @@ def fetch(
     `repeticao`: máximo de repetições (além da primeira tentativa) após 502/503/504 sem marcador
     de desafio ou falha de conexão/leitura; POST só repete com `idempotente=True`. 403, 429 e
     desafio nunca repetem. A espera cabe no prazo total; senão a falha original é devolvida.
+    `antes_do_salto(host)`: chamado antes de seguir cada redirecionamento; se levantar, a cadeia
+    termina com essa exceção, sem nova requisição.
     """
     if isinstance(repeticao, bool) or not isinstance(repeticao, int) or repeticao < 0:
         raise ValueError("repeticao inválida")
@@ -1135,6 +1206,7 @@ def fetch(
                                 **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
                                 session=session,
                                 estado=estado,
+                                antes_do_salto=antes_do_salto,
                                 **({"sink": output} if output is not None else {}),
                             )
                             break
@@ -1156,7 +1228,9 @@ def fetch(
                 breaker.record_success()
                 outcome.put((result, None))
             except Exception as exc:
-                if isinstance(exc, HTTPStatusError) and exc.status in {404,410}:
+                if getattr(exc, "sem_requisicao", False):
+                    pass
+                elif isinstance(exc, HTTPStatusError) and exc.status in {404,410}:
                     breaker.record_success()
                 else:
                     breaker.record_failure()

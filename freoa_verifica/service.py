@@ -29,6 +29,7 @@ from freoa_verifica.citation import Citation, extract, parse_one
 from freoa_verifica.contrato import CONTRATO_VERSAO
 from freoa_verifica.courts import normalize_court
 from freoa_verifica.search import buscar_and_or, consulta_fts, normalize_fts_query
+from freoa_verifica.connectors.guarda import GuardaExecucao
 from freoa_verifica.connectors.base import (
     Candidate,
     ParsedDecision,
@@ -2008,8 +2009,7 @@ class Verifica:
                     if judgment_date and parsed.judgment_date != judgment_date:
                         continue
                     # Reaproveita a resposta já capturada; Unavailable do indexador interrompe a fonte.
-                    result = self._index_candidate_juris(connector, cand, captured_response=response,
-                                                         propagar_indisponibilidade=True)
+                    result = self._index_candidate_juris(connector, cand, captured_response=response)
                     if result and result.get('capture_id'):
                         return 'encontrada', result
             except Unavailable as exc:
@@ -2308,6 +2308,12 @@ class Verifica:
         return isinstance(cobertura, list) and any(c["truncado_remoto"] or c["truncado_local"] for c in cobertura)
 
     def _juris_textual(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
+        # Guarda por pesquisa: candidatos da mesma URL (ata) usam uma única captura, e fonte que desafiou
+        # ou recusou não é consultada de novo na mesma pesquisa (FIX10/F-14).
+        with GuardaExecucao().ativar():
+            return self._juris_textual_corpo(q, tribunais, desde, ate, autoridade_min, limite, cursor)
+
+    def _juris_textual_corpo(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
         offset = _decode_cursor(cursor)
         limite = max(1, min(int(limite), 50))
         tribunais_norm = (list(_JURIS_CONNECTORS) if tribunais is None else
@@ -2542,10 +2548,10 @@ class Verifica:
             self._last_juris_capture = (response.body,key,capture_id)
         return capture_id
 
-    def _index_candidate_juris(self, connector, cand: Candidate, captured_response=None, *,
-                               propagar_indisponibilidade: bool = False) -> dict[str, Any] | None:
-        """`propagar_indisponibilidade`: Unavailable do conector sobe ao controlador da cadeia em vez de
-        virar candidato só com metadados (a confirmação CNJ interrompe a fonte e declara a falha)."""
+    def _index_candidate_juris(self, connector, cand: Candidate, captured_response=None) -> dict[str, Any] | None:
+        """Unavailable do conector sobe sempre ao controlador (confirmação, pesquisa, semente), que
+        interrompe a fonte e declara a categoria; só falha que não é de indisponibilidade vira candidato
+        só com metadados."""
         meta = cand.metadata or {}
         court = str(meta.get("court") or connector.authority or connector.id).upper()
         class_name = meta.get("classe") or meta.get("class") or meta.get("class_name")
@@ -2648,7 +2654,7 @@ class Verifica:
                     official_id=parsed.official_id,
                 )
         except Exception as exc:  # noqa: BLE001
-            if propagar_indisponibilidade and isinstance(exc, Unavailable):
+            if isinstance(exc, Unavailable):
                 raise
             # Download/parse falhou: permanece metadados, sem capture_id.
             capture_id = None

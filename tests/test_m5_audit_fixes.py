@@ -180,9 +180,11 @@ def test_nivel_prova_metadados_sem_captura(verifica_populada, monkeypatch):
 
     svc._connectors["stj"] = Conn()
     res = svc.pesquisar_jurisprudencia("teste", tribunais=["stj"], limite=5)
-    assert res["status"] == "unavailable"
-    assert res["reason_code"] == "EVIDENCIA_AUSENTE"
-    assert "itens" not in res
+    # FIX10/F-14: o download que falha é a indisponibilidade da fonte, declarada com o motivo da fonte
+    assert res["status"] == "indisponivel"
+    assert res["reason_code"] == "DOWNLOAD_FAIL"
+    assert res["fontes_indisponiveis"] == {"stj": "DOWNLOAD_FAIL"}
+    assert res["itens"] == []
 
 
 # --- 4. concorrência ---

@@ -64,7 +64,9 @@ class _Handler(BaseHTTPRequestHandler):
             length = self.content_length if self.content_length is not None else len(payload)
             self.send_header("Content-Length", str(length))
         self.end_headers()
-        if write_body and self.status == 200 and self.command != "HEAD":
+        # O corpo acompanha o Content-Length declarado em qualquer status: framing incompleto em
+        # resposta de erro é RespostaInvalida (FIX10/F-13).
+        if write_body and self.command != "HEAD":
             self.wfile.write(payload)
 
 

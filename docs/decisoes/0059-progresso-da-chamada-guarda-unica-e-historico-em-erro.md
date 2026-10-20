@@ -38,3 +38,24 @@ A rodada 5 achou variantes das mesmas classes; a emenda troca os remendos por me
 - **CVM Colegiado.** Todos os itens de uma ata reutilizam a mesma captura (um GET); cada um seleciona a sua decisão.
   A captura de jurisprudência da semente usa `propagar_indisponibilidade=True`, de modo que `Unavailable` do indexador
   sobe e é registrado com sua categoria em vez de virar `sem_evidencia_capturada`.
+
+## Emenda FIX10 (auditoria final, rodada 6: F-08, F-11, F-13, F-14)
+
+- **Identidade (F-08).** A identidade efetiva é `transport.identidade_requisicao(metodo, url, corpo)`, a mesma
+  canonicalização que o transporte aplica ao validar o destino: esquema minúsculo, host IDNA minúsculo sem ponto
+  final, porta padrão removida, percent-encoding canônico (`%7E` = `~`), query ordenada, fragmento descartado. A guarda
+  não tem canonicalização própria; cache e bloqueio por host usam só essa função.
+- **Bloqueio por host efetivo (F-11).** O bloqueio por fonte vale para o host inicial e para o host de cada salto que
+  respondeu sem redirecionar (`evidencia.saltos`; `url_final` quando o desafio é visto na resposta final). O transporte
+  aceita `antes_do_salto(host)`; a guarda o fornece e recusa o salto para host bloqueado com a categoria original, sem
+  requisição e sem incremento no breaker. A cadeia permanece como evidência.
+- **Amostra e framing (F-13).** A amostra do corpo de erro é lida em laço até 64 KiB ou o fim do corpo, e o marcador é
+  procurado no buffer acumulado (atravessa fronteiras de bloco). Chunk inválido, `Content-Length` não satisfeito,
+  encerramento prematuro ou leitura impossível dentro da amostra é `RespostaInvalida` (`resposta_inesperada`), nunca
+  repetível. Só corpo examinado sem marcador mantém a classificação por status. Corpo além de 64 KiB: examinam-se os
+  primeiros 64 KiB, sem validar o framing do restante.
+- **Indexador (F-14).** `Verifica._index_candidate_juris` propaga sempre `Unavailable`; o parâmetro
+  `propagar_indisponibilidade` foi removido. Só falha que não é de indisponibilidade vira candidato com metadados. A
+  pesquisa textual (`pesquisar_jurisprudencia`) roda sob uma `GuardaExecucao` por pesquisa: candidatos da mesma URL
+  usam uma única captura, a indisponibilidade de um candidato interrompe a fonte, aparece em `fontes` e em
+  `cobertura[].indisponivel` com categoria, e o status de topo é `parcial` ou `indisponivel`, nunca `ok`.
