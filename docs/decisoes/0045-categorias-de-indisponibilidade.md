@@ -43,3 +43,17 @@ quando o corpo chega (200 e `detect_challenge`).
   `Content-Length` divergente, tamanho acima do limite) usa o tipo `transport.RespostaInvalida` (`TooLarge` é
   subclasse) e vira `resposta_inesperada`, que o hook live mantém como falha.
 - `detect_challenge` não infere desafio por 202 com corpo vazio. Só cabeçalho de borda ou assinatura de corpo.
+
+## Emenda FIX9 (auditoria final, rodada 5: F-06, F-13)
+
+- A classificação da falha de transporte é uma só: `transport._classificar(exc, estado)` decide categoria e
+  repetibilidade, e nenhum outro ponto do transporte converte exceção em categoria. O `_EstadoChamada`
+  (`resposta_iniciada`, `saltos`, `bytes_recebidos`, `ultimo_status`) nasce em `fetch` e é visto por todos os
+  saltos, pela validação/resolução de cada salto, pelo controlador externo de prazo e pela leitura de desafio.
+- Regra: qualquer status ou byte recebido em qualquer momento da chamada torna toda falha posterior (prazo,
+  fechamento, DNS, validação de outro salto) `RespostaInvalida`/`resposta_inesperada`, não repetível, com `saltos`
+  preservados. Sem status nem byte na chamada, a falha é `fonte_fora` e repetível. Uma repetição decidida pelo
+  transporte é um novo percurso e zera o estado.
+- Falha de resolução DNS é `TransportError` (`fonte_fora`), não `BlockedHost`; endereço inseguro continua política.
+- `_desafio_na_resposta` distingue "sem marcador" de "impossível examinar": erro de leitura (framing, protocolo,
+  soquete) propaga como `RespostaInvalida`, sem repetição.

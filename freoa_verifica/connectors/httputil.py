@@ -12,6 +12,7 @@ from freoa_verifica.connectors.challenge import (
     map_transport_error,
     unavailable_from_challenge,
 )
+from freoa_verifica.connectors.guarda import ativa as guarda_ativa
 from freoa_verifica.identidade_http import user_agent_do_modo
 from freoa_verifica.limites import restante
 from freoa_verifica.transport import (
@@ -25,7 +26,25 @@ def ua_header(mode: str) -> dict[str, str]:
     return {"User-Agent": user_agent_do_modo(mode)}
 
 
-def connector_fetch(
+def connector_fetch(url: str, **kw: Any) -> Response:
+    """fetch + detecção de desafio; propaga Unavailable.
+
+    Dentro de uma guarda de execução (`connectors.guarda`), a mesma requisição efetiva não se repete
+    e uma fonte que desafiou ou recusou não é consultada de novo.
+    """
+    guarda = guarda_ativa()
+    if guarda is None:
+        return _connector_fetch(url, **kw)
+    return guarda.executar(
+        kw.get("method", "GET"),
+        url,
+        kw.get("body"),
+        cacheavel=kw.get("session") is None and kw.get("sink") is None,
+        baixar=lambda: _connector_fetch(url, **kw),
+    )
+
+
+def _connector_fetch(
     url: str,
     *,
     hosts: frozenset[str],
@@ -45,7 +64,6 @@ def connector_fetch(
     ignore_challenge_kinds: frozenset[str] | None = None,
     expected_content: str | None = None,
 ) -> Response:
-    """fetch + detecção de desafio; propaga Unavailable."""
     timeout = restante(timeout)
     if timeout <= 0:
         raise Unavailable("orcamento")

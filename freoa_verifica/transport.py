@@ -237,9 +237,12 @@ def _desafio_na_resposta(response) -> str | None:
         headers = dict(response.getheaders())
         reader = getattr(response, "read1", None) or response.read
         amostra = reader(65536) or b""
-        found = detect_challenge(status=response.status, headers=headers, body=amostra)
-    except Exception:
-        return None
+    except (OSError, http.client.HTTPException, ValueError) as exc:
+        # Impossível examinar não é "sem marcador" (FIX9/F-13): erro de framing/protocolo propaga.
+        raise RespostaInvalida(
+            f"Corpo da resposta de erro ilegível: {exc}", http=_failure_http(response)
+        ) from exc
+    found = detect_challenge(status=response.status, headers=headers, body=amostra)
     return str(found.args[0]) if found is not None and found.args else None
 
 
@@ -458,7 +461,8 @@ def validate_url(
     except Empty as exc:
         raise Timeout("Prazo de DNS esgotado") from exc
     if error is not None:
-        raise BlockedHost(f"Falha de DNS: {error}") from error
+        # Falha de infraestrutura, não de política: fonte_fora, repetível enquanto nada foi recebido.
+        raise TransportError(f"Falha de DNS: {error}") from error
     addresses = sorted({record[4][0] for record in records})
     if not addresses or any(not _public_unicast(ip) for ip in addresses):
         raise BlockedHost("DNS retornou endereço inseguro ou não suportado")
@@ -473,11 +477,11 @@ class _LeitorObservado(io.RawIOBase):
     já contam como resposta iniciada.
     """
 
-    def __init__(self, soquete, iniciada: threading.Event) -> None:
+    def __init__(self, soquete, estado: "_EstadoChamada") -> None:
         super().__init__()
         # `makefile` sem buffer mantém a contagem de referências que adia o fechamento do soquete.
         self._cru = soquete.makefile("rb", buffering=0)
-        self._iniciada = iniciada
+        self._estado = estado
 
     def readable(self) -> bool:
         return True
@@ -485,7 +489,8 @@ class _LeitorObservado(io.RawIOBase):
     def readinto(self, b):
         n = self._cru.readinto(b)
         if n:
-            self._iniciada.set()
+            self._estado.resposta_iniciada = True
+            self._estado.bytes_recebidos += n
         return n
 
     def close(self) -> None:
@@ -498,12 +503,12 @@ class _LeitorObservado(io.RawIOBase):
 class _SoqueteObservado:
     """Delega ao soquete real; só `makefile` muda, para observar o primeiro byte da resposta."""
 
-    def __init__(self, soquete, iniciada: threading.Event) -> None:
+    def __init__(self, soquete, estado: "_EstadoChamada") -> None:
         self._soquete = soquete
-        self._iniciada = iniciada
+        self._estado = estado
 
     def makefile(self, *a, **kw):
-        return io.BufferedReader(_LeitorObservado(self._soquete, self._iniciada))
+        return io.BufferedReader(_LeitorObservado(self._soquete, self._estado))
 
     def __getattr__(self, nome):
         return getattr(self._soquete, nome)
@@ -642,48 +647,99 @@ def _retry_after(falha: HTTPStatusError) -> float | None:
     return max(0.0, (alvo - datetime.now(timezone.utc)).total_seconds())
 
 
-def _espera_antes_de_repetir(falha: Exception, repeticoes: int, deadline: float) -> float | None:
-    """Espera até a próxima tentativa, ou None se a falha não é repetível ou a espera não cabe no prazo."""
-    if isinstance(falha, HTTPStatusError):
-        if falha.status not in _STATUS_REPETIVEIS or falha.desafio:
-            return None
-        espera = _retry_after(falha)
-    elif type(falha) in (TransportError, Timeout):
-        espera = None
+_STATUS_REDIRECIONAMENTO = (301, 302, 303, 307, 308)
+
+
+@dataclass
+class _EstadoChamada:
+    """Progresso observável de uma chamada lógica (FIX9/F-06, F-13).
+
+    Criado uma vez em `fetch` e compartilhado por todos os saltos, pelo controlador externo de
+    prazo, pela validação/resolução de cada salto e pela leitura de desafio. Só `reiniciar`
+    (uma repetição decidida pelo próprio transporte, que é um novo percurso) o zera.
+    """
+
+    prazo: float = float("inf")  # relógio monotônico do prazo total
+    resposta_iniciada: bool = False  # qualquer byte de resposta recebido em qualquer salto
+    saltos: list = field(default_factory=list)  # [{url, status}] de cada salto que respondeu
+    bytes_recebidos: int = 0
+    ultimo_status: int | None = None
+    http: HTTPMetadata | None = None  # recibo do último salto que respondeu
+    # por salto
+    lendo_status: bool = False
+    lento: bool = False
+    expirou: bool = False
+
+    def reiniciar(self) -> None:
+        self.resposta_iniciada = False
+        self.saltos = []
+        self.bytes_recebidos = 0
+        self.ultimo_status = None
+        self.novo_salto()
+
+    def novo_salto(self) -> None:
+        self.http = None
+        self.lendo_status = False
+        self.lento = False
+        self.expirou = False
+
+
+def _classificar(exc: BaseException, estado: _EstadoChamada) -> tuple[BaseException, bool]:
+    """Único ponto do transporte que converte exceção em categoria. Devolve (falha, repetível).
+
+    Regra: resposta iniciada em qualquer momento da chamada (byte recebido em qualquer salto) torna
+    toda falha posterior `RespostaInvalida` (`resposta_inesperada`), nunca repetível. Sem nenhum byte
+    de resposta, falha de conexão/DNS/prazo é `fonte_fora` e repetível. Status 502/503/504 sem
+    desafio é repetível. Exceção que não é de transporte volta intacta, não repetível.
+    """
+    if (
+        estado.lendo_status
+        and isinstance(exc, http.client.HTTPException)
+        and not isinstance(exc, OSError)
+    ):
+        # LineTooLong, BadStatusLine, protocolo desconhecido, cabeçalhos em excesso: houve bytes.
+        estado.resposta_iniciada = True
+    if isinstance(exc, TransportError):
+        falha: BaseException = exc
+        if type(exc) in (TransportError, Timeout) and estado.resposta_iniciada:
+            falha = RespostaInvalida(str(exc), http=exc.http)
+            falha.__cause__ = exc.__cause__ or exc
+    elif isinstance(exc, (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException)):
+        if estado.lento:
+            falha = TransporteLento("Taxa de leitura abaixo do mínimo")
+        elif estado.resposta_iniciada:
+            falha = RespostaInvalida(str(exc))
+        elif (
+            isinstance(exc, TimeoutError) or estado.expirou or time.monotonic() >= estado.prazo
+        ):
+            falha = Timeout(str(exc))
+        else:
+            falha = TransportError(str(exc))
+        falha.__cause__ = exc
     else:
-        return None
+        return exc, False
+    if falha.http is None:
+        falha.http = estado.http
+    if not falha.saltos and any(s["status"] in _STATUS_REDIRECIONAMENTO for s in estado.saltos):
+        falha.saltos = list(estado.saltos)
+    if isinstance(falha, HTTPStatusError):
+        repetivel = falha.status in _STATUS_REPETIVEIS and not falha.desafio
+    else:
+        repetivel = type(falha) in (TransportError, Timeout)
+    return falha, repetivel
+
+
+def _espera_antes_de_repetir(falha: Exception, repeticoes: int, deadline: float) -> float | None:
+    """Espera até a próxima tentativa, ou None se a espera não cabe no prazo (a falha já é repetível)."""
+    espera = _retry_after(falha) if isinstance(falha, HTTPStatusError) else None
     if espera is None:
         base = float(2**repeticoes)  # 1s, 2s
         espera = base + _sortear(0.0, 0.25 * base)
     return espera if espera < deadline - time.monotonic() else None
 
 
-def _attach_http(exc: BaseException, response) -> None:
-    http_meta = _failure_http(response)
-    if http_meta is None:
-        return
-    if isinstance(exc, TransportError) and exc.http is None:
-        exc.http = http_meta
-
-
-def _fetch_once(
-    url: str,
-    *,
-    method: str,
-    body: bytes | None,
-    caller_headers: dict[str, str],
-    allowed_hosts: frozenset[str],
-    allowed_path_prefixes: dict[str, tuple[str, ...]] | None,
-    allowed_mimes: frozenset[str],
-    max_bytes: int,
-    max_redirects: int,
-    deadline: float,
-    min_bytes_per_second: float | None = None,
-    session: Session | None = None,
-    sink: BinaryIO | None = None,
-    progresso: threading.Event | None = None,
-) -> Response:
-    """Uma tentativa de captura (com redirecionamentos). Revisão única dos caminhos de exceção (FIX5/F-01).
+def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -> Response:
+    """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
 
     Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
     `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
@@ -709,17 +765,46 @@ def _fetch_once(
     | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
     | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
 
-    Timeout em salto posterior a um redirecionamento recebido também é repetível, mas só se a
-    espera couber no prazo restante (o prazo já esgotou, então nunca cabe).
+    Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
+    validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
     """
+    estado = estado if estado is not None else _EstadoChamada(prazo=kw["deadline"])
+    try:
+        return _percorrer(url, estado=estado, **kw)
+    except Exception as exc:
+        falha, _ = _classificar(exc, estado)
+        if falha is exc:
+            raise
+        raise falha from exc
+
+
+def _percorrer(
+    url: str,
+    *,
+    estado: _EstadoChamada,
+    method: str,
+    body: bytes | None,
+    caller_headers: dict[str, str],
+    allowed_hosts: frozenset[str],
+    allowed_path_prefixes: dict[str, tuple[str, ...]] | None,
+    allowed_mimes: frozenset[str],
+    max_bytes: int,
+    max_redirects: int,
+    deadline: float,
+    min_bytes_per_second: float | None = None,
+    session: Session | None = None,
+    sink: BinaryIO | None = None,
+) -> Response:
+    """Percurso bruto dos saltos: levanta a exceção original; `_fetch_once` a classifica."""
     original = url
     redirects: list[str] = []
-    saltos: list[dict] = []  # progresso é da chamada lógica: o status de qualquer salto vale para a cadeia
+    saltos = estado.saltos  # progresso é da chamada lógica: o status de qualquer salto vale para a cadeia
     current_method = method
     current_body = body
     req_extra = dict(caller_headers)
 
     for _ in range(max_redirects + 1):
+        estado.novo_salto()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise Timeout("Prazo de captura esgotado")
@@ -735,9 +820,6 @@ def _fetch_once(
         # Prazo do soquete acompanha o timeout da captura (CKAN/STJ ~25–90s).
         connection = PinnedHTTPSConnection(host, ip, timeout=max(1.0, remaining))
         connection.capture_deadline = deadline
-        # Compartilhado com o controlador externo de prazo: qualquer byte de resposta já o aciona.
-        iniciada = progresso if progresso is not None else threading.Event()
-        iniciada.clear()
         timed_out = threading.Event()
         slow = threading.Event()
         finished = threading.Event()
@@ -746,6 +828,7 @@ def _fetch_once(
 
         def expire(expired=timed_out, conn=connection, state=network_state) -> None:
             expired.set()
+            estado.expirou = True
             active_socket = state["socket"] or getattr(conn, "sock", None)
             if active_socket is not None:
                 try:
@@ -760,7 +843,6 @@ def _fetch_once(
         timer.daemon = True
         timer.start()
         response = None
-        lendo_status = False
         try:
             req_headers = _contact_headers()
             req_headers.update(req_extra)
@@ -776,11 +858,13 @@ def _fetch_once(
             )
             network_state["socket"] = getattr(connection, "sock", None)
             if getattr(connection, "sock", None) is not None:
-                connection.sock = _SoqueteObservado(connection.sock, iniciada)
-            lendo_status = True
+                connection.sock = _SoqueteObservado(connection.sock, estado)
+            estado.lendo_status = True
             response = connection.getresponse()
-            lendo_status = False
-            iniciada.set()
+            estado.lendo_status = False
+            estado.resposta_iniciada = True
+            estado.ultimo_status = response.status
+            estado.http = _failure_http(response)
             saltos.append({"url": url, "status": response.status})
             if session is not None:
                 session.absorb_response(url, response)
@@ -877,6 +961,7 @@ def _fetch_once(
                 now = time.monotonic()
                 if (size - window_size) / max(now - window_start, 0.001) < (MIN_BYTES_PER_SECOND if min_bytes_per_second is None else min_bytes_per_second):
                     slow.set()
+                    estado.lento = True
                     expire()
                     return
                 window_start, window_size = now, size
@@ -941,33 +1026,6 @@ def _fetch_once(
                 mime=mime,
                 http=http_meta,
             )
-        except TransportError as exc:
-            _attach_http(exc, response)
-            if redirects:
-                exc.saltos = list(saltos)
-            raise
-        except (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
-            if response is None and not slow.is_set() and (
-                saltos
-                or iniciada.is_set()
-                or (lendo_status and not isinstance(exc, OSError))
-            ):
-                # O servidor já enviou bytes, mas a linha de status ou os cabeçalhos são inválidos
-                # (LineTooLong, BadStatusLine, UnknownProtocol, cabeçalhos em excesso) ou foram
-                # interrompidos (prazo, reset) antes de completar. Encerramento sem byte algum é
-                # RemoteDisconnected, que é OSError e segue como fonte_fora.
-                falha = RespostaInvalida(str(exc))
-                falha.saltos = list(saltos)
-                raise falha from exc
-            if response is not None and not slow.is_set():
-                # Falha depois de recebido o status/cabeçalho (IncompleteRead, chunk inválido, reset
-                # ou prazo no corpo): resposta inválida, não indisponibilidade ambiental (decisão 0045).
-                raise RespostaInvalida(str(exc), http=_failure_http(response)) from exc
-            if slow.is_set():
-                raise TransporteLento("Taxa de leitura abaixo do mínimo", http=_failure_http(response)) from exc
-            if isinstance(exc, TimeoutError) or timed_out.is_set() or time.monotonic() >= deadline:
-                raise Timeout(str(exc), http=_failure_http(response)) from exc
-            raise TransportError(str(exc), http=_failure_http(response)) from exc
         finally:
             finished.set()
             if rate_timer is not None:
@@ -1034,7 +1092,7 @@ def fetch(
     outcome: Queue = Queue(maxsize=1)
     cancelled = threading.Event()
     worker_done = threading.Event()
-    recebeu = threading.Event()  # status/cabeçalhos da tentativa corrente já chegaram
+    estado = _EstadoChamada(prazo=deadline)  # uma vez por chamada lógica; todo salto e o controlador o veem
     temporary: list[Path] = []
 
     def worker() -> None:
@@ -1076,17 +1134,21 @@ def fetch(
                                 deadline=deadline,
                                 **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
                                 session=session,
-                                progresso=recebeu,
+                                estado=estado,
                                 **({"sink": output} if output is not None else {}),
                             )
                             break
-                        except Exception as falha:
+                        except Exception as erro:
+                            falha, repetivel = _classificar(erro, estado)
                             espera = None
-                            if repeticoes < repeticao and (method != "POST" or idempotente):
+                            if repetivel and repeticoes < repeticao and (method != "POST" or idempotente):
                                 espera = _espera_antes_de_repetir(falha, repeticoes, deadline)
                             if espera is None:
-                                raise
+                                if falha is erro:
+                                    raise
+                                raise falha from erro
                             repeticoes += 1
+                            estado.reiniciar()  # repetição decidida pelo transporte = novo percurso
                             _dormir(espera)
                 finally:
                     if output is not None:
@@ -1119,9 +1181,7 @@ def fetch(
         cancelled.set()
         if worker_done.is_set() and temporary:
             temporary[0].unlink(missing_ok=True)
-        if recebeu.is_set():
-            raise RespostaInvalida("Prazo de captura esgotado após o início da resposta")
-        raise Timeout("Prazo de captura esgotado")
+        raise _classificar(Timeout("Prazo de captura esgotado"), estado)[0]
     try:
         result, error = outcome.get_nowait()
     except Empty as exc:

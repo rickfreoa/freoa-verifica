@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
@@ -17,6 +18,7 @@ from typing import Any, Callable
 from freoa_verifica.aliases import WorkKey
 from freoa_verifica.citation import _MONTHS
 from freoa_verifica.connectors.base import Unavailable
+from freoa_verifica.connectors.guarda import GuardaExecucao
 from freoa_verifica.connectors.stf import SUMULA_BASES
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.parsers.model import ParsedDocument
@@ -154,6 +156,17 @@ def parse_act_ref(ref: str) -> tuple[str, str, int | None] | None:
     return tipo, numero, ano
 
 
+def _com_guarda(metodo):
+    """Executa o método sob a guarda de execução da semente (requisição efetiva única, bloqueio por fonte)."""
+
+    @functools.wraps(metodo)
+    def interno(self, *args, **kwargs):
+        with self._guarda.ativar():
+            return metodo(self, *args, **kwargs)
+
+    return interno
+
+
 class SementeSync:
     """Orquestra captura do corpus semente via fachada Verifica."""
 
@@ -179,6 +192,7 @@ class SementeSync:
         self._failed: dict[tuple[str, str], str] = {}  # falhou nesta execução: nunca retentada nela
         self._tentadas: dict[tuple[str, str], tuple[bool, Any]] = {}  # desfecho por chave de requisição, por execução
         self._pendentes_iniciais: set[str] | None = None
+        self._guarda = GuardaExecucao()  # identidade efetiva da requisição e bloqueio por fonte
 
     def _stats(self, fonte: str) -> FonteStats:
         fonte = fonte.removesuffix("_doc")
@@ -333,6 +347,7 @@ class SementeSync:
         rows = self.svc.conn.execute("SELECT chave FROM sync_state WHERE fonte='alterador' AND status='indisponivel'").fetchall()
         self._pendentes_iniciais = {r[0] for r in rows}
 
+    @_com_guarda
     def sync_planalto(self) -> None:
         if not self._want("planalto"):
             return
@@ -480,6 +495,7 @@ class SementeSync:
                                      amending_act_texts=rw.amending_act_texts)
         return complete
 
+    @_com_guarda
     def sync_cvm(self) -> None:
         if not self._want("cvm_normas"):
             return
@@ -582,6 +598,7 @@ class SementeSync:
         except Exception as exc:  # noqa: BLE001
             self._mark_indisponivel("cvm_normas", chave, f"{type(exc).__name__}:{exc}"[:200])
 
+    @_com_guarda
     def sync_bcb(self) -> None:
         if not self._want("bcb"):
             return
@@ -692,6 +709,7 @@ class SementeSync:
         except Exception as exc:  # noqa: BLE001
             self._mark_indisponivel("bcb", chave, f"{type(exc).__name__}:{exc}"[:200])
 
+    @_com_guarda
     def sync_stj(self) -> None:
         if not self._want("stj"):
             return
@@ -776,6 +794,7 @@ class SementeSync:
                 self._mark_indisponivel("stj_doc", chave, str(exc)[:200], getattr(exc, "categoria", None))
         db.close()
 
+    @_com_guarda
     def sync_tcu(self) -> None:
         if not self._want("tcu"):
             return
@@ -828,6 +847,7 @@ class SementeSync:
         except Exception as exc:  # noqa: BLE001
             self._mark_indisponivel("tcu", chave, str(exc)[:200], getattr(exc, "categoria", None))
 
+    @_com_guarda
     def sync_tjdft(self) -> None:
         if not self._want("tjdft"):
             return
@@ -864,7 +884,8 @@ class SementeSync:
             if not (fonte == "tcu" and cand.key in getattr(connector,"_captured_pages",{})):
                 self._sleep()
             item = self._tentar_uma_vez(
-                (checkpoint, key), lambda: self.svc._index_candidate_juris(connector, cand)
+                (checkpoint, key),
+                lambda: self.svc._index_candidate_juris(connector, cand, propagar_indisponibilidade=True),
             )
             if not item or not item.get("capture_id"):
                 raise Unavailable("sem_evidencia_capturada")
@@ -876,6 +897,7 @@ class SementeSync:
             self._mark_indisponivel(checkpoint, key, str(exc)[:200], getattr(exc, "categoria", None))
             return False
 
+    @_com_guarda
     def sync_cvm_colegiado(self) -> None:
         if not self._want("cvm_colegiado"):
             return
@@ -909,6 +931,7 @@ class SementeSync:
             except Exception as exc:
                 self._mark_indisponivel("cvm_colegiado", f"colegiado:{ano}", str(exc)[:200], getattr(exc, "categoria", None))
 
+    @_com_guarda
     def sync_stf(self) -> None:
         if not self._want("stf"):
             return
@@ -984,6 +1007,7 @@ class SementeSync:
                     except Exception as exc:  # noqa: BLE001
                         self._mark_indisponivel("stf", cand.key, str(exc)[:200], getattr(exc, "categoria", None))
 
+    @_com_guarda
     def run(self) -> dict[str, Any]:
         self.progress("início sync semente")
         self._failed.clear()  # "falhou nesta execução" vale por execução

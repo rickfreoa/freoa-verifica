@@ -25,14 +25,14 @@ Em `verificar_texto`, associações com confiança `provavel` recebem `requer_co
 Requer Python 3.11 ou superior.
 
 ```bash
-pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.2.0/freoa_verifica-1.2.0-py3-none-any.whl"
+pip install "https://github.com/rickfreoa/freoa-verifica/releases/download/v1.3.0/freoa_verifica-1.3.0-py3-none-any.whl"
 # ou a partir do código-fonte:
-pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.2.0"
+pip install "git+https://github.com/rickfreoa/freoa-verifica@v1.3.0"
 fv doctor
 fv snapshot install                   # corpus semente (opcional, recomendado)
 ```
 
-No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verifica.ps1) faz tudo de uma vez: cria o ambiente em `%USERPROFILE%\freoa-verifica`, confere a attestation do wheel e do lock com o GitHub CLI (`gh`), quando instalado, e registra quando não pôde conferir; instala o pacote e o acervo vinculado; e só declara sucesso depois de conferir versão, acervo e `fv doctor`. Qualquer etapa que falhe interrompe a instalação com o nome da etapa. Um acervo anterior sem vínculo comprovado é preservado ao lado (`<home>.pre-1.2.0-<data>`), e o snapshot vai para um diretório limpo. Execute com `powershell -ExecutionPolicy Bypass -File .\instalar-freoa-verifica.ps1`.
+No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verifica.ps1) faz tudo de uma vez: cria o ambiente em `%USERPROFILE%\freoa-verifica`, exige e confere a attestation do wheel e do lock com o GitHub CLI (`gh`): sem `gh`, ou com a attestation inválida, a instalação é interrompida. A única exceção é o parâmetro explícito `-SemAttestation`, que prossegue com aviso e grava `attestation_verificada: false` ("PROVENIENCIA NAO VERIFICADA") na instalação; instala o pacote e o acervo vinculado; e só declara sucesso depois de conferir versão, acervo e `fv doctor`. Qualquer etapa que falhe interrompe a instalação com o nome da etapa. Um acervo anterior sem vínculo comprovado é preservado ao lado (`<home>.pre-<versão>-<data>`), e o snapshot vai para um diretório limpo. Execute com `powershell -ExecutionPolicy Bypass -File .\instalar-freoa-verifica.ps1`.
 
 ### Como servidor para clientes compatíveis com MCP
 
@@ -47,7 +47,7 @@ No Windows, [`scripts/instalar-freoa-verifica.ps1`](scripts/instalar-freoa-verif
 Alternativa sem instalação permanente:
 
 ```bash
-uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.2.0 freoa-verifica-mcp
+uvx --from git+https://github.com/rickfreoa/freoa-verifica@v1.3.0 freoa-verifica-mcp
 ```
 
 O snapshot é um arquivo `freoa-verifica-snapshot-AAAAMMDD-<versão>.tar.gz`, acompanhado de `.sha256`. O pacote traz a lista dos snapshots oficiais (`freoa_verifica/data/snapshots-oficiais.json`, coberta pela attestation do wheel); `fv snapshot install` escolhe a release mais recente cujo snapshot conste dessa lista e recusa qualquer outro (`SNAPSHOT_NAO_VINCULADO`), salvo com `--aceitar-nao-vinculado`. Nesse caso, o acervo fica marcado `vinculado: false` de forma permanente, visível em `fv snapshot info` e `fv doctor`. Para um pacote local: `fv snapshot install --arquivo <arquivo>.tar.gz`.
@@ -78,7 +78,7 @@ Para consultar normas no acervo instalado em somente leitura, defina `FV_READ_ON
 
 verificar_texto pressupõe texto jurídico; siglas em textos de outra natureza podem ser lidas como citações. Campos técnicos explicitamente rotulados exigem conferência; a forma jurídica usual `CC, art. 114` permanece exata sem esses marcadores. Veja a decisão [0020](docs/decisoes/0020-rotulos-e-contextos-tecnicos.md).
 
-## Estado atual (1.2.0)
+## Estado atual (1.3.0)
 
 Cobertura medida e limites, fonte a fonte, em [docs/FONTES.md](docs/FONTES.md). Histórico de mudanças no [CHANGELOG](CHANGELOG.md).
 
