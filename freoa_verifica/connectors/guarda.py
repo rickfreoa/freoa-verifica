@@ -24,6 +24,7 @@ from typing import Callable
 from urllib.parse import urlsplit
 
 from freoa_verifica.connectors.base import Unavailable
+from freoa_verifica.transport import _host_canonico, identidade_requisicao
 
 BLOQUEIAM_A_FONTE = frozenset({"ambiental_desafio", "recusa_identificado"})
 LIMITE_BYTES = 64 * 1024 * 1024
@@ -32,11 +33,6 @@ _ATIVA: contextvars.ContextVar["GuardaExecucao | None"] = contextvars.ContextVar
 
 def ativa() -> "GuardaExecucao | None":
     return _ATIVA.get()
-
-
-def identidade(method: str, url: str, body: bytes | None) -> tuple:
-    p = urlsplit(url)
-    return (method.upper(), p.scheme.lower(), p.netloc.lower(), p.path or "/", p.query, body or b"")
 
 
 def _copia(exc: Unavailable, **extra) -> Unavailable:
@@ -64,11 +60,11 @@ class GuardaExecucao:
             _ATIVA.reset(token)
 
     def executar(self, method: str, url: str, body: bytes | None, *, cacheavel: bool, baixar: Callable):
-        host = (urlsplit(url).hostname or "").lower()
+        host = _host_canonico(urlsplit(url))
         bloqueio = self.bloqueios.get(host)
         if bloqueio is not None:
             raise _copia(bloqueio, url=url, bloqueio_fonte=host)
-        chave = identidade(method, url, body)
+        chave = identidade_requisicao(method, url, body)
         if cacheavel:
             if chave in self._falhas:
                 raise _copia(self._falhas[chave])

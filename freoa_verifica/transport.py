@@ -291,9 +291,54 @@ def _normalize_caller_headers(headers: dict[str, str] | None) -> dict[str, str]:
     return normalized
 
 
+def _host_canonico(parsed) -> str:
+    """Host como o transporte o valida: minúsculo, IDNA, sem ponto final."""
+    host = (parsed.hostname or "").lower().rstrip(".")
+    try:
+        return host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return host
+
+
+_PERCENT = re.compile(r"%([0-9A-Fa-f]{2})")
+_NAO_RESERVADO = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
+
+def _percent_canonico(texto: str) -> str:
+    """`%7E` e `~` são o mesmo octeto: decodifica não reservados, maiusculiza o resto."""
+
+    def troca(m):
+        c = chr(int(m.group(1), 16))
+        return c if c in _NAO_RESERVADO else "%" + m.group(1).upper()
+
+    return _PERCENT.sub(troca, texto)
+
+
+def identidade_requisicao(metodo: str, url: str, corpo: bytes | None = None) -> tuple:
+    """Identidade efetiva de uma requisição, pela mesma canonicalização que valida o destino.
+
+    Esquema minúsculo, host IDNA minúsculo sem ponto final, porta padrão removida, caminho com
+    percent-encoding canônico, query ordenada, fragmento descartado. Cache e bloqueio da guarda de
+    execução usam só esta função.
+    """
+    parsed = urlsplit(url)
+    esquema = parsed.scheme.lower()
+    try:
+        porta = parsed.port
+    except ValueError:
+        porta = None
+    if porta == {"https": 443, "http": 80}.get(esquema):
+        porta = None
+    host = _host_canonico(parsed)
+    if porta is not None:
+        host = f"{host}:{porta}"
+    query = "&".join(sorted(_percent_canonico(parsed.query).split("&"))) if parsed.query else ""
+    return (metodo.upper(), esquema, host, _percent_canonico(parsed.path) or "/", query, corpo or b"")
+
+
 def _origin(url: str) -> tuple[str, str, int]:
     parsed = urlsplit(url)
-    host = (parsed.hostname or "").lower().rstrip(".")
+    host = _host_canonico(parsed)
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     return parsed.scheme.lower(), host, port
 
@@ -407,7 +452,7 @@ def validate_reference(
         raise BlockedHost("URL deve usar ASCII imprimível; percent-encode UTF-8")
     try:
         parsed = urlsplit(url)
-        host = (parsed.hostname or "").lower().rstrip(".")
+        host = _host_canonico(parsed)
         port = parsed.port
     except ValueError as exc:
         raise BlockedHost(str(exc)) from exc
