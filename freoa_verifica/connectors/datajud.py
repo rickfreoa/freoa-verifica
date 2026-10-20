@@ -10,6 +10,7 @@ from typing import Any
 
 from freoa_verifica.connectors.base import (
     Candidate,
+    CandidateList,
     Connector,
     HealthProbe,
     HealthReport,
@@ -197,10 +198,12 @@ class DatajudConnector(Connector):
             raise Unavailable("resposta_invalida")
         total = hits_wrap.get("total")
         total_n = total.get("value") if isinstance(total, dict) else total
+        relacao = total.get("relation") if isinstance(total, dict) else None
+        total_exato = None if relacao is None else relacao == "eq"
         hits = hits_wrap.get("hits") or []
         if total_n == 0:
             self.descartados_sigilo = 0
-            return []
+            return CandidateList([], total=0, total_exato=total_exato)
         if total_n and int(total_n) > 0 and not hits:
             raise Unavailable("resposta_invalida")
         out: list[Candidate] = []
@@ -234,7 +237,8 @@ class DatajudConnector(Connector):
                 )
             )
         self.descartados_sigilo = descartados
-        return out
+        informado = total_n if isinstance(total_n, int) and not isinstance(total_n, bool) else None
+        return CandidateList(out, total=informado, total_exato=total_exato)
 
     def _post(self, tribunal: str, body: dict[str, Any]) -> Response:
         tribunal = tribunal.strip().lower()

@@ -11,6 +11,7 @@ from lxml import html as lxml_html
 
 from freoa_verifica.connectors.base import (
     Candidate,
+    CandidateList,
     Connector,
     HealthProbe,
     HealthReport,
@@ -255,8 +256,9 @@ def _parse_results(
         r'id="totalResultadoAbaRetornoFiltro-A"[^>]*value="(\d+)"',
         text,
     )
-    if m_total and int(m_total.group(1)) == 0:
-        return []
+    total = int(m_total.group(1)) if m_total else None  # a página não diz se é exato: total_exato fica nulo
+    if total == 0:
+        return CandidateList([], total=0)
     if "#%#emptySession#%#" in text:
         raise Unavailable("resposta_inesperada")
     # DOM sobre texto já decodificado (evita mojibake em Órgão/publicação/ementa).
@@ -265,7 +267,7 @@ def _parse_results(
     if not rows:
         if m_total is None:
             raise Unavailable("resposta_inesperada")
-        return []
+        return CandidateList([], total=total)
     out: list[Candidate] = []
     for row in rows:
         if len(out) >= limite:
@@ -308,7 +310,7 @@ def _parse_results(
                 },
             )
         )
-    return out
+    return CandidateList(out, total=total)
 
 
 def _norm_label(value: str) -> str:

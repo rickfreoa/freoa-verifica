@@ -67,15 +67,20 @@ class Candidate:
 
 
 class CandidateList(list):
-    """Contrato A9: candidatos lidos + `total` informado pela fonte; `truncado` = fonte tem mais do que foi lido."""
+    """Contrato A9: candidatos lidos + `total` informado pela fonte.
 
-    def __init__(self, items=(), total: int | None = None):
+    `total` é `None` quando a fonte não informa (desconhecido, nunca o tamanho lido). `total_exato`: `True`
+    exato, `False` cota inferior, `None` a fonte não diz. `truncado` = a fonte tem mais do que foi lido.
+    """
+
+    def __init__(self, items=(), total: int | None = None, total_exato: bool | None = None):
         super().__init__(items)
-        self.total = max(total or 0, len(self))
+        self.total = None if total is None else max(total, len(self))
+        self.total_exato = total_exato if self.total is not None else None
 
     @property
     def truncado(self) -> bool:
-        return self.total > len(self)
+        return self.total is not None and self.total > len(self)
 
 
 @dataclass(frozen=True)
