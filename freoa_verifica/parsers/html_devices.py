@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 from lxml import etree
 from lxml import html as lhtml
 
+from freoa_verifica.texto_resposta import codec_html_declarado
 from freoa_verifica.parsers.model import (
     Annotation,
     EditorialBlock,
@@ -146,29 +147,12 @@ def decode_html_bytes(data: bytes) -> tuple[str, list[Issue]]:
     Fallbacks registram Issue ENCODING_FALLBACK.
     """
     issues: list[Issue] = []
-    head = data[:4000]
-    m = re.search(br"charset\s*=\s*[\"']?([\w-]+)", head, re.I)
-    if m:
-        enc = m.group(1).decode("ascii", errors="ignore").strip().lower()
-        if enc in {
-            "utf-8",
-            "utf8",
-            "iso-8859-1",
-            "latin-1",
-            "latin1",
-            "cp1252",
-            "windows-1252",
-        }:
-            alias = {
-                "utf8": "utf-8",
-                "latin-1": "iso-8859-1",
-                "latin1": "iso-8859-1",
-                "windows-1252": "cp1252",
-            }.get(enc, enc)
-            try:
-                return data.decode(alias), issues
-            except UnicodeDecodeError:
-                pass
+    declarado = codec_html_declarado(data)  # prescan WHATWG: só `<meta>` efetivo, nunca "charset" solto no texto
+    if declarado is not None:
+        try:
+            return data.decode(declarado), issues
+        except UnicodeDecodeError:
+            pass
     try:
         return data.decode("utf-8"), issues
     except UnicodeDecodeError:

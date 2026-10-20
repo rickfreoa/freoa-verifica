@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode, urljoin
 
-from lxml import html as lxml_html
 
 from freoa_verifica.connectors.base import (
     Candidate,
@@ -22,7 +21,7 @@ from freoa_verifica.connectors.base import (
 from freoa_verifica.connectors.challenge import detect_challenge, unavailable_from_challenge
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
-from freoa_verifica.texto_resposta import texto_da_resposta
+from freoa_verifica.texto_resposta import arvore_html, texto_da_resposta, texto_do_response
 from freoa_verifica.transport import Response
 
 _HOSTS = frozenset(
@@ -141,7 +140,7 @@ class StfConnector(Connector):
         )
         incidente = _incidente_from_response(resp)
         if not incidente:
-            text = lxml_html.fromstring(resp.body).text_content()
+            text = arvore_html(texto_do_response(resp)).text_content()
             if _MAINTENANCE.search(text):
                 raise Unavailable("resposta_invalida")
             if re.search(r"\bProcesso\s+n[aã]o\s+encontrado\b",text,re.I):
@@ -217,7 +216,7 @@ class StfConnector(Connector):
                 metadata=leading if len(leading_cases) == 1 else {"leading_cases":leading_cases},
             )
         # aba decisões HTML
-        items = _parse_aba_decisoes(resp.body, base=resp.final_url)
+        items = _parse_aba_decisoes(texto_do_response(resp), base=resp.final_url)
         first = items[0] if items else {}
         return ParsedDecision(
             profile="stf_decisoes",
@@ -242,7 +241,7 @@ class StfConnector(Connector):
             user_agent=self.user_agent,
             timeout=45.0,
         )
-        return _parse_aba_decisoes(resp.body, base=url)
+        return _parse_aba_decisoes(texto_do_response(resp), base=url)
 
     def list_sumulas(self, base: int) -> list[Candidate]:
         """Sumário oficial (HTML) -> um candidato por súmula; o enunciado vem da página de detalhe."""
@@ -256,7 +255,7 @@ class StfConnector(Connector):
             user_agent=self.user_agent,
             timeout=60.0,
         )
-        tree = lxml_html.fromstring(resp.body)
+        tree = arvore_html(texto_do_response(resp))
         out = []
         for a in tree.xpath('//div[@class="sumarioSumulas"]//div[contains(@class,"sumula-item")]/a[@href]'):
             m = _SUMULA_RE.match(_texto(a))
@@ -312,7 +311,7 @@ def _texto(el) -> str:
 
 
 def _parse_sumula(resp: Response) -> ParsedDecision:
-    tree = lxml_html.fromstring(resp.body)
+    tree = arvore_html(texto_do_response(resp))
     titulo = tree.xpath('//div[@class="titulo"]')
     corpo = tree.xpath('//div[@class="titulo"][1]/following-sibling::div[@class="parCOM"][1]')
     m = _SUMULA_RE.match(_texto(titulo[0])) if titulo else None
@@ -363,12 +362,8 @@ def _incidente_from_response(resp: Response) -> str | None:
     return m.group(1) if m else None
 
 
-def _parse_aba_decisoes(body: bytes, *, base: str) -> list[dict[str, Any]]:
-    try:
-        content = body.decode("utf-8")
-    except UnicodeDecodeError:
-        content = body
-    tree = lxml_html.fromstring(content)
+def _parse_aba_decisoes(body: bytes | str, *, base: str) -> list[dict[str, Any]]:
+    tree = arvore_html(body)
     items = []
     for div in tree.xpath('//div[contains(@class,"andamento-item")]'):
         data_el = div.xpath('.//*[contains(@class,"andamento-data")]')

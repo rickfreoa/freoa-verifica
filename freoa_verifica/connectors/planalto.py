@@ -19,6 +19,7 @@ from freoa_verifica.connectors.base import (
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.parsers.planalto import parse_planalto
+from freoa_verifica.texto_resposta import texto_do_response
 from freoa_verifica.transport import HTTPStatusError, Response
 
 _BASE = "https://www.planalto.gov.br"
@@ -177,7 +178,8 @@ class PlanaltoConnector(Connector):
             cand = self.resolve({"tipo": "LEI", "numero": 6404, "ano": 1976})
             assert cand is not None
             resp = self.fetch(cand)
-            ok = b"6.404" in resp.body or b"6404" in resp.body
+            texto = texto_do_response(resp)
+            ok = "6.404" in texto or "6404" in texto
             probes.append(
                 HealthProbe("positivo", "ok" if ok else "failed", cand.url)
             )

@@ -1131,6 +1131,11 @@ def _percorrer(
                     http=_failure_http(response),
                 )
             if response.status in (301, 302, 303, 307, 308):
+                # Desafio no salto (cabeçalho de borda ou corpo): não segue Location (FIX16/F-21).
+                desafio = _desafio_na_resposta(response)
+                if desafio:
+                    saltos[-1]["desafio"] = desafio  # a guarda bloqueia este host, apesar do status de redirecionamento
+                    raise HTTPStatusError(response.status, http=_failure_http(response), desafio=desafio)
                 location = response.getheader("Location")
                 if not location:
                     raise BlockedHost(

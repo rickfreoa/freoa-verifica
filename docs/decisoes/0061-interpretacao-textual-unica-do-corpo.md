@@ -2,6 +2,8 @@
 
 Data: 20/10/2026 · Versão: 1.3.0 · Origem: auditoria final, rodada 11 (F-19); complementa a 0045 e a 0060
 
+> A extração de charset (regra 2) e a exceção dos parsers (Consequências) foram revistas pela 0062.
+
 ## Problema
 
 A detecção de desafio decodificava o corpo sempre como UTF-8 (`errors="replace"`). HTML em UTF-16, ou em

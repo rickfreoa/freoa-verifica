@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode
 
-from lxml import html as lxml_html
 
 from freoa_verifica.connectors.base import (
     Candidate,
@@ -22,7 +21,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch, form_body
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
-from freoa_verifica.texto_resposta import texto_da_resposta
+from freoa_verifica.texto_resposta import arvore_html, texto_da_resposta, texto_do_response
 from freoa_verifica.transport import Response, Session
 
 _HOST = "esaj.tjsp.jus.br"
@@ -181,10 +180,9 @@ class TjspConnector(Connector):
             session=session,
         )
         return _parse_results(
-            page.body,
+            texto_do_response(page),  # `page.headers` não guarda todos os charsets: o Content-Type cru está no Response
             source_id=self.id,
             limite=limite,
-            headers=page.headers,
         )
 
     def resolve(self, key: Any) -> Candidate | None:
@@ -261,7 +259,7 @@ def _parse_results(
     if "#%#emptySession#%#" in text:
         raise Unavailable("resposta_inesperada")
     # DOM sobre texto já decodificado (evita mojibake em Órgão/publicação/ementa).
-    tree = lxml_html.fromstring(text)
+    tree = arvore_html(text)
     rows = tree.xpath('//tr[contains(@class,"fundocinza1")]')
     if not rows:
         if m_total is None:
