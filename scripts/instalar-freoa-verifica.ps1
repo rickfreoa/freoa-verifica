@@ -1,7 +1,7 @@
 ﻿# Instala FREOA Verifica; Python 3.11+. O padrão de -Versao é o __version__ do repositório na release.
 # A attestation é obrigatória; -SemAttestation pula a verificação e grava attestation_verificada: false.
 param(
-    [string]$Versao = "1.2.0",
+    [string]$Versao = "1.3.0",
     [switch]$SemAttestation
 )
 $ErrorActionPreference = "Stop"
