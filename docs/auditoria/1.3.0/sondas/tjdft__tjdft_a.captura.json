@@ -1,0 +1,29 @@
+{
+ "conector": "tjdft",
+ "versao": "1.2.0",
+ "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+ "metodo": "POST",
+ "parametros": {
+  "query": "dissolução parcial de sociedade",
+  "pagina": 1,
+  "tamanho": 5
+ },
+ "user_agent": "FREOA-Verifica/1.0 (+https://github.com/rickfreoa/freoa-verifica; uso-identificado; contato via FV_CONTACT)",
+ "capturado_em": "2026-10-20T00:20:41.156106+00:00",
+ "sonda": true,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+ "status": 200,
+ "content_type": "application/json",
+ "cabecalhos": {
+  "content-length": "104853",
+  "content-type": "application/json; charset=utf-8",
+  "date": "Tue, 20 Oct 2026 00:20:41 GMT"
+ },
+ "sha256": "8e2b71b8f589917aff51c314d3e0cdd66080b122ed16c2ba44c81aeeef8784d0",
+ "bytes": 104853,
+ "arquivo": "tjdft_a.json"
+}

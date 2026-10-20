@@ -1,0 +1,25 @@
+{
+ "conector": "senado",
+ "versao": "1.2.0",
+ "url": "https://legis.senado.leg.br/dadosabertos/legislacao/lista?tipo=LEI&numero=10303&ano=2001",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.2.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-20T00:23:19.827727+00:00",
+ "sonda": true,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://legis.senado.leg.br/dadosabertos/legislacao/lista?tipo=LEI&numero=10303&ano=2001",
+ "status": 200,
+ "content_type": "application/xml",
+ "cabecalhos": {
+  "content-length": "1140",
+  "content-type": "application/xml",
+  "date": "Tue, 20 Oct 2026 00:23:20 GMT"
+ },
+ "sha256": "62eeb65badc65f45e2af5ba847b5a8d80ec7dfbe87542ec1577a61f9cf1f0709",
+ "bytes": 1140,
+ "arquivo": "ua_senado.xml"
+}

@@ -1,0 +1,42 @@
+{
+ "conector": "tjsp",
+ "versao": "1.2.0",
+ "url": "https://esaj.tjsp.jus.br/cjsg/trocaDePagina.do?tipoDeDecisao=A&pagina=1&conversationId=",
+ "metodo": "GET",
+ "parametros": {
+  "consulta": {
+   "termo": "dissolução parcial de sociedade",
+   "pagina": 1
+  },
+  "formulario": {
+   "dados.buscaInteiroTeor": "dissolução parcial de sociedade",
+   "dados.pesquisarComSinonimos": "S",
+   "dados.origensSelecionadas": "T",
+   "tipoDecisaoSelecionados": "A",
+   "dados.ordenarPor": "dtPublicacao"
+  },
+  "etapa_previa": {
+   "url": "https://esaj.tjsp.jus.br/cjsg/resultadoCompleta.do",
+   "metodo": "POST"
+  }
+ },
+ "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+ "capturado_em": "2026-10-20T00:22:16.889700+00:00",
+ "sonda": true,
+ "unavailable": true,
+ "motivo": "desafio_captcha",
+ "categoria": "ambiental_desafio",
+ "evidencia": {
+  "status": 200,
+  "marcador": "captcha",
+  "sha256": "782ddba1332cdfd22cef418fe71400bd39cc1451e12109cb51014dd4e1941b95",
+  "url": "https://esaj.tjsp.jus.br/cjsg/resultadoCompleta.do"
+ },
+ "url_final": null,
+ "status": null,
+ "content_type": null,
+ "cabecalhos": {},
+ "sha256": null,
+ "bytes": null,
+ "arquivo": null
+}

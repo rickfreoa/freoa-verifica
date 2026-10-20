@@ -1,0 +1,24 @@
+{
+ "conector": "tcu",
+ "versao": "1.2.0",
+ "url": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=2",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.2.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-20T00:24:46.527058+00:00",
+ "sonda": true,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos?inicio=0&quantidade=2",
+ "status": 200,
+ "content_type": "application/json",
+ "cabecalhos": {
+  "content-type": "application/json;charset=UTF-8",
+  "date": "Tue, 20 Oct 2026 00:24:47 GMT"
+ },
+ "sha256": "ab46c0ab5a8f7b69864b5fdd447be51ca4ff5ec73bad2cef1e8f59626b08f2c5",
+ "bytes": 2621,
+ "arquivo": "ua_tcu.json"
+}

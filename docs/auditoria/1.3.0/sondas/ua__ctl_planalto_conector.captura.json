@@ -1,0 +1,24 @@
+{
+ "conector": "planalto",
+ "versao": "1.2.0",
+ "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404.htm",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+ "capturado_em": "2026-10-20T00:25:09.285008+00:00",
+ "sonda": true,
+ "unavailable": true,
+ "motivo": "http_404",
+ "categoria": null,
+ "evidencia": {
+  "status": 404,
+  "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404.htm"
+ },
+ "url_final": null,
+ "status": null,
+ "content_type": null,
+ "cabecalhos": {},
+ "sha256": null,
+ "bytes": null,
+ "arquivo": null
+}

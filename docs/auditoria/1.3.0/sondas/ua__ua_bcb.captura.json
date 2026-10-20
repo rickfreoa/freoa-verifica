@@ -1,0 +1,25 @@
+{
+ "conector": "bcb",
+ "versao": "1.2.0",
+ "url": "https://www.bcb.gov.br/api/conteudo/app/normativos/exibenormativo?p1=Resolu%C3%A7%C3%A3o+CMN&p2=4966",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.2.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-20T00:23:49.740331+00:00",
+ "sonda": true,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www.bcb.gov.br/api/conteudo/app/normativos/exibenormativo?p1=Resolu%C3%A7%C3%A3o+CMN&p2=4966",
+ "status": 200,
+ "content_type": "application/json",
+ "cabecalhos": {
+  "content-length": "306588",
+  "content-type": "application/json; charset=utf-8",
+  "date": "Tue, 20 Oct 2026 00:23:50 GMT"
+ },
+ "sha256": "8d2ac4d5dde4b1277564739854138c8154ea838e84396832c8fad7669b09358c",
+ "bytes": 306588,
+ "arquivo": "ua_bcb.json"
+}

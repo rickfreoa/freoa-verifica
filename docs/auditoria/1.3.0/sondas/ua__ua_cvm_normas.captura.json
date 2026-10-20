@@ -1,0 +1,25 @@
+{
+ "conector": "cvm_normas",
+ "versao": "1.2.0",
+ "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.2.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-20T00:23:30.460499+00:00",
+ "sonda": true,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://conteudo.cvm.gov.br/legislacao/resolucoes.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-type": "text/html;charset=UTF-8",
+  "date": "Tue, 20 Oct 2026 00:23:31 GMT",
+  "last-modified": "Tue, 20 Oct 2026 00:23:31 GMT"
+ },
+ "sha256": "764665ae86fc0d25fb2abc6a5c2e793bb2c5c8d3309bb3f4642b9dba79f39146",
+ "bytes": 77882,
+ "arquivo": "ua_cvm_normas.html"
+}

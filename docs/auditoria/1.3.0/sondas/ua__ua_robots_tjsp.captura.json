@@ -1,0 +1,24 @@
+{
+ "conector": "tjsp",
+ "versao": "1.2.0",
+ "url": "https://esaj.tjsp.jus.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.2.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-20T00:26:04.330789+00:00",
+ "sonda": true,
+ "unavailable": true,
+ "motivo": "http_404",
+ "categoria": null,
+ "evidencia": {
+  "status": 404,
+  "url": "https://esaj.tjsp.jus.br/robots.txt"
+ },
+ "url_final": null,
+ "status": null,
+ "content_type": null,
+ "cabecalhos": {},
+ "sha256": null,
+ "bytes": null,
+ "arquivo": null
+}

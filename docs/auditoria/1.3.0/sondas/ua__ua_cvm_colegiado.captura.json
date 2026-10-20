@@ -1,0 +1,26 @@
+{
+ "conector": "cvm_colegiado",
+ "versao": "1.2.0",
+ "url": "https://conteudo.cvm.gov.br/feed/decisoes.xml",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.2.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-20T00:23:40.682470+00:00",
+ "sonda": true,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://conteudo.cvm.gov.br/feed/decisoes.xml",
+ "status": 200,
+ "content_type": "text/xml",
+ "cabecalhos": {
+  "content-length": "16528",
+  "content-type": "text/xml;charset=UTF-8",
+  "date": "Tue, 20 Oct 2026 00:23:41 GMT",
+  "last-modified": "Tue, 20 Oct 2026 00:23:41 GMT"
+ },
+ "sha256": "73f8a19cc4e0f512e024d6709e69d19a9e1a7155326545f3906ab0f1cef6d187",
+ "bytes": 16528,
+ "arquivo": "ua_cvm_colegiado.xml"
+}

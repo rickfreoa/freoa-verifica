@@ -207,7 +207,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--com-situacao", action="store_true", help="relê também a situação das obras (exige rede)")
     _add_json_flag(pr)
 
-    pc = ac.add_parser("conferir", help="bateria do snapshot: confere o acervo (somente leitura; decisão 0056)")
+    pc = ac.add_parser("conferir", help="bateria do snapshot: confere o acervo (somente leitura; decisão 0057)")
     pc.add_argument("--home", dest="home_conferir", default=None, metavar="DIR", help="diretório de dados a conferir")
     pc.add_argument("--manifesto", default=None, metavar="ARQ", help="compara com manifesto congelado")
     pc.add_argument("--gravar-manifesto", default=None, metavar="ARQ", help="grava o manifesto congelado do recorte")

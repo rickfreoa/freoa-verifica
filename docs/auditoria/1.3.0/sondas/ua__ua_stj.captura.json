@@ -1,0 +1,25 @@
+{
+ "conector": "stj",
+ "versao": "1.2.0",
+ "url": "https://dadosabertos.web.stj.jus.br/api/3/action/package_show?id=espelhos-de-acordaos-primeira-turma",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.2.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-20T00:24:10.063772+00:00",
+ "sonda": true,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://dadosabertos.web.stj.jus.br/api/3/action/package_show?id=espelhos-de-acordaos-primeira-turma",
+ "status": 200,
+ "content_type": "application/json",
+ "cabecalhos": {
+  "content-length": "42159",
+  "content-type": "application/json;charset=utf-8",
+  "date": "Tue, 20 Oct 2026 00:24:37 GMT"
+ },
+ "sha256": "9db5f0bc2b19ce3352427065678395b6ddae619e048702cfcc53d744e2d88450",
+ "bytes": 42159,
+ "arquivo": "ua_stj.json"
+}

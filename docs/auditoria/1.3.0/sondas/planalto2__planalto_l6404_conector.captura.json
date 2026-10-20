@@ -1,0 +1,26 @@
+{
+ "conector": "planalto",
+ "versao": "1.2.0",
+ "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+ "capturado_em": "2026-10-20T00:41:41.093678+00:00",
+ "sonda": true,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-length": "757607",
+  "content-type": "text/html",
+  "date": "Tue, 20 Oct 2026 00:41:33 GMT",
+  "last-modified": "Thu, 23 Apr 2026 23:00:40 GMT"
+ },
+ "sha256": "6478ff368f0534fac87d9b51cb11b509dc88a9adc4555825787333a81670dc48",
+ "bytes": 757607,
+ "arquivo": "planalto_l6404_conector.html"
+}

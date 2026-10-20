@@ -1,4 +1,4 @@
-"""S4 (decisão 0056): `fv acervo conferir` — bateria do snapshot, somente leitura."""
+"""S4 (decisão 0057): `fv acervo conferir` — bateria do snapshot, somente leitura."""
 import hashlib
 import json
 import sqlite3

@@ -1,0 +1,24 @@
+{
+ "conector": "planalto",
+ "versao": "1.2.0",
+ "url": "https://www.planalto.gov.br/ccivil_03/leis/leis_2001/l10303.htm",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.2.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-20T00:25:19.445568+00:00",
+ "sonda": true,
+ "unavailable": true,
+ "motivo": "transporte_TransportError",
+ "categoria": "fonte_fora",
+ "evidencia": {
+  "marcador": "transporte:TransportError",
+  "url": "https://www.planalto.gov.br/ccivil_03/leis/leis_2001/l10303.htm"
+ },
+ "url_final": null,
+ "status": null,
+ "content_type": null,
+ "cabecalhos": {},
+ "sha256": null,
+ "bytes": null,
+ "arquivo": null
+}
