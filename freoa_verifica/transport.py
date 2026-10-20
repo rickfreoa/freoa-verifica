@@ -93,8 +93,8 @@ class EmptyBody(TransportError):
     """GET com corpo vazio."""
 
 
-class TransporteLento(TransportError):
-    """Leitura abaixo da taxa mínima durante uma janela completa."""
+class TransporteLento(RespostaInvalida):
+    """Leitura abaixo da taxa mínima durante uma janela completa, já iniciada a resposta (FIX5/F-01)."""
 
 
 class HTTPStatusError(TransportError):
@@ -638,6 +638,29 @@ def _fetch_once(
     sink: BinaryIO | None = None,
     progresso: threading.Event | None = None,
 ) -> Response:
+    """Uma tentativa de captura (com redirecionamentos). Revisão única dos caminhos de exceção (FIX5/F-01).
+
+    Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
+    `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
+    recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
+
+    | exceção                                    | status recebido? | categoria            | repetível |
+    |--------------------------------------------|------------------|----------------------|-----------|
+    | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
+    | HTTPStatusError com desafio / demais status| sim              | desafio / conforme   | não       |
+    | RespostaInvalida (MIME, framing, encoding) | sim              | resposta_inesperada  | não       |
+    | TooLarge (declarado ou baixado)            | sim              | resposta_inesperada  | não       |
+    | TransporteLento (taxa mínima)              | sim              | resposta_inesperada  | não       |
+    | EmptyBody                                  | sim              | resposta_inesperada  | não       |
+    | OSError/SSL/HTTP com resposta iniciada     | sim              | resposta_inesperada  | não       |
+    | prazo esgotado no corpo (aqui ou em fetch) | sim              | resposta_inesperada  | não       |
+    | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
+    | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
+    | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
+
+    Timeout em salto posterior a um redirecionamento recebido também é repetível, mas só se a
+    espera couber no prazo restante (o prazo já esgotou, então nunca cabe).
+    """
     original = url
     redirects: list[str] = []
     current_method = method

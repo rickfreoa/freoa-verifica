@@ -279,7 +279,7 @@ class PlanaltoConnector(Connector):
                     last_err = exc
                     if exc.reason == "http_404":
                         break
-                    if attempt < 2 and exc.reason in {"transporte_Timeout", "transporte_lento", "transporte_TransporteLento", "http_503", "http_502", "http_504"}:
+                    if attempt < 2 and exc.reason in {"transporte_Timeout", "http_503", "http_502", "http_504"}:
                         continue
                     raise _reclassificar_recusa(exc) from exc
         raise Unavailable(last_err.reason if last_err else "sem_url")
