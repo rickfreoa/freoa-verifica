@@ -52,8 +52,10 @@ def test_hash_e_tamanho_de_cada_entrada_conferem():
 
 def test_campos_obrigatorios_por_categoria_no_manifesto_real():
     for chave, e in load_meta().items():
-        assert e["categoria"] in ("captura_real", "sintetica"), chave
-        if e["categoria"] == "sintetica":
+        assert e["categoria"] in ("captura_real", "sintetica", "metadados_captura"), chave
+        if e["categoria"] == "metadados_captura":
+            assert e["descreve"] in load_meta(), chave
+        elif e["categoria"] == "sintetica":
             assert e["gerador"] and e["proposito"], chave
         else:
             for campo in ("url", "url_final", "status", "content_type", "capturado_em", "origem_metadados"):
@@ -148,7 +150,10 @@ def test_load_fixture_le_pelo_manifesto():
 
 def test_tjdft_sem_metadados_observados():
     """A06: status e content_type dos registros TJDFT vieram de mocks de teste, não de captura preservada."""
-    tjdft = {k: e for k, e in load_meta().items() if k.startswith("tjdft_")}
+    # As capturas pelo instrumento (origem `captura_instrumento`, p.ex. tjdft_busca_integra) trazem metadados observados.
+    tjdft = {k: e for k, e in load_meta().items()
+             if k.startswith("tjdft_") and e.get("origem_metadados") != "captura_instrumento"
+             and e["categoria"] == "captura_real"}
     assert len(tjdft) == 5
     for chave, e in tjdft.items():
         assert (e["status"], e["content_type"], e["origem_metadados"]) == (None, None, "desconhecida"), chave
