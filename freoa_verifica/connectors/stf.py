@@ -22,6 +22,7 @@ from freoa_verifica.connectors.base import (
 from freoa_verifica.connectors.challenge import detect_challenge, unavailable_from_challenge
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
+from freoa_verifica.texto_resposta import texto_da_resposta
 from freoa_verifica.transport import Response
 
 _HOSTS = frozenset(
@@ -357,7 +358,7 @@ def _incidente_from_response(resp: Response) -> str | None:
     m = re.search(r"incidente=(\d+)", final)
     if m:
         return m.group(1)
-    text = resp.body.decode("utf-8", errors="replace")
+    text = texto_da_resposta(resp.body, resp.content_type or resp.headers.get("content-type"))
     m = re.search(r"incidente=(\d+)", text)
     return m.group(1) if m else None
 

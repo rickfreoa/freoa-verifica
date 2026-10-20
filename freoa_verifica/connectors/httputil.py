@@ -17,6 +17,7 @@ from freoa_verifica.identidade_http import user_agent_do_modo
 from freoa_verifica.limites import restante
 from freoa_verifica.transport import (
     Response,
+    RespostaInvalida,
     Session,
     fetch as transport_fetch,
     revalidar_captura,
@@ -178,10 +179,16 @@ def _checar_desafio(
     if sink is not None:
         with Path(sink).open("rb") as stream:
             sample = stream.read(65536)
-    found = detect_challenge(
-        status=resp.status, headers=resp.headers, body=sample,
-        expected_content=expected_content,
-    )
+    try:
+        found = detect_challenge(
+            status=resp.status, headers=resp.headers, body=sample,
+            expected_content=expected_content, parcial=sink is not None and len(sample) >= 65536,
+            content_type=resp.content_type,
+        )
+    except RespostaInvalida as exc:  # corpo não interpretável (charset): nunca sucesso (decisão 0061)
+        if sink is not None:
+            Path(sink).unlink(missing_ok=True)
+        raise _mapear_erro(exc, url) from exc
     if found is not None:
         kind = str(found.args[0]) if found.args else ""
         ignored = ignore_challenge_kinds or frozenset()
@@ -189,7 +196,8 @@ def _checar_desafio(
             if sink is not None:
                 Path(sink).unlink(missing_ok=True)
             desafio = unavailable_from_challenge(
-                found, status=resp.status, headers=resp.headers, body=sample, url=url
+                found, status=resp.status, headers=resp.headers, body=sample, url=url,
+                content_type=resp.content_type,
             )
             if resp.final_url != url:
                 desafio.evidencia["url_final"] = resp.final_url  # host que de fato desafiou
@@ -203,6 +211,9 @@ def form_body(fields: Mapping[str, Any]) -> bytes:
 
 
 def ensure_not_challenge_bytes(data: bytes, *, status: int = 200) -> None:
-    found = detect_challenge(status=status, body=data)
+    try:
+        found = detect_challenge(status=status, body=data)
+    except RespostaInvalida as exc:
+        raise _mapear_erro(exc, "") from exc
     if found is not None:
         raise unavailable_from_challenge(found, status=status, body=data)

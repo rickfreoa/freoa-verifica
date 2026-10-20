@@ -7,6 +7,7 @@ import re
 from typing import Mapping
 
 from freoa_verifica.connectors.base import Unavailable
+from freoa_verifica.texto_resposta import normalizar_para_busca, texto_da_resposta
 from freoa_verifica.transport import (
     ChallengeDetected,
     EmptyBody,
@@ -20,9 +21,8 @@ from freoa_verifica.transport import (
 # registrar na decisão e cobrir com teste em tests/test_categorias_indisponibilidade.py.
 ASSINATURAS_VERSAO = 1
 
-# Marcadores de corpo (case-insensitive).
+# Marcadores de corpo, comparados sobre o texto normalizado (NFKC, casefold, sem acentos; decisão 0061).
 _BODY_MARKERS: tuple[tuple[str, str], ...] = (
-    ("verificação de segurança", "f5"),
     ("verificacao de seguranca", "f5"),
     ("tspd", "tspd"),
     ("bobcmn", "bobcmn"),
@@ -46,10 +46,13 @@ def detect_challenge(
     headers: Mapping[str, str] | None = None,
     body: bytes | str | None = None,
     expected_content: str | None = None,
+    parcial: bool = False,
+    content_type: str | None = None,
 ) -> ChallengeDetected | None:
     """Retorna ChallengeDetected se a resposta for desafio; senão None.
 
-    Nunca resolve CAPTCHA — só classifica.
+    Nunca resolve CAPTCHA — só classifica. Corpo em bytes é interpretado por `texto_da_resposta`
+    (BOM/charset do Content-Type); corpo não interpretável levanta `RespostaInvalida`.
     """
     hdrs = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
 
@@ -57,7 +60,7 @@ def detect_challenge(
         if name in hdrs:
             return ChallengeDetected(kind)
 
-    text = _as_text(body)
+    text = texto_da_resposta(body, content_type or hdrs.get("content-type"), parcial=parcial)
     if text:
         if status in (None, 200) and expected_content and re.search(expected_content, text, re.I):
             return None
@@ -79,7 +82,7 @@ def raise_if_challenge(
         raise found
 
 
-def _evidencia(status, headers, body, url) -> dict:
+def _evidencia(status, headers, body, url, content_type=None) -> dict:
     """Evidência do que foi visto: status, marcador, cabeçalho, sha256 do corpo e url."""
     hdrs = {str(k).lower() for k in (headers or {})}
     ev: dict = {}
@@ -88,9 +91,13 @@ def _evidencia(status, headers, body, url) -> dict:
     cab = next((n for n, _ in _HEADER_MARKERS if n in hdrs), None)
     if cab:
         ev["cabecalho"] = cab
-    text = _as_text(body)
+    try:
+        cab = {str(k).lower(): v for k, v in (headers or {}).items()}
+        text = texto_da_resposta(body, content_type or cab.get("content-type"))
+    except RespostaInvalida:
+        text = ""
     if text:
-        lower = _sem_biblioteca_lateral(text).lower()
+        lower = normalizar_para_busca(_sem_biblioteca_lateral(text))
         marcador = next((m for m, _ in _BODY_MARKERS if m in lower), None)
         if marcador is None and "/tspd/" in lower:
             marcador = "/tspd/"
@@ -105,11 +112,11 @@ def _evidencia(status, headers, body, url) -> dict:
 
 
 def unavailable_from_challenge(
-    exc: ChallengeDetected, *, status=None, headers=None, body=None, url=None
+    exc: ChallengeDetected, *, status=None, headers=None, body=None, url=None, content_type=None
 ) -> Unavailable:
     kind = str(exc.args[0]) if exc.args else "desconhecido"
     return Unavailable(
-        f"desafio_{kind}", "ambiental_desafio", _evidencia(status, headers, body, url)
+        f"desafio_{kind}", "ambiental_desafio", _evidencia(status, headers, body, url, content_type)
     )
 
 
@@ -159,17 +166,6 @@ def map_transport_error(exc: BaseException, url: str | None = None) -> Unavailab
     return None
 
 
-def _as_text(body: bytes | str | None) -> str:
-    if body is None:
-        return ""
-    if isinstance(body, str):
-        return body
-    try:
-        return body.decode("utf-8", errors="replace")
-    except Exception:
-        return ""
-
-
 def _sem_biblioteca_lateral(text: str) -> str:
     # Biblioteca de um formulário lateral não é uma página de desafio.
     return re.sub(
@@ -179,7 +175,7 @@ def _sem_biblioteca_lateral(text: str) -> str:
 
 
 def _kind_from_text(text: str) -> str | None:
-    lower = _sem_biblioteca_lateral(text).lower()
+    lower = normalizar_para_busca(_sem_biblioteca_lateral(text))
     for marker, kind in _BODY_MARKERS:
         if marker in lower:
             return kind
