@@ -43,7 +43,10 @@ Checksums provam integridade, e a origem depende do canal da release.
 1. Congelar código funcional e versão na integração; registrar o commit.
 2. Instalar a wheel local em ambiente limpo; reconstruir o acervo sobre cópia do corpus candidato, exportar o
    snapshot e instalá-lo de forma **experimental** (`--aceitar-nao-vinculado`) em home descartável; conferir
-   integridade, `fv doctor --offline` e bench.
+   integridade, `fv doctor --offline` e bench. Bateria S4 (decisão 0056, somente leitura): no corpus candidato,
+   `fv acervo conferir --home <candidato> --recorte-desde AAAA-MM-DD --recorte-ate AAAA-MM-DD --estrito
+   --gravar-manifesto manifesto.json` (sem defeito nem pendência); na instalação experimental,
+   `fv acervo conferir --home <descartável> --manifesto manifesto.json --estrito`, que deve sair com 0.
 3. Congelar os bytes exportados, gravar o digest em `freoa_verifica/data/snapshots-oficiais.json` e commitar.
    Repetir a instalação, agora vinculada, em home vazio.
 4. Auditoria independente sobre esse commit (manifesto, instalador, digest, código).
@@ -52,7 +55,8 @@ Checksums provam integridade, e a origem depende do canal da release.
    (`gh release create --draft`) com wheel, sdist, lock, `SHA256SUMS` e attestation. Ele não publica na PyPI.
 6. Auditoria dos bytes da CI: baixar os assets do rascunho, conferir `SHA256SUMS` e a attestation
    (`gh attestation verify <arquivo> --repo rickfreoa/freoa-verifica`), o conteúdo da wheel (sem `tests/`,
-   digest do snapshot embutido igual ao auditado) e instalar a wheel baixada em ambiente limpo. Anexar ao rascunho
+   digest do snapshot embutido igual ao auditado) e instalar a wheel baixada em ambiente limpo, com o snapshot
+   auditado; repetir `fv acervo conferir --manifesto manifesto.json --estrito` sobre esse home. Anexar ao rascunho
    exatamente o snapshot auditado e seu `.sha256` (`gh release upload`, sem substituir asset) e só então publicar
    (`gh release edit vX.Y.Z --draft=false`).
 7. A publicação dispara `pypi.yml` (`release: published`): ele baixa os assets da própria release, confere
