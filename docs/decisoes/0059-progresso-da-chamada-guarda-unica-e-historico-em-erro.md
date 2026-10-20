@@ -83,3 +83,18 @@ A rodada 5 achou variantes das mesmas classes; a emenda troca os remendos por me
   `Unavailable`); desafio visto na revalidação bloqueia a fonte como se visto ao vivo. Simetricamente, uma falha
   guardada só é reaproveitada por chamada de mesma política: outra política pode ter aceitado a resposta que a primeira
   recusou, e nesse caso a guarda faz o pedido.
+
+## Emenda FIX12 (auditoria final, rodada 8: F-13, F-16)
+
+- **Sintaxe estrita (F-13).** A validade da resposta não depende do parser tolerante do `http.client`. O wrapper de
+  soquete que já conta progresso guarda os bytes brutos até o fim dos cabeçalhos, e `transport._campos_estritos` os
+  valida pela RFC 9112 §2–§5: linha de status `HTTP/1.0|1.1 SP 3DIGIT SP reason CRLF`; campo `token ":" OWS valor OWS CRLF`,
+  nome só com `tchar`, sem espaço antes de `:`, sem obs-fold, sem linha sem `:`, fim de linha só CRLF. As decisões de
+  framing (`Content-Length`, `Transfer-Encoding`) passam a ler esses campos validados, não `response.msg`. Os trailers
+  de chunked têm a mesma gramática de campo. Violação em qualquer status é `RespostaInvalida` (`resposta_inesperada`),
+  nunca repetível. Respostas `100` intermediárias são validadas como o `http.client` as pula.
+- **Entrada atual (F-16).** Antes de consultar bloqueio, falha ou sucesso guardados, `GuardaExecucao.executar` chama
+  `entrada()`, que aplica `transport.validate_reference` à URL SOLICITADA nesta chamada (esquema, userinfo, porta,
+  fragmento, host e prefixo sobre o caminho decodificado) e levanta o mesmo `Unavailable` que a chamada receberia sem
+  cache. Recusa de entrada não gera pedido nem bloqueia a fonte. A revalidação da cadeia guardada (FIX11) continua.
+  Regra de equivalência: para toda URL, o resultado com cache é o resultado sem cache, exceto pelo número de pedidos.
