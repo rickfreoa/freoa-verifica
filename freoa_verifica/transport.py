@@ -273,23 +273,63 @@ class _RespostaEstrita(http.client.HTTPResponse):
                 raise http.client.IncompleteRead(b"")  # encerramento prematuro
             if linha == b"\r\n":
                 return
+            if _CAMPO.fullmatch(linha[:-2]) is None:
+                self._close_conn()
+                raise http.client.HTTPException("Campo de trailer inválido")
         raise http.client.HTTPException("Trailer excessivo")
 
 
-def _validar_framing(response) -> int | None:
-    """Verificações de framing de QUALQUER resposta, qualquer status (FIX11/F-13). Devolve o Content-Length.
+_TCHAR = rb"[!#$%&'*+\-.^_`|~0-9A-Za-z]"
+_CAMPO = re.compile(
+    _TCHAR + rb"+:[ \t]*(?:[\x21-\x7e\x80-\xff](?:[ \t\x21-\x7e\x80-\xff]*[\x21-\x7e\x80-\xff])?)?[ \t]*"
+)
+_LINHA_STATUS = re.compile(rb"HTTP/1\.[01] [0-9]{3} [\t \x21-\x7e\x80-\xff]*")
 
-    Inspeciona os cabeçalhos brutos (`response.msg`), não a leitura tolerante do `http.client`:
-    Transfer-Encoding diferente de um único `chunked`, Content-Length duplicado, não numérico ou
-    negativo, e Content-Length junto de Transfer-Encoding são `RespostaInvalida`. O fluxo chunked é
-    validado por `_RespostaEstrita`.
+
+def _campos_estritos(cru: bytes) -> dict[str, list[str]]:
+    """Valida os BYTES da linha de status e dos cabeçalhos pela gramática da RFC 9112 §2–§5 (FIX12/F-13).
+
+    Linha de status `HTTP/1.x SP 3DIGIT SP reason`; campo `token ":" OWS valor OWS`, sem espaço antes de
+    `:`, sem obs-fold, sem linha sem `:`; fim de linha só CRLF. Respostas 100 são puladas, como faz o
+    `http.client`. Devolve os campos da resposta final (nomes em minúsculas). Levanta `ValueError`.
+    """
+    pos = 0
+    while True:
+        fim = cru.find(b"\r\n\r\n", pos)
+        if fim < 0:
+            raise ValueError("Bloco de cabeçalhos sem CRLF CRLF final")
+        linhas = cru[pos:fim + 2].split(b"\r\n")[:-1]
+        pos = fim + 4
+        if _LINHA_STATUS.fullmatch(linhas[0]) is None:
+            raise ValueError("Linha de status inválida")
+        campos: dict[str, list[str]] = {}
+        for linha in linhas[1:]:
+            if _CAMPO.fullmatch(linha) is None:
+                raise ValueError("Campo de cabeçalho inválido")
+            nome, valor = linha.split(b":", 1)
+            campos.setdefault(nome.decode("ascii").lower(), []).append(valor.strip(b" \t").decode("latin-1"))
+        if linhas[0][9:12] != b"100":
+            return campos
+
+
+def _validar_framing(response, cru: bytes) -> int | None:
+    """Validação de QUALQUER resposta, qualquer status (FIX11/F-13, FIX12/F-13). Devolve o Content-Length.
+
+    A decisão é sobre os bytes brutos (`cru`), não sobre o parser tolerante do `http.client`: sintaxe
+    estrita da linha de status e dos cabeçalhos; Transfer-Encoding diferente de um único `chunked`,
+    Content-Length duplicado, não numérico ou negativo, e Content-Length junto de Transfer-Encoding são
+    `RespostaInvalida`. O fluxo chunked e os trailers são validados por `_RespostaEstrita`.
     """
     def invalida(motivo: str) -> RespostaInvalida:
         return RespostaInvalida(motivo, http=_failure_http(response))
 
-    te = response.msg.get_all("Transfer-Encoding") or []
-    cl = response.msg.get_all("Content-Length") or []
-    if te and (len(te) > 1 or te[0].strip().lower() != "chunked"):
+    try:
+        campos = _campos_estritos(cru)
+    except ValueError as exc:
+        raise invalida(str(exc)) from exc
+    te = campos.get("transfer-encoding", [])
+    cl = campos.get("content-length", [])
+    if te and (len(te) > 1 or te[0].lower() != "chunked"):
         raise invalida("Transfer-Encoding não suportado")
     if len(cl) > 1 or (cl and (len(cl[0]) > 20 or not re.fullmatch(r"[0-9]+", cl[0]))):
         raise invalida("Content-Length inválido")
@@ -649,6 +689,8 @@ class _LeitorObservado(io.RawIOBase):
         if n:
             self._estado.resposta_iniciada = True
             self._estado.bytes_recebidos += n
+            if self._estado.cru is not None:
+                self._estado.cru += b[:n]
         return n
 
     def close(self) -> None:
@@ -827,6 +869,7 @@ class _EstadoChamada:
     lendo_status: bool = False
     lento: bool = False
     expirou: bool = False
+    cru: bytearray | None = None  # bytes do soquete até a validação dos cabeçalhos (FIX12/F-13)
 
     def reiniciar(self) -> None:
         self.resposta_iniciada = False
@@ -840,6 +883,7 @@ class _EstadoChamada:
         self.lendo_status = False
         self.lento = False
         self.expirou = False
+        self.cru = bytearray()
 
 
 def _classificar(exc: BaseException, estado: _EstadoChamada) -> tuple[BaseException, bool]:
@@ -1028,7 +1072,8 @@ def _percorrer(
             saltos.append({"url": url, "status": response.status})
             if session is not None:
                 session.absorb_response(url, response)
-            declared_size = _validar_framing(response)  # todo status, antes de qualquer classificação
+            cru, estado.cru = bytes(estado.cru or b""), None
+            declared_size = _validar_framing(response, cru)  # todo status, antes de qualquer classificação
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader("Location")
                 if not location:
