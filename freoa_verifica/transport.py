@@ -155,6 +155,7 @@ class Response:
     mime: str
     http: HTTPMetadata | None = None
     size: int = 0
+    content_type: str = ""  # Content-Type cru recebido, com charset; `headers` só retém o que cabe no recibo
 
 
 # portado de freoa-verifica/http_receipts.py:_valid_header
@@ -403,7 +404,13 @@ def _desafio_na_resposta(response) -> str | None:
         raise RespostaInvalida(
             f"Corpo da resposta de erro ilegível: {exc}", http=_failure_http(response)
         ) from exc
-    found = detect_challenge(status=response.status, headers=headers, body=bytes(amostra))
+    # Charset/BOM do Content-Type valem como no sucesso (decisão 0061); ilegível é RespostaInvalida, não "sem marcador".
+    try:
+        found = detect_challenge(
+            status=response.status, headers=headers, body=bytes(amostra), parcial=len(amostra) >= _AMOSTRA_DESAFIO
+        )
+    except RespostaInvalida as exc:
+        raise RespostaInvalida(str(exc), http=_failure_http(response)) from exc
     return str(found.args[0]) if found is not None and found.args else None
 
 
@@ -1262,6 +1269,7 @@ def _percorrer(
                 redirects=list(redirects),
                 mime=mime,
                 http=http_meta,
+                content_type=raw_type,
             )
         finally:
             finished.set()
