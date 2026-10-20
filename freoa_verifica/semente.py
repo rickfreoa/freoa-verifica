@@ -177,6 +177,7 @@ class SementeSync:
         self.corpus = load_corpus()
         self.stats: dict[str, FonteStats] = {}
         self._failed: dict[tuple[str, str], str] = {}  # falhou nesta execução: nunca retentada nela
+        self._tentadas: dict[tuple[str, str], tuple[bool, Any]] = {}  # desfecho por chave de requisição, por execução
         self._pendentes_iniciais: set[str] | None = None
 
     def _stats(self, fonte: str) -> FonteStats:
@@ -207,8 +208,28 @@ class SementeSync:
             return True
         return datetime.now(timezone.utc) - (t if t.tzinfo else t.replace(tzinfo=timezone.utc)) > timedelta(days=_REVALIDAR_DIAS)
 
+    def _tentar_uma_vez(self, chave: tuple[str, str], fn: Callable[[], Any]) -> Any:
+        """Guarda única da execução: `fn` roda no máximo uma vez por chave de requisição.
+
+        Chamada repetida devolve o resultado ou relança a exceção da primeira, sem novo pedido nem novo
+        incremento no breaker. Vale para obras, datas de alteradores, BCB, CVM e jurisprudência.
+        """
+        if chave in self._tentadas:
+            ok, saida = self._tentadas[chave]
+            if ok:
+                return saida
+            raise saida
+        try:
+            saida = fn()
+        except Exception as exc:
+            self._tentadas[chave] = (False, exc)
+            raise
+        self._tentadas[chave] = (True, saida)
+        return saida
+
     def _mark_indisponivel(self, fonte: str, chave: str, motivo: str, categoria: str | None = None) -> None:
         self._failed[fonte, chave] = motivo
+        self._tentadas.setdefault((fonte, chave), (True, None))  # falhou aqui: nenhum caminho a repete
         # Falha não apaga o histórico da última captura válida (sha256, ultima_captura_ok).
         anterior = self.state.get(fonte, chave)
         try:
@@ -237,8 +258,22 @@ class SementeSync:
         if self.state.done(fonte, chave):
             self._stats(fonte).pulados += 1
             return "pulado", None
-        if (fonte, chave) in self._failed:
-            return "indisponivel", None  # já falhou nesta execução; repetição só na próxima
+        # Falhou (ou já foi tentada) nesta execução: repetição só na próxima.
+        saida = self._tentar_uma_vez(
+            (fonte, chave),
+            lambda: self._capturar_legis(fonte, chave, connector_id=connector_id, work_key=work_key, label=label),
+        )
+        return saida or ("indisponivel", None)
+
+    def _capturar_legis(
+        self,
+        fonte: str,
+        chave: str,
+        *,
+        connector_id: str,
+        work_key: WorkKey,
+        label: str,
+    ) -> tuple[str, ParsedDocument | None]:
         try:
             conn_obj = self.svc._get(connector_id)
             key = {
@@ -403,11 +438,15 @@ class SementeSync:
             saved = self.state.get("alterador_data", akey)
             iso = (json.loads(saved["payload_json"] or "{}").get("data") if saved else None)
             if not iso:
-                try:
+                def datar(atipo=atipo, anumero=anumero, aano=aano, akey=akey):
                     self._sleep()
-                    iso = self.svc._get("planalto").resolve_alterador_date(atipo, anumero, aano)
-                    self.state.set("alterador_data", akey, "parseado" if iso else "indisponivel",
-                                   motivo=None if iso else "senado_sem_data", payload={"data": iso})
+                    data = self.svc._get("planalto").resolve_alterador_date(atipo, anumero, aano)
+                    self.state.set("alterador_data", akey, "parseado" if data else "indisponivel",
+                                   motivo=None if data else "senado_sem_data", payload={"data": data})
+                    return data
+
+                try:
+                    iso = self._tentar_uma_vez(("alterador_data", akey), datar)
                 except Exception as exc:
                     self._mark_indisponivel("alterador_data", akey, str(exc)[:200], getattr(exc, "categoria", None))
             for ann in annotations:
@@ -481,7 +520,9 @@ class SementeSync:
                 continue
             self.progress(f"cvm_normas instrução {num}")
             try:
-                cand = conn_obj.resolve({"tipo": "instrucoes", "numero": int(num)})
+                cand = self._tentar_uma_vez(
+                    ("cvm_normas:resolve", chave), lambda: conn_obj.resolve({"tipo": "instrucoes", "numero": int(num)})
+                )
                 if cand is None:
                     self._mark_indisponivel("cvm_normas", chave, "nao_resolvido")
                     continue
@@ -490,6 +531,9 @@ class SementeSync:
                 self._mark_indisponivel("cvm_normas", chave, str(exc)[:200], getattr(exc, "categoria", None))
 
     def _capture_cvm_cand(self, conn_obj: Any, cand: Any) -> None:
+        self._tentar_uma_vez(("cvm_normas", cand.key), lambda: self._capturar_cvm(conn_obj, cand))
+
+    def _capturar_cvm(self, conn_obj: Any, cand: Any) -> None:
         chave = cand.key
         try:
             from dataclasses import replace
@@ -558,7 +602,9 @@ class SementeSync:
                 continue
             self.progress(f"bcb {chave}")
             try:
-                cand = conn_obj.resolve({"tipo": tipo, "numero": numero})
+                cand = self._tentar_uma_vez(
+                    ("bcb:resolve", chave), lambda: conn_obj.resolve({"tipo": tipo, "numero": numero})
+                )
                 if cand is None:
                     self._mark_indisponivel("bcb", chave, "nao_resolvido")
                     continue
@@ -603,6 +649,9 @@ class SementeSync:
                 self._mark_indisponivel("bcb", f"recentes:{tipo}", str(exc)[:200], getattr(exc, "categoria", None))
 
     def _capture_bcb_cand(self, conn_obj: Any, cand: Any, chave: str) -> None:
+        self._tentar_uma_vez(("bcb", chave), lambda: self._capturar_bcb(conn_obj, cand, chave))
+
+    def _capturar_bcb(self, conn_obj: Any, cand: Any, chave: str) -> None:
         try:
             self._sleep()
             resp = conn_obj.fetch(cand)
@@ -814,7 +863,9 @@ class SementeSync:
         try:
             if not (fonte == "tcu" and cand.key in getattr(connector,"_captured_pages",{})):
                 self._sleep()
-            item = self.svc._index_candidate_juris(connector, cand)
+            item = self._tentar_uma_vez(
+                (checkpoint, key), lambda: self.svc._index_candidate_juris(connector, cand)
+            )
             if not item or not item.get("capture_id"):
                 raise Unavailable("sem_evidencia_capturada")
             self.state.set(checkpoint, key, "parseado")
@@ -917,7 +968,9 @@ class SementeSync:
                         continue
                     try:
                         self._sleep()
-                        item = self.svc._index_candidate_juris(conn_obj, cand)
+                        item = self._tentar_uma_vez(
+                            ("stf", cand.key), lambda: self.svc._index_candidate_juris(conn_obj, cand)
+                        )
                         if item and item.get("capture_id"):
                             # A reingestão substitui o documento; o sha registra a mudança na fonte.
                             sha = self.svc.conn.execute("SELECT sha256 FROM capture WHERE id=?",
@@ -934,6 +987,7 @@ class SementeSync:
     def run(self) -> dict[str, Any]:
         self.progress("início sync semente")
         self._failed.clear()  # "falhou nesta execução" vale por execução
+        self._tentadas.clear()
         self._capturar_pendentes_iniciais()
         steps = [
             ("planalto", self.sync_planalto),

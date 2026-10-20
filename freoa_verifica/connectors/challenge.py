@@ -120,6 +120,8 @@ def map_transport_error(exc: BaseException, url: str | None = None) -> Unavailab
     http = getattr(exc, "http", None)
     status = getattr(http, "status_code", None)
     base = {"url": url} if url else {}
+    if getattr(exc, "saltos", None):
+        base["saltos"] = [dict(salto) for salto in exc.saltos]
     if isinstance(exc, HTTPStatusError):
         ev = {"status": exc.status, **base}
         headers = dict(getattr(http, "headers", ()) or ())

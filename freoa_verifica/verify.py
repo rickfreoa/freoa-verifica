@@ -94,8 +94,9 @@ class Resolver(Protocol):
 
 
 class SourceUnavailable(Exception):
-    def __init__(self, reason: str):
+    def __init__(self, reason: str, fontes_consultadas: list[dict] | None = None):
         self.reason = reason
+        self.fontes_consultadas = list(fontes_consultadas or [])  # experimental (0058): fonte, resultado, motivo, categoria
         super().__init__(reason)
 
 
@@ -308,7 +309,8 @@ def verificar(
         resolved = resolver.resolve(cite.work)
     except SourceUnavailable as exc:
         result = VerificationResult(
-            identity=Dimension("unavailable", exc.reason),
+            identity=Dimension("unavailable", exc.reason,
+                               [Evidence(fontes_consultadas=exc.fontes_consultadas)] if exc.fontes_consultadas else []),
             text=Dimension("not_assessed", "FONTE_INDISPONIVEL"),
             temporal=Dimension("not_assessed", "FONTE_INDISPONIVEL"),
             support=support,

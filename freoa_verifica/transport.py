@@ -71,6 +71,7 @@ class TransportError(Exception):
 
     def __init__(self, message: str | None = None, *, http: HTTPMetadata | None = None):
         self.http = http
+        self.saltos: list[dict] = []  # cadeia de redirecionamentos já respondida: [{url, status}]
         super().__init__(message)
 
 
@@ -713,6 +714,7 @@ def _fetch_once(
     """
     original = url
     redirects: list[str] = []
+    saltos: list[dict] = []  # progresso é da chamada lógica: o status de qualquer salto vale para a cadeia
     current_method = method
     current_body = body
     req_extra = dict(caller_headers)
@@ -779,6 +781,7 @@ def _fetch_once(
             response = connection.getresponse()
             lendo_status = False
             iniciada.set()
+            saltos.append({"url": url, "status": response.status})
             if session is not None:
                 session.absorb_response(url, response)
             if response.status in (301, 302, 303, 307, 308):
@@ -940,16 +943,22 @@ def _fetch_once(
             )
         except TransportError as exc:
             _attach_http(exc, response)
+            if redirects:
+                exc.saltos = list(saltos)
             raise
         except (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
             if response is None and not slow.is_set() and (
-                iniciada.is_set() or (lendo_status and not isinstance(exc, OSError))
+                saltos
+                or iniciada.is_set()
+                or (lendo_status and not isinstance(exc, OSError))
             ):
                 # O servidor já enviou bytes, mas a linha de status ou os cabeçalhos são inválidos
                 # (LineTooLong, BadStatusLine, UnknownProtocol, cabeçalhos em excesso) ou foram
                 # interrompidos (prazo, reset) antes de completar. Encerramento sem byte algum é
                 # RemoteDisconnected, que é OSError e segue como fonte_fora.
-                raise RespostaInvalida(str(exc)) from exc
+                falha = RespostaInvalida(str(exc))
+                falha.saltos = list(saltos)
+                raise falha from exc
             if response is not None and not slow.is_set():
                 # Falha depois de recebido o status/cabeçalho (IncompleteRead, chunk inválido, reset
                 # ou prazo no corpo): resposta inválida, não indisponibilidade ambiental (decisão 0045).
