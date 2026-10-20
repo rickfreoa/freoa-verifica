@@ -237,7 +237,8 @@ def test_cnj_fonte_sem_o_processo_nao_devolve_outros(svc, conn, monkeypatch):
     conn.state["resp"] = _resp(_load("acordo_acionistas"))  # fonte responde com outros processos
     svc._connectors["tjdft"] = conn
     r = svc.pesquisar_jurisprudencia("0713166-62.2018.8.07.0000")
-    assert r["status"] == "nao_encontrado_na_fonte" and r["itens"] == []
+    # a fonte leu 3 de 3025 (truncado): sem negativa categórica (B2-03), mas também sem itens de outros processos
+    assert r["status"] == "nao_confirmado_no_acervo" and r["truncado"] is True and r["itens"] == []
 
 
 def test_monocratica_com_inteiro_teor_nao_grava_texto_como_ementa(svc, conn):
