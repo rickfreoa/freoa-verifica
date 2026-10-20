@@ -19,7 +19,8 @@ Não há URL de documento por `uuid`; nenhuma é inventada (`url_oficial` fica v
 ## Inteiro teor
 
 Só quando `inteiroTeor` (ou `inteiroTeorHtml`, convertido para texto) (a) não contém "Inteiro Teor indisponível"
-(sem acentos/caixa), (b) tem ao menos 1000 caracteres e (c) contém o número do processo do registro. Então perfil
+(sem acentos/caixa), (b) tem ao menos 1000 caracteres, (c) contém o número do processo do registro, (d) tem parte
+dispositiva e (e) termina com fecho (auditoria 1.2.0; critério completo e extensão aos acórdãos na decisão 0046). Então perfil
 `tjdft_inteiro_teor` e `metadata["documento"]="inteiro_teor"`. Caso contrário perfil `tjdft_ementa`, sem texto integral.
 `possuiInteiroTeor` sozinho nunca promove (decisão 0038).
 
@@ -30,6 +31,6 @@ HTTP diferente de 200, JSON inválido, `hits` inválido ou `registros` ausente/v
 
 ## Limites
 
-Acórdãos não trazem a íntegra pela API nesta versão: `obter_decisao(parte="inteiro_teor")` responde
-`parte_indisponivel`. `desde`/`ate` da busca ao vivo não são repassados à API. Classe processual (`class_name`) não é
+Sem `retornaInteiroTeor` a API quase não traz a íntegra dos acórdãos; a decisão 0046 passou a pedi-la. `desde`/`ate`
+da busca ao vivo não são repassados à API (filtro local, decisão 0053). Classe processual (`class_name`) não é
 derivada. Semente temática pequena e configurável em `corpus_semente.json` (`jurisprudencia.tjdft`), com checkpoint por consulta.
