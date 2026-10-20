@@ -1115,6 +1115,14 @@ def _percorrer(
                 session.absorb_response(url, response)
             cru, estado.cru = bytes(estado.cru or b""), None
             declared_size = _validar_framing(response, cru)  # todo status, antes de qualquer classificação
+            # Único ponto, qualquer status (FIX14/F-18): o transporte não decodifica corpo comprimido, e
+            # "não examinei" nunca vale "sem marcador"; logo, qualquer codificação além de identity é inválida.
+            encoding = response.getheader("Content-Encoding")
+            if encoding is not None and encoding.strip().lower() != "identity":
+                raise RespostaInvalida(
+                    "Apenas Content-Encoding identity é suportado",
+                    http=_failure_http(response),
+                )
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader("Location")
                 if not location:
@@ -1160,12 +1168,6 @@ def _percorrer(
                     response.status,
                     http=_failure_http(response),
                     desafio=_desafio_na_resposta(response),
-                )
-            encoding = response.getheader("Content-Encoding")
-            if encoding is not None and encoding.strip().lower() != "identity":
-                raise RespostaInvalida(
-                    "Apenas Content-Encoding identity é suportado",
-                    http=_failure_http(response),
                 )
             raw_type = response.getheader("Content-Type", "") or ""
             if "," in raw_type:
