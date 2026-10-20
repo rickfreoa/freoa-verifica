@@ -207,6 +207,15 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--com-situacao", action="store_true", help="relê também a situação das obras (exige rede)")
     _add_json_flag(pr)
 
+    pc = ac.add_parser("conferir", help="bateria do snapshot: confere o acervo (somente leitura; decisão 0056)")
+    pc.add_argument("--home", dest="home_conferir", default=None, metavar="DIR", help="diretório de dados a conferir")
+    pc.add_argument("--manifesto", default=None, metavar="ARQ", help="compara com manifesto congelado")
+    pc.add_argument("--gravar-manifesto", default=None, metavar="ARQ", help="grava o manifesto congelado do recorte")
+    pc.add_argument("--recorte-desde", default=None, metavar="DATA", help="AAAA-MM-DD; início do recorte declarado")
+    pc.add_argument("--recorte-ate", default=None, metavar="DATA", help="AAAA-MM-DD; fim do recorte declarado")
+    pc.add_argument("--estrito", action="store_true", help="pendências do sync_state também falham")
+    _add_json_flag(pc)
+
     p = sub.add_parser("runs", help="gerenciar execuções registradas")
     runs = p.add_subparsers(dest="runs_cmd", required=True)
     pp = runs.add_parser("purgar", help="reconstruir o banco sem execuções anteriores a DATA")
@@ -243,6 +252,18 @@ def main(argv: list[str] | None = None) -> None:
 
         run_api(host=args.host, port=args.port, token=args.token, home=args.home, registro=registro)
         return
+
+    if args.cmd == "acervo" and args.acervo_cmd == "conferir":
+        # Fora de `Verifica`: ele migra o banco e grava registro; a bateria é só leitura.
+        from freoa_verifica import bateria
+        from freoa_verifica.store.db import data_home
+
+        data = bateria.executar(
+            args.home_conferir or args.home or data_home(), manifesto=args.manifesto,
+            gravar=args.gravar_manifesto, estrito=args.estrito,
+            recorte={"desde": args.recorte_desde, "ate": args.recorte_ate})
+        _print_result(data, as_json=as_json, titulo="Bateria do acervo")
+        raise SystemExit(0 if data["status"] == "ok" else 1)
 
     with Verifica(home=args.home, registro=registro) as svc:
         if args.cmd == "runs":
