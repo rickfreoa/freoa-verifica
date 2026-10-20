@@ -9,7 +9,6 @@ from dataclasses import replace
 from typing import Any
 from urllib.parse import urljoin, urldefrag, urlencode
 
-from lxml import html as lxml_html
 
 from freoa_verifica.connectors.base import (
     Candidate,
@@ -22,7 +21,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
-from freoa_verifica.texto_resposta import texto_da_resposta
+from freoa_verifica.texto_resposta import arvore_html, texto_da_resposta, texto_do_response
 from freoa_verifica.transport import Response
 
 _FEED = "https://conteudo.cvm.gov.br/feed/decisoes.xml"
@@ -118,7 +117,7 @@ class CvmColegiadoConnector(Connector):
             'dataFim':f'31/12/{ano}' if ano else ''})
         resp = connector_fetch(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
                                mimes=self.mimes, user_agent=self.user_agent, timeout=60.0)
-        return _parse_search(resp.body, base=url, source_id=self.id, limite=limite)
+        return _parse_search(texto_do_response(resp), base=url, source_id=self.id, limite=limite)
 
     def resolve(self, key: Any) -> Candidate | None:
         if isinstance(key, str) and key.startswith("http"):
@@ -181,10 +180,9 @@ class CvmColegiadoConnector(Connector):
         return resp
 
     def parse(self, resp: Response) -> ParsedDecision:
-        if resp.final_url.endswith(".xml") or (
-            resp.body.lstrip()[:1] == b"<" and b"<item>" in resp.body[:5000]
-        ):
-            items = _parse_rss(resp.body)
+        texto = texto_do_response(resp)  # interpretação única: nada abaixo relê os bytes
+        if resp.final_url.endswith(".xml") or (texto.lstrip()[:1] == "<" and "<item>" in texto[:5000]):
+            items = _parse_rss(texto)
             first = items[0] if items else {}
             link = _canonicalize_cvm_url(first.get("link") or "")
             reuniao = _reuniao_id_from_url(link or resp.final_url)
@@ -197,7 +195,7 @@ class CvmColegiadoConnector(Connector):
                 text=first.get("description") or "",
                 metadata={"items": len(items), "ata": reuniao},
             )
-        return _parse_reuniao_html(resp.body, url=resp.final_url or resp.url)
+        return _parse_reuniao_html(texto, url=resp.final_url or resp.url)
 
     def _sync_year(self, ano: int, *, q: str, limite: int) -> list[Candidate]:
         index_url = f"https://conteudo.cvm.gov.br/decisoes/{ano}/"
@@ -218,7 +216,7 @@ class CvmColegiadoConnector(Connector):
         text = texto_da_resposta(resp.body, resp.content_type or resp.headers.get("content-type"))
         if _MAINTENANCE.search(text):
             raise Unavailable("resposta_invalida")
-        tree = lxml_html.fromstring(resp.body)
+        tree = arvore_html(text)
         links = tree.xpath("//a[@href]")
         q_lower = (q or "").lower()
         out: list[Candidate] = []
@@ -266,11 +264,13 @@ def _reuniao_id_from_url(url: str) -> str | None:
     return f"reuniao={m.group(1)}-R{m.group(2)}"
 
 
-def _parse_rss(body: bytes) -> list[dict[str, str]]:
-    if _MAINTENANCE.search(body.decode("utf-8", errors="replace")[:2000]):
+def _parse_rss(body: bytes | str) -> list[dict[str, str]]:
+    # Charset do cabeçalho vence a declaração XML (RFC 7303): o expat recebe o texto já decidido e ignora a declaração.
+    text = texto_da_resposta(body)
+    if _MAINTENANCE.search(text[:2000]):
         raise Unavailable("resposta_invalida")
     try:
-        root = ET.fromstring(body)
+        root = ET.fromstring(text)
     except ET.ParseError as exc:
         raise Unavailable("resposta_invalida") from exc
     tag = root.tag.split("}")[-1].lower() if isinstance(root.tag, str) else ""
@@ -305,14 +305,14 @@ def _parse_rss(body: bytes) -> list[dict[str, str]]:
     return items
 
 
-def _parse_reuniao_html(body: bytes, *, url: str) -> ParsedDecision:
-    text_head = body[:4000].decode("utf-8", errors="replace")
-    if _MAINTENANCE.search(text_head):
+def _parse_reuniao_html(body: bytes | str, *, url: str) -> ParsedDecision:
+    pagina = texto_da_resposta(body)
+    if _MAINTENANCE.search(pagina[:4000]):
         raise Unavailable("resposta_invalida")
-    tree = lxml_html.fromstring(body)
+    tree = arvore_html(pagina)
     title_el = tree.xpath("//h2|//h1")
     title = title_el[0].text_content().strip() if title_el else url
-    text = tree.xpath("string(//article)") or body.decode("utf-8", errors="replace")
+    text = tree.xpath("string(//article)") or pagina
     reuniao = _reuniao_id_from_url(url)
     if not reuniao:
         raise Unavailable("resposta_invalida")
@@ -404,7 +404,7 @@ def _parse_reuniao_html(body: bytes, *, url: str) -> ParsedDecision:
 
 
 def _parse_search(body, *, base, source_id, limite):
-    tree = lxml_html.fromstring(body)
+    tree = arvore_html(body)
     text = tree.text_content()
     if _MAINTENANCE.search(text):
         raise Unavailable('resposta_invalida')

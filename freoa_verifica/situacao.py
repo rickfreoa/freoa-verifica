@@ -162,12 +162,13 @@ def registrar_cvm(conn: sqlite3.Connection, home: Any, connector: Any, cand: Any
     """Captura a página do ato (sempre) e grava a situação lida; falha vira ilegivel."""
     from freoa_verifica.connectors.cvm_normas import ler_situacao_pagina
     from freoa_verifica.store import repo
+    from freoa_verifica.texto_resposta import texto_do_response
 
     try:
         resp = connector.fetch_situacao(cand)
         captura = repo.save_capture(conn, resp, "cvm_normas", home=home)
         from freoa_verifica.connectors.cvm_normas import _parse_key
-        lida = ler_situacao_pagina(resp.body, _parse_key(cand.key))
+        lida = ler_situacao_pagina(texto_do_response(resp), _parse_key(cand.key))
         if lida is None:
             ws = WorkStatus(rw.work_id, "ilegivel", "pagina_do_ato_ilegivel", None, None,
                             captura, resp.sha256, resp.fetched_at)

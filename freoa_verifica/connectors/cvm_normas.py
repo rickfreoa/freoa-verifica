@@ -8,7 +8,6 @@ from typing import Any
 from urllib.parse import urljoin
 
 from lxml import etree as lxml_etree
-from lxml import html as lxml_html
 
 from freoa_verifica.connectors.base import (
     CandidateList,
@@ -23,7 +22,8 @@ from freoa_verifica.connectors.httputil import connector_fetch, form_body
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
 from freoa_verifica.parsers.model import Issue, ParsedDocument
-from freoa_verifica.transport import Response, Session
+from freoa_verifica.texto_resposta import arvore_html, texto_do_response
+from freoa_verifica.transport import RespostaInvalida, Response, Session
 
 MAX_ITENS_PAGINA = 500
 
@@ -234,7 +234,7 @@ class CvmNormasConnector(Connector):
         if kind == "pdf" or resp.body[:4] == b"%PDF":
             return _parse_pdf(resp.body, source=resp.final_url)
         # HTML da página do ato — ementa/situação
-        return _parse_ato_html(resp.body, base_url=resp.final_url)
+        return _parse_ato_html(texto_do_response(resp), base_url=resp.final_url)
 
     def _search_index(self, q: str, *, tipo: str, limite: int, pagina: int = 1) -> list[Candidate]:
         meta = _INDEX[tipo]
@@ -252,7 +252,7 @@ class CvmNormasConnector(Connector):
         )
         if not session.has_cookie("JSESSIONID"):
             raise Unavailable("sessao_ausente")
-        tree = lxml_html.fromstring(init.body)
+        tree = _html_tree(texto_do_response(init))
         itens = min(MAX_ITENS_PAGINA, max(1, int(limite or 100)))
         fields = {
             "searchPage": str(max(1, pagina)),
@@ -289,7 +289,7 @@ class CvmNormasConnector(Connector):
             session=session,
             expected_content=r'<article\b|class=["\'][^"\']*orderResults',
         )
-        return _parse_list_html(resp.body, source_id=self.id, tipo=tipo, limite=limite, q=q)
+        return _parse_list_html(texto_do_response(resp), source_id=self.id, tipo=tipo, limite=limite, q=q)
 
 
 def _kind_from_url(url: str) -> str:
@@ -328,16 +328,11 @@ def _especie_numero(texto: str) -> tuple[str | None, int | None]:
     return tipo, int(digitos) if digitos.isdigit() else None
 
 
-def _html_tree(body: bytes):
-    """UTF-8 primeiro; sem isso o lxml presume latin-1 e produz mojibake (A4)."""
+def _html_tree(body: bytes | str):
+    """Árvore do texto da interpretação única; bytes só chegam aqui de chamadores diretos (testes)."""
     try:
-        text = body.decode("utf-8")
-    except UnicodeDecodeError:
-        text = body.decode("cp1252", errors="replace")
-    text = re.sub(r"^\s*<\?xml[^>]*\?>", "", text)
-    try:
-        return lxml_html.fromstring(text)
-    except (ValueError, lxml_etree.ParserError) as exc:
+        return arvore_html(body)
+    except (ValueError, lxml_etree.ParserError, RespostaInvalida) as exc:
         raise Unavailable("resposta_inesperada") from exc
 
 

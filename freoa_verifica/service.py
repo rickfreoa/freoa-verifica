@@ -3065,7 +3065,9 @@ class Verifica:
                 )
                 continue
             try:
-                report = self._get(cid).health()
+                # Uma guarda por fonte: as sondas dela compartilham o bloqueio após desafio/recusa (FIX16/F-17).
+                with GuardaExecucao().ativar():
+                    report = self._get(cid).health()
                 probes = [
                     {"nome": p.name, "status": p.status, "detalhe": p.detail}
                     for p in report.probes

@@ -67,9 +67,11 @@ class GuardaExecucao:
 
     @staticmethod
     def _hosts_recusantes(inicial: str, exc: Unavailable) -> set[str]:
-        """Host inicial e host de cada salto que respondeu sem ser redirecionamento (evidência `saltos`)."""
+        """Host inicial e host de cada salto que respondeu sem ser redirecionamento, ou que desafiou (`saltos`)."""
         ev = exc.evidencia
-        urls = [s.get("url") for s in ev.get("saltos") or () if s.get("status") not in _REDIRECIONAMENTOS]
+        urls = [
+            s.get("url") for s in ev.get("saltos") or () if s.get("status") not in _REDIRECIONAMENTOS or s.get("desafio")
+        ]
         urls.append(ev.get("url_final"))
         hosts = {_host_canonico(urlsplit(u)) for u in urls if u}
         hosts.add(inicial)
