@@ -9,9 +9,12 @@ from pathlib import Path
 import pytest
 
 pytest_plugins = ["pytester"]
+pytestmark = pytest.mark.repositorio
 
 RAIZ = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("saude_fontes", RAIZ / "scripts" / "saude_fontes.py")
+if not (RAIZ / "scripts" / "saude_fontes.py").exists():  # job da wheel: sem checkout
+    pytest.skip("exige o checkout (scripts/)", allow_module_level=True)
+_spec =importlib.util.spec_from_file_location("saude_fontes", RAIZ / "scripts" / "saude_fontes.py")
 sf = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sf)
 

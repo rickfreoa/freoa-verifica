@@ -57,8 +57,9 @@ jobs:
           python-version: "3.12"
       - name: Install locked deps and package
         run: |
+          python -m pip install --require-hashes -r requirements/build.lock
           python -m pip install --require-hashes -r requirements/ci.lock
-          python -m pip install --no-deps -e .
+          python -m pip install --no-deps --no-build-isolation -e .
       - name: Testes de repositório
         run: python -m pytest tests -q -m "repositorio and not live" -p no:cacheprovider
 

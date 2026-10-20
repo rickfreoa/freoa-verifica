@@ -2881,7 +2881,7 @@ class Verifica:
                        "status": "ok" if provenance.get("vinculado") else "alerta",
                        "detalhe": provenance})
         checks.append(_acervo.verificar_digest_instalado(provenance))
-        checks.append(_acervo.attestation_instalacao())
+        checks.append(_acervo.attestation_instalacao(provenance))
         aviso = self.acervo_status()
         checks.append({"nome": "acervo", "status": "alerta" if aviso else "ok",
                        "detalhe": aviso or "atende ao manifesto/mínimo"})

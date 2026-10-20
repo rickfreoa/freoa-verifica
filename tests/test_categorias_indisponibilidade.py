@@ -78,6 +78,12 @@ def test_202_sem_prova_nao_e_ambiental():
     assert u.reason == "desafio_aws_waf" and u.categoria == "resposta_inesperada"
 
 
+@pytest.mark.parametrize("body", [b"", None, "  "])
+def test_202_com_corpo_vazio_sem_assinatura_nao_e_desafio(body):
+    assert detect_challenge(status=202, body=body) is None
+    assert detect_challenge(status=202, body=body, headers={"content-type": "text/html"}) is None
+
+
 def test_json_invalido_e_resposta_inesperada():
     assert Unavailable("resposta_invalida").categoria == "resposta_inesperada"
     assert Unavailable("resposta_inesperada").categoria == "resposta_inesperada"

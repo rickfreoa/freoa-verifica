@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 FIXTURES_META = FIXTURES_DIR / "FIXTURES.json"
 
-CATEGORIAS = ("captura_real", "sintetica")
+CATEGORIAS = ("captura_real", "sintetica", "metadados_captura")
 CAMPOS_CAPTURA = ("url", "url_final", "status", "content_type", "capturado_em", "origem_metadados")
 CAMPOS_SINTETICA = ("gerador", "proposito")
 
@@ -59,6 +59,8 @@ def validar_inventario(raiz: Path = FIXTURES_DIR, manifesto: Path | None = None)
         if len(dados) != e.get("bytes"):
             problemas.append(f"bytes divergentes: {arquivo} ({chave})")
         problemas.extend(_campos(chave, e))
+        if e.get("categoria") == "metadados_captura" and e.get("descreve") not in entradas:
+            problemas.append(f"descreve fixture ausente: {chave} -> {e.get('descreve')!r}")
 
     for atual, nomes, arquivos in os.walk(raiz, followlinks=False):
         for nome in [*nomes, *arquivos]:
@@ -75,6 +77,8 @@ def _campos(chave: str, e: dict) -> list[str]:
     categoria = e.get("categoria")
     if categoria not in CATEGORIAS:
         return [f"categoria inválida: {chave} -> {categoria!r}"]
+    if categoria == "metadados_captura":  # registro completo de uma captura; `descreve` aponta a fixture
+        return [] if e.get("descreve") else [f"campo ausente em {chave}: descreve"]
     if categoria == "sintetica":
         return [f"campo ausente em {chave}: {c}" for c in CAMPOS_SINTETICA if not e.get(c)]
     faltam = [f"campo ausente em {chave}: {c}" for c in CAMPOS_CAPTURA if c not in e]

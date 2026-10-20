@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode
@@ -44,6 +45,47 @@ def _data_br(iso: Any) -> str | None:
     """AAAA-MM-DD -> DD/MM/AAAA (formato do formulário e-SAJ); outra forma não é enviada."""
     m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", str(iso or ""))
     return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else None
+
+
+@dataclass(frozen=True)
+class CjsgRequest:
+    post_url: str
+    fields: dict[str, Any]
+    pagina: int
+    page_url: str
+
+
+def build_cjsg_request(q: str, **filtros: Any) -> CjsgRequest:
+    """Formulário e URL da página da consulta cjsg; usado pelo conector e pela captura reproduzível."""
+    fields = {
+        "dados.buscaInteiroTeor": q,
+        "dados.pesquisarComSinonimos": filtros.get("sinonimos", "S"),
+        "dados.origensSelecionadas": filtros.get("origem", "T"),
+        "tipoDecisaoSelecionados": filtros.get("tipo_decisao", "A"),
+        "dados.ordenarPor": "dtPublicacao",
+    }
+    if filtros.get("numero_processo"):
+        fields["dados.nuProcesso"] = filtros["numero_processo"]
+        fields["dados.buscaInteiroTeor"] = ""
+    dt_inicio = filtros.get("dt_inicio") or _data_br(filtros.get("desde"))
+    dt_fim = filtros.get("dt_fim") or _data_br(filtros.get("ate"))
+    if dt_inicio:
+        fields["dados.dtJulgamentoInicio"] = dt_inicio
+    if dt_fim:
+        fields["dados.dtJulgamentoFim"] = dt_fim
+    pagina = int(filtros.get("pagina") or 1)
+    page_url = (
+        _BASE
+        + "trocaDePagina.do?"
+        + urlencode(
+            {
+                "tipoDeDecisao": fields["tipoDecisaoSelecionados"],
+                "pagina": str(pagina),
+                "conversationId": "",
+            }
+        )
+    )
+    return CjsgRequest(_BASE + "resultadoCompleta.do", fields, pagina, page_url)
 
 
 @register
@@ -105,31 +147,15 @@ class TjspConnector(Connector):
             raise Unavailable("resposta_inesperada")
         # Sessão efêmera por consulta (CookieJar em memória; nunca em recibos).
         session = Session()
-        fields = {
-            "dados.buscaInteiroTeor": q,
-            "dados.pesquisarComSinonimos": filtros.get("sinonimos", "S"),
-            "dados.origensSelecionadas": filtros.get("origem", "T"),
-            "tipoDecisaoSelecionados": filtros.get("tipo_decisao", "A"),
-            "dados.ordenarPor": "dtPublicacao",
-        }
-        if filtros.get("numero_processo"):
-            fields["dados.nuProcesso"] = filtros["numero_processo"]
-            fields["dados.buscaInteiroTeor"] = ""
-        dt_inicio = filtros.get("dt_inicio") or _data_br(filtros.get("desde"))
-        dt_fim = filtros.get("dt_fim") or _data_br(filtros.get("ate"))
-        if dt_inicio:
-            fields["dados.dtJulgamentoInicio"] = dt_inicio
-        if dt_fim:
-            fields["dados.dtJulgamentoFim"] = dt_fim
-        post_url = _BASE + "resultadoCompleta.do"
+        req = build_cjsg_request(q, **filtros)
         init = connector_fetch(
-            post_url,
+            req.post_url,
             hosts=self.hosts,
             path_prefixes=self.path_prefixes,
             mimes=self.mimes,
             user_agent=self.user_agent,
             method="POST",
-            body=form_body(fields),
+            body=form_body(req.fields),
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "text/html",
@@ -139,23 +165,11 @@ class TjspConnector(Connector):
         )
         if not session.has_cookie("JSESSIONID"):
             raise Unavailable("sessao_ausente")
-        pagina = int(filtros.get("pagina") or 1)
-        if pagina < 1 or pagina > MAX_PAGINA:
+        if req.pagina < 1 or req.pagina > MAX_PAGINA:
             raise Unavailable("resposta_invalida")
         limite = min(MAX_LIMITE, max(1, int(filtros.get("limite") or 20)))
-        page_url = (
-            _BASE
-            + "trocaDePagina.do?"
-            + urlencode(
-                {
-                    "tipoDeDecisao": fields["tipoDecisaoSelecionados"],
-                    "pagina": str(pagina),
-                    "conversationId": "",
-                }
-            )
-        )
         page = connector_fetch(
-            page_url,
+            req.page_url,
             hosts=self.hosts,
             path_prefixes=self.path_prefixes,
             mimes=self.mimes,

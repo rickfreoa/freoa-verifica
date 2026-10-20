@@ -35,3 +35,11 @@ e o teste live não distinguia ambiente (WAF, fonte fora) de regressão do códi
 O transporte descarta o corpo e retém só 4 cabeçalhos em resposta não 200; por isso 403 visto como
 `HTTPStatusError` não é inspecionado por assinatura e fica `recusa_identificado`. Assinaturas só valem
 quando o corpo chega (200 e `detect_challenge`).
+
+## Emenda FIX1 (auditoria do bloco 1)
+
+- `fonte_fora` vale só para falha de conexão, TLS, timeout e 5xx com prova. Erro de protocolo com resposta
+  recebida (MIME proibido, `Content-Type`/`Content-Encoding`/`Transfer-Encoding` inválidos, framing,
+  `Content-Length` divergente, tamanho acima do limite) usa o tipo `transport.RespostaInvalida` (`TooLarge` é
+  subclasse) e vira `resposta_inesperada`, que o hook live mantém como falha.
+- `detect_challenge` não infere desafio por 202 com corpo vazio. Só cabeçalho de borda ou assinatura de corpo.

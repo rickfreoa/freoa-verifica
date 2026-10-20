@@ -103,18 +103,53 @@ def test_doctor_compara_digest_instalado_com_lista(lista):
     assert acervo.verificar_digest_instalado({})["status"] == "alerta"
 
 
-@pytest.mark.parametrize("conteudo,esperado,status", [
-    ('{"attestation_verificada": true}', True, "ok"),
-    ('{"attestation_verificada": false}', False, "alerta"),
-    (None, None, "alerta"),
+def _registro(tmp_path, monkeypatch, **campos):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    (tmp_path / "freoa-verifica").mkdir(exist_ok=True)
+    base = {"versao": __version__, "sha256_wheel": "c" * 64, "digest_snapshot": D_ATUAL,
+            "attestation_verificada": True, "concluida": True}
+    (tmp_path / "freoa-verifica" / "instalacao.json").write_text(json.dumps({**base, **campos}), encoding="utf-8")
+
+
+PROV = {"vinculado": True, "snapshot_sha256": D_ATUAL}
+
+
+def test_doctor_attestation_ok_com_registro_completo_e_coerente(tmp_path, monkeypatch):
+    _registro(tmp_path, monkeypatch)
+    r = acervo.attestation_instalacao(PROV)
+    assert r["status"] == "ok" and r["detalhe"]["motivos"] == []
+    assert r["detalhe"]["attestation_verificada"] is True and r["detalhe"]["sha256_wheel"] == "c" * 64
+
+
+@pytest.mark.parametrize("campos,motivo", [
+    ({"attestation_verificada": False}, "attestation_nao_verificada"),
+    ({"concluida": False}, "instalacao_nao_concluida"),
+    ({"concluida": None}, "instalacao_nao_concluida"),
+    ({"versao": "0.0.1"}, "versao_divergente"),
+    ({"digest_snapshot": D_ANTIGO}, "digest_snapshot_divergente"),
+    ({"digest_snapshot": None}, "digest_snapshot_divergente"),
 ])
-def test_doctor_exibe_attestation(tmp_path, monkeypatch, conteudo, esperado, status):
+def test_doctor_alerta_registro_incompleto_ou_de_outra_instalacao(tmp_path, monkeypatch, campos, motivo):
+    _registro(tmp_path, monkeypatch, **campos)
+    r = acervo.attestation_instalacao(PROV)
+    assert r["status"] == "alerta" and motivo in r["detalhe"]["motivos"]
+
+
+def test_doctor_registro_do_audito_nao_e_ok(tmp_path, monkeypatch):
+    # attestation true, versão antiga, instalação não concluída e sem commit: antes dava status "ok".
+    _registro(tmp_path, monkeypatch, versao="0.0.1", concluida=False, commit=None)
+    assert acervo.attestation_instalacao(PROV)["status"] == "alerta"
+    assert acervo.attestation_instalacao()["status"] == "alerta"
+
+
+@pytest.mark.parametrize("conteudo", [None, "não é json", "[1]"])
+def test_doctor_sem_registro_utilizavel_alerta(tmp_path, monkeypatch, conteudo):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     if conteudo is not None:
         (tmp_path / "freoa-verifica").mkdir()
         (tmp_path / "freoa-verifica" / "instalacao.json").write_text(conteudo, encoding="utf-8")
-    r = acervo.attestation_instalacao()
-    assert r["detalhe"]["attestation_verificada"] is esperado and r["status"] == status
+    r = acervo.attestation_instalacao(PROV)
+    assert r["status"] == "alerta" and r["detalhe"]["attestation_verificada"] is None
 
 
 def test_doctor_inclui_as_verificacoes(tmp_path, monkeypatch):
