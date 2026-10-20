@@ -14,7 +14,6 @@ from freoa_verifica.transport import (
     RespostaInvalida,
     Timeout,
     TransportError,
-    TransporteLento,
 )
 
 # Tabela de assinaturas de desafio (decisão 0045). Mudar uma linha exige subir a versão,
@@ -148,7 +147,7 @@ def map_transport_error(exc: BaseException, url: str | None = None) -> Unavailab
         if status:
             ev["status"] = status
         return Unavailable(f"transporte_{nome}", "resposta_inesperada", ev)
-    if isinstance(exc, (Timeout, TransporteLento)) or type(exc) is TransportError:
+    if isinstance(exc, Timeout) or type(exc) is TransportError:
         # Falha de conexão, TLS ou leitura registrada pelo transporte.
         nome = type(exc).__name__
         ev = {"marcador": f"transporte:{nome}", **base}

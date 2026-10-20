@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -268,19 +267,14 @@ class PlanaltoConnector(Connector):
             raise Unavailable("sem_url")
         last_err = None
         for url in urls:
-            for attempt in range(3):
-                if attempt:
-                    time.sleep(2 ** attempt)
-                try:
-                    return connector_fetch(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
-                        mimes=self.mimes, user_agent=self.user_agent, timeout=180.0,
-                        min_bytes_per_second=256, max_bytes=30 * 1024 * 1024)
-                except Unavailable as exc:
-                    last_err = exc
-                    if exc.reason == "http_404":
-                        break
-                    if attempt < 2 and exc.reason in {"transporte_Timeout", "transporte_lento", "transporte_TransporteLento", "http_503", "http_502", "http_504"}:
-                        continue
+            # Repetição (502/503/504, falha antes do status) é política do transporte; aqui só se troca de URL.
+            try:
+                return connector_fetch(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
+                    mimes=self.mimes, user_agent=self.user_agent, timeout=180.0,
+                    min_bytes_per_second=256, max_bytes=30 * 1024 * 1024)
+            except Unavailable as exc:
+                last_err = exc
+                if exc.reason != "http_404":
                     raise _reclassificar_recusa(exc) from exc
         raise Unavailable(last_err.reason if last_err else "sem_url")
 
