@@ -59,3 +59,27 @@ A rodada 5 achou variantes das mesmas classes; a emenda troca os remendos por me
   pesquisa textual (`pesquisar_jurisprudencia`) roda sob uma `GuardaExecucao` por pesquisa: candidatos da mesma URL
   usam uma única captura, a indisponibilidade de um candidato interrompe a fonte, aparece em `fontes` e em
   `cobertura[].indisponivel` com categoria, e o status de topo é `parcial` ou `indisponivel`, nunca `ok`.
+
+## Emenda FIX11 (auditoria final, rodada 7: F-11, F-13, F-16)
+
+- **Framing de toda resposta (F-13).** `transport._validar_framing(resposta)` roda sobre os cabeçalhos brutos de
+  qualquer resposta, com qualquer status, antes da classificação: `Transfer-Encoding` diferente de um único `chunked`,
+  `Content-Length` duplicado (mesmo com valores iguais), não numérico, com sinal ou negativo, e `Content-Length` junto
+  de `Transfer-Encoding` são `RespostaInvalida` (`resposta_inesperada`, sem repetição). O 200 e as respostas de erro
+  usam a mesma função. O fluxo chunked é lido por `_RespostaEstrita`, que não herda a tolerância do `http.client`:
+  tamanho `HEXDIG+` com extensão opcional (sem sinal, sublinhado, espaço ou `0x`), fim de chunk exatamente CRLF, e
+  corpo terminado em `0 CRLF [trailer] CRLF`. Dados além do tamanho declarado, tamanho inválido e encerramento
+  prematuro são `RespostaInvalida` em 200, 503 e demais status.
+- **Desfecho final na guarda (F-11).** A guarda registra o desfecho final da chamada ao conector, não o intermediário
+  do transporte. `connector_fetch(..., reclassificar=f)` aplica a regra do conector (`f(Unavailable) -> Unavailable`)
+  dentro do `baixar` que a guarda executa; o Planalto passa `_reclassificar_recusa` (decisão 0048), de modo que o
+  fechamento sem resposta, já `recusa_identificado`, bloqueia o host para o resto da execução (a segunda lei não faz
+  pedido e o breaker conta uma falha). Fora da guarda a reclassificação é a mesma.
+- **Política da chamada atual sobre a captura guardada (F-16).** A chave do cache segue a identidade efetiva; a
+  política não entra nela. Antes de entregar uma captura guardada, `connector_fetch` a revalida, sem rede, contra a
+  política da chamada atual: `transport.revalidar_captura` (allowlist de host e caminho da URL pedida e de cada
+  redirecionamento, número de redirecionamentos, MIME, `max_bytes` declarado e recebido) e a detecção de desafio com os
+  parâmetros da chamada. A recusa é a mesma exceção que o transporte levantaria ao vivo (mesmo mapeamento para
+  `Unavailable`); desafio visto na revalidação bloqueia a fonte como se visto ao vivo. Simetricamente, uma falha
+  guardada só é reaproveitada por chamada de mesma política: outra política pode ter aceitado a resposta que a primeira
+  recusou, e nesse caso a guarda faz o pedido.
