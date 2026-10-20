@@ -9,6 +9,9 @@ DEPRECATED: frozenset[str] = frozenset()
 EXPERIMENTAL: frozenset[str] = frozenset({
     "listar_fontes:fontes[].cobertura",
     "listar_fontes:fontes[].ultimo_health",
+    "listar_fontes:fontes[].capacidade",
+    "listar_fontes:fontes[].recorte_acervo",
+    "listar_fontes:fontes[].tipos_documento",
     "buscar_legislacao:tesauro",
     "pesquisar_jurisprudencia:tesauro",
     # Lista por tribunal (decisão 0055). `[]` deixa de fora o objeto `cobertura` de `nao_confirmado_no_acervo`, estável.

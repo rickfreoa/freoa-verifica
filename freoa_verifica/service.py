@@ -91,6 +91,17 @@ _CLASSES_POR_EXTENSO = (
 )
 
 
+def _tipos_documento(coverage: dict[str, Any]) -> list[str]:
+    """Tipos de documento que a fonte entrega, a partir da cobertura declarada do conector."""
+    tipos = ["ementa"] if coverage.get("ementa") else []
+    it = coverage.get("inteiro_teor")
+    if it is True:
+        tipos.append("inteiro_teor")
+    elif it:
+        tipos.append("inteiro_teor_parcial")
+    return tipos or ["metadados"]
+
+
 def _authenticated_output(method):
     """Consultas auxiliares obedecem à mesma autenticação das verificações."""
     @wraps(method)
@@ -2827,6 +2838,25 @@ class Verifica:
             "cursor": str(offset + max_chars) if truncado else None,
         }
 
+    def _capacidade_e_recorte(self, cid: str, coverage: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        """Capacidade (acervo/ao_vivo/ambos/nenhuma) e recorte do acervo instalado da fonte (aditivo, experimental).
+
+        Tribunal: decisões do acervo e período; demais fontes: capturas oficiais. `0` é acervo instalado vazio
+        (medido), não desconhecido. `ao_vivo` de tribunal é a busca textual ao vivo; consulta pontual por número
+        não entra nessa conta."""
+        if cid in _JURIS_CONNECTORS:
+            ac = self._acervo_do_tribunal(normalize_court(cid))
+            n = ac["n"]
+            recorte = {"decisoes": n, "desde": (ac["recorte"] or {}).get("desde"),
+                       "ate": (ac["recorte"] or {}).get("ate"), "capturado_em": ac["capturado_em"]}
+            vivo = bool(coverage.get("busca_textual_ao_vivo", coverage.get("busca_textual")))
+        else:
+            n, capturado = self.conn.execute(
+                "SELECT COUNT(*), MAX(fetched_at) FROM capture WHERE source_id=?", (cid,)).fetchone()
+            recorte = {"capturas": n, "capturado_em": capturado}
+            vivo = True  # captura sob demanda na fonte oficial
+        return ("ambos" if n and vivo else "acervo" if n else "ao_vivo" if vivo else "nenhuma"), recorte
+
     def listar_fontes(self) -> dict[str, Any]:
         fontes = []
         for cid, cls in registry().items():
@@ -2846,10 +2876,14 @@ class Verifica:
                             "falhas": br.failures,
                         }
                     )
+            capacidade, recorte = self._capacidade_e_recorte(cid, coverage)
             fontes.append(
                 {
                     "id": cid,
                     "autoridade": getattr(cls, "authority", cid),
+                    "capacidade": capacidade,
+                    "recorte_acervo": recorte,
+                    "tipos_documento": _tipos_documento(coverage),
                     "cobertura": coverage,
                     "ultimo_health": last,
                     "circuito": circuit,

@@ -167,7 +167,7 @@ Em `encontrada`: `id`, `tribunal`, `classe`, `numero`, `orgao`, `relator`, `part
 
 ### `listar_fontes`
 
-`{fontes: array, total: number, contrato: string}`. `contrato` é a `CONTRATO_VERSAO` (aditivo, ausente nas versões anteriores a esta). Cada fonte: `id`, `autoridade` (strings), `circuito` (array de `{host, estado: "fechado"|"aberto", falhas: number}`), `cobertura` (object, **experimental**: chaves variam por conector), `ultimo_health` (**experimental**: `null` ou resultado do último `health`).
+`{fontes: array, total: number, contrato: string}`. `contrato` é a `CONTRATO_VERSAO` (aditivo, ausente nas versões anteriores a esta). Cada fonte: `id`, `autoridade` (strings), `circuito` (array de `{host, estado: "fechado"|"aberto", falhas: number}`), `cobertura` (object, **experimental**: chaves variam por conector), `ultimo_health` (**experimental**: `null` ou resultado do último `health`). Aditivos e **experimentais** (decisão 0056): `capacidade` (`acervo`|`ao_vivo`|`ambos`|`nenhuma`; para tribunal, `ao_vivo` é a busca textual ao vivo), `recorte_acervo` (tribunal: `{decisoes, desde, ate, capturado_em}`; demais fontes: `{capturas, capturado_em}`; contagem `0` é acervo instalado vazio) e `tipos_documento` (lista de `ementa`, `inteiro_teor`, `inteiro_teor_parcial`, `metadados`).
 
 ## Estados
 
