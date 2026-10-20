@@ -17,3 +17,24 @@ A 0058 deixou quatro brechas: o redirecionamento reiniciava a condição "nenhum
 
 - `fontes_consultadas` continua aditivo e experimental (`docs/CONTRATO.md`).
 - Com a guarda única, a mesma chave não é tentada duas vezes na semente nem quando aparece em contextos ou listas diferentes.
+
+## Emenda FIX9 (auditoria final, rodada 5: F-06, F-08, F-11, F-13)
+
+A rodada 5 achou variantes das mesmas classes; a emenda troca os remendos por mecanismos únicos.
+
+- **Progresso (F-06, F-13).** Regra 1 vale por `_EstadoChamada` único por chamada lógica, inclusive no controlador
+  externo de prazo, na validação/resolução dos saltos e na leitura de desafio (ver emenda FIX9 da 0045). Deixa de haver
+  evento por salto que se limpa.
+- **Identidade efetiva (F-08, F-11).** A regra 2 deixa de ser por papel (`principal`, `alterador`): em
+  `connector_fetch`, sob `SementeSync`, a guarda de execução (`connectors/guarda.py`) deduplica por método + URL
+  normalizada + corpo e guarda o primeiro desfecho (resposta capturada ou `Unavailable`) para todo caminho que
+  chama conector. Respostas bem-sucedidas ficam num LRU de 64 MiB (uma resposta expulsa pode ser pedida de novo);
+  falhas ficam todas; requisições com `session` ou `sink` não entram no cache de desfechos. `_tentar_uma_vez`
+  continua como guarda por chave de checkpoint.
+- **Bloqueio por fonte.** Depois de `Unavailable` com categoria `ambiental_desafio` ou `recusa_identificado`, nenhuma
+  nova requisição ao host na execução; as seguintes recebem a mesma categoria, sem rede, com
+  `evidencia.bloqueio_fonte`, e os itens restantes ficam pendentes com ela. `fonte_fora` e `resposta_inesperada` não
+  bloqueiam. Tem efeito só dentro da guarda (a semente); consultas do usuário não são afetadas.
+- **CVM Colegiado.** Todos os itens de uma ata reutilizam a mesma captura (um GET); cada um seleciona a sua decisão.
+  A captura de jurisprudência da semente usa `propagar_indisponibilidade=True`, de modo que `Unavailable` do indexador
+  sobe e é registrado com sua categoria em vez de virar `sem_evidencia_capturada`.
