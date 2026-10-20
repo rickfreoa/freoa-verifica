@@ -98,3 +98,19 @@ A rodada 5 achou variantes das mesmas classes; a emenda troca os remendos por me
   fragmento, host e prefixo sobre o caminho decodificado) e levanta o mesmo `Unavailable` que a chamada receberia sem
   cache. Recusa de entrada não gera pedido nem bloqueia a fonte. A revalidação da cadeia guardada (FIX11) continua.
   Regra de equivalência: para toda URL, o resultado com cache é o resultado sem cache, exceto pelo número de pedidos.
+
+## Emenda FIX13 (auditoria final, rodada 9: F-13, F-16)
+
+- **Extensões de chunk (F-13).** `chunk-ext` segue a RFC 9112 §7.1.1: `*( BWS ";" BWS token [ BWS "=" BWS ( token / quoted-string ) ] )`,
+  com `quoted-string` da RFC 9110 §5.6.4 (qdtext e quoted-pair; sem CTL exceto HTAB) e `chunk-size = 1*HEXDIG` (até 16
+  dígitos). Vale também para a `last-chunk`. Violação (`5;\x00`, `5;x="aberta`, `5;=x`, `5;x=`, `0x5`, `5\t`) é
+  `RespostaInvalida` em qualquer status, sem repetição. Espaço antes de `;` (`5 ;x`) é BWS e é válido. A correspondência
+  produção a produção de toda a gramática do FIX11/FIX12 está na tabela do docstring de `_RespostaEstrita`; as
+  restrições (aceitar menos que a RFC) são HTTP/1.x apenas, obs-fold, 16 dígitos de tamanho, 100 linhas de trailer,
+  Content-Length único e um só `chunked`.
+- **Identidade do cache (F-16).** `identidade_requisicao` preserva a query EXATAMENTE como enviada (sem ordenar nem
+  decodificar parâmetros: `?a=1&a=2` e `?a=2&a=1` são requisições distintas). Esquema, host, porta e caminho seguem
+  normalizados. A identidade inclui método, corpo e os cabeçalhos definidos pelo chamador (nomes em minúsculas,
+  ordenados) e o modo de `User-Agent`; os cabeçalhos que o transporte injeta por padrão não entram, pois são os mesmos
+  em toda chamada. Regra de equivalência mantida: com cache = sem cache, exceto o número de pedidos. Custo aceito: o
+  cache deixa de unir variações de ordem de query que o servidor trataria como iguais.

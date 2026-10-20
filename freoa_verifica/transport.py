@@ -229,18 +229,55 @@ def _failure_http(response) -> HTTPMetadata | None:
         return None
 
 
-_LINHA_CHUNK = re.compile(rb"[0-9A-Fa-f]{1,16}(?:;[^\r\n]*)?\r\n")
+_TCHAR = rb"[!#$%&'*+\-.^_`|~0-9A-Za-z]"
+_BWS = rb"[ \t]*"
+# quoted-string (RFC 9110 §5.6.4): DQUOTE *( qdtext / quoted-pair ) DQUOTE
+_QUOTED = rb'"(?:[\t \x21\x23-\x5b\x5d-\x7e\x80-\xff]|\\[\t \x21-\x7e\x80-\xff])*"'
+_CHUNK_EXT = (
+    rb"(?:" + _BWS + rb";" + _BWS + _TCHAR + rb"+(?:" + _BWS + rb"=" + _BWS
+    + rb"(?:" + _TCHAR + rb"+|" + _QUOTED + rb"))?)*"
+)
+_LINHA_CHUNK = re.compile(rb"([0-9A-Fa-f]{1,16})" + _CHUNK_EXT + rb"\r\n")
 _MAX_LINHA_CHUNK = 65536
 
 
 class _RespostaEstrita(http.client.HTTPResponse):
-    """HTTPResponse que não tolera framing chunked malformado (FIX11/F-13).
+    r"""HTTPResponse que não tolera framing chunked malformado (FIX11/F-13).
 
     O `http.client` descarta sem conferir os 2 bytes depois dos dados de um chunk, aceita tamanho com
     sinal, sublinhado ou espaço (`int(x, 16)`) e dá o fim do corpo por bom sem o CRLF final. Aqui o
     tamanho é `HEXDIG+` com extensão opcional, o fim de chunk é exatamente CRLF e o corpo termina em
     `0 CRLF [trailer] CRLF`; qualquer outra coisa é `HTTPException`/`IncompleteRead`, que o transporte
     classifica como `RespostaInvalida` (resposta já iniciada), nunca repetível.
+
+    Correspondência produção a produção com a RFC 9112 (FIX13/F-13). Restrição = aceita menos que a RFC.
+
+    | Produção da RFC                                   | Implementação                                   | Relação   |
+    |---------------------------------------------------|-------------------------------------------------|-----------|
+    | HTTP-version = "HTTP" "/" DIGIT "." DIGIT (§2.3)  | `_LINHA_STATUS`: `HTTP/1.[01]`                  | restrição |
+    | status-line = version SP status-code SP [reason]  | `_LINHA_STATUS`: SP, 3DIGIT, SP, reason*        | igual     |
+    | reason-phrase = 1*(HTAB/SP/VCHAR/obs-text)        | `[\t \x21-\x7e\x80-\xff]*` (vazia, como errata) | igual     |
+    | field-line = field-name ":" OWS value OWS (§5)    | `_CAMPO`                                        | igual     |
+    | field-name = token (RFC 9110 §5.6.2)              | `_TCHAR+`                                       | igual     |
+    | field-value = *field-content; field-content =     | `_CAMPO`: field-vchar, miolo com SP/HTAB,       | igual     |
+    |   field-vchar [1*(SP/HTAB/field-vchar) field-vchar]| sem espaço nas pontas                          |           |
+    | obs-fold (§5.2)                                   | recusado (a RFC permite recusar na resposta)    | restrição |
+    | chunked-body = *chunk last-chunk trailer CRLF     | `_get_chunk_left` + `_ler_trailer`              | igual     |
+    | chunk = chunk-size [chunk-ext] CRLF data CRLF     | `_LINHA_CHUNK`; CRLF exato após os dados        | igual     |
+    | chunk-size = 1*HEXDIG                             | `[0-9A-Fa-f]{1,16}`                             | restrição |
+    | last-chunk = 1*"0" [chunk-ext] CRLF               | tamanho 0 pela mesma `_LINHA_CHUNK`             | igual     |
+    | chunk-ext = *(BWS ";" BWS name [BWS "=" BWS val]) | `_CHUNK_EXT`                                    | igual     |
+    | chunk-ext-name = token                            | `_TCHAR+`                                       | igual     |
+    | chunk-ext-val = token / quoted-string             | `_TCHAR+` / `_QUOTED`                           | igual     |
+    | quoted-string, qdtext, quoted-pair (RFC 9110      | `_QUOTED`: qdtext = HTAB/SP/%x21/%x23-5B/       | igual     |
+    |   §5.6.4)                                         | %x5D-7E/obs-text; pair = "\" (HTAB/SP/VCHAR/    |           |
+    |                                                   | obs-text); CTL e LF/CR recusados                |           |
+    | trailer-section = *(field-line CRLF)              | `_CAMPO`; no máximo 100 linhas                  | restrição |
+    | BWS = OWS = *(SP / HTAB)                          | `[ \t]*`                                        | igual     |
+    | Content-Length = 1*DIGIT                          | `[0-9]+`, até 20 dígitos, valor único           | restrição |
+    | Transfer-Encoding = #transfer-coding              | um único `chunked`                              | restrição |
+
+    Nota: BWS antes de ";" é gramática válida (`5 ;x`); espaço depois do tamanho sem ";" (`5 `, `5\t`) não é.
     """
 
     def _get_chunk_left(self):
@@ -252,10 +289,11 @@ class _RespostaEstrita(http.client.HTTPResponse):
             linha = self.fp.readline(_MAX_LINHA_CHUNK + 1)
             if len(linha) > _MAX_LINHA_CHUNK:
                 raise http.client.LineTooLong("chunk size")
-            if _LINHA_CHUNK.fullmatch(linha) is None:
+            m = _LINHA_CHUNK.fullmatch(linha)
+            if m is None:
                 self._close_conn()
-                raise http.client.HTTPException("Tamanho de chunk inválido")
-            chunk_left = int(linha.split(b";", 1)[0], 16)
+                raise http.client.HTTPException("Tamanho ou extensão de chunk inválido")
+            chunk_left = int(m.group(1), 16)
             if chunk_left == 0:
                 self._ler_trailer()
                 self._close_conn()
@@ -279,7 +317,6 @@ class _RespostaEstrita(http.client.HTTPResponse):
         raise http.client.HTTPException("Trailer excessivo")
 
 
-_TCHAR = rb"[!#$%&'*+\-.^_`|~0-9A-Za-z]"
 _CAMPO = re.compile(
     _TCHAR + rb"+:[ \t]*(?:[\x21-\x7e\x80-\xff](?:[ \t\x21-\x7e\x80-\xff]*[\x21-\x7e\x80-\xff])?)?[ \t]*"
 )
@@ -423,12 +460,16 @@ def _percent_canonico(texto: str) -> str:
     return _PERCENT.sub(troca, texto)
 
 
-def identidade_requisicao(metodo: str, url: str, corpo: bytes | None = None) -> tuple:
+def identidade_requisicao(
+    metodo: str, url: str, corpo: bytes | None = None, cabecalhos: dict[str, str] | None = None,
+) -> tuple:
     """Identidade efetiva de uma requisição, pela mesma canonicalização que valida o destino.
 
     Esquema minúsculo, host IDNA minúsculo sem ponto final, porta padrão removida, caminho com
-    percent-encoding canônico, query ordenada, fragmento descartado. Cache e bloqueio da guarda de
-    execução usam só esta função.
+    percent-encoding canônico, fragmento descartado. A query vai EXATAMENTE como enviada (a ordem e a
+    codificação dos parâmetros são do servidor, não do cliente; FIX13/F-16). Entram também o método, o
+    corpo e os cabeçalhos definidos pelo chamador (nomes em minúsculas, ordenados): o servidor pode
+    variar a representação por eles. Cache e bloqueio da guarda de execução usam só esta função.
     """
     parsed = urlsplit(url)
     esquema = parsed.scheme.lower()
@@ -441,8 +482,8 @@ def identidade_requisicao(metodo: str, url: str, corpo: bytes | None = None) -> 
     host = _host_canonico(parsed)
     if porta is not None:
         host = f"{host}:{porta}"
-    query = "&".join(sorted(_percent_canonico(parsed.query).split("&"))) if parsed.query else ""
-    return (metodo.upper(), esquema, host, _percent_canonico(parsed.path) or "/", query, corpo or b"")
+    campos = tuple(sorted((str(n).strip().lower(), str(v)) for n, v in (cabecalhos or {}).items()))
+    return (metodo.upper(), esquema, host, _percent_canonico(parsed.path) or "/", parsed.query, corpo or b"", campos)
 
 
 def _origin(url: str) -> tuple[str, str, int]:
