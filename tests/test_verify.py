@@ -43,6 +43,8 @@ def env(tmp_path, monkeypatch):
         fetched_at=entry.get("capturado_em"),
         work_date=WORK_DATE_LSA,
         label="Lei nº 6.404/1976",
+        # cp1252 sem declaração nos bytes; a indexação exige a decisão de interpretação (0066).
+        content_type="text/html; charset=windows-1252",
     )
     resolver.add(rw_lsa)
 

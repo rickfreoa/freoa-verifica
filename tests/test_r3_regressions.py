@@ -42,9 +42,11 @@ def test_estabilidade_fixture_normativa(fixture, tmp_path, monkeypatch):
     assert actual_key is not None
     actual_date = actual_date or f"{actual_key.year:04}-01-01"
     with Verifica(tmp_path) as svc:
+        # Planalto: cp1252 sem declaração nos bytes; a indexação exige a decisão de interpretação (0066).
+        ctype = None if fixture.endswith("docx") or fixture.startswith("bcb") else "text/html; charset=windows-1252"
         rw = svc.indexar_obra(source_id="planalto", work_key=actual_key,
                              document=document, body=body, url="https://www.planalto.gov.br/fixture",
-                             work_date=actual_date)
+                             work_date=actual_date, content_type=ctype)
         # Caminhos de todas as recusas + primeiros/últimos dispositivos.
         paths = list(dict.fromkeys([p.path for p in document.provisions[:2] + document.provisions[-2:]] +
                                   document.ambiguous_paths + [i.path for i in document.issues if i.path]))

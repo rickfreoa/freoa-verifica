@@ -72,11 +72,15 @@ def _como_legado(svc, capture_id: str) -> None:
 
 
 def _indexar_planalto(svc, numero: int, corpo: bytes, texto: str):
-    """`texto` é o que a versão que capturou leu: dele vem o modelo persistido (o anterior, na conferência)."""
+    """`texto` é o que a versão que capturou leu: dele vem o modelo persistido (o anterior, na conferência).
+
+    Indexa com o Content-Type que a 1.2.0 recebeu (a indexação atual exige decisão, F-26) e depois rebaixa o recibo.
+    """
     url = f"https://www.planalto.gov.br/ccivil_03/leis/l{numero}.htm"
     rw = svc.indexar_obra(source_id="planalto", work_key=WorkKey("federal", "lei", str(numero), 2000),
                           document=parse_planalto(texto, base_url=url), body=corpo, url=url,
-                          fetched_at="2026-10-21T00:00:00+00:00", label=f"Lei {numero}/2000")
+                          fetched_at="2026-10-21T00:00:00+00:00", label=f"Lei {numero}/2000",
+                          content_type="text/html; charset=windows-1252")
     _como_legado(svc, rw.capture_id)
     return rw
 

@@ -830,13 +830,10 @@ class Verifica:
                     conferencia = json.dumps({'modelo_anterior_sha256': anterior, 'modelo_novo_sha256': novo})
                 key = WorkKey(work['authority'],work['kind'],work['number'],work['year'])
                 validate_identity(key,doc,row['work_date'])
-                repo.persist_parsed_document(self.conn,capture_id=row['id'],document=doc,work_id=work['id'],work_date=row['work_date'],amending_act_texts=json.loads(row['amending_texts_json'] or '{}'))
-                if row['content_type'] is None and row['origem_da_codificacao'] is None:
-                    # Recibo (imutável) sem decisão: o derivado registra a desta releitura (0065).
-                    with self.conn:
-                        self.conn.execute('UPDATE parsed_document SET interpretacao_codificacao=?, '
-                                          'interpretacao_origem=?, interpretacao_conferencia=? WHERE capture_id=?',
-                                          (decisao[1], decisao[2], conferencia, row['id']))
+                # Recibo (imutável) sem decisão: o derivado registra a desta releitura, com o modelo (0065, 0066).
+                legada = ((decisao[1], decisao[2], conferencia)
+                          if row['content_type'] is None and row['origem_da_codificacao'] is None else None)
+                repo.persist_parsed_document(self.conn,capture_id=row['id'],document=doc,work_id=work['id'],work_date=row['work_date'],amending_act_texts=json.loads(row['amending_texts_json'] or '{}'),interpretacao=legada)
                 counts['reprocessados'] += 1
                 fonte[{ORIGEM_LEGADO: 'reprocessadas_legadas', ORIGEM_LEGADO_CONFERIDO: 'reprocessadas_legadas_conferidas'}
                       .get(decisao[2], 'reprocessadas_atuais')] += 1
@@ -876,7 +873,7 @@ class Verifica:
             if padrao is not None:
                 response = replace(response, interpretacao_legada=padrao)
                 decisao = (None, padrao.codificacao, padrao.origem)
-        if decisao == (None, None, None):
+        if not repo.decisao_registrada(decisao[1], decisao[2]):  # Content-Type sem decisão não basta (F-26)
             raise _InterpretacaoIndisponivel('interpretacao_indisponivel')
         if recibo[0] is not None or recibo[2] is not None:
             divergente = decisao != recibo
