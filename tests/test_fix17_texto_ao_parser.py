@@ -50,10 +50,22 @@ def test_planalto_meta_vale_quando_o_cabecalho_nao_declara():
     assert "Ação" in " ".join(r.text for p in doc.provisions for r in p.redactions)
 
 
+def test_planalto_captura_relida_sem_content_type_usa_a_escada_declarada():
+    """Sem Content-Type o Response não veio do transporte: captura relida (cp1252 sem meta, como a real da LSA)."""
+    corpo = PLANALTO.replace(META_LATIN1, "").encode("cp1252")
+    doc = PlanaltoConnector().parse(_resposta("https://www.planalto.gov.br/ccivil_03/leis/l1.htm", corpo, ""))
+    assert "Ação" in " ".join(r.text for p in doc.provisions for r in p.redactions)
+    assert "ENCODING_FALLBACK" in {i.code for i in doc.issues}
+
+
 def test_filho_com_texto_nao_redetecta_charset():
     """`--texto`: o subprocesso recebe o texto decidido; o `<meta>` dentro dele não é reaplicado."""
-    doc = parse_isolated("planalto", PLANALTO, 60.0, base_url="https://www.planalto.gov.br/ccivil_03/leis/l1.htm")
+    base = "https://www.planalto.gov.br/ccivil_03/leis/l1.htm"
+    doc = parse_isolated("planalto", PLANALTO, 60.0, base_url=base)
     assert "Ação" in " ".join(r.text for p in doc.provisions for r in p.redactions)
+    # Caminho anterior (bytes ao filho, sem Content-Type): o <meta> reinterpretava — é o que o teste acima exclui.
+    legado = parse_isolated("planalto", PLANALTO.encode("utf-8"), 60.0, base_url=base)
+    assert "AÃ§Ã£o" in " ".join(r.text for p in legado.provisions for r in p.redactions)
 
 
 def test_cvm_colegiado_parse_com_meta_divergente():

@@ -407,7 +407,9 @@ def _desafio_na_resposta(response) -> str | None:
     # Charset/BOM do Content-Type valem como no sucesso (decisão 0061); ilegível é RespostaInvalida, não "sem marcador".
     try:
         found = detect_challenge(
-            status=response.status, headers=headers, body=bytes(amostra), parcial=len(amostra) >= _AMOSTRA_DESAFIO
+            status=response.status, headers=headers, body=bytes(amostra), parcial=len(amostra) >= _AMOSTRA_DESAFIO,
+            # Todas as linhas de Content-Type (getheader as junta): duplicado é ambíguo, não "vale a última" (FIX17).
+            content_type=response.getheader("Content-Type") or None,
         )
     except RespostaInvalida as exc:
         raise RespostaInvalida(str(exc), http=_failure_http(response)) from exc

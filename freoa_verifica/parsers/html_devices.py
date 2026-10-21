@@ -859,6 +859,8 @@ def parse_html_devices(
         return "", None, "", [], early_issues, [], []
 
     html_text = _ORDINAL_SUP.sub(r"\1o", html_text)
+    # lxml recusa str com `<?xml encoding?>`; a codificação já foi decidida antes (FIX17, como `arvore_html`).
+    html_text = re.sub(r"^﻿?\s*<\?xml[^>]*\?>", "", html_text)
     # HTMLParser: huge_tree/no_network (resolve_entities só existe no XMLParser).
     parser = etree.HTMLParser(huge_tree=False, no_network=True, recover=True)
     root = lhtml.fromstring(html_text, parser=parser)

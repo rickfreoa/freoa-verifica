@@ -29,13 +29,14 @@ from freoa_verifica.citation import Citation, extract, parse_one
 from freoa_verifica.contrato import CONTRATO_VERSAO
 from freoa_verifica.courts import normalize_court
 from freoa_verifica.search import buscar_and_or, consulta_fts, normalize_fts_query
-from freoa_verifica.connectors.guarda import GuardaExecucao
+from freoa_verifica.connectors.guarda import BLOQUEIAM_A_FONTE, GuardaExecucao, da_chamada
 from freoa_verifica.connectors.base import (
     Candidate,
     ParsedDecision,
     Unavailable,
     get_connector,
     registry,
+    sob_guarda,
 )
 from freoa_verifica.identity import IdentityMismatch, validate_identity, requested_date, declared_identity
 from freoa_verifica.ids import new_ulid
@@ -79,6 +80,8 @@ _ESPERA_CLOSE = 30.0
 from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E402,F401
 
 _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
+# Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
+_INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
 _JANELA_REORDENACAO = 50  # só os 50 primeiros candidatos são reordenados; além deles vale a ordem bm25
 _SIGLAS_TRIBUNAL_FILTRO = frozenset({"STJ", "STF", "TCU", "TJDFT", "TJSP", "CVM"})
 _JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "tjdft", "cvm_colegiado")
@@ -1105,6 +1108,7 @@ class Verifica:
     def _index_candidate_legis(self, connector, cand: Candidate) -> dict[str, Any]:
         capture_id = None
         failure = None
+        classificacao: dict[str, Any] = {}
         path = None
         trecho = cand.snippet or ""
         try:
@@ -1146,10 +1150,15 @@ class Verifica:
                 if parsed.provisions:
                     path = parsed.provisions[0].path
                     trecho = parsed.provisions[0].redactions[0].text if parsed.provisions[0].redactions else trecho
+        except Unavailable as exc:
+            if exc.categoria in _INTERROMPEM_A_FONTE:
+                raise  # desafio, recusa ou fonte fora: o controlador interrompe a fonte e declara (FIX17/F-23)
+            failure, classificacao = exc.reason, exc.classificacao()  # falha do item, com categoria e evidência
         except Exception as exc:  # noqa: BLE001
             failure = getattr(exc, "reason", str(exc)) or type(exc).__name__
         text, trunc = _truncate(trecho, 280)
         return {
+            **classificacao,
             "obra": cand.title,
             "caminho": path,
             "rotulo": cand.title,
@@ -2310,7 +2319,7 @@ class Verifica:
     def _juris_textual(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
         # Guarda por pesquisa: candidatos da mesma URL (ata) usam uma única captura, e fonte que desafiou
         # ou recusou não é consultada de novo na mesma pesquisa (FIX10/F-14).
-        with GuardaExecucao().ativar():
+        with da_chamada():
             return self._juris_textual_corpo(q, tribunais, desde, ate, autoridade_min, limite, cursor)
 
     def _juris_textual_corpo(self, q, tribunais, desde, ate, autoridade_min, limite, cursor) -> dict[str, Any]:
@@ -2811,6 +2820,7 @@ class Verifica:
             cands = _com_prazo(prazo, connector.search, q, **filtros)
         except Unavailable as exc:
             return {"status": "indisponivel", "motivo": exc.reason, "reason_code": exc.reason, "itens": [],
+                    "fonte": {"status": "unavailable", "motivo": exc.reason, **exc.classificacao()},
                     **exc.classificacao()}
         except Exception as exc:  # noqa: BLE001
             motivo = f"{type(exc).__name__}:{exc}"[:200]
@@ -2818,16 +2828,24 @@ class Verifica:
         itens = []
         falhas = []
         nao_indexados = 0
+        interrompida: Unavailable | None = None
         for n, c in enumerate(cands):
-            if n >= max_indexar or time.monotonic() >= prazo:  # decisão 0024: parcial declarada
+            if interrompida is not None or n >= max_indexar or time.monotonic() >= prazo:  # 0024: parcial declarada
                 nao_indexados += 1
                 itens.append({"titulo": c.title, "chave": c.key, "url": c.url, "trecho": c.snippet or "",
-                              "capture_id": None, "metadados": c.metadata, "nao_indexado": True})
+                              "capture_id": None, "metadados": c.metadata, "nao_indexado": True,
+                              **({"motivo": interrompida.reason} if interrompida else {})})
                 continue
             try:
                 item = _com_prazo(prazo, self._index_candidate_legis, connector, c)
-            except Unavailable:  # abandonada: nada parcial é confirmado (CANCELADO)
-                item = {"capture_id": None, "motivo": "orcamento"}
+            except Unavailable as exc:
+                if exc.reason != "orcamento":
+                    # Desafio, recusa ou fonte fora: nenhum pedido a mais à fonte, falha declarada (FIX17/F-23).
+                    interrompida = exc
+                    falhas.append({"chave": c.key, "url": c.url, "status": "unavailable", "motivo": exc.reason,
+                                   **exc.classificacao()})
+                    continue
+                item = {"capture_id": None, "motivo": "orcamento"}  # abandonada: nada parcial é confirmado
             if not item.get("capture_id") and time.monotonic() >= prazo:  # orçamento estourou no item
                 nao_indexados += 1
                 itens.append({"titulo": c.title, "chave": c.key, "url": c.url, "trecho": c.snippet or "",
@@ -2836,7 +2854,8 @@ class Verifica:
                 continue
             if not item.get("capture_id"):
                 falhas.append({"chave": c.key, "url": c.url, "status": "unavailable",
-                               "motivo": item.get("motivo") or "captura_indisponivel"})
+                               "motivo": item.get("motivo") or "captura_indisponivel",
+                               **{k: item[k] for k in ("categoria", "evidencia_indisponibilidade") if k in item}})
                 continue
             itens.append({
                 "titulo": c.title,
@@ -2850,9 +2869,12 @@ class Verifica:
         truncado = bool(getattr(cands, "truncado", False))  # A9
         if (nao_indexados or truncado) and status == "ok":  # decisão 0024
             status = "parcial"
+        fonte = ({"status": "unavailable", "motivo": interrompida.reason, **interrompida.classificacao()}
+                 if interrompida else {"status": "ok", "motivo": None})
         return {"status": status, "itens": itens, "total": getattr(cands, "total", len(cands)),
                 "falhas": falhas, "indexados": len(itens) - nao_indexados, "nao_indexados": nao_indexados,
-                "truncado": truncado}
+                "truncado": truncado, "fonte": fonte,
+                **({"motivo": interrompida.reason, **interrompida.classificacao()} if interrompida else {})}
 
     # ------------------------------------------------------------------
     # Evidência / fontes / sync
@@ -2889,13 +2911,20 @@ class Verifica:
                     "size": cap.get("size"),
                 },
             }
+        from freoa_verifica.texto_resposta import texto_da_resposta
+        from freoa_verifica.transport import RespostaInvalida
+
         text = ""
-        for enc in ("utf-8", "latin-1"):
-            try:
-                text = body.decode(enc)
-                break
-            except UnicodeDecodeError:
-                continue
+        try:  # mesma interpretação da captura, pelo Content-Type do recibo (0063); exibição nunca falha
+            ctype = (json.loads(cap.get("headers_json") or "{}") or {}).get("content-type") or cap.get("mime")
+            text = texto_da_resposta(body, ctype)
+        except (RespostaInvalida, ValueError, AttributeError):
+            for enc in ("utf-8", "latin-1"):
+                try:
+                    text = body.decode(enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
         if not text:
             text = f"[binário {cap.get('mime') or 'application/octet-stream'}; {len(body)} bytes]"
         slice_ = text[offset : offset + max_chars]
@@ -3012,7 +3041,13 @@ class Verifica:
                         kwargs["quantidade"] = min(100, max_itens)
                         kwargs["max_pages"] = max(1, (max_itens + 99) // 100)
                     result = conn_obj.sync(**kwargs)
-                    relatorio.append({"fonte": cid, "status": "ok", "resultado": str(result)[:200]})
+                    # Com estado de sincronização (semente anterior na mesma instância), a falha por recurso fica
+                    # em last_failures: a fonte não é declarada "ok" por silêncio (FIX17/F-23).
+                    falhas = list(getattr(conn_obj, "last_failures", None) or [])
+                    relatorio.append({"fonte": cid, "status": "parcial" if falhas else "ok",
+                                      "resultado": str(result)[:200],
+                                      **({"falhas": [{"chave": k, "motivo": m} for k, m in falhas[:20]]}
+                                         if falhas else {})})
                 else:
                     # busca índice leve
                     cands = conn_obj.search(desde or "lei",)
@@ -3197,7 +3232,9 @@ def _guardar(fn):
         externa = not getattr(self._local, "prof", 0)
         token = _politica_atual.set(self.registro)
         try:
-            with self._operacao(caro):
+            # Guarda da chamada (FIX17/F-23): toda operação pública, inclusive as que a CLI, o MCP e o REST expõem,
+            # tem identidade efetiva e bloqueio por host; aninhadas compartilham a da chamada externa.
+            with self._operacao(caro), da_chamada():
                 if fn.__name__ in _DEPENDENTES and not _derivados.compativel(self.conn):
                     return _derivados.indisponivel(self.acervo_status())
                 out = fn(self, *args, **kwargs)
@@ -3220,3 +3257,7 @@ _DEPENDENTES = frozenset({
 
 for _nome in _CONTADAS:
     setattr(Verifica, _nome, _guardar(getattr(Verifica, _nome)))
+
+# Fora da fachada contada, mas podem chegar à rede: só a guarda da chamada (FIX17/F-23).
+for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install"):
+    setattr(Verifica, _nome, sob_guarda(getattr(Verifica, _nome)))

@@ -64,11 +64,19 @@ def detect_challenge(
     if text:
         if status in (None, 200) and expected_content and re.search(expected_content, text, re.I):
             return None
-        kind = _kind_from_text(text)
+        kind = _kind_from_text(text) or _kind_nos_bytes(body)
         if kind:
             return ChallengeDetected(kind)
 
     return None
+
+
+def _kind_nos_bytes(body: bytes | str | None) -> str | None:
+    """Marcador ASCII nos próprios bytes (FIX17): rótulo ou BOM UTF-16/32 não esconde "CAPTCHA" escrito em ASCII.
+
+    Só acrescenta detecção: em codificação compatível com ASCII a vista latin-1 traz os mesmos marcadores do texto.
+    """
+    return _kind_from_text(body.decode("latin-1")) if isinstance(body, (bytes, bytearray)) and body else None
 
 
 def raise_if_challenge(
@@ -96,13 +104,17 @@ def _evidencia(status, headers, body, url, content_type=None) -> dict:
         text = texto_da_resposta(body, content_type or cab.get("content-type"))
     except RespostaInvalida:
         text = ""
-    if text:
-        lower = normalizar_para_busca(_sem_biblioteca_lateral(text))
+    vistas = [text] if text else []
+    if isinstance(body, (bytes, bytearray)) and body:
+        vistas.append(body.decode("latin-1"))  # mesma vista de `_kind_nos_bytes`
+    for vista in vistas:
+        lower = normalizar_para_busca(_sem_biblioteca_lateral(vista))
         marcador = next((m for m, _ in _BODY_MARKERS if m in lower), None)
         if marcador is None and "/tspd/" in lower:
             marcador = "/tspd/"
         if marcador:
             ev["marcador"] = marcador
+            break
     raw = body.encode("utf-8") if isinstance(body, str) else body
     if raw:
         ev["sha256"] = hashlib.sha256(raw).hexdigest()

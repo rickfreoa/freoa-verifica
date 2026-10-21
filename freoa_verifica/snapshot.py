@@ -798,6 +798,7 @@ def _download_latest_release(*, staging_dir: str | Path | None = None, vinculo: 
 def _download_release(url: str, *, staging_dir: str | Path | None = None,
                       aceitar_nao_vinculado: bool = False, vinculo: dict | None = None) -> Path:
     from freoa_verifica.connectors.httputil import connector_fetch
+    from freoa_verifica.texto_resposta import texto_do_response
 
     parsed = urlparse(url)
     host = parsed.hostname or ""
@@ -812,10 +813,10 @@ def _download_release(url: str, *, staging_dir: str | Path | None = None,
             user_agent="identified", timeout=1800.0,
             max_bytes=4 * 1024**3, sink=raw,
         )
-        checksum = connector_fetch(
+        checksum = texto_do_response(connector_fetch(
             url + ".sha256", hosts=GITHUB_HOSTS, path_prefixes=GITHUB_PREFIXES,
             mimes=GITHUB_MIMES, user_agent="identified", timeout=60, max_bytes=4096,
-        ).body.decode("utf-8").split()
+        )).split()
         if not checksum or not re.fullmatch(r"[0-9a-fA-F]{64}", checksum[0]) or checksum[0].lower() != resp.sha256:
             raise ValueError("asset_integridade")
         binding = _vincular(_sha256_file(raw), aceitar_nao_vinculado)

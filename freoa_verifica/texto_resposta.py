@@ -439,7 +439,8 @@ def codec_html_declarado(corpo: bytes) -> str | None:
 
 def texto_do_response(resp, *, parcial: bool = False) -> str:
     """Texto do corpo de um `Response`, com o Content-Type cru que o transporte guardou."""
-    return texto_da_resposta(resp.body, resp.content_type or resp.headers.get("content-type"), parcial=parcial)
+    ctype = getattr(resp, "content_type", "") or (getattr(resp, "headers", None) or {}).get("content-type")
+    return texto_da_resposta(resp.body, ctype, parcial=parcial)
 
 
 def arvore_html(corpo: bytes | str, content_type: str | None = None):

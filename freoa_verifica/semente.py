@@ -18,7 +18,7 @@ from typing import Any, Callable
 from freoa_verifica.aliases import WorkKey
 from freoa_verifica.citation import _MONTHS
 from freoa_verifica.connectors.base import Unavailable
-from freoa_verifica.connectors.guarda import GuardaExecucao
+from freoa_verifica.connectors.guarda import da_chamada
 from freoa_verifica.connectors.stf import SUMULA_BASES
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.parsers.model import ParsedDocument
@@ -157,11 +157,14 @@ def parse_act_ref(ref: str) -> tuple[str, str, int | None] | None:
 
 
 def _com_guarda(metodo):
-    """Executa o método sob a guarda de execução da semente (requisição efetiva única, bloqueio por fonte)."""
+    """Executa o método sob a guarda da execução (requisição efetiva única, bloqueio por fonte).
+
+    A guarda é a da chamada externa (`run`, ou o método chamado diretamente): renovada a cada execução,
+    compartilhada só pelas chamadas aninhadas (FIX17/F-15)."""
 
     @functools.wraps(metodo)
     def interno(self, *args, **kwargs):
-        with self._guarda.ativar():
+        with da_chamada():
             return metodo(self, *args, **kwargs)
 
     return interno
@@ -192,7 +195,6 @@ class SementeSync:
         self._failed: dict[tuple[str, str], str] = {}  # falhou nesta execução: nunca retentada nela
         self._tentadas: dict[tuple[str, str], tuple[bool, Any]] = {}  # desfecho por chave de requisição, por execução
         self._pendentes_iniciais: set[str] | None = None
-        self._guarda = GuardaExecucao()  # identidade efetiva da requisição e bloqueio por fonte
 
     def _stats(self, fonte: str) -> FonteStats:
         fonte = fonte.removesuffix("_doc")
