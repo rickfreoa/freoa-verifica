@@ -73,6 +73,8 @@ SNAPSHOT_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "id", "source_id", "edition_id", "url", "final_url", "fetched_at",
         "status", "headers_json", "redirects_json", "sha256", "mime",
         "size", "outcome",
+        # FIX18/F-22 (0064): a releitura reproduz a interpretação original; snapshot anterior à 014 não as tem.
+        "content_type", "codificacao", "origem_da_codificacao",
     ),
     "extract": (
         "id", "capture_id", "parser_version", "text_sha256", "quality",
@@ -606,6 +608,8 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
         substituir = (snap_dv or 0) > (local_dv or 0)
         substituidas: list[str] = []
         for table, columns in SNAPSHOT_TABLE_COLUMNS.items():
+            no_snap = {r[1] for r in conn.execute(f"PRAGMA snap.table_info({table})")}
+            columns = tuple(c for c in columns if c in no_snap)  # snapshot anterior a uma migração aditiva
             fks = conn.execute(f"PRAGMA foreign_key_list({table})").fetchall()
             rows = conn.execute(f"SELECT {', '.join(columns)} FROM snap.{table}").fetchall()
             table_map = mappings.setdefault(table, {})

@@ -82,6 +82,12 @@ from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E4
 _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
 # Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
 _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
+
+
+class _InterpretacaoIndisponivel(Exception):
+    """Captura sem os dados que reproduzem a interpretação original do corpo (F-22, decisão 0064)."""
+
+
 _JANELA_REORDENACAO = 50  # só os 50 primeiros candidatos são reordenados; além deles vale a ordem bm25
 _SIGLAS_TRIBUNAL_FILTRO = frozenset({"STJ", "STF", "TCU", "TJDFT", "TJSP", "CVM"})
 _JURIS_CONNECTORS = ("stj", "stf", "tcu", "tjsp", "tjdft", "cvm_colegiado")
@@ -591,6 +597,7 @@ class Verifica:
         work_date: str | None = None,
         label: str | None = None,
         fts_alvo: str = "fts_redaction",
+        content_type: str | None = None,
     ) -> ResolvedWork:
         if cancelado():
             raise Unavailable("orcamento")
@@ -619,6 +626,7 @@ class Verifica:
             label=label,
             home=self.home,
             fts_alvo=fts_alvo,
+            content_type=content_type,
         )
         if cancelado():
             raise Unavailable("orcamento")
@@ -632,7 +640,7 @@ class Verifica:
                 amending_act_texts=rw.amending_act_texts,
                 candidato_ao_vivo=(True if fts_alvo == "fts_staging" else None),
             )
-        situacao.registrar_do_corpo(self.conn, rw, source_id, body)  # C2
+        situacao.registrar_do_corpo(self.conn, rw, source_id, body, content_type)  # C2
         if demovida:  # o modelo canônico anterior permanece
             canonica = self._rebuild_from_db(work_key, _exact=True)
             rw = canonica if isinstance(canonica, ResolvedWork) else rw
@@ -759,7 +767,6 @@ class Verifica:
 
     def reprocessar_capturas(self) -> dict:
         """Recalcula modelos derivados dos mesmos bytes, preservando recibos de captura."""
-        from freoa_verifica.transport import Response
         self.reparar_anos()
         rows = self.conn.execute("SELECT c.*, p.work_id, p.work_date, p.amending_texts_json FROM capture c JOIN parsed_document p ON p.capture_id=c.id WHERE p.model_json IS NOT NULL").fetchall()
         counts = {'reprocessados':0, 'divergentes':[], 'falhas':[]}
@@ -770,8 +777,11 @@ class Verifica:
             if not work or work['authority'].startswith('invalidated:'):
                 continue
             try:
-                body = blobs.get_blob(row['sha256'],home=self.home)
-                response = Response(row['url'],row['final_url'],row['status'],json.loads(row['headers_json']),body,row['sha256'],row['fetched_at'],[],row['mime'])
+                response = self._resposta_da_captura(row)
+            except Exception as exc:  # noqa: BLE001 — blob ausente ou interpretação indisponível: falha declarada
+                counts['falhas'].append({'capture_id': row['id'], 'motivo': str(exc)})
+                continue
+            try:
                 doc = self._get(row['source_id']).parse(response)
                 key = WorkKey(work['authority'],work['kind'],work['number'],work['year'])
                 validate_identity(key,doc,row['work_date'])
@@ -787,6 +797,28 @@ class Verifica:
             counts['divergentes'] += repo.aplicar_monotonia(self.conn)
         self._resolver = MemoryResolver()
         return counts
+
+    def _resposta_da_captura(self, row) -> "Response":
+        """`Response` relido do recibo com o Content-Type persistido, para a mesma função única (F-22, decisão 0064).
+
+        Captura anterior à 014 usa o `content-type` de `headers_json`; sem nenhum, ou com decisão persistida que a
+        função atual não reproduz, `_InterpretacaoIndisponivel`: nunca outra interpretação, em silêncio.
+        """
+        from freoa_verifica.transport import Response
+
+        headers = json.loads(row['headers_json'] or '{}')
+        persistido = row['content_type'] if 'content_type' in row.keys() else None
+        ctype = persistido or headers.get('content-type')
+        if not ctype:
+            raise _InterpretacaoIndisponivel('interpretacao_indisponivel')
+        body = blobs.get_blob(row['sha256'], home=self.home)
+        response = Response(row['url'], row['final_url'], row['status'], headers, body, row['sha256'],
+                            row['fetched_at'], [], row['mime'], content_type=ctype)
+        if persistido is not None:
+            decisao = (row['content_type'], row['codificacao'], row['origem_da_codificacao'])
+            if repo.interpretacao_do_recibo(response) != decisao:
+                raise _InterpretacaoIndisponivel('interpretacao_divergente')
+        return response
 
     def _identity_rows(self, invalidated=False):
         predicate = "LIKE" if invalidated else "NOT LIKE"
@@ -885,6 +917,7 @@ class Verifica:
                     work_key=work,
                     document=parsed,
                     body=resp.body,
+                    content_type=resp.content_type,
                     url=resp.final_url or resp.url,
                     fetched_at=resp.fetched_at,
                     label=label,
@@ -1139,6 +1172,7 @@ class Verifica:
                     work_key=wk,
                     document=parsed,
                     body=resp.body,
+                    content_type=resp.content_type,
                     url=resp.final_url or resp.url,
                     fetched_at=resp.fetched_at,
                     label=cand.title,
@@ -2911,20 +2945,13 @@ class Verifica:
                     "size": cap.get("size"),
                 },
             }
-        from freoa_verifica.texto_resposta import texto_da_resposta
-        from freoa_verifica.transport import RespostaInvalida
+        from freoa_verifica.texto_resposta import texto_para_exibicao
 
-        text = ""
-        try:  # mesma interpretação da captura, pelo Content-Type do recibo (0063); exibição nunca falha
-            ctype = (json.loads(cap.get("headers_json") or "{}") or {}).get("content-type") or cap.get("mime")
-            text = texto_da_resposta(body, ctype)
-        except (RespostaInvalida, ValueError, AttributeError):
-            for enc in ("utf-8", "latin-1"):
-                try:
-                    text = body.decode(enc)
-                    break
-                except UnicodeDecodeError:
-                    continue
+        try:  # mesma interpretação da captura, pelo Content-Type do recibo (0063, 0064); exibição nunca falha
+            ctype = cap.get("content_type") or (json.loads(cap.get("headers_json") or "{}") or {}).get("content-type")
+        except (ValueError, AttributeError):
+            ctype = None
+        text = texto_para_exibicao(body, ctype or cap.get("mime"))
         if not text:
             text = f"[binário {cap.get('mime') or 'application/octet-stream'}; {len(body)} bytes]"
         slice_ = text[offset : offset + max_chars]

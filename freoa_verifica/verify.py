@@ -709,10 +709,12 @@ def populate_from_parsed(
     label: str | None = None,
     home=None,
     fts_alvo: str = "fts_redaction",
+    content_type: str | None = None,
 ) -> ResolvedWork:
     """Persiste obra parseada no repositório e devolve ResolvedWork.
 
     `fts_alvo="fts_staging"`: candidato ao vivo (A7) é indexado direto no staging, nunca no canônico.
+    `content_type`: o cru da resposta que o parser leu; vai ao recibo para que a releitura o reproduza (F-22).
     """
     if fts_alvo not in ("fts_redaction", "fts_staging"):
         raise ValueError(f"fts_alvo inválido: {fts_alvo}")
@@ -747,6 +749,7 @@ def populate_from_parsed(
         fetched_at=fetched,
         redirects=[],
         mime="application/octet-stream",
+        content_type=content_type or "",
     )
     capture_id = store_repo.save_capture(conn, resp, source_id, home=home)
     with conn:

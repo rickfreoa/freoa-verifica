@@ -149,8 +149,12 @@ def planalto_offline(monkeypatch):
             if candidate.key != "LEI:6404:1976":
                 raise Unavailable("http_404")
             body = load_fixture("planalto_lei_6404_1976")
+            # shortcut: o servidor declarou só `text/html` (manifesto) e o corpo é cp1252 sem <meta>, que a função
+            # única recusa (0061: padrão UTF-8). O charset aqui é o que a escada antiga deduzia; serve a testes de
+            # outros comportamentos. A recusa da captura real é questão aberta da FIX18 (relatório).
             return Response(entry["url"], entry["url"], 200, {}, body, hashlib.sha256(body).hexdigest(),
-                            entry.get("capturado_em") or "2026-01-01T00:00:00+00:00", [], "text/html")
+                            entry.get("capturado_em") or "2026-01-01T00:00:00+00:00", [], "text/html",
+                            content_type="text/html; charset=windows-1252")
 
     original = Verifica._get
 
