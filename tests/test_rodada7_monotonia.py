@@ -30,7 +30,8 @@ def _idx(s, textos, quando, nome):
     corpo = _html(*textos)
     url = "https://example.invalid/" + nome
     return s.indexar_obra(source_id="planalto", work_key=KEY, document=parse_planalto(corpo, base_url=url),
-                          body=corpo, url=url, label="Lei 9.999/2000", fetched_at=quando)
+                          body=corpo, url=url, label="Lei 9.999/2000", fetched_at=quando,
+                          content_type="text/html; charset=utf-8")
 
 
 def _cands(s):

@@ -18,6 +18,25 @@ class IdentityConflict(Exception):
     """Identidade já existe com atributos incompatíveis."""
 
 
+def interpretacao_do_recibo(resp: Response) -> tuple[str | None, str | None, str | None]:
+    """(content_type cru, codec, origem) da interpretação única do corpo, para o recibo (FIX18/F-22, decisão 0064).
+
+    Sem Content-Type conhecido, tudo None (a releitura falha declarada). Corpo que a função única recusa guarda o
+    Content-Type e decisão None: a releitura chega à mesma recusa.
+    """
+    from freoa_verifica.texto_resposta import content_type_do_response, interpretar
+    from freoa_verifica.transport import RespostaInvalida
+
+    content_type = content_type_do_response(resp)
+    if content_type is None:
+        return None, None, None
+    try:
+        decisao = interpretar(resp.body, content_type)
+    except RespostaInvalida:
+        return content_type, None, None
+    return content_type, decisao.codificacao, decisao.origem
+
+
 def save_capture(
     conn: sqlite3.Connection,
     resp: Response,
@@ -32,13 +51,15 @@ def save_capture(
     if digest != resp.sha256:
         raise ValueError("sha256 da resposta diverge do corpo")
     size = len(resp.body)
+    content_type, codificacao, origem = interpretacao_do_recibo(resp)
     blobs.put_blob(resp.body, home=home or data_home())
     capture_id = new_ulid()
     conn.execute(
         "INSERT INTO capture("
         "id, source_id, edition_id, url, final_url, fetched_at, status, "
-        "headers_json, redirects_json, sha256, mime, size, outcome"
-        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "headers_json, redirects_json, sha256, mime, size, outcome, "
+        "content_type, codificacao, origem_da_codificacao"
+        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(sha256, url, fetched_at) DO NOTHING",
         (
             capture_id,
@@ -54,6 +75,9 @@ def save_capture(
             resp.mime,
             size,
             outcome,
+            content_type,
+            codificacao,
+            origem,
         ),
     )
     row = conn.execute(

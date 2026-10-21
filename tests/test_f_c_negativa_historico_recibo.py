@@ -34,7 +34,7 @@ def svc(tmp_path, monkeypatch):
 def _indexar(svc, doc):
     return svc.indexar_obra(source_id="planalto", work_key=KEY, document=doc, body=b"sintetico",
                             url="https://example.invalid/s", label=NORM,
-                            fetched_at=datetime.now(timezone.utc).isoformat())
+                            fetched_at=datetime.now(timezone.utc).isoformat(), content_type="text/html")
 
 
 def _nucleo(svc, citacao, **kw):

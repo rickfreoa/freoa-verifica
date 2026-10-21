@@ -21,7 +21,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch, form_body
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
-from freoa_verifica.texto_resposta import arvore_html, texto_da_resposta, texto_do_response
+from freoa_verifica.texto_resposta import arvore_html, corpo_binario, texto_da_resposta, texto_do_response
 from freoa_verifica.transport import Response, Session
 
 _HOST = "esaj.tjsp.jus.br"
@@ -214,8 +214,9 @@ class TjspConnector(Connector):
         )
 
     def parse(self, resp: Response) -> ParsedDecision:
-        if resp.body[:4] == b"%PDF":
-            text = _pdf_text(resp.body)
+        corpo = corpo_binario(resp)
+        if corpo[:4] == b"%PDF":
+            text = _pdf_text(corpo)
             return ParsedDecision(
                 profile="tjsp_pdf",
                 kind="acordao",
@@ -224,7 +225,7 @@ class TjspConnector(Connector):
                 text=text,
                 documents=[{"url": resp.final_url, "label": "inteiro_teor"}],
             )
-        text = _decode_html(resp.body, {"content-type": resp.content_type or resp.headers.get("content-type", "")})
+        text = texto_do_response(resp)
         return ParsedDecision(
             profile="tjsp_html",
             kind="acordao",

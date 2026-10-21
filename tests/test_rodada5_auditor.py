@@ -23,7 +23,7 @@ def _doc(*textos):
 def _indexar(s, doc, corpo, quando, alvo="fts_redaction", src="planalto"):
     return s.indexar_obra(source_id=src, work_key=KEY, document=doc, body=corpo,
                           url="https://example.invalid/s", label="Lei 9.999/2000",
-                          fetched_at=quando, fts_alvo=alvo)
+                          fetched_at=quando, fts_alvo=alvo, content_type="text/html; charset=utf-8")
 
 
 def test_a7_012_marca_por_documento_obra_com_canonica_e_candidata(tmp_path, monkeypatch):

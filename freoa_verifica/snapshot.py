@@ -73,6 +73,8 @@ SNAPSHOT_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "id", "source_id", "edition_id", "url", "final_url", "fetched_at",
         "status", "headers_json", "redirects_json", "sha256", "mime",
         "size", "outcome",
+        # FIX18/F-22 (0064): a releitura reproduz a interpretação original; snapshot anterior à 014 não as tem.
+        "content_type", "codificacao", "origem_da_codificacao",
     ),
     "extract": (
         "id", "capture_id", "parser_version", "text_sha256", "quality",
@@ -207,8 +209,10 @@ def _decompress_to(src: Path, dest: Path) -> None:
 
 def _restore_stj_ementas(conn: sqlite3.Connection, home: Path) -> None:
     """Recupera ementas antigas substituídas pelo dispositivo na extração."""
+    from freoa_verifica.texto_resposta import texto_da_resposta
+
     captures = conn.execute("""
-        SELECT DISTINCT c.id, c.sha256 FROM capture c
+        SELECT DISTINCT c.id, c.sha256, c.mime, c.headers_json, c.content_type FROM capture c
         JOIN decision_document dd ON dd.capture_id=c.id
         JOIN decision d ON d.id=dd.decision_id
         WHERE d.court='STJ' AND c.source_id='stj' AND c.mime LIKE '%json%'
@@ -219,7 +223,9 @@ def _restore_stj_ementas(conn: sqlite3.Connection, home: Path) -> None:
         except FileNotFoundError:
             # Snapshots declaradamente sem blobs conservam somente as extrações.
             continue
-        data = json.loads(raw)
+        # Interpretação única pelo recibo (F-22, 0064): Content-Type persistido, o do recibo legado ou o MIME gravado.
+        ctype = cap["content_type"] or json.loads(cap["headers_json"] or "{}").get("content-type") or cap["mime"]
+        data = json.loads(texto_da_resposta(raw, ctype))
         records = data if isinstance(data, list) else [data]
         by_key = {}
         for item in records:
@@ -606,6 +612,8 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
         substituir = (snap_dv or 0) > (local_dv or 0)
         substituidas: list[str] = []
         for table, columns in SNAPSHOT_TABLE_COLUMNS.items():
+            no_snap = {r[1] for r in conn.execute(f"PRAGMA snap.table_info({table})")}
+            columns = tuple(c for c in columns if c in no_snap)  # snapshot anterior a uma migração aditiva
             fks = conn.execute(f"PRAGMA foreign_key_list({table})").fetchall()
             rows = conn.execute(f"SELECT {', '.join(columns)} FROM snap.{table}").fetchall()
             table_map = mappings.setdefault(table, {})

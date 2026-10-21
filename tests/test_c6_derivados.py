@@ -48,11 +48,13 @@ def _carregar(svc, *, legado: bool):
             provs.append(p)
         doc = replace(doc, provisions=provs, parser_version="1.2.2")
     svc.indexar_obra(source_id="planalto", work_key=CF_KEY, document=doc, body=body, url=CF_URL,
-                     fetched_at="2026-10-18T00:00:00+00:00", work_date=None, label="Constituição Federal")
+                     fetched_at="2026-10-18T00:00:00+00:00", work_date=None, label="Constituição Federal",
+                     content_type="text/html; charset=utf-8")
     cvm = load_fixture("cvm_resol_080_consolid_docx")
     svc.indexar_obra(source_id="cvm_normas", work_key=CVM_KEY, document=parse_cvm_docx(cvm), body=cvm,
                      url=CVM_URL, fetched_at="2026-10-18T00:00:00+00:00", work_date="2022-03-29",
-                     label="Resolução CVM 80")
+                     label="Resolução CVM 80",
+                     content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 
 def _respostas(svc):
@@ -194,8 +196,12 @@ def test_manifesto_carrega_derived_version_real(tmp_path, novo):
 # Snapshot no formato v1.0.2 (esquema 1..5, sem derived_version) e reconstrução vazia
 # ---------------------------------------------------------------------------
 
-def _snapshot_v102(tmp_path, legado):
-    """Exporta o home legado e regrava banco e manifesto como a v1.0.2 os publicava."""
+def _snapshot_v102(tmp_path, legado, *, content_type_no_recibo=True):
+    """Exporta o home legado e regrava banco e manifesto como a v1.0.2 os publicava.
+
+    Sem as colunas da 014 (F-22, decisão 0064), a releitura só reproduz a interpretação pelo `content-type` de
+    `headers_json`; `content_type_no_recibo=False` simula o recibo legado sem ele (falha declarada).
+    """
     import json
     from freoa_verifica.snapshot import SNAPSHOT_TABLE_COLUMNS, _compress, _sha256_file
     from freoa_verifica.store.db import _migration_files, split_sql_statements
@@ -214,9 +220,14 @@ def _snapshot_v102(tmp_path, legado):
     old.execute("ATTACH DATABASE ? AS novo", (str(dest / manifest["db_arquivo"]),))
     for tabela, cols in SNAPSHOT_TABLE_COLUMNS.items():
         antigas = {r[1] for r in old.execute(f"PRAGMA main.table_info({tabela})")}
-        comuns = ", ".join(c for c in cols if c in antigas)
+        comuns = [c for c in cols if c in antigas]
+        origem = list(comuns)
+        if tabela == "capture" and content_type_no_recibo:
+            origem[comuns.index("headers_json")] = (
+                "CASE WHEN content_type IS NULL THEN headers_json "
+                "ELSE json_set(headers_json, '$.\"content-type\"', content_type) END")
         if comuns:
-            old.execute(f"INSERT INTO main.{tabela}({comuns}) SELECT {comuns} FROM novo.{tabela}")
+            old.execute(f"INSERT INTO main.{tabela}({', '.join(comuns)}) SELECT {', '.join(origem)} FROM novo.{tabela}")
     old.commit()
     old.close()
     assert not sqlite3.connect(str(novo_db)).execute("SELECT 1 FROM sqlite_master WHERE name IN ('meta','work_status')").fetchall()
@@ -259,6 +270,20 @@ def test_snapshot_v102_instala_reconstroi_e_reinstala(tmp_path, novo):
         assert alvo.snapshot_install(dest, aceitar_nao_vinculado=True)["status"] == "ok"
         assert derivados.versao(alvo.conn) == derivados.DERIVED_VERSION
         assert _respostas(alvo) == esperado
+
+
+def test_snapshot_v102_sem_content_type_no_recibo_falha_declarada(tmp_path):
+    """F-22 (0064): captura sem Content-Type persistido nunca é reinterpretada de outro modo; a instalação que precisa
+    reprocessar recusa, declarando `interpretacao_indisponivel`, e o home não muda."""
+    legado = _home_legado(tmp_path)
+    try:
+        dest, _ = _snapshot_v102(tmp_path, legado, content_type_no_recibo=False)
+    finally:
+        legado.close()
+    with Verifica(home=tmp_path / "alvo") as alvo:
+        out = alvo.snapshot_install(dest, aceitar_nao_vinculado=True)
+        assert out["status"] == "erro" and "interpretacao_indisponivel" in out["motivo"], out
+        assert alvo.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0] == 0
 
 
 def test_snapshot_de_esquema_futuro_ou_nao_prefixo_e_recusado(tmp_path, novo):

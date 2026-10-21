@@ -290,7 +290,12 @@ def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
                 Path(str(db) + suf).unlink(missing_ok=True)
             os.replace(copia, db)
             svc._clear_caches()
-            return {"status": "ok", "derived_version": DERIVED_VERSION, **relatorio}
+            # Derivados trocados; situação com fonte interrompida é declarada, nunca "ok" por silêncio (F-23).
+            situacao = relatorio.get("situacao")
+            parcial = isinstance(situacao, dict) and situacao.get("status") != "ok"
+            return {"status": "parcial" if parcial else "ok", "derived_version": DERIVED_VERSION, **relatorio,
+                    **({"motivo": "situacao_" + str(situacao.get("status")), **{k: situacao[k] for k in
+                       ("categoria", "evidencia_indisponibilidade") if k in situacao}} if parcial else {})}
     except (RuntimeError, ValueError, OSError, TimeoutError, sqlite3.Error) as exc:
         return {"status": "erro", "motivo": str(exc)[:200], "original_intacto": True}
     finally:
