@@ -1,6 +1,7 @@
 """Guarda de execução: uma requisição efetiva é feita no máximo uma vez por execução (FIX9/F-08, F-11).
 
-Ativa só dentro de `with guarda.ativar():` (a sincronização da semente). Em `connector_fetch`:
+Ativa em toda chamada externa (`da_chamada`: fachada `Verifica`, métodos de entrada dos conectores, semente) e
+compartilhada pelas chamadas aninhadas; morre com a chamada que a abriu (FIX17). Em `connector_fetch`:
 
 1. a identidade efetiva da requisição é método + URL normalizada + corpo; não depende do papel
    (obra principal, alteradora) nem do conector que a pede;
@@ -39,6 +40,21 @@ _ATIVA: contextvars.ContextVar["GuardaExecucao | None"] = contextvars.ContextVar
 
 def ativa() -> "GuardaExecucao | None":
     return _ATIVA.get()
+
+
+@contextlib.contextmanager
+def da_chamada():
+    """Guarda da chamada: a ativa, se houver (chamada aninhada), ou uma nova, que acaba com ela (FIX17/F-23, F-15).
+
+    Toda entrada que pode chegar à rede (fachada, conector, semente) passa por aqui: nenhuma requisição fica sem
+    identidade efetiva nem sem bloqueio por host, e nenhuma guarda sobrevive à chamada externa que a abriu.
+    """
+    atual = _ATIVA.get()
+    if atual is not None:
+        yield atual
+        return
+    with GuardaExecucao().ativar() as nova:
+        yield nova
 
 
 def _copia(exc: Unavailable, **extra) -> Unavailable:

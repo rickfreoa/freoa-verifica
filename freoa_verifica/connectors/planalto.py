@@ -282,7 +282,12 @@ class PlanaltoConnector(Connector):
 
     def parse(self, resp: Response):
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
-        return parse_ou_indisponivel("planalto", resp.body, 300.0, base_url=resp.final_url)
+        # Texto da interpretação única (Content-Type do Response); os bytes seguem só para captura e hash (F-22).
+        # Sem Content-Type algum o Response não veio do transporte (que exige MIME): é captura relida, e vale a
+        # escada declarada de `decode_html_bytes` com Issue ENCODING_FALLBACK (0062, 0063).
+        tem_tipo = bool(getattr(resp, "content_type", "") or (resp.headers or {}).get("content-type"))
+        dados = texto_do_response(resp) if tem_tipo else resp.body
+        return parse_ou_indisponivel("planalto", dados, 300.0, base_url=resp.final_url)
 
     def resolve_alterador_date(self, tipo: str, numero: int | str, ano: int) -> str | None:
         """Resolve data completa via Senado quando o Planalto cita só o ano."""

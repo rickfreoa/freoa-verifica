@@ -160,7 +160,7 @@ Em `encontrada`: `id`, `tribunal`, `classe`, `numero`, `orgao`, `relator`, `part
 
 ### `buscar_normas_cvm` e `buscar_normas_bcb`
 
-`{status, itens, total, truncado}` mais `motivo`, `reason_code`, `offline` (condicionais nos estados negativos) e, online, `falhas` (array), `indexados`, `nao_indexados`. Item indexado: `titulo`, `chave`, `url`, `trecho`, `capture_id`, `metadados`; item não indexado: `nao_indexado: true`, `capture_id: null`, `motivo` opcional. Congelado apenas o estado offline (`indisponivel`/`offline`); o formato online vem do código (`service.py:2597-2650`) e não tem arquivo congelado.
+`{status, itens, total, truncado}` mais `motivo`, `reason_code`, `offline` (condicionais nos estados negativos) e, online, `falhas` (array; cada falha leva `categoria` e `evidencia_indisponibilidade` quando provadas), `indexados`, `nao_indexados` e `fonte` (aditivo, 0063: `{status: "ok"|"unavailable", motivo, categoria?, evidencia_indisponibilidade?}`; desafio, recusa ou fonte fora interrompem a fonte, e os candidatos restantes saem não indexados com o `motivo` da interrupção). Item indexado: `titulo`, `chave`, `url`, `trecho`, `capture_id`, `metadados`; item não indexado: `nao_indexado: true`, `capture_id: null`, `motivo` opcional. Congelado apenas o estado offline (`indisponivel`/`offline`); o formato online vem do código (`service.py:2597-2650`) e não tem arquivo congelado.
 
 ### `obter_evidencia`
 

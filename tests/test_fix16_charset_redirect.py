@@ -77,8 +77,8 @@ def test_declaracoes_efetivas(corpo, ctype, esperado):
     assert esperado in texto_da_resposta(corpo, ctype)
 
 
-def test_parametro_charset_repetido_vale_o_primeiro():
-    with pytest.raises(RespostaInvalida):  # utf-8 primeiro: \xe7 é inválido
+def test_parametro_charset_repetido_divergente_e_invalido():  # FIX17: nenhum "primeiro vale"
+    with pytest.raises(RespostaInvalida):
         texto_da_resposta(b"<p>a\xe7\xe3o</p>", "text/html; charset=utf-8; charset=latin1")
 
 

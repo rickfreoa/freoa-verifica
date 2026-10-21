@@ -25,12 +25,20 @@ from freoa_verifica.connectors.base import (
     register,
 )
 from freoa_verifica.authority import normalize_species
+from freoa_verifica.connectors.guarda import BLOQUEIAM_A_FONTE
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
+from freoa_verifica.texto_resposta import texto_do_response
 from freoa_verifica.transport import Response
 
 _MESES_REVALIDADOS = 2
 _REVALIDAR_DIAS = 30
+_INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
+
+
+def _interrompe(exc: Exception) -> bool:
+    """Desafio, recusa ou fonte fora: a sincronização não segue para outro pacote/recurso do host (FIX17/F-23)."""
+    return isinstance(exc, Unavailable) and exc.categoria in _INTERROMPEM_A_FONTE
 
 
 def _agora() -> datetime:
@@ -192,7 +200,7 @@ class StjConnector(Connector):
                         timeout=120.0,
                         max_bytes=30 * 1024 * 1024,
                     )
-                    data = json.loads(resp.body.decode("utf-8"))
+                    data = json.loads(texto_do_response(resp))
                     ok = isinstance(data, list) and bool(data)
                     probes.append(
                         HealthProbe(
@@ -227,7 +235,7 @@ class StjConnector(Connector):
             timeout=180.0,
         )
         try:
-            payload = json.loads(resp.body.decode("utf-8"))
+            payload = json.loads(texto_do_response(resp))
         except json.JSONDecodeError as exc:
             raise Unavailable("resposta_inesperada") from exc
         if not payload.get("success"):
@@ -380,7 +388,7 @@ class StjConnector(Connector):
 
     def parse_candidate(self, resp: Response, candidate: Candidate) -> ParsedDecision:
         if resp.mime == "text/csv":
-            item = _precedentes_do_csv(resp.body).get(candidate.key)  # mesma política do sync: a última linha vale
+            item = _precedentes_do_csv(texto_do_response(resp)).get(candidate.key)  # mesma política do sync: a última linha vale
             if item is None:
                 raise Unavailable("stj_documento_ausente_no_recurso")
             return self._decision(item)
@@ -389,7 +397,7 @@ class StjConnector(Connector):
     def parse(self, resp: Response, *, key: str | None = None) -> ParsedDecision:
         if key is not None:
             if self._last_items is None or self._last_items[0] is not resp.body:
-                loaded = json.loads(resp.body.decode('utf-8'))
+                loaded = json.loads(texto_do_response(resp))
                 if isinstance(loaded,list):
                     self._last_items = (resp.body, {str(i.get('id') or i.get('numeroDocumento')):i for i in loaded if isinstance(i,dict)})
                 else:
@@ -398,7 +406,7 @@ class StjConnector(Connector):
             if data is None:
                 raise Unavailable('stj_documento_ausente_no_recurso')
         else:
-            data = json.loads(resp.body.decode("utf-8"))
+            data = json.loads(texto_do_response(resp))
         if key is not None and isinstance(data, list):
             data = next((item for item in data if isinstance(item, dict)
                          and str(item.get("id") or item.get("numeroDocumento")) == key), None)
@@ -479,6 +487,8 @@ class StjConnector(Connector):
                     key = f"package:{pkg}"
                     self.sync_state.set("stj_resource", key, "indisponivel", motivo=str(exc)[:200])
                     self.last_failures.append((key, str(exc)[:200]))
+                    if _interrompe(exc):
+                        raise
                     continue
                 if self.sync_state:
                     self.sync_state.set("stj_resource", f"package:{pkg}", "metadados")
@@ -546,7 +556,7 @@ class StjConnector(Connector):
                                 url, hosts=self.hosts, path_prefixes=self.path_prefixes,
                                 mimes=self.mimes, user_agent=self.user_agent,
                                 timeout=120.0, max_bytes=40 * 1024 * 1024)
-                        rows = json.loads(resp.body.decode("utf-8"))
+                        rows = json.loads(texto_do_response(resp))
                         if not isinstance(rows, list):
                             raise Unavailable("stj_recurso_nao_lista")
                         self.resource_dir.mkdir(parents=True, exist_ok=True)
@@ -588,6 +598,8 @@ class StjConnector(Connector):
                                                      "ultima_captura_ok": ultimo_ok.isoformat() if ultimo_ok else None,
                                                      "sha256": saved_info.get("sha256")})
                         self.last_failures.append((checkpoint, str(exc)[:200]))
+                        if _interrompe(exc):
+                            raise
                         continue
             if precedentes:
                 try:
@@ -597,6 +609,8 @@ class StjConnector(Connector):
                         raise
                     self.sync_state.set("stj_resource", f"package:{_PRECEDENTES}", "indisponivel", motivo=str(exc)[:200])
                     self.last_failures.append((f"package:{_PRECEDENTES}", str(exc)[:200]))
+                    if _interrompe(exc):
+                        raise
             conn.commit()
             return inserted
         finally:
@@ -657,12 +671,12 @@ class StjConnector(Connector):
         for r in got.values():
             (self.resource_dir / (r.sha256 + ".csv")).write_bytes(r.body)
         para: dict[str, list[str]] = {}
-        for row in _csv_rows(got["Processos.csv"].body):
+        for row in _csv_rows(texto_do_response(got["Processos.csv"])):
             if (row.get("leadingCase") or "").strip() == "S" and (row.get("Processo") or "").strip():
                 para.setdefault(row["sequencialPrecedente"].strip(), []).append(row["Processo"].strip())
         temas = got["Temas.csv"]
         n = 0
-        for key, item in _precedentes_do_csv(temas.body).items():
+        for key, item in _precedentes_do_csv(texto_do_response(temas)).items():
             if max_itens is not None and n >= max_itens:
                 break
             self._put(conn, rows_by_key, key, {
@@ -693,8 +707,9 @@ class StjConnector(Connector):
 _TIPOS_PRECEDENTE = {"Tema": ("Tema Repetitivo", "repetitivo"), "IAC": ("IAC", "irdr_iac")}
 
 
-def _csv_rows(body: bytes) -> list[dict[str, str]]:
-    return list(csv.DictReader(io.StringIO(body.decode("utf-8-sig"), newline="")))
+def _csv_rows(texto: str) -> list[dict[str, str]]:
+    """Linhas do CSV a partir do texto da interpretação única (BOM UTF-8 já consumido por ela)."""
+    return list(csv.DictReader(io.StringIO(texto, newline="")))
 
 
 def _situacao_estruturada(texto: str) -> dict[str, Any]:
@@ -712,10 +727,10 @@ def _situacao_estruturada(texto: str) -> dict[str, Any]:
     return {"valor": valor, "texto_oficial": texto or None}
 
 
-def _precedentes_do_csv(body: bytes) -> dict[str, dict[str, Any]]:
+def _precedentes_do_csv(texto: str) -> dict[str, dict[str, Any]]:
     """Linhas repetidas da mesma chave: a última vale; divergência de tese/situação fica declarada."""
     items: dict[str, dict[str, Any]] = {}
-    for row in _csv_rows(body):
+    for row in _csv_rows(texto):
         item = _precedente_item(row)
         if not item:
             continue

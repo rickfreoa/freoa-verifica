@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Literal
@@ -116,8 +117,35 @@ class ParsedDecision:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+def sob_guarda(fn):
+    """Executa `fn` sob a guarda da chamada (`guarda.da_chamada`)."""
+    if getattr(fn, "_sob_guarda", False):
+        return fn
+
+    @functools.wraps(fn)
+    def interno(*args, **kwargs):
+        from freoa_verifica.connectors.guarda import da_chamada  # import tardio: guarda importa este módulo
+
+        with da_chamada():
+            return fn(*args, **kwargs)
+
+    interno._sob_guarda = True
+    return interno
+
+
+# Métodos que podem chegar à rede: chamados diretamente (sem a fachada), cada um abre a própria guarda (FIX17/F-23).
+ENTRADAS_DE_REDE = ("health", "search", "resolve", "fetch", "fetch_situacao", "sync", "package_show")
+
+
 class Connector(ABC):
     """Contrato de conector de fonte oficial."""
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for nome in ENTRADAS_DE_REDE:
+            fn = cls.__dict__.get(nome)
+            if callable(fn):
+                setattr(cls, nome, sob_guarda(fn))
 
     id: ClassVar[str]
     authority: ClassVar[str]

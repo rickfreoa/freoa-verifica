@@ -20,6 +20,7 @@ from freoa_verifica.connectors.base import (
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.parsers.bcb_json import parse_bcb_json
+from freoa_verifica.texto_resposta import texto_do_response
 from freoa_verifica.transport import Response
 
 _JSON_MIMES = frozenset(
@@ -168,7 +169,7 @@ class BcbConnector(Connector):
             timeout=45.0,
         )
         try:
-            payload = json.loads(resp.body.decode("utf-8"))
+            payload = json.loads(texto_do_response(resp))
         except json.JSONDecodeError as exc:
             raise Unavailable("resposta_invalida") from exc
         if "TotalRows" not in payload or "Rows" not in payload:
@@ -277,7 +278,7 @@ class BcbConnector(Connector):
             user_agent=self.user_agent,
             timeout=60.0,
         )
-        if tipo == "Resolução CMN" and _sem_conteudo(resp.body):
+        if tipo == "Resolução CMN" and _sem_conteudo(texto_do_response(resp)):
             # Resoluções do CMN anteriores a 2020 estão no BCB como tipo "Resolução".
             resp = self.fetch(Candidate(self.id, f"bcb:Resolução:{numero}", f"Resolução {numero}",
                                         metadata={"tipo": "Resolução", "numero": numero}))
@@ -285,11 +286,11 @@ class BcbConnector(Connector):
 
     def parse(self, resp: Response):
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
-        return parse_ou_indisponivel("bcb_json", resp.body, 120.0)
+        return parse_ou_indisponivel("bcb_json", texto_do_response(resp), 120.0)
 
 
-def _sem_conteudo(body: bytes) -> bool:
+def _sem_conteudo(texto: str) -> bool:
     try:
-        return not (json.loads(body.decode("utf-8")).get("conteudo") or [])
+        return not (json.loads(texto).get("conteudo") or [])
     except (ValueError, AttributeError):
         return False
