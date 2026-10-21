@@ -70,3 +70,4 @@ Adiado para 1.4.0: coleta integral (F4; nenhum adaptador com total exato comprov
 - O sandbox do Cursor CLI não é suportado no Windows. O Cursor roda com `--auto-review` (classificador do servidor aprova chamadas seguras), sem `--force`. A trilha S2 passou ao Sonnet; o Cursor fica com G1/G3.
 - Agentes Claude rodam com lista fechada de ferramentas (edição, pytest, scripts do repositório, git local sem push).
 - Cursor também indisponível (limite de uso do plano até 30/10/2026, inclusive no modelo `auto`, erro registrado). G1/G3 passam ao Sonnet. Codex permanece exclusivamente auditor, para preservar a separação de papéis.
+- Sonnet atingiu o limite semanal em 20/10/2026 (até 21/10, 23h). A partir do FIX17, o desenvolvedor passa a ser o Opus via CLI, em processo separado do supervisor; Codex continua exclusivamente auditor.
