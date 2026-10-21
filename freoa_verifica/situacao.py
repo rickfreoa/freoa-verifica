@@ -15,6 +15,8 @@ from datetime import date, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from freoa_verifica.connectors.base import Unavailable
+
 SITUACOES = ("revogada", "cancelada", "vigente_declarada", "ilegivel", "nao_aplicavel")
 AUTORIDADES_COM_SITUACAO = frozenset({"cvm", "bcb", "cmn"})
 MAX_IDADE_DIAS = 30
@@ -153,18 +155,39 @@ def _revogacao_declarada(atualizacoes: Any) -> tuple[str | None, str | None]:
     return re.sub(r"\s+", " ", m["ato"]).strip(), efeito
 
 
-def registrar_do_corpo(conn: sqlite3.Connection, rw: Any, source_id: str, body: bytes) -> None:
-    """BCB: a própria captura normativa traz os campos de situação."""
+def registrar_do_corpo(conn: sqlite3.Connection, rw: Any, source_id: str, body: bytes,
+                       content_type: str | None = None) -> None:
+    """BCB: a própria captura normativa traz os campos de situação, lidos pelo Content-Type da resposta (F-22)."""
+    from freoa_verifica.texto_resposta import texto_da_resposta
+    from freoa_verifica.transport import RespostaInvalida
+
     if source_id != "bcb":
         return
-    lida = ler_bcb(body)
+    try:  # sem Content-Type (registro sintético), o JSON da fonte: UTF-8/BOM, nunca `<meta>` do HTML embutido
+        lida = ler_bcb(texto_da_resposta(body, content_type or "application/json"))
+    except RespostaInvalida:
+        lida = {"situacao": "ilegivel", "texto_oficial": "corpo não interpretável"}
     gravar(conn, WorkStatus(rw.work_id, lida["situacao"], lida.get("texto_oficial"),
                             lida.get("ato_revogador"), lida.get("data_efeito"), rw.capture_id, rw.sha256,
                             rw.fetched_at))
 
 
-def registrar_cvm(conn: sqlite3.Connection, home: Any, connector: Any, cand: Any, rw: Any) -> WorkStatus:
-    """Captura a página do ato (sempre) e grava a situação lida; falha vira ilegivel."""
+def interrompe_a_fonte(exc: Unavailable) -> bool:
+    """Falha que é da fonte, não do item: desafio, recusa, fonte fora, resposta inesperada ou orçamento (FIX18/F-23).
+
+    Item ausente (`http_404`, sem categoria) é do item: a ressincronização segue para o próximo.
+    """
+    return exc.categoria is not None or exc.reason == "orcamento"
+
+
+def registrar_cvm(conn: sqlite3.Connection, home: Any, connector: Any, cand: Any, rw: Any, *,
+                  propagar: bool = False) -> WorkStatus:
+    """Captura a página do ato (sempre) e grava a situação lida; falha vira ilegivel.
+
+    `propagar`: o controlador (ressincronização) recebe a indisponibilidade estruturada que é da fonte, depois de
+    gravada a falha de leitura, para interromper a fonte e declará-la (FIX18/F-23). Sem ele (página do ato como
+    evidência acessória de uma obra já capturada), a falha fica como `ilegivel`, com motivo e categoria.
+    """
     from freoa_verifica.connectors.cvm_normas import ler_situacao_pagina
     from freoa_verifica.store import repo
     from freoa_verifica.texto_resposta import texto_do_response
@@ -180,10 +203,22 @@ def registrar_cvm(conn: sqlite3.Connection, home: Any, connector: Any, cand: Any
         else:
             ws = WorkStatus(rw.work_id, lida["situacao"], lida["texto_oficial"], lida["ato_revogador"],
                             None, captura, resp.sha256, resp.fetched_at)
-    except Exception as exc:  # noqa: BLE001 — qualquer falha é ilegivel, nunca vigente
+    except Unavailable as exc:
+        ws = _falha_de_leitura(conn, WorkStatus(rw.work_id, "ilegivel", _motivo("pagina_do_ato_indisponivel", exc)),
+                               home)
+        if propagar and interrompe_a_fonte(exc):
+            raise
+        return ws
+    except Exception as exc:  # noqa: BLE001 — qualquer outra falha (parse, banco) é ilegivel, nunca vigente
         return _falha_de_leitura(conn, WorkStatus(rw.work_id, "ilegivel", f"pagina_do_ato_indisponivel: {getattr(exc, 'reason', type(exc).__name__)}"[:200]), home)
     gravar(conn, ws)
     return ws
+
+
+def _motivo(prefixo: str, exc: Exception) -> str:
+    """Motivo gravado da falha de leitura: código estável e, se provada, a categoria (decisão 0045)."""
+    categoria = getattr(exc, "categoria", None)
+    return f"{prefixo}: {getattr(exc, 'reason', type(exc).__name__)}{f' [{categoria}]' if categoria else ''}"[:200]
 
 
 def _falha_de_leitura(conn: sqlite3.Connection, ws: WorkStatus, home: Any) -> WorkStatus:
@@ -209,24 +244,33 @@ def ressincronizar(svc: Any, *, fontes: tuple[str, ...] = ("cvm_normas", "bcb"),
 
     if svc._offline():
         return {"status": "indisponivel", "motivo": "offline"}
-    out = {"lidas": 0, "ilegiveis": 0, "revogadas": 0, "canceladas": 0, "obras": 0, "falhas_com_leitura_preservada": 0}
+    out = {"lidas": 0, "ilegiveis": 0, "revogadas": 0, "canceladas": 0, "obras": 0, "falhas_com_leitura_preservada": 0,
+           "nao_consultadas": 0}
     inicio = datetime.now().astimezone()
     rows = svc.conn.execute(
         "SELECT * FROM work WHERE authority IN ('cvm','bcb','cmn') AND authority NOT LIKE 'invalidated:%' "
         "ORDER BY authority, kind, number, year").fetchall()
+    # Falha que é da fonte interrompe a fonte: nenhuma obra seguinte a consulta, e a fonte sai declarada (F-23).
+    interrompidas: dict[str, Unavailable] = {}
     for row in rows[:max_obras]:
         fonte = "cvm_normas" if row["authority"] == "cvm" else "bcb"
         if fonte not in fontes:
             continue
-        caps = repo.captures_for_work(svc.conn, row["id"])
         out["obras"] += 1
+        if fonte in interrompidas:
+            out["nao_consultadas"] += 1
+            continue
+        caps = repo.captures_for_work(svc.conn, row["id"])
         rw = type("W", (), {"work_id": row["id"]})()
-        if fonte == "cvm_normas":
-            tipo = _KIND_TIPO.get(row["kind"])
-            cand = svc._get(fonte).resolve({"tipo": tipo, "numero": int(row["number"])}) if tipo else None
-            ws = registrar_cvm(svc.conn, svc.home, svc._get(fonte), cand, rw) if cand else _ilegivel(svc.conn, row["id"], "especie_sem_pagina")
-        else:
-            ws = _reler_bcb(svc, row, caps, rw)
+        try:
+            if fonte == "cvm_normas":
+                ws = _reler_cvm(svc, row, rw)
+            else:
+                ws = _reler_bcb(svc, row, caps, rw)
+        except Unavailable as exc:
+            interrompidas[fonte] = exc
+            out["nao_consultadas"] += 1
+            continue
         if ws.situacao != "ilegivel" and _anterior(ws.lido_em, inicio):
             out["falhas_com_leitura_preservada"] += 1  # tentativa frustrada; vale a leitura anterior
             continue
@@ -235,7 +279,32 @@ def ressincronizar(svc: Any, *, fontes: tuple[str, ...] = ("cvm_normas", "bcb"),
         out["revogadas"] += ws.situacao == "revogada"
         out["canceladas"] += ws.situacao == "cancelada"
     svc._resolver = type(svc._resolver)()
-    return {"status": "ok", **out}
+    if not interrompidas:
+        return {"status": "ok", **out}
+    primeira = next(iter(interrompidas.values()))
+    return {"status": "parcial" if out["lidas"] else "indisponivel", **out,
+            "motivo": primeira.reason, **primeira.classificacao(),
+            "fontes": {f: {"status": "unavailable", "motivo": e.reason, **e.classificacao()}
+                       for f, e in interrompidas.items()}}
+
+
+def _reler_cvm(svc: Any, row: Any, rw: Any) -> WorkStatus:
+    """Página do ato CVM; a indisponibilidade que é da fonte (inclusive no `resolve`) sobe ao controlador."""
+    tipo = _KIND_TIPO.get(row["kind"])
+    if not tipo:
+        return _ilegivel(svc.conn, row["id"], "especie_sem_pagina")
+    conector = svc._get("cvm_normas")
+    try:
+        cand = conector.resolve({"tipo": tipo, "numero": int(row["number"])})
+    except Unavailable as exc:
+        ws = _falha_de_leitura(svc.conn, WorkStatus(row["id"], "ilegivel", _motivo("pagina_do_ato_indisponivel", exc)),
+                               svc.home)
+        if interrompe_a_fonte(exc):
+            raise
+        return ws
+    if cand is None:
+        return _ilegivel(svc.conn, row["id"], "especie_sem_pagina")
+    return registrar_cvm(svc.conn, svc.home, conector, cand, rw, propagar=True)
 
 
 def _anterior(lido_em: str | None, inicio: datetime) -> bool:
@@ -273,7 +342,12 @@ def _reler_bcb(svc: Any, row: Any, caps: list, rw: Any) -> WorkStatus:
         lida = ler_bcb(texto_do_response(resp))
         ws = WorkStatus(row["id"], lida["situacao"], lida.get("texto_oficial"), lida.get("ato_revogador"),
                         lida.get("data_efeito"), captura, resp.sha256, resp.fetched_at)
-    except Exception as exc:  # noqa: BLE001
+    except Unavailable as exc:
+        ws = _falha_de_leitura(svc.conn, WorkStatus(row["id"], "ilegivel", _motivo("bcb_indisponivel", exc)), svc.home)
+        if interrompe_a_fonte(exc):
+            raise  # o controlador interrompe a fonte e a declara (F-23)
+        return ws
+    except Exception as exc:  # noqa: BLE001 — parse ou banco: ilegivel, nunca vigente
         return _falha_de_leitura(svc.conn, WorkStatus(row["id"], "ilegivel", f"bcb_indisponivel: {getattr(exc, 'reason', type(exc).__name__)}"[:200]), svc.home)
     gravar(svc.conn, ws)
     return ws

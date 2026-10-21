@@ -409,7 +409,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.cmd == "acervo":
             if args.acervo_cmd == "ressincronizar-situacao":
                 data = svc.ressincronizar_situacao()
-                raise SystemExit(_print_result(data, as_json=as_json, titulo="Situação das obras"))
+                codigo = _print_result(data, as_json=as_json, titulo="Situação das obras")
+                raise SystemExit(codigo or (0 if data.get("status") == "ok" else 1))  # parcial/indisponível (F-23)
             if args.acervo_cmd == "reconstruir":
                 data = svc.reconstruir_acervo(com_situacao=args.com_situacao)
                 _print_result(data, as_json=as_json, titulo="Reconstrução do acervo")
