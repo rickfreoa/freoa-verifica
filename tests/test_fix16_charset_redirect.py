@@ -23,7 +23,7 @@ from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.service import Verifica
 from freoa_verifica.texto_resposta import arvore_html, texto_da_resposta
 from freoa_verifica.transport import Response, RespostaInvalida
-from tests.test_fix12_sintaxe_estrita import ALLOWED, _buscar, _servidor
+from tests.test_fix12_sintaxe_estrita import ALLOWED, _servidor
 from tests.test_fix15_charset import _CONFTEST, _enviar
 from tests.test_transport import _fast_guards, _wire_local
 

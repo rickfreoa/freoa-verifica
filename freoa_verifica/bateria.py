@@ -89,7 +89,7 @@ def _recursos_ckan(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def _pendencias(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     marcas = ",".join("?" * len(_CONCLUIDOS))
-    rows = conn.execute(f"SELECT fonte, chave, status, motivo FROM sync_state WHERE status NOT IN ({marcas}) "
+    rows = conn.execute(f"SELECT fonte, chave, status, motivo FROM sync_state WHERE status NOT IN ({marcas}) "  # noqa: S608 - só placeholders
                         "ORDER BY fonte, chave", _CONCLUIDOS).fetchall()
     return [dict(r) for r in rows]
 

@@ -10,7 +10,6 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import pytest
 
 from freoa_verifica import transport
 from freoa_verifica.semente import SementeSync

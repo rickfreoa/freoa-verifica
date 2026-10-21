@@ -3,3 +3,14 @@ extend-exclude = [".venv", "build", "dist", "freoa_verifica.egg-info"]
 
 [lint]
 select = ["E9", "F", "S", "BLE", "TRY"]
+# Regras de estilo do TRY sem efeito sobre segurança ou abstenção (decisão 0050, emenda).
+ignore = ["TRY003", "TRY004", "TRY300", "TRY301"]
+
+[lint.per-file-ignores]
+# Testes usam assert, subprocessos com argumentos fixos e mensagens longas por desenho.
+"tests/**" = ["F811", "S608", "S101", "S603", "S607", "S108", "S105", "S106", "S311", "TRY002", "TRY003", "BLE001"]
+# SQL montado apenas com placeholders, operadores e nomes de tabela constantes do próprio módulo.
+"freoa_verifica/connectors/stj.py" = ["S608"]
+"freoa_verifica/derivados.py" = ["S608"]
+# Script de CI: lê o JUnit gerado pelo próprio job e chama `gh` com argumentos fixos.
+"scripts/saude_fontes.py" = ["S314", "S603"]

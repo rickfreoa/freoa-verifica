@@ -6,7 +6,6 @@ Ponta a ponta: servidor local real (200, chunk parcial, pausa) â†’ transporte â†
 from __future__ import annotations
 
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest

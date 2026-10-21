@@ -53,7 +53,7 @@ from freoa_verifica.store.db import connect, data_home
 from freoa_verifica.temporal import select as temporal_select
 from freoa_verifica.texto_resposta import (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO, content_type_do_response,
                                            interpretar_legado_padrao)
-from freoa_verifica.transport import _CIRCUIT_BREAKERS
+from freoa_verifica.transport import _CIRCUIT_BREAKERS, Response
 from freoa_verifica import situacao  # C2
 from freoa_verifica.verify import (
     MemoryResolver,
@@ -841,7 +841,7 @@ class Verifica:
                 with self.conn:
                     self.conn.execute('UPDATE work SET authority=? WHERE id=?',('invalidated:'+work['authority'],work['id']))
                 counts['divergentes'].append(work['id'])
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - falha da releitura é declarada por captura, não engolida
                 counts['falhas'].append({'capture_id':row['id'],'motivo':str(exc)})
                 fonte['falhas'][str(exc)[:80]] = fonte['falhas'].get(str(exc)[:80], 0) + 1
         with self.conn:  # 0034: capturas que perdem dispositivos deixam de ser canônicas
@@ -2458,7 +2458,7 @@ class Verifica:
             tesauro_info = res["tesauro"]
             # Mesma correspondência: primeiro quem tem os termos na ementa (o resumo oficial do julgado), depois
             # quem só os tem espalhados no inteiro teor; a ordem bm25 desempata. Determinístico.
-            from freoa_verifica.search import consulta_fts, pertinencia
+            from freoa_verifica.search import pertinencia
             variantes = consulta_fts(q)[1]
             def forca(r):
                 # Termos na ementa contam inteiros; só no inteiro teor (sem ementa ou fora dela), pela metade.

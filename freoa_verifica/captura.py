@@ -214,7 +214,8 @@ def _confinado(destino: Path, nome: str) -> Path:
     """Caminho final de `nome` dentro de `destino`, já resolvido; recusa fuga, link simbólico e subpasta."""
     base = destino.resolve()
     final = (base / nome)
-    if final.parent.resolve() != base or final.resolve().parent != base or final.is_symlink():
+    # Separadores de qualquer sistema são recusados: "..\\x" é fuga no Windows mesmo que o POSIX o aceite.
+    if "/" in nome or "\\" in nome or final.parent.resolve() != base or final.resolve().parent != base or final.is_symlink():
         raise ValueError(f"caminho fora do destino: {nome}")
     return final
 
