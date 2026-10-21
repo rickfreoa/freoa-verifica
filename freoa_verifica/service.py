@@ -1048,6 +1048,8 @@ class Verifica:
                                 "regras": tr.rules_applied,
                                 "flags": tr.flags,
                             }
+                except Unavailable as exc:  # declarada com categoria, nunca vigente por silêncio (FIX18)
+                    vigencia = {"status": "unknown", "motivo": exc.reason, **exc.classificacao()}
                 except Exception:  # noqa: BLE001
                     vigencia = {"status": "unknown"}
             items.append(
@@ -3148,7 +3150,8 @@ class Verifica:
                 )
             except Exception as exc:  # noqa: BLE001
                 checks.append(
-                    {"nome": f"fonte:{cid}", "status": "falha", "detalhe": str(exc)[:200]}
+                    {"nome": f"fonte:{cid}", "status": "falha", "detalhe": str(exc)[:200],
+                     **(exc.classificacao() if isinstance(exc, Unavailable) else {})}
                 )
         provenance = _acervo.installed_provenance(self.home)
         checks.append({"nome": "snapshot_proveniencia",

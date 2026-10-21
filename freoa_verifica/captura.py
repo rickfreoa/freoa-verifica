@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 from freoa_verifica import __version__
 from freoa_verifica.connectors import tjdft, tjsp
-from freoa_verifica.connectors.base import Unavailable, registry
+from freoa_verifica.connectors.base import Unavailable, registry, sob_guarda
 from freoa_verifica.connectors.challenge import map_transport_error
 from freoa_verifica.connectors.httputil import connector_fetch, form_body, ua_header
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
@@ -169,6 +169,7 @@ def _planejar(conector: str, consulta: dict[str, Any] | None, url: str | None) -
     return plano
 
 
+@sob_guarda  # etapas da mesma captura: identidade efetiva e bloqueio por host (garantia estrutural 1, FIX18)
 def _buscar(plano: dict[str, Any], ua_modo: str):
     sessao = Session() if plano.get("sessao") else None
     kw: dict[str, Any] = {

@@ -251,7 +251,7 @@ def ressincronizar(svc: Any, *, fontes: tuple[str, ...] = ("cvm_normas", "bcb"),
         "SELECT * FROM work WHERE authority IN ('cvm','bcb','cmn') AND authority NOT LIKE 'invalidated:%' "
         "ORDER BY authority, kind, number, year").fetchall()
     # Falha que é da fonte interrompe a fonte: nenhuma obra seguinte a consulta, e a fonte sai declarada (F-23).
-    interrompidas: dict[str, Unavailable] = {}
+    interrompidas: dict[str, dict[str, Any]] = {}
     for row in rows[:max_obras]:
         fonte = "cvm_normas" if row["authority"] == "cvm" else "bcb"
         if fonte not in fontes:
@@ -268,7 +268,7 @@ def ressincronizar(svc: Any, *, fontes: tuple[str, ...] = ("cvm_normas", "bcb"),
             else:
                 ws = _reler_bcb(svc, row, caps, rw)
         except Unavailable as exc:
-            interrompidas[fonte] = exc
+            interrompidas[fonte] = {"status": "unavailable", "motivo": exc.reason, **exc.classificacao()}
             out["nao_consultadas"] += 1
             continue
         if ws.situacao != "ilegivel" and _anterior(ws.lido_em, inicio):
@@ -281,11 +281,8 @@ def ressincronizar(svc: Any, *, fontes: tuple[str, ...] = ("cvm_normas", "bcb"),
     svc._resolver = type(svc._resolver)()
     if not interrompidas:
         return {"status": "ok", **out}
-    primeira = next(iter(interrompidas.values()))
-    return {"status": "parcial" if out["lidas"] else "indisponivel", **out,
-            "motivo": primeira.reason, **primeira.classificacao(),
-            "fontes": {f: {"status": "unavailable", "motivo": e.reason, **e.classificacao()}
-                       for f, e in interrompidas.items()}}
+    primeira = {k: v for k, v in next(iter(interrompidas.values())).items() if k != "status"}
+    return {"status": "parcial" if out["lidas"] else "indisponivel", **out, **primeira, "fontes": interrompidas}
 
 
 def _reler_cvm(svc: Any, row: Any, rw: Any) -> WorkStatus:

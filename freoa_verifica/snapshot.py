@@ -209,8 +209,10 @@ def _decompress_to(src: Path, dest: Path) -> None:
 
 def _restore_stj_ementas(conn: sqlite3.Connection, home: Path) -> None:
     """Recupera ementas antigas substituídas pelo dispositivo na extração."""
+    from freoa_verifica.texto_resposta import texto_da_resposta
+
     captures = conn.execute("""
-        SELECT DISTINCT c.id, c.sha256 FROM capture c
+        SELECT DISTINCT c.id, c.sha256, c.mime, c.headers_json, c.content_type FROM capture c
         JOIN decision_document dd ON dd.capture_id=c.id
         JOIN decision d ON d.id=dd.decision_id
         WHERE d.court='STJ' AND c.source_id='stj' AND c.mime LIKE '%json%'
@@ -221,7 +223,9 @@ def _restore_stj_ementas(conn: sqlite3.Connection, home: Path) -> None:
         except FileNotFoundError:
             # Snapshots declaradamente sem blobs conservam somente as extrações.
             continue
-        data = json.loads(raw)
+        # Interpretação única pelo recibo (F-22, 0064): Content-Type persistido, o do recibo legado ou o MIME gravado.
+        ctype = cap["content_type"] or json.loads(cap["headers_json"] or "{}").get("content-type") or cap["mime"]
+        data = json.loads(texto_da_resposta(raw, ctype))
         records = data if isinstance(data, list) else [data]
         by_key = {}
         for item in records:
