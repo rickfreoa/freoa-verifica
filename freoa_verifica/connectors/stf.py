@@ -21,7 +21,7 @@ from freoa_verifica.connectors.base import (
 from freoa_verifica.connectors.challenge import detect_challenge, unavailable_from_challenge
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
-from freoa_verifica.texto_resposta import arvore_html, texto_da_resposta, texto_do_response
+from freoa_verifica.texto_resposta import arvore_html, corpo_binario, texto_do_response
 from freoa_verifica.transport import Response
 
 _HOSTS = frozenset(
@@ -182,13 +182,14 @@ class StfConnector(Connector):
     def parse(self, resp: Response) -> ParsedDecision:
         if "sumariosumulas.asp" in (resp.final_url or ""):
             return _parse_sumula(resp)
-        if resp.body[:4] == b"%PDF":
+        corpo = corpo_binario(resp)
+        if corpo[:4] == b"%PDF":
             return ParsedDecision(
                 profile="stf_pdf",
                 kind="decisao",
                 court="STF",
                 official_id=resp.final_url,
-                text=_pdf_text(resp.body),
+                text=_pdf_text(corpo),
                 documents=[{"url": resp.final_url, "label": "inteiro_teor"}],
             )
         if "application/json" in (resp.mime or "") or resp.body[:1] in (b"{", b"["):
@@ -357,7 +358,7 @@ def _incidente_from_response(resp: Response) -> str | None:
     m = re.search(r"incidente=(\d+)", final)
     if m:
         return m.group(1)
-    text = texto_da_resposta(resp.body, resp.content_type or resp.headers.get("content-type"))
+    text = texto_do_response(resp)
     m = re.search(r"incidente=(\d+)", text)
     return m.group(1) if m else None
 

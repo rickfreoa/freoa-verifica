@@ -7,7 +7,7 @@ import re
 from typing import Mapping
 
 from freoa_verifica.connectors.base import Unavailable
-from freoa_verifica.texto_resposta import normalizar_para_busca, texto_da_resposta
+from freoa_verifica.texto_resposta import normalizar_para_busca, texto_da_resposta, vista_bytes
 from freoa_verifica.transport import (
     ChallengeDetected,
     EmptyBody,
@@ -76,7 +76,7 @@ def _kind_nos_bytes(body: bytes | str | None) -> str | None:
 
     Só acrescenta detecção: em codificação compatível com ASCII a vista latin-1 traz os mesmos marcadores do texto.
     """
-    return _kind_from_text(body.decode("latin-1")) if isinstance(body, (bytes, bytearray)) and body else None
+    return _kind_from_text(vista_bytes(body)) if isinstance(body, (bytes, bytearray)) and body else None
 
 
 def raise_if_challenge(
@@ -106,7 +106,7 @@ def _evidencia(status, headers, body, url, content_type=None) -> dict:
         text = ""
     vistas = [text] if text else []
     if isinstance(body, (bytes, bytearray)) and body:
-        vistas.append(body.decode("latin-1"))  # mesma vista de `_kind_nos_bytes`
+        vistas.append(vista_bytes(body))  # mesma vista de `_kind_nos_bytes`
     for vista in vistas:
         lower = normalizar_para_busca(_sem_biblioteca_lateral(vista))
         marcador = next((m for m, _ in _BODY_MARKERS if m in lower), None)

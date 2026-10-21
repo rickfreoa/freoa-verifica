@@ -13,6 +13,7 @@ from __future__ import annotations
 import codecs
 import re
 import unicodedata
+from dataclasses import dataclass
 
 _BOMS: tuple[tuple[bytes, str], ...] = (  # UTF-32 antes de UTF-16: o BOM LE de 32 começa com o de 16
     (codecs.BOM_UTF32_LE, "utf-32"),
@@ -276,9 +277,11 @@ def _declaracao_xml(corpo: bytes) -> tuple[str, str] | None:
 
 
 def _mime(content_type: str | None) -> str:
+    """Media type validado, para TODA resposta e antes de qualquer desvio por BOM, MIME binário ou status (FIX18/F-19):
+    sintaxe estrita, `charset*`/continuações e `charset` duplicado divergente são `RespostaInvalida`."""
     if not (content_type or "").strip(_OWS):
         return ""
-    parametros_media_type(content_type)  # malformado é RespostaInvalida mesmo sem charset nem mime textual (FIX17)
+    _charset_cabecalho(content_type)
     return content_type.split(";", 1)[0].strip(_OWS).lower()
 
 
@@ -382,39 +385,63 @@ def _charset_cabecalho(content_type: str | None) -> str | None:
     return valores[0] if valores else None
 
 
-def _declarado(corpo: bytes, content_type: str | None, mime: str) -> tuple[str, str]:
-    """(nome, codec) declarado: cabeçalho, depois prescan de HTML ou declaração XML; senão UTF-8."""
+def _declarado(corpo: bytes, content_type: str | None, mime: str) -> tuple[str, str, str]:
+    """(nome, codec, origem) declarado: cabeçalho, depois prescan de HTML ou declaração XML; senão UTF-8."""
     rotulo = _charset_cabecalho(content_type)
     if rotulo is not None:
         achado = _encoding(rotulo)
         if achado is None:
             raise _invalida(f"Charset não suportado: {rotulo}")
-        return achado
-    achado = None
+        return (*achado, "header")
     if not mime or mime == "text/html":
         achado = _prescan_html(corpo)
-    if achado is None and (_xml(mime) or not mime):
+        if achado is not None:
+            return (*achado, "meta")
+    if _xml(mime) or not mime:
         achado = _declaracao_xml(corpo)
-    return achado or _ROTULOS["utf-8"]
+        if achado is not None:
+            return (*achado, "declaracao_xml")
+    return (*_ROTULOS["utf-8"], "padrao")
 
 
-def texto_da_resposta(corpo: bytes | str | None, content_type: str | None = None, *, parcial: bool = False) -> str:
-    """Texto do corpo conforme BOM/charset; `RespostaInvalida` se não for interpretável.
+ORIGENS = ("bom", "header", "meta", "declaracao_xml", "padrao", "binario")
 
-    `parcial`: o corpo é só o começo de uma resposta maior; sequência multibyte cortada no fim é aceita.
-    Mime não textual (PDF, DOCX…) não tem charset: devolve latin-1, só para busca de marcadores ASCII.
+
+@dataclass(frozen=True)
+class Interpretacao:
+    """Texto e a decisão que o produziu: `codificacao` (codec usado; None se binário) e `origem` (`ORIGENS`)."""
+
+    texto: str
+    codificacao: str | None
+    origem: str
+
+
+def _parece_html(corpo: bytes, content_type: str | None) -> bool:
+    """Marcador HTML no início, nos bytes ou na vista do `charset` declarado (UTF-16 sem BOM não tem `<html` ASCII)."""
+    vistas = [corpo[:_META_BYTES].lower()]
+    achado = _encoding(_charset_cabecalho(content_type))
+    if achado is not None and achado[1] != "-":
+        vistas.append(codecs.decode(corpo[: _META_BYTES * 4], achado[1], "ignore").lower().encode("utf-8"))
+    return any(b"<html" in v or b"<!doctype" in v for v in vistas)
+
+
+def interpretar(corpo: bytes, content_type: str | None = None, *, parcial: bool = False) -> Interpretacao:
+    """Interpretação única do corpo (decisões 0061 a 0064); `RespostaInvalida` se não for interpretável.
+
+    O Content-Type é validado PRIMEIRO, para todo corpo: BOM, MIME binário ou status nunca dispensam a validação
+    (FIX18/F-19). `parcial`: o corpo é só o começo de uma resposta maior; multibyte cortado no fim é aceito.
+    Mime não textual (PDF, DOCX…) não tem charset: vista latin-1, só para marcadores ASCII; mas corpo com BOM ou
+    marcador HTML sob mime binário é lido como texto (um desafio HTML servido como PDF continua desafio).
     """
-    if corpo is None:
-        return ""
-    if isinstance(corpo, str):
-        return corpo
     mime = _mime(content_type)
+    bom = next((n for b, n in _BOMS if corpo.startswith(b)), None)
     if not _textual(mime):
-        return corpo.decode("latin-1")
-    nome = next((n for bom, n in _BOMS if corpo.startswith(bom)), None)
-    erros = "strict"
+        if bom is None and not _parece_html(corpo, content_type):
+            return Interpretacao(corpo.decode("latin-1"), None, "binario")
+        mime = ""
+    nome, enc, origem, erros = bom, None, "bom", "strict"
     if nome is None:
-        enc, nome = _declarado(corpo, content_type, mime)
+        enc, nome, origem = _declarado(corpo, content_type, mime)
         if enc == "windows-1252":
             erros = "fv_whatwg_c1"
     if nome == "-":
@@ -428,7 +455,36 @@ def texto_da_resposta(corpo: bytes | str | None, content_type: str | None = None
         raise _invalida(f"Corpo inválido para o charset {nome}") from exc
     if not isinstance(texto, str):
         raise _invalida(f"Charset não textual: {nome}")
-    return texto
+    return Interpretacao(texto, nome, origem)
+
+
+def texto_da_resposta(corpo: bytes | str | None, content_type: str | None = None, *, parcial: bool = False) -> str:
+    """Texto de `interpretar`; `str` já é texto, `None` é vazio."""
+    if corpo is None:
+        return ""
+    if isinstance(corpo, str):
+        return corpo
+    return interpretar(corpo, content_type, parcial=parcial).texto
+
+
+def vista_bytes(corpo: bytes | str | None) -> str:
+    """Bytes crus como latin-1, só para procurar marcadores ASCII (FIX17): nunca é o texto do documento."""
+    return corpo.decode("latin-1") if isinstance(corpo, (bytes, bytearray)) else ""
+
+
+def texto_para_exibicao(corpo: bytes, content_type: str | None) -> str:
+    """Exibição de captura guardada, que nunca falha: a interpretação única ou, se inválida, UTF-8/latin-1 declarados
+    pelo chamador como exibição (nunca alimentam parser nem verificação)."""
+    from freoa_verifica.transport import RespostaInvalida  # import tardio: transport usa este módulo
+
+    try:
+        return interpretar(corpo, content_type).texto
+    except (RespostaInvalida, ValueError):
+        pass
+    try:
+        return corpo.decode("utf-8")
+    except UnicodeDecodeError:
+        return corpo.decode("latin-1")
 
 
 def codec_html_declarado(corpo: bytes) -> str | None:
@@ -437,10 +493,23 @@ def codec_html_declarado(corpo: bytes) -> str | None:
     return achado[1] if achado and achado[1] != "-" else None
 
 
+def content_type_do_response(resp) -> str | None:
+    """Content-Type cru que o transporte guardou (ou o do recibo, em captura relida)."""
+    return getattr(resp, "content_type", "") or (getattr(resp, "headers", None) or {}).get("content-type") or None
+
+
 def texto_do_response(resp, *, parcial: bool = False) -> str:
     """Texto do corpo de um `Response`, com o Content-Type cru que o transporte guardou."""
-    ctype = getattr(resp, "content_type", "") or (getattr(resp, "headers", None) or {}).get("content-type")
-    return texto_da_resposta(resp.body, ctype, parcial=parcial)
+    return texto_da_resposta(resp.body, content_type_do_response(resp), parcial=parcial)
+
+
+def corpo_binario(resp) -> bytes:
+    """Bytes de um `Response` para parser de formato binário (PDF, DOCX), com o Content-Type validado como no texto.
+
+    Único caminho pelo qual um parser recebe bytes de resposta (garantia estrutural 4, FIX18).
+    """
+    _mime(content_type_do_response(resp))
+    return resp.body
 
 
 def arvore_html(corpo: bytes | str, content_type: str | None = None):

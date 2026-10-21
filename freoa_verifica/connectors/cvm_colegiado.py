@@ -213,7 +213,7 @@ class CvmColegiadoConnector(Connector):
             if exc.reason in {'http_404','http_410'}:
                 return self._search_portal(q,limite=limite,ano=ano)
             raise
-        text = texto_da_resposta(resp.body, resp.content_type or resp.headers.get("content-type"))
+        text = texto_do_response(resp)
         if _MAINTENANCE.search(text):
             raise Unavailable("resposta_invalida")
         tree = arvore_html(text)

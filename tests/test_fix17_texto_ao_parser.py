@@ -19,7 +19,7 @@ from freoa_verifica.connectors.senado import SenadoConnector
 from freoa_verifica.connectors.tcu import TcuConnector
 from freoa_verifica.connectors.tjdft import _load as tjdft_load
 from freoa_verifica.parsers.isolated import parse_isolated
-from freoa_verifica.transport import Response
+from freoa_verifica.transport import Response, RespostaInvalida
 
 CT_UTF8 = "text/html; charset=utf-8"
 META_LATIN1 = '<meta charset="iso-8859-1">'
@@ -50,12 +50,12 @@ def test_planalto_meta_vale_quando_o_cabecalho_nao_declara():
     assert "Ação" in " ".join(r.text for p in doc.provisions for r in p.redactions)
 
 
-def test_planalto_captura_relida_sem_content_type_usa_a_escada_declarada():
-    """Sem Content-Type o Response não veio do transporte: captura relida (cp1252 sem meta, como a real da LSA)."""
+def test_planalto_sem_content_type_nao_cai_em_escada_alternativa():
+    """FIX18/F-22 (decisão 0064): sem Content-Type vale a mesma função única; cp1252 sem meta não é UTF-8 e falha
+    declarada, nunca a escada cp1252 de `decode_html_bytes` (que a FIX17 aplicava a captura relida)."""
     corpo = PLANALTO.replace(META_LATIN1, "").encode("cp1252")
-    doc = PlanaltoConnector().parse(_resposta("https://www.planalto.gov.br/ccivil_03/leis/l1.htm", corpo, ""))
-    assert "Ação" in " ".join(r.text for p in doc.provisions for r in p.redactions)
-    assert "ENCODING_FALLBACK" in {i.code for i in doc.issues}
+    with pytest.raises(RespostaInvalida):
+        PlanaltoConnector().parse(_resposta("https://www.planalto.gov.br/ccivil_03/leis/l1.htm", corpo, ""))
 
 
 def test_filho_com_texto_nao_redetecta_charset():

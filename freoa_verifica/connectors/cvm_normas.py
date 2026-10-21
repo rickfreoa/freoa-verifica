@@ -22,7 +22,7 @@ from freoa_verifica.connectors.httputil import connector_fetch, form_body
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
 from freoa_verifica.parsers.model import Issue, ParsedDocument
-from freoa_verifica.texto_resposta import arvore_html, texto_do_response
+from freoa_verifica.texto_resposta import arvore_html, corpo_binario, texto_do_response
 from freoa_verifica.transport import RespostaInvalida, Response, Session
 
 MAX_ITENS_PAGINA = 500
@@ -229,10 +229,11 @@ class CvmNormasConnector(Connector):
 
     def parse(self, resp: Response) -> ParsedDocument:
         kind = _kind_from_url(resp.final_url)
-        if kind == "docx" or resp.body[:2] == b"PK":
-            return _parse_docx(resp.body)
-        if kind == "pdf" or resp.body[:4] == b"%PDF":
-            return _parse_pdf(resp.body, source=resp.final_url)
+        corpo = corpo_binario(resp)
+        if kind == "docx" or corpo[:2] == b"PK":
+            return _parse_docx(corpo)
+        if kind == "pdf" or corpo[:4] == b"%PDF":
+            return _parse_pdf(corpo, source=resp.final_url)
         # HTML da página do ato — ementa/situação
         return _parse_ato_html(texto_do_response(resp), base_url=resp.final_url)
 

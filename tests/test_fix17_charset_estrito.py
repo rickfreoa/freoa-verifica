@@ -72,8 +72,10 @@ def test_parametros_nao_aplicam_rfc2231():
     assert nomes == ["charset*0", "charset"]
 
 
-def test_nao_textual_nao_interpreta_charset():
-    assert texto_da_resposta(b"%PDF", "application/pdf; charset*=x''y")
+def test_nao_textual_tambem_valida_charset():
+    """FIX18/F-19: MIME binário não dispensa a validação (esta asserção, na FIX17, afirmava o contrário)."""
+    with pytest.raises(RespostaInvalida):
+        texto_da_resposta(b"%PDF", "application/pdf; charset*=x''y")
 
 
 # --- matriz: transporte, guarda e hook ------------------------------------------------------------------------
