@@ -17,4 +17,7 @@ EXPERIMENTAL: frozenset[str] = frozenset({
     # Lista por tribunal (decisão 0055). `[]` deixa de fora o objeto `cobertura` de `nao_confirmado_no_acervo`, estável.
     "pesquisar_jurisprudencia:cobertura[]",
     "pesquisar_jurisprudencia:cobertura_por_tribunal",
+    # Texto de captura lida sem Content-Type (decisão 0065); também em `evidence[]` de `verificar_citacao`.
+    "obter_dispositivo:proveniencia",
+    "obter_evidencia:proveniencia",
 })

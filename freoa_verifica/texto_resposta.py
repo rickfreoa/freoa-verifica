@@ -394,6 +394,8 @@ def _declarado(corpo: bytes, content_type: str | None, mime: str) -> tuple[str, 
         if achado is None:
             raise _invalida(f"Charset não suportado: {rotulo}")
         return (*achado, "header")
+    if not mime and corpo.lstrip(_ESPACOS)[:1] in (b"{", b"["):
+        return (*_ROTULOS["utf-8"], "padrao")  # JSON sem Content-Type: UTF-8 (RFC 8259 §8.1), sem prescan HTML (0065)
     if not mime or mime == "text/html":
         achado = _prescan_html(corpo)
         if achado is not None:
@@ -405,7 +407,9 @@ def _declarado(corpo: bytes, content_type: str | None, mime: str) -> tuple[str, 
     return (*_ROTULOS["utf-8"], "padrao")
 
 
-ORIGENS = ("bom", "header", "meta", "declaracao_xml", "padrao", "binario")
+ORIGEM_LEGADO = "legado_sem_cabecalho"
+ORIGENS = ("bom", "header", "meta", "declaracao_xml", "padrao", "binario", ORIGEM_LEGADO)
+_MAGICOS_BINARIOS = (b"%PDF-", b"PK\x03\x04")
 
 
 @dataclass(frozen=True)
@@ -457,6 +461,19 @@ def interpretar(corpo: bytes, content_type: str | None = None, *, parcial: bool 
     if not isinstance(texto, str):
         raise _invalida(f"Charset não textual: {nome}")
     return Interpretacao(texto, nome, origem)
+
+
+def interpretar_legado(corpo: bytes) -> Interpretacao:
+    """Captura sem Content-Type (1.2.0 gravava `headers_json={}`): decisão só dos próprios bytes (decisão 0065).
+
+    A mesma `interpretar`, sem Content-Type: BOM → prescan WHATWG → declaração XML → JSON e demais em UTF-8 estrito.
+    PDF/DOCX pela assinatura são binários (sem codec). Nenhum Content-Type é inventado; a origem declara a prova
+    degradada. Bytes inválidos: `RespostaInvalida`.
+    """
+    if corpo.startswith(_MAGICOS_BINARIOS):
+        return Interpretacao(corpo.decode("latin-1"), None, ORIGEM_LEGADO)
+    decisao = interpretar(corpo, None)
+    return Interpretacao(decisao.texto, decisao.codificacao, ORIGEM_LEGADO)
 
 
 def texto_da_resposta(corpo: bytes | str | None, content_type: str | None = None, *, parcial: bool = False) -> str:
