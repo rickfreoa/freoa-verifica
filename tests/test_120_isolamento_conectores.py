@@ -1,4 +1,5 @@
 """Auditoria 1.2.0 (B2, M1, M2): Planalto e BCB parseiam no filho limitado, com resultado idêntico ao do pai."""
+import dataclasses
 import hashlib
 import os
 import subprocess
@@ -26,8 +27,10 @@ def _resp(body, url):
 
 def test_planalto_no_filho_identico_ao_pai():
     body = (FIX / "planalto_lei_6404_1976.html").read_bytes()
-    filho = PlanaltoConnector().parse(_resp(body, URL))
-    pai = parse_planalto(body, base_url=URL)
+    # FIX18 (0064): sem Content-Type não há escada alternativa; o charset é o que ela deduzia (ver conftest).
+    resp = dataclasses.replace(_resp(body, URL), content_type="text/html; charset=windows-1252")
+    filho = PlanaltoConnector().parse(resp)
+    pai = parse_planalto(body.decode("cp1252"), base_url=URL)
     assert asdict(filho) == asdict(pai) and len(pai.provisions) > 100
 
 

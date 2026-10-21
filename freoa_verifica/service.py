@@ -51,6 +51,7 @@ from freoa_verifica.parsers.model import (
 from freoa_verifica.store import blobs, repo
 from freoa_verifica.store.db import connect, data_home
 from freoa_verifica.temporal import select as temporal_select
+from freoa_verifica.texto_resposta import content_type_do_response
 from freoa_verifica.transport import _CIRCUIT_BREAKERS
 from freoa_verifica import situacao  # C2
 from freoa_verifica.verify import (
@@ -917,7 +918,7 @@ class Verifica:
                     work_key=work,
                     document=parsed,
                     body=resp.body,
-                    content_type=resp.content_type,
+                    content_type=content_type_do_response(resp),
                     url=resp.final_url or resp.url,
                     fetched_at=resp.fetched_at,
                     label=label,
@@ -1174,7 +1175,7 @@ class Verifica:
                     work_key=wk,
                     document=parsed,
                     body=resp.body,
-                    content_type=resp.content_type,
+                    content_type=content_type_do_response(resp),
                     url=resp.final_url or resp.url,
                     fetched_at=resp.fetched_at,
                     label=cand.title,

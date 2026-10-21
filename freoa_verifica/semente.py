@@ -22,6 +22,7 @@ from freoa_verifica.connectors.guarda import da_chamada
 from freoa_verifica.connectors.stf import SUMULA_BASES
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.parsers.model import ParsedDocument
+from freoa_verifica.texto_resposta import content_type_do_response
 
 log = logging.getLogger("freoa_verifica.semente")
 
@@ -327,7 +328,7 @@ class SementeSync:
                 work_key=work_key,
                 document=parsed,
                 body=resp.body,
-                content_type=resp.content_type,
+                content_type=content_type_do_response(resp),
                 url=resp.final_url or resp.url,
                 fetched_at=resp.fetched_at,
                 label=label,
@@ -586,7 +587,7 @@ class SementeSync:
                 work_key=wk,
                 document=parsed,
                 body=resp.body,
-                content_type=resp.content_type,
+                content_type=content_type_do_response(resp),
                 url=resp.final_url or resp.url,
                 fetched_at=resp.fetched_at,
                 label=cand.title,
@@ -702,7 +703,7 @@ class SementeSync:
                 work_key=wk,
                 document=parsed,
                 body=resp.body,
-                content_type=resp.content_type,
+                content_type=content_type_do_response(resp),
                 url=resp.final_url or resp.url,
                 fetched_at=resp.fetched_at,
                 label=cand.title,

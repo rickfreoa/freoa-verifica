@@ -59,7 +59,7 @@ class _Senado:
         url = "https://www25.senado.leg.br/lei6404"
         return Response(url, url, 200, {}, body, hashlib.sha256(body).hexdigest(),
                         load_meta()["planalto_lei_6404_1976"].get("capturado_em") or "2026-01-01T00:00:00+00:00",
-                        [], "text/html")
+                        [], "text/html", content_type="text/html; charset=windows-1252")  # FIX18: ver conftest
 
     def parse(self, resp):
         return self._parser.parse(resp)
