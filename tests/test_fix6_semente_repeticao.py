@@ -18,6 +18,20 @@ from tests.test_fix5_resposta_iniciada import _servidor as _servidor_gotejante
 from tests.test_transport import _fast_guards, _wire_local
 
 
+
+def _so_desta_thread(esperas):
+    """time.sleep global registra só as esperas da thread do teste: threads de outros testes não contam."""
+    import threading
+    dono = threading.get_ident()
+    real = __import__("time").sleep
+
+    def dormir(s):
+        if threading.get_ident() == dono:
+            esperas.append(s)
+        else:
+            real(s)
+    return dormir
+
 def _servidor_status(status: int, retry_after: str | None = None):
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -46,7 +60,7 @@ def _rodar(monkeypatch, tmp_path, server):
     monkeypatch.setattr(transport, "SLOW_WINDOW", 0.05)
     esperas: list[float] = []
     monkeypatch.setattr(transport, "_dormir", esperas.append)
-    monkeypatch.setattr("time.sleep", esperas.append)  # nenhum laço da semente pode dormir de verdade
+    monkeypatch.setattr("time.sleep", _so_desta_thread(esperas))  # nenhum laço da semente pode dormir de verdade
     try:
         with Verifica(tmp_path) as svc:
             sync = SementeSync(svc, fontes=["planalto"], rate_delay=0)

@@ -16,6 +16,20 @@ from tests.test_fix6_semente_repeticao import _servidor_status
 from tests.test_transport import _fast_guards, _wire_local
 
 
+
+def _so_desta_thread(esperas):
+    """time.sleep global registra só as esperas da thread do teste: threads de outros testes não contam."""
+    import threading
+    dono = threading.get_ident()
+    real = __import__("time").sleep
+
+    def dormir(s):
+        if threading.get_ident() == dono:
+            esperas.append(s)
+        else:
+            real(s)
+    return dormir
+
 def _rodar(monkeypatch, tmp_path, server):
     monkeypatch.delenv("FV_OFFLINE", raising=False)
     _fast_guards(monkeypatch)
@@ -23,7 +37,7 @@ def _rodar(monkeypatch, tmp_path, server):
     monkeypatch.setattr(transport, "SLOW_WINDOW", 0.05)
     esperas: list[float] = []
     monkeypatch.setattr(transport, "_dormir", esperas.append)
-    monkeypatch.setattr("time.sleep", esperas.append)
+    monkeypatch.setattr("time.sleep", _so_desta_thread(esperas))
     doc = ParsedDocument("fixture", "1", "Lei 6.404", None, "Art. 1 Texto.",
                          [Provision("art1", "Art. 1", "", redactions=[Redaction("Art. 1 Texto.", False, 0)])])
     doc.provisions[0].redactions[0].annotations = [

@@ -13,6 +13,20 @@ from freoa_verifica.connectors.planalto import PlanaltoConnector
 from tests.test_transport import _fast_guards, _wire_local
 
 
+
+def _so_desta_thread(esperas):
+    """time.sleep global registra só as esperas da thread do teste: threads de outros testes não contam."""
+    import threading
+    dono = threading.get_ident()
+    real = __import__("time").sleep
+
+    def dormir(s):
+        if threading.get_ident() == dono:
+            esperas.append(s)
+        else:
+            real(s)
+    return dormir
+
 def _servidor_503(retry_after: str | None = None):
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -39,7 +53,7 @@ def _executar(monkeypatch, server):
     _wire_local(monkeypatch, server.server_address[1])
     esperas: list[float] = []
     monkeypatch.setattr(transport, "_dormir", esperas.append)
-    monkeypatch.setattr("time.sleep", esperas.append)  # nenhum laço externo pode dormir de verdade
+    monkeypatch.setattr("time.sleep", _so_desta_thread(esperas))  # nenhum laço externo pode dormir de verdade
     c = PlanaltoConnector()
     cand = c.resolve({"tipo": "LEI", "numero": 6404, "ano": 1976})
     breaker = None
