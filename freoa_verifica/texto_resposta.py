@@ -1,7 +1,8 @@
-"""Interpretação textual única do corpo de uma resposta HTTP (decisões 0061 e 0062).
+"""Interpretação textual única do corpo de uma resposta HTTP (decisões 0061 a 0064).
 
 Detecção de desafio (`connectors.challenge`, `transport._desafio_na_resposta`) e leitura de sucesso pelos
-conectores usam esta função. Ordem: BOM → parâmetro `charset` do Content-Type (media type, RFC 9110 §8.3.1)
+conectores usam esta função. Antes de tudo, a validação do Content-Type (0064). Ordem: BOM → parâmetro `charset`
+do Content-Type (media type, RFC 9110 §8.3.1)
 → HTML: "prescan a byte stream to determine its encoding" (WHATWG HTML §13.2.3.2); XML: declaração
 `encoding` (RFC 7303) → UTF-8. Rótulos pela tabela de encodings do WHATWG. Charset desconhecido ou bytes
 inválidos no charset escolhido são `RespostaInvalida`: corpo que não foi interpretado nunca equivale a "sem
