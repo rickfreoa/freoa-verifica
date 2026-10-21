@@ -2948,6 +2948,8 @@ class Verifica:
                                    **exc.classificacao()})
                     continue
                 item = {"capture_id": None, "motivo": "orcamento"}  # abandonada: nada parcial é confirmado
+                # A espera pode voltar antes do relógio (Windows): o orçamento declarado esgotado vale como esgotado.
+                prazo = min(prazo, time.monotonic())
             if not item.get("capture_id") and time.monotonic() >= prazo:  # orçamento estourou no item
                 nao_indexados += 1
                 itens.append({"titulo": c.title, "chave": c.key, "url": c.url, "trecho": c.snippet or "",
