@@ -156,6 +156,8 @@ class Response:
     http: HTTPMetadata | None = None
     size: int = 0
     content_type: str = ""  # Content-Type cru recebido, com charset; `headers` só retém o que cabe no recibo
+    # Só em captura legada relida pelo padrão da fonte, sob conferência (0065, emenda); nunca é Content-Type.
+    interpretacao_legada: object = None
 
 
 # portado de freoa-verifica/http_receipts.py:_valid_header

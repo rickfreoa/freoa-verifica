@@ -44,3 +44,40 @@ O snapshot congelado tem 843 capturas com modelo (423 BCB, 299 CVM, 121 Planalto
 - Senado e demais fontes não reprocessáveis ficam fora do critério de compatibilidade, como ficam fora da releitura.
 - Testes: `tests/test_fix19_f24_legado.py`; revistos `tests/test_fix18_f22_recibo_interpretacao.py` e
   `tests/test_c6_derivados.py` (snapshot da 1.0.2 sem Content-Type agora é relido como legado).
+
+## Emenda (FIX19b, 21/10/2026) — padrão da fonte sob conferência
+
+**Problema.** Na cópia do banco real, 118 das 121 capturas legadas do Planalto falham na regra 1: sem BOM, sem
+declaração nos bytes e inválidas em UTF-8 (cp1252 sem `<meta>`, como a fixture real da LSA). O Planalto recusa o
+cliente identificado (0048): não há recaptura nem cabeçalho autêntico obtenível.
+
+**Regra 6 (decisão do supervisor).** Para captura legada (sem Content-Type) **sem declaração de codificação nos
+bytes** (BOM, `<meta>` efetivo pelo prescan, declaração XML; nem JSON nem binário pela assinatura) **e inválida em
+UTF-8**, admite-se uma única codificação alternativa por fonte, declarada na tabela versionada
+`texto_resposta.CODIFICACAO_LEGADA_POR_FONTE = {"planalto": "windows-1252"}` — **sob condição de conferência**:
+
+1. a releitura só é aceita se o modelo produzido for idêntico ao modelo já persistido para aquela captura (produzido
+   pela versão que a capturou), comparados por hash canônico do modelo (`service._hash_modelo`: título, ementa,
+   texto e, por dispositivo, caminho, rótulo, escopo, rubrica, cabeçalhos e redações com texto e marca de riscado;
+   ficam fora issues, spans, anotações e versão do parser);
+2. idêntico: `interpretacao_origem = "legado_padrao_da_fonte_conferido"`, codificação registrada no derivado e, em
+   `parsed_document.interpretacao_conferencia` (migração 016, exportada no snapshot), a evidência
+   `{modelo_anterior_sha256, modelo_novo_sha256}`;
+3. divergente, ou sem modelo anterior: `falha: interpretacao_indisponivel`, modelo e obra intactos. O padrão da fonte
+   nunca é aplicado sem conferência;
+4. não se aplica a capturas novas (`repo.interpretacao_do_recibo` não consulta a tabela: captura nova sem
+   Content-Type continua na regra 1) nem a fontes sem entrada na tabela.
+
+Releitura seguinte de captura conferida confere de novo, contra o modelo persistido (idêntico ao original) e contra
+a decisão registrada no derivado. `obter_evidencia` só usa o padrão da fonte para captura cuja conferência está
+registrada no derivado; sem ela, exibe como na regra 3.
+
+**Relatório e resposta pública.** `por_fonte.<id>` ganha `reprocessadas_legadas_conferidas`.
+`proveniencia.interpretacao` (experimental) vale `legado_sem_cabecalho` ou `legado_padrao_da_fonte_conferido`.
+
+**Consequências.** A conferência prende a releitura ao parser: mudança futura do parser do Planalto que altere o
+modelo dessas capturas fará a conferência falhar e a reconstrução ser recusada; a saída, então, é decisão nova, não
+afrouxar o hash. A conferência prova que a versão atual reproduz a leitura da versão que capturou, não que
+windows-1252 era a codificação servida; por isso a origem é declarada em toda resposta. Testes em
+`tests/test_fix19_f24_legado.py` (padrão aceito e conferido, modelo divergente, sem modelo, fonte sem tabela,
+captura nova).
