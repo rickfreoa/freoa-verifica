@@ -130,7 +130,8 @@ def _lsa_completa(tmp_path, monkeypatch):
     svc = Verifica(home=tmp_path)
     svc.indexar_obra(source_id="planalto", work_key=WorkKey("federal", "lei", "6404", 1976), document=doc,
                      body=body, url=load_meta()["planalto_lei_6404_1976"]["url"],
-                     fetched_at="2026-10-18T00:00:00+00:00", work_date="1976-12-15", label="Lei nº 6.404/1976")
+                     fetched_at="2026-10-18T00:00:00+00:00", work_date="1976-12-15", label="Lei nº 6.404/1976",
+                     content_type="text/html; charset=windows-1252")  # FIX19: ver conftest (cp1252 sem <meta>)
     return svc, doc
 
 
