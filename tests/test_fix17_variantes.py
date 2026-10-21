@@ -19,6 +19,7 @@ from freoa_verifica.parsers.bcb_json import parse_bcb_json
 from freoa_verifica.service import Verifica
 from freoa_verifica.transport import Response
 from tests.test_fix12_sintaxe_estrita import _servidor
+from tests.test_fix17_controladores import servidor_que_le_o_corpo
 from tests.test_fix15_charset import _enviar
 from tests.test_transport import _fast_guards, _wire_local
 
@@ -126,7 +127,7 @@ RESPOSTA = (b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: text/
 @pytest.fixture
 def rede(monkeypatch):
     monkeypatch.delenv("FV_OFFLINE", raising=False)
-    server, pedidos = _servidor(RESPOSTA)
+    server, pedidos = servidor_que_le_o_corpo(RESPOSTA)
     _fast_guards(monkeypatch)
     _wire_local(monkeypatch, server.server_address[1])
     yield lambda: Counter(re.search(rb"(?im)^host:\s*([^\r\n:]+)", p).group(1).decode().lower() for p in pedidos)

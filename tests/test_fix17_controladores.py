@@ -8,7 +8,9 @@ indisponível (status != "ok"). Transporte e conectores reais, TCP local; nada s
 from __future__ import annotations
 
 import re
+import socketserver
 import sqlite3
+import threading
 from collections import Counter
 
 import pytest
@@ -22,7 +24,6 @@ from freoa_verifica.connectors.cvm_normas import CvmNormasConnector
 from freoa_verifica.connectors.stj import StjConnector
 from freoa_verifica.semente import SyncState, _com_guarda
 from freoa_verifica.service import Verifica
-from tests.test_fix12_sintaxe_estrita import _servidor
 from tests.test_transport import _fast_guards, _wire_local
 
 CAPTCHA = b"<html><body><p>CAPTCHA</p></body></html>"
@@ -30,11 +31,44 @@ RESPOSTA = (b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: text/
             b"Content-Length: %d\r\n\r\n" % len(CAPTCHA)) + CAPTCHA
 
 
+def servidor_que_le_o_corpo(bytes_resposta: bytes):
+    """Como `_servidor`, mas consome o corpo (Content-Length) antes de responder: no Windows, fechar o socket com
+    corpo de POST não lido manda RST e o cliente veria falha de transporte em vez da resposta."""
+    pedidos: list[bytes] = []
+
+    class H(socketserver.BaseRequestHandler):
+        def handle(self):
+            dados = b""
+            while b"\r\n\r\n" not in dados:
+                parte = self.request.recv(4096)
+                if not parte:
+                    return
+                dados += parte
+            cab, _, resto = dados.partition(b"\r\n\r\n")
+            m = re.search(rb"(?im)^content-length:\s*(\d+)", cab)
+            falta = int(m.group(1)) - len(resto) if m else 0
+            while falta > 0:
+                parte = self.request.recv(min(65536, falta))
+                if not parte:
+                    break
+                falta -= len(parte)
+            pedidos.append(cab)
+            self.request.sendall(bytes_resposta)
+
+    class S(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    server = S(("127.0.0.1", 0), H)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, pedidos
+
+
 @pytest.fixture
 def rede(monkeypatch):
     """Servidor local que desafia todo pedido; devolve um contador de pedidos por host (cabeçalho Host)."""
     monkeypatch.delenv("FV_OFFLINE", raising=False)
-    server, pedidos = _servidor(RESPOSTA)
+    server, pedidos = servidor_que_le_o_corpo(RESPOSTA)
     _fast_guards(monkeypatch)
     _wire_local(monkeypatch, server.server_address[1])
 
