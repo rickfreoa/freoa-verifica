@@ -95,7 +95,7 @@ def test_reopen_idempotent(db_path):
     row = c2.execute("SELECT id FROM source WHERE id='s1'").fetchone()
     assert row is not None
     versions = {row[0] for row in c2.execute("SELECT version FROM schema_version")}
-    assert versions == set(range(1, 16))
+    assert versions == set(range(1, 17))
     c2.close()
 
 
@@ -112,7 +112,7 @@ def test_banco_v102_migra_para_v103(tmp_path, monkeypatch):
     c.close()
     monkeypatch.undo()
     c = dbmod.connect(tmp_path / "v102.sqlite3")
-    assert {r[0] for r in c.execute("SELECT version FROM schema_version")} == set(range(1, 16))
+    assert {r[0] for r in c.execute("SELECT version FROM schema_version")} == set(range(1, 17))
     assert c.execute("SELECT id FROM source").fetchone()[0] == "s1"
     for tabela in ("work_status", "fts_staging"):
         c.execute(f"SELECT * FROM {tabela} LIMIT 1")
