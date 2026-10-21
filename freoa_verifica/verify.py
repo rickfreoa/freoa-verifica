@@ -728,20 +728,6 @@ def populate_from_parsed(
     from freoa_verifica.identity import validate_identity
     validate_identity(work_key, document, work_date)
 
-    # garante source
-    conn.execute(
-        "INSERT OR IGNORE INTO source(id, authority, profile, hosts_json) VALUES (?,?,?,?)",
-        (source_id, work_key.authority, document.profile, "[]"),
-    )
-    work_id = store_repo.upsert_work(
-        conn,
-        jurisdiction="br",
-        authority=work_key.authority,
-        kind=work_key.kind,
-        number=work_key.number,
-        year=work_key.year,
-        label=label,
-    )
     fetched = fetched_at or datetime.now(timezone.utc).isoformat()
     digest = hashlib.sha256(body).hexdigest()
     resp = Response(
@@ -755,6 +741,25 @@ def populate_from_parsed(
         redirects=[],
         mime="application/octet-stream",
         content_type=content_type or "",
+    )
+    # Modelo de fonte reprocessável só com decisão de interpretação; sem ela, nada se grava (F-26, decisão 0066).
+    if source_id in store_repo.FONTES_COMPILADAS and not store_repo.decisao_registrada(
+            *store_repo.interpretacao_do_recibo(resp)[1:]):
+        raise store_repo.interpretacao_indisponivel(digest, url)
+
+    # garante source
+    conn.execute(
+        "INSERT OR IGNORE INTO source(id, authority, profile, hosts_json) VALUES (?,?,?,?)",
+        (source_id, work_key.authority, document.profile, "[]"),
+    )
+    work_id = store_repo.upsert_work(
+        conn,
+        jurisdiction="br",
+        authority=work_key.authority,
+        kind=work_key.kind,
+        number=work_key.number,
+        year=work_key.year,
+        label=label,
     )
     capture_id = store_repo.save_capture(conn, resp, source_id, home=home)
     with conn:

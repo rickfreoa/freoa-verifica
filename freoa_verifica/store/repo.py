@@ -42,6 +42,23 @@ def interpretacao_do_recibo(resp: Response) -> tuple[str | None, str | None, str
     return content_type, decisao.codificacao, decisao.origem
 
 
+# Sem codec só o binário (pela assinatura, no legado): texto sempre tem o codec que o leu.
+_ORIGENS_SEM_CODEC = ("binario", "legado_sem_cabecalho")
+
+
+def decisao_registrada(codificacao: str | None, origem: str | None) -> bool:
+    """Decisão de interpretação presente (F-26, decisão 0066): origem e codec, salvo binário. Content-Type não basta."""
+    return origem is not None and (codificacao is not None or origem in _ORIGENS_SEM_CODEC)
+
+
+def interpretacao_indisponivel(capture_sha256: str | None = None, url: str | None = None):
+    """Falha declarada de quem grava modelo sem decisão de interpretação (F-26): nada é gravado."""
+    from freoa_verifica.connectors.base import Unavailable
+
+    evidencia = {k: v for k, v in (("sha256", capture_sha256), ("url", url)) if v}
+    return Unavailable("interpretacao_indisponivel", "resposta_inesperada", evidencia)
+
+
 def save_capture(
     conn: sqlite3.Connection,
     resp: Response,
@@ -535,8 +552,23 @@ def persist_parsed_document(
     work_date: str | None = None,
     amending_act_texts: dict[str, str] | None = None,
     candidato_ao_vivo: bool | None = None,
+    interpretacao: tuple[str | None, str, str | None] | None = None,
 ) -> str:
-    """Persiste parsed_document, extract e occurrences (redaction → extract/capture)."""
+    """Persiste parsed_document, extract e occurrences (redaction → extract/capture).
+
+    Fonte reprocessável: o modelo só se grava com decisão de interpretação, a do recibo ou `interpretacao`
+    (codec, origem, conferência da releitura legada), gravada no derivado na mesma transação (F-26, decisão 0066).
+    """
+    if interpretacao is not None:
+        if not decisao_registrada(interpretacao[0], interpretacao[1]):
+            raise interpretacao_indisponivel()
+    else:
+        cap = conn.execute("SELECT c.source_id, c.sha256, c.url, c.codificacao, c.origem_da_codificacao, "
+                           "p.interpretacao_codificacao, p.interpretacao_origem FROM capture c "
+                           "LEFT JOIN parsed_document p ON p.capture_id=c.id WHERE c.id=?", (capture_id,)).fetchone()
+        if (cap is not None and cap[0] in FONTES_COMPILADAS and not decisao_registrada(cap[3], cap[4])
+                and not decisao_registrada(cap[5], cap[6])):
+            raise interpretacao_indisponivel(cap[1], cap[2])
     text_sha = hashlib.sha256((document.text or "").encode("utf-8")).hexdigest()
     extract_id = new_ulid()
     conn.execute(
@@ -595,6 +627,9 @@ def persist_parsed_document(
          json.dumps(amending_act_texts or {}, ensure_ascii=False),
          json.dumps(events, ensure_ascii=False), capture_id),
     )
+    if interpretacao is not None:  # recibo (imutável) sem decisão: a da releitura fica no derivado (0065)
+        conn.execute("UPDATE parsed_document SET interpretacao_codificacao=?, interpretacao_origem=?, "
+                     "interpretacao_conferencia=? WHERE capture_id=?", (*interpretacao, capture_id))
     if candidato_ao_vivo is not None:  # None preserva a marca existente (reprocessamento)
         conn.execute("UPDATE parsed_document SET candidato_ao_vivo=? WHERE capture_id=?",
                      (1 if candidato_ao_vivo else 0, capture_id))

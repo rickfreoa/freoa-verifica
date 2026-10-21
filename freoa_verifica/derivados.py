@@ -25,12 +25,15 @@ _log = logging.getLogger(__name__)
 #     no derivado; decisões 0064 e 0065).
 DERIVED_VERSION = 5
 
-# Captura reprocessável com modelo e sem decisão de interpretação no recibo (0064) nem no derivado (0065).
+# Captura reprocessável com modelo e sem decisão de interpretação no recibo (0064) nem no derivado (0065), com ou
+# sem Content-Type (F-26, 0066). Decisão = origem e codec, salvo binário: o mesmo de `repo.decisao_registrada`.
+_DECIDIDA = "({o} IS NOT NULL AND ({c} IS NOT NULL OR {o} IN ('binario','legado_sem_cabecalho')))"
 _SEM_DECISAO = (
     "SELECT 1 FROM capture c JOIN parsed_document p ON p.capture_id=c.id JOIN work w ON w.id=p.work_id "
     "WHERE p.model_json IS NOT NULL AND c.source_id IN ('planalto','cvm_normas','bcb') "
-    "AND w.authority NOT LIKE 'invalidated:%' AND c.content_type IS NULL AND c.origem_da_codificacao IS NULL "
-    "AND p.interpretacao_origem IS NULL LIMIT 1")
+    "AND w.authority NOT LIKE 'invalidated:%' "
+    f"AND NOT {_DECIDIDA.format(o='c.origem_da_codificacao', c='c.codificacao')} "
+    f"AND NOT {_DECIDIDA.format(o='p.interpretacao_origem', c='p.interpretacao_codificacao')} LIMIT 1")
 
 REASON = "ACERVO_DESATUALIZADO"
 REASON_NAO_PUBLICADA = "ACERVO_DE_VERSAO_NAO_PUBLICADA"
