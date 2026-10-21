@@ -13,7 +13,6 @@ from __future__ import annotations
 import codecs
 import re
 import unicodedata
-from email.message import Message
 
 _BOMS: tuple[tuple[bytes, str], ...] = (  # UTF-32 antes de UTF-16: o BOM LE de 32 começa com o de 16
     (codecs.BOM_UTF32_LE, "utf-32"),
@@ -277,7 +276,10 @@ def _declaracao_xml(corpo: bytes) -> tuple[str, str] | None:
 
 
 def _mime(content_type: str | None) -> str:
-    return (content_type or "").split(";", 1)[0].strip().lower()
+    if not (content_type or "").strip(_OWS):
+        return ""
+    parametros_media_type(content_type)  # malformado é RespostaInvalida mesmo sem charset nem mime textual (FIX17)
+    return content_type.split(";", 1)[0].strip(_OWS).lower()
 
 
 def _textual(mime: str) -> bool:
@@ -296,13 +298,88 @@ def _invalida(motivo: str):
     return RespostaInvalida(motivo)
 
 
+_TCHAR = frozenset("!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+_OWS = " \t"
+
+
+def _token(texto: str, pos: int) -> tuple[str, int]:
+    fim = pos
+    while fim < len(texto) and texto[fim] in _TCHAR:
+        fim += 1
+    return texto[pos:fim], fim
+
+
+def _aspas(texto: str, pos: int) -> tuple[str, int]:
+    """quoted-string (RFC 9110 §5.6.4) a partir da aspa de abertura: (valor sem escapes, posição após o fecho)."""
+    saida: list[str] = []
+    pos += 1
+    while pos < len(texto):
+        c = texto[pos]
+        if c == '"':
+            return "".join(saida), pos + 1
+        if c == "\\":
+            pos += 1
+            if pos >= len(texto):
+                break
+            c = texto[pos]
+        if not (c in "\t " or "!" <= c <= "~" or "\x80" <= c <= "\xff"):  # qdtext / quoted-pair
+            raise _invalida("Content-Type malformado: caractere inválido em quoted-string")
+        saida.append(c)
+        pos += 1
+    raise _invalida("Content-Type malformado: quoted-string sem fecho")
+
+
+def parametros_media_type(content_type: str) -> list[tuple[str, str]]:
+    """Parâmetros de `type "/" subtype *( OWS ";" OWS [ parameter ] )` (RFC 9110 §5.6.6, §8.3.1).
+
+    Gramática estrita, sem RFC 2231: `charset*` é outro nome de parâmetro, nunca `charset`. Nomes em minúsculas.
+    Malformado é `RespostaInvalida`.
+    """
+    texto = content_type.strip(_OWS)
+    tipo, pos = _token(texto, 0)
+    if not tipo or texto[pos : pos + 1] != "/":
+        raise _invalida("Content-Type malformado: media type sem barra")
+    subtipo, pos = _token(texto, pos + 1)
+    if not subtipo:
+        raise _invalida("Content-Type malformado: subtipo vazio")
+    achados: list[tuple[str, str]] = []
+    while pos < len(texto):
+        while pos < len(texto) and texto[pos] in _OWS:
+            pos += 1
+        if texto[pos : pos + 1] != ";":
+            raise _invalida("Content-Type malformado: esperado ';' entre parâmetros")
+        pos += 1
+        while pos < len(texto) and texto[pos] in _OWS:
+            pos += 1
+        if pos >= len(texto) or texto[pos] == ";":  # parâmetro vazio é permitido pela gramática
+            continue
+        nome, pos = _token(texto, pos)
+        if not nome or texto[pos : pos + 1] != "=":
+            raise _invalida("Content-Type malformado: parâmetro sem nome ou sem valor")
+        pos += 1
+        if texto[pos : pos + 1] == '"':
+            valor, pos = _aspas(texto, pos)
+        else:
+            valor, pos = _token(texto, pos)
+            if not valor:
+                raise _invalida("Content-Type malformado: parâmetro sem valor")
+        achados.append((nome.lower(), valor))
+    return achados
+
+
 def _charset_cabecalho(content_type: str | None) -> str | None:
-    """Parâmetro `charset` (e só ele) do Content-Type interpretado como media type."""
+    """Valor do parâmetro `charset` (e só dele) do Content-Type; extensão RFC 2231 e duplicata divergente são inválidas."""
     if not content_type:
         return None
-    msg = Message()
-    msg["content-type"] = content_type
-    return msg.get_content_charset(failobj=None) or None
+    valores: list[str] = []
+    for nome, valor in parametros_media_type(content_type):
+        if nome.startswith("charset*"):
+            raise _invalida("Content-Type com charset estendido ou em continuação (RFC 2231) não é aceito")
+        if nome == "charset":
+            valores.append(valor)
+    if len({v.lower() for v in valores}) > 1:
+        raise _invalida("Content-Type com charset duplicado e divergente")
+    return valores[0] if valores else None
 
 
 def _declarado(corpo: bytes, content_type: str | None, mime: str) -> tuple[str, str]:
