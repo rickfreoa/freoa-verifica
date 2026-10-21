@@ -193,7 +193,7 @@ class StfConnector(Connector):
             )
         if "application/json" in (resp.mime or "") or resp.body[:1] in (b"{", b"["):
             try:
-                data = json.loads(resp.body.decode("utf-8"))
+                data = json.loads(texto_do_response(resp))
             except json.JSONDecodeError:
                 data = {}
             rg = (
@@ -284,7 +284,7 @@ class StfConnector(Connector):
             timeout=45.0,
         )
         try:
-            data = json.loads(resp.body.decode("utf-8"))
+            data = json.loads(texto_do_response(resp))
         except json.JSONDecodeError as exc:
             raise Unavailable("resposta_inesperada") from exc
         leading_cases = _leading_cases(_rg(data).get('processoLeadingCase'))

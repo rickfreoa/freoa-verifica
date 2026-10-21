@@ -27,6 +27,7 @@ from freoa_verifica.connectors.base import (
 from freoa_verifica.authority import normalize_species
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
+from freoa_verifica.texto_resposta import texto_do_response
 from freoa_verifica.transport import Response
 
 _MESES_REVALIDADOS = 2
@@ -192,7 +193,7 @@ class StjConnector(Connector):
                         timeout=120.0,
                         max_bytes=30 * 1024 * 1024,
                     )
-                    data = json.loads(resp.body.decode("utf-8"))
+                    data = json.loads(texto_do_response(resp))
                     ok = isinstance(data, list) and bool(data)
                     probes.append(
                         HealthProbe(
@@ -227,7 +228,7 @@ class StjConnector(Connector):
             timeout=180.0,
         )
         try:
-            payload = json.loads(resp.body.decode("utf-8"))
+            payload = json.loads(texto_do_response(resp))
         except json.JSONDecodeError as exc:
             raise Unavailable("resposta_inesperada") from exc
         if not payload.get("success"):
@@ -389,7 +390,7 @@ class StjConnector(Connector):
     def parse(self, resp: Response, *, key: str | None = None) -> ParsedDecision:
         if key is not None:
             if self._last_items is None or self._last_items[0] is not resp.body:
-                loaded = json.loads(resp.body.decode('utf-8'))
+                loaded = json.loads(texto_do_response(resp))
                 if isinstance(loaded,list):
                     self._last_items = (resp.body, {str(i.get('id') or i.get('numeroDocumento')):i for i in loaded if isinstance(i,dict)})
                 else:
@@ -398,7 +399,7 @@ class StjConnector(Connector):
             if data is None:
                 raise Unavailable('stj_documento_ausente_no_recurso')
         else:
-            data = json.loads(resp.body.decode("utf-8"))
+            data = json.loads(texto_do_response(resp))
         if key is not None and isinstance(data, list):
             data = next((item for item in data if isinstance(item, dict)
                          and str(item.get("id") or item.get("numeroDocumento")) == key), None)
@@ -546,7 +547,7 @@ class StjConnector(Connector):
                                 url, hosts=self.hosts, path_prefixes=self.path_prefixes,
                                 mimes=self.mimes, user_agent=self.user_agent,
                                 timeout=120.0, max_bytes=40 * 1024 * 1024)
-                        rows = json.loads(resp.body.decode("utf-8"))
+                        rows = json.loads(texto_do_response(resp))
                         if not isinstance(rows, list):
                             raise Unavailable("stj_recurso_nao_lista")
                         self.resource_dir.mkdir(parents=True, exist_ok=True)

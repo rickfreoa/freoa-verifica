@@ -25,7 +25,8 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
-from freoa_verifica.transport import Response
+from freoa_verifica.texto_resposta import texto_do_response
+from freoa_verifica.transport import RespostaInvalida, Response
 
 _HOST = "jurisdf.tjdft.jus.br"
 _API = f"https://{_HOST}/api/v1/pesquisa"
@@ -365,8 +366,8 @@ class TjdftConnector(Connector):
 
 def _load(resp: Response) -> dict[str, Any]:
     try:
-        data = json.loads(resp.body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        data = json.loads(texto_do_response(resp))
+    except (RespostaInvalida, json.JSONDecodeError) as exc:
         raise Unavailable("tjdft_json_invalido") from exc
     if not isinstance(data, dict):
         raise Unavailable("tjdft_json_invalido")

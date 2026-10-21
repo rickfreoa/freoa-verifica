@@ -18,6 +18,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
+from freoa_verifica.texto_resposta import texto_do_response
 from freoa_verifica.transport import Response
 
 _TIPOS = frozenset({"LEI", "LCP", "DEL", "MPV", "DEC", "EMC", "DLG", "DSN"})
@@ -163,7 +164,7 @@ class SenadoConnector(Connector):
             timeout=45.0,
         )
         try:
-            payload = json.loads(resp.body.decode("utf-8"))
+            payload = json.loads(texto_do_response(resp))
         except json.JSONDecodeError as exc:
             raise Unavailable("resposta_inesperada") from exc
         docs = _docs_from_payload(payload)
@@ -210,7 +211,7 @@ class SenadoConnector(Connector):
     def parse(self, resp: Response):
         from freoa_verifica.parsers.model import ParsedDocument
 
-        payload = json.loads(resp.body.decode("utf-8"))
+        payload = json.loads(texto_do_response(resp))
         docs = _docs_from_payload(payload)
         doc = docs[0] if docs else {}
         ident = doc.get("identificacao") if isinstance(doc.get("identificacao"), dict) else doc
@@ -290,7 +291,7 @@ class SenadoConnector(Connector):
             timeout=45.0,
         )
         try:
-            payload = json.loads(resp.body.decode("utf-8"))
+            payload = json.loads(texto_do_response(resp))
         except json.JSONDecodeError as exc:
             raise Unavailable("resposta_inesperada") from exc
         total = payload.get("totalHits")

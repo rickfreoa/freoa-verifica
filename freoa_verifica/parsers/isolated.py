@@ -53,7 +53,9 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url:
         # (setsid) e bloquearia o pai; _bounded_io fecha o que pode e abandona o resto no prazo.
         proc = subprocess.Popen(
             # -P: o diretório corrente não entra no sys.path do filho antes dos limites.
-            [sys.executable, "-P", "-m", "freoa_verifica.parsers.isolated", profile, *([base_url] if base_url else [])],
+            # `--texto`: a entrada é o texto já interpretado (UTF-8 só como transporte); o filho não detecta charset.
+            [sys.executable, "-P", "-m", "freoa_verifica.parsers.isolated", profile,
+             *(["--texto"] if isinstance(data, str) else []), *([base_url] if base_url else [])],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
             # Grupo próprio: timeout e excesso matam também descendentes que herdem os pipes.
             **({"start_new_session": True} if os.name == "posix" else {}),
@@ -248,8 +250,11 @@ def _main() -> None:
     parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto)))
     try:
         body = sys.stdin.buffer.read()
-        if sys.argv[1] == "planalto" and len(sys.argv) > 2:
-            document = parse_planalto(body, base_url=sys.argv[2])
+        argumentos = sys.argv[2:]
+        if argumentos[:1] == ["--texto"]:
+            body, argumentos = body.decode("utf-8"), argumentos[1:]  # estrito: erro aqui é falha do filho
+        if sys.argv[1] == "planalto" and argumentos:
+            document = parse_planalto(body, base_url=argumentos[0])
         else:
             document = parsers[sys.argv[1]](body)
     except MemoryError:

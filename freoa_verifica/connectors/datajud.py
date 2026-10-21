@@ -20,6 +20,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
+from freoa_verifica.texto_resposta import texto_do_response
 from freoa_verifica.transport import Response
 
 # Chave pública documentada na wiki DataJud (não é segredo).
@@ -153,7 +154,7 @@ class DatajudConnector(Connector):
         return self._post(tribunal, body)
 
     def parse(self, resp: Response) -> ParsedDecision:
-        payload = json.loads(resp.body.decode("utf-8"))
+        payload = json.loads(texto_do_response(resp))
         if payload.get("timed_out") is True:
             raise Unavailable("resposta_invalida")
         hits = (((payload.get("hits") or {}).get("hits")) or [])
@@ -189,7 +190,7 @@ class DatajudConnector(Connector):
     def _search_body(self, tribunal: str, body: dict[str, Any]) -> list[Candidate]:
         resp = self._post(tribunal, body)
         try:
-            payload = json.loads(resp.body.decode("utf-8"))
+            payload = json.loads(texto_do_response(resp))
         except json.JSONDecodeError as exc:
             raise Unavailable("resposta_invalida") from exc
         if payload.get("timed_out") is True:

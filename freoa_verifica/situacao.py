@@ -105,16 +105,21 @@ def resumo(ws: WorkStatus | None) -> dict[str, Any] | None:
 # Leitura da evidência
 # ----------------------------------------------------------------------
 
-def ler_bcb(body: bytes) -> dict[str, Any]:
-    """Campos Revogado/Cancelado do JSON oficial. Qualquer ausência é ilegivel."""
+def ler_bcb(body: bytes | str) -> dict[str, Any]:
+    """Campos Revogado/Cancelado do JSON oficial. Qualquer ausência é ilegivel.
+
+    `str` é o texto da interpretação única do `Response`; `bytes` (captura relida, sem Content-Type) é JSON.
+    """
     from freoa_verifica.parsers.bcb_json import _pick_item
+    from freoa_verifica.texto_resposta import texto_da_resposta
+    from freoa_verifica.transport import RespostaInvalida
 
     try:
-        item = _pick_item(json.loads(body.decode("utf-8")))
+        item = _pick_item(json.loads(texto_da_resposta(body, "application/json")))
         revogado, cancelado = item["Revogado"], item["Cancelado"]
         if not isinstance(revogado, bool) or not isinstance(cancelado, bool):
             raise TypeError
-    except (ValueError, KeyError, TypeError, AttributeError):
+    except (ValueError, KeyError, TypeError, AttributeError, RespostaInvalida):
         return {"situacao": "ilegivel", "texto_oficial": "campos Revogado/Cancelado ausentes ou ilegíveis"}
     titulo = str(item.get("Titulo") or "").strip()
     texto = f"{titulo}: Revogado={str(revogado).lower()}; Cancelado={str(cancelado).lower()}"
@@ -263,7 +268,9 @@ def _reler_bcb(svc: Any, row: Any, caps: list, rw: Any) -> WorkStatus:
         resp = conn_obj.fetch(Candidate("bcb", f"bcb:{tipo}:{numero}", f"{tipo} {numero}", cap["url"],
                                         metadata={"tipo": tipo, "numero": numero}))
         captura = repo.save_capture(svc.conn, resp, "bcb", home=svc.home)
-        lida = ler_bcb(resp.body)
+        from freoa_verifica.texto_resposta import texto_do_response
+
+        lida = ler_bcb(texto_do_response(resp))
         ws = WorkStatus(row["id"], lida["situacao"], lida.get("texto_oficial"), lida.get("ato_revogador"),
                         lida.get("data_efeito"), captura, resp.sha256, resp.fetched_at)
     except Exception as exc:  # noqa: BLE001

@@ -19,6 +19,7 @@ from freoa_verifica.connectors.base import (
 )
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
+from freoa_verifica.texto_resposta import texto_do_response
 from freoa_verifica.transport import Response
 
 _API = "https://dados-abertos.apps.tcu.gov.br/api/acordao/recupera-acordaos"
@@ -183,7 +184,7 @@ class TcuConnector(Connector):
         return self.parse(resp,key=candidate.key)
 
     def parse(self, resp: Response, *, key=None) -> ParsedDecision:
-        item = json.loads(resp.body.decode("utf-8"))
+        item = json.loads(texto_do_response(resp))
         if isinstance(item, list):
             if not item:
                 raise Unavailable("resposta_invalida")
@@ -263,7 +264,7 @@ class TcuConnector(Connector):
             timeout=60.0,
         )
         try:
-            payload = json.loads(resp.body.decode("utf-8"))
+            payload = json.loads(texto_do_response(resp))
         except json.JSONDecodeError as exc:
             raise Unavailable("resposta_invalida") from exc
         if not isinstance(payload, list):

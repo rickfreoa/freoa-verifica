@@ -282,7 +282,8 @@ class PlanaltoConnector(Connector):
 
     def parse(self, resp: Response):
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
-        return parse_ou_indisponivel("planalto", resp.body, 300.0, base_url=resp.final_url)
+        # Texto da interpretação única (Content-Type do Response); os bytes seguem só para captura e hash (F-22).
+        return parse_ou_indisponivel("planalto", texto_do_response(resp), 300.0, base_url=resp.final_url)
 
     def resolve_alterador_date(self, tipo: str, numero: int | str, ano: int) -> str | None:
         """Resolve data completa via Senado quando o Planalto cita só o ano."""

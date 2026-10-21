@@ -769,6 +769,7 @@ def _download_latest_release(*, staging_dir: str | Path | None = None, vinculo: 
     """Baixa o asset da release `v<__version__>` via API GitHub (hosts permitidos); nunca de release anterior."""
     from freoa_verifica import __version__
     from freoa_verifica.connectors.httputil import connector_fetch
+    from freoa_verifica.texto_resposta import texto_do_response
 
     tag = f"v{__version__}"
     resp = connector_fetch(
@@ -780,7 +781,7 @@ def _download_latest_release(*, staging_dir: str | Path | None = None, vinculo: 
         timeout=60.0,
         max_bytes=5 * 1024 * 1024,
     )
-    release = json.loads(resp.body.decode("utf-8"))
+    release = json.loads(texto_do_response(resp))
     if not isinstance(release, dict):
         raise RuntimeError("releases_resposta_inesperada")
     if release.get("draft") or release.get("prerelease"):
