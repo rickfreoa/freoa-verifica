@@ -60,23 +60,24 @@ def _indexar_sem_metadado(svc, *, headers_json_ctype: str | None = None):
                           body=LEI, url=url, fetched_at="2026-10-21T00:00:00+00:00", label="Lei 1/2000")
     if headers_json_ctype is not None:  # recibo legado (anterior à 014) que guardou o content-type em headers_json
         svc.conn.execute("DROP TRIGGER capture_no_update")
-        svc.conn.execute("UPDATE capture SET headers_json=? WHERE id=?",
+        svc.conn.execute("UPDATE capture SET headers_json=?, content_type=NULL, codificacao=NULL, "
+                         "origem_da_codificacao=NULL WHERE id=?",
                          (json.dumps({"content-type": headers_json_ctype}), rw.capture_id))
         svc.conn.commit()
     return rw
 
 
-def test_captura_sem_metadado_falha_declarada_sem_reinterpretar(tmp_path, monkeypatch):
+def test_captura_sem_metadado_e_legado_declarado_sem_content_type_inventado(tmp_path, monkeypatch):
+    """Revisto pela 0065: sem Content-Type, a decisão vem só dos bytes (aqui o `<meta>` Latin-1) e é declarada como
+    prova degradada; o Content-Type continua nulo."""
     monkeypatch.setenv("FV_OFFLINE", "1")
     with Verifica(tmp_path / "h") as svc:
         rw = _indexar_sem_metadado(svc)
         cap = svc.conn.execute("SELECT * FROM capture WHERE id=?", (rw.capture_id,)).fetchone()
-        assert cap["content_type"] is None and cap["origem_da_codificacao"] is None
-        antes = _modelo(svc)
+        assert (cap["content_type"], cap["codificacao"], cap["origem_da_codificacao"]) == (
+            None, "cp1252", "legado_sem_cabecalho")
         out = svc.reprocessar_capturas()
-        assert out["reprocessados"] == 0
-        assert out["falhas"] == [{"capture_id": rw.capture_id, "motivo": "interpretacao_indisponivel"}]
-        assert _modelo(svc) == antes and "AÃ" not in antes
+        assert out["falhas"] == [] and out["por_fonte"]["planalto"]["reprocessadas_legadas"] == 1, out
 
 
 def test_captura_legada_usa_content_type_de_headers_json(tmp_path, monkeypatch):
@@ -108,6 +109,7 @@ def test_decisao_persistida_divergente_e_falha(tmp_path, monkeypatch):
 def test_recibo_de_resposta_sintetica_sem_content_type_nao_inventa():
     corpo = b"<p>x</p>"
     resp = Response("u", "u", 200, {}, corpo, "0" * 64, "t", [], "text/html")
-    assert repo.interpretacao_do_recibo(resp) == (None, None, None)
+    assert repo.interpretacao_do_recibo(resp) == (None, "utf-8", "legado_sem_cabecalho")  # 0065
+    assert repo.interpretacao_do_recibo(dataclasses.replace(resp, body=b"x \xc3\x28 x")) == (None, None, None)
     pdf = dataclasses.replace(resp, content_type="application/pdf")
     assert repo.interpretacao_do_recibo(pdf) == ("application/pdf", None, "binario")

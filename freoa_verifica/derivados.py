@@ -21,7 +21,16 @@ _log = logging.getLogger(__name__)
 # 3 = 1.1.0 (cvm-pdf-2 com dispositivos inferidos, tipo "Resolução" do BCB como CMN pelo preâmbulo,
 #     data de efeito declarada no BCB, situação estruturada de precedentes).
 # 4 = 1.2.0 (espécie declarada pela fonte prevalece: monocrática nunca rotulada como acórdão; decisão 0038).
-DERIVED_VERSION = 4
+# 5 = 1.3.0 (interpretação única do corpo; captura sem Content-Type relida só dos bytes, com a decisão registrada
+#     no derivado; decisões 0064 e 0065).
+DERIVED_VERSION = 5
+
+# Captura reprocessável com modelo e sem decisão de interpretação no recibo (0064) nem no derivado (0065).
+_SEM_DECISAO = (
+    "SELECT 1 FROM capture c JOIN parsed_document p ON p.capture_id=c.id JOIN work w ON w.id=p.work_id "
+    "WHERE p.model_json IS NOT NULL AND c.source_id IN ('planalto','cvm_normas','bcb') "
+    "AND w.authority NOT LIKE 'invalidated:%' AND c.content_type IS NULL AND c.origem_da_codificacao IS NULL "
+    "AND p.interpretacao_origem IS NULL LIMIT 1")
 
 REASON = "ACERVO_DESATUALIZADO"
 REASON_NAO_PUBLICADA = "ACERVO_DE_VERSAO_NAO_PUBLICADA"
@@ -62,10 +71,11 @@ def marcar_origem_nao_publicada(conn: sqlite3.Connection) -> None:
 
 
 def compativel(conn: sqlite3.Connection) -> bool:
-    """Home vazio não tem derivados a invalidar; senão a versão tem de ser a do código."""
-    if versao(conn) == DERIVED_VERSION:
-        return True
+    """Home vazio não tem derivados a invalidar; senão a versão tem de ser a do código e toda captura com modelo tem
+    decisão de interpretação registrada, atual ou legada (0065): nunca certificar derivados que não se reproduzem."""
     try:
+        if versao(conn) == DERIVED_VERSION:
+            return conn.execute(_SEM_DECISAO).fetchone() is None
         return conn.execute("SELECT 1 FROM work LIMIT 1").fetchone() is None
     except sqlite3.Error:
         return False
@@ -226,11 +236,14 @@ def reprocessar_pasta(pasta: Path, *, com_situacao: bool = False) -> dict[str, A
     with Verifica(home=pasta) as novo:
         rep = novo.reprocessar_capturas()
         if rep["falhas"]:
-            raise RuntimeError(f"reprocessamento falhou em {len(rep['falhas'])} captura(s): "
+            exc = RuntimeError(f"reprocessamento falhou em {len(rep['falhas'])} captura(s): "
                                f"{rep['falhas'][0]['motivo'][:120]}")
+            exc.por_fonte = rep["por_fonte"]
+            raise exc
         if reprocessaveis and not rep["reprocessados"]:
             raise RuntimeError("nenhuma_captura_reprocessada")
-        relatorio.update(reprocessados=rep["reprocessados"], divergentes=rep["divergentes"])
+        relatorio.update(reprocessados=rep["reprocessados"], divergentes=rep["divergentes"],
+                         por_fonte=rep["por_fonte"])
         with novo.conn:
             relatorio["fts"] = reindexar_fts(novo.conn)
             relatorio["decisoes_reclassificadas"] = reclassificar_autoridade(novo.conn)
@@ -297,6 +310,7 @@ def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
                     **({"motivo": "situacao_" + str(situacao.get("status")), **{k: situacao[k] for k in
                        ("categoria", "evidencia_indisponibilidade") if k in situacao}} if parcial else {})}
     except (RuntimeError, ValueError, OSError, TimeoutError, sqlite3.Error) as exc:
-        return {"status": "erro", "motivo": str(exc)[:200], "original_intacto": True}
+        return {"status": "erro", "motivo": str(exc)[:200], "original_intacto": True,
+                **({"por_fonte": exc.por_fonte} if getattr(exc, "por_fonte", None) else {})}
     finally:
         shutil.rmtree(pasta, ignore_errors=True)

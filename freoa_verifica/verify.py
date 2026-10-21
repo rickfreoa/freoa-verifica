@@ -23,6 +23,7 @@ from freoa_verifica.store import repo as store_repo
 from freoa_verifica.temporal import select as temporal_select
 from freoa_verifica.textcmp import ALGO_VERSION as TEXTCMP_VERSION
 from freoa_verifica.textcmp import compare
+from freoa_verifica.texto_resposta import ORIGEM_LEGADO
 from freoa_verifica.aliases import WorkKey
 
 POLICY_VERSION = "verify-r5-1"
@@ -46,6 +47,7 @@ class Evidence:
     span: tuple[int, int] | None = None
     trecho_oficial: str | None = None
     fontes_consultadas: list[dict] | None = None  # experimental; só quando fonte anterior ficou indisponível (0058)
+    proveniencia: dict | None = None  # experimental; só quando o texto vem de captura sem Content-Type (0065)
 
 
 @dataclass
@@ -83,6 +85,7 @@ class ResolvedWork:
     persisted_incomplete: bool = False
     caminhos_conhecidos: frozenset[str] = frozenset()  # dispositivos de qualquer captura canônica da obra (0034)
     fontes_consultadas: list[dict] = field(default_factory=list)  # fontes anteriores sem resposta na captura (0058)
+    proveniencia: dict | None = None  # experimental; `{interpretacao: "legado_sem_cabecalho"}` (0065)
 
 
 class Resolver(Protocol):
@@ -155,6 +158,7 @@ def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, sp
         span=span,
         trecho_oficial=t,
         fontes_consultadas=rw.fontes_consultadas or None,
+        proveniencia=rw.proveniencia,
     )
 
 
@@ -616,7 +620,8 @@ def _result_to_json(result: VerificationResult) -> dict[str, Any]:
         return {
             "status": d.status,
             "reason_code": d.reason_code,
-            "evidence": [{**{k: v for k, v in asdict(e).items() if k != "fontes_consultadas" or v},
+            "evidence": [{**{k: v for k, v in asdict(e).items()
+                             if k not in ("fontes_consultadas", "proveniencia") or v},
                           "span": list(e.span) if e.span is not None else None}
                          for e in d.evidence],
         }
@@ -792,4 +797,8 @@ def populate_from_parsed(
         url=url,
         fetched_at=fetched,
         quarantined=document.quarantined,
+        # Mesma declaração que a obra relida do banco traz (0065): captura sem Content-Type é prova degradada.
+        proveniencia=({"interpretacao": ORIGEM_LEGADO} if conn.execute(
+            "SELECT origem_da_codificacao FROM capture WHERE id=?", (capture_id,)).fetchone()[0] == ORIGEM_LEGADO
+            else None),
     )

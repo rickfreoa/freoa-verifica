@@ -112,6 +112,10 @@ SNAPSHOT_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "issues_json", "ambiguous_paths_json", "editorial_json",
         "model_json", "work_id", "work_date", "amending_texts_json", "events_json",
         "candidato_ao_vivo",
+        # FIX19/F-24 (0065): decisão da releitura de captura cujo recibo não a tem; snapshot anterior à 015 não a tem.
+        "interpretacao_codificacao", "interpretacao_origem",
+        # FIX19b (0065, emenda): hashes da conferência da releitura pelo padrão da fonte; ausente antes da 016.
+        "interpretacao_conferencia",
     ),
     "work_year_issue": ("work_id", "reason", "capture_id"),
     "work_status": (

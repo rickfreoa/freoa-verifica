@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 import threading
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from contextlib import contextmanager
 from functools import wraps
 from datetime import datetime, timezone
@@ -51,7 +51,8 @@ from freoa_verifica.parsers.model import (
 from freoa_verifica.store import blobs, repo
 from freoa_verifica.store.db import connect, data_home
 from freoa_verifica.temporal import select as temporal_select
-from freoa_verifica.texto_resposta import content_type_do_response
+from freoa_verifica.texto_resposta import (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO, content_type_do_response,
+                                           interpretar_legado_padrao)
 from freoa_verifica.transport import _CIRCUIT_BREAKERS
 from freoa_verifica import situacao  # C2
 from freoa_verifica.verify import (
@@ -87,6 +88,33 @@ _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
 
 class _InterpretacaoIndisponivel(Exception):
     """Captura sem os dados que reproduzem a interpretação original do corpo (F-22, decisão 0064)."""
+
+
+def _proveniencia(cap: dict | None, derivado: dict | None = None) -> dict | None:
+    """`{interpretacao: "legado_sem_cabecalho" | "legado_padrao_da_fonte_conferido"}` (experimental, 0065 e emenda)
+    se o texto vem de captura lida sem Content-Type: prova degradada, declarada em toda resposta pública que o entrega."""
+    origem = (cap or {}).get("origem_da_codificacao") or (derivado or {}).get("interpretacao_origem")
+    return {"interpretacao": origem} if origem in (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO) else None
+
+
+def _hash_modelo(modelo: dict | None) -> str | None:
+    """Hash canônico do modelo para a conferência da releitura legada (0065, emenda): título, ementa, texto e, por
+    dispositivo, caminho, rótulo, escopo, rubrica, cabeçalhos e redações (texto, riscado). Sem modelo: None."""
+    if not isinstance(modelo, dict):
+        return None
+
+    def _red(r: dict) -> list:
+        return [r.get("text"), bool(r.get("struck"))]
+
+    canon = {
+        "title": modelo.get("title"), "ementa": modelo.get("ementa"), "text": modelo.get("text"),
+        "provisions": [{
+            "path": p.get("path"), "label": p.get("label"), "scope": p.get("scope"), "rubrica": p.get("rubrica"),
+            "headings": p.get("headings") or [], "redactions": [_red(r) for r in p.get("redactions") or []],
+            "concurrent": [_red(r) for r in p.get("concurrent_redactions") or []],
+        } for p in modelo.get("provisions") or []],
+    }
+    return hashlib.sha256(json.dumps(canon, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 _JANELA_REORDENACAO = 50  # só os 50 primeiros candidatos são reordenados; além deles vale a ordem bm25
@@ -715,6 +743,7 @@ class Verifica:
             amending_act_texts=amending_texts,
             persisted_incomplete=incomplete,
             caminhos_conhecidos=frozenset(conhecidos),
+            proveniencia=_proveniencia(cap, saved),
         )
         return rw
 
@@ -769,57 +798,94 @@ class Verifica:
     def reprocessar_capturas(self) -> dict:
         """Recalcula modelos derivados dos mesmos bytes, preservando recibos de captura."""
         self.reparar_anos()
-        rows = self.conn.execute("SELECT c.*, p.work_id, p.work_date, p.amending_texts_json FROM capture c JOIN parsed_document p ON p.capture_id=c.id WHERE p.model_json IS NOT NULL").fetchall()
-        counts = {'reprocessados':0, 'divergentes':[], 'falhas':[]}
+        rows = self.conn.execute("SELECT c.*, p.work_id, p.work_date, p.amending_texts_json, p.interpretacao_codificacao, p.interpretacao_origem, p.model_json FROM capture c JOIN parsed_document p ON p.capture_id=c.id WHERE p.model_json IS NOT NULL").fetchall()
+        counts = {'reprocessados':0, 'divergentes':[], 'falhas':[], 'por_fonte':{}}
         for row in rows:
             if row['source_id'] not in {'planalto','cvm_normas','bcb'}:
                 continue
             work = self.conn.execute('SELECT * FROM work WHERE id=?',(row['work_id'],)).fetchone()
             if not work or work['authority'].startswith('invalidated:'):
                 continue
+            fonte = counts['por_fonte'].setdefault(row['source_id'], {
+                'reprocessadas_atuais': 0, 'reprocessadas_legadas': 0, 'reprocessadas_legadas_conferidas': 0,
+                'falhas': {}})
             try:
-                response = self._resposta_da_captura(row)
+                response, decisao = self._resposta_da_captura(row)
             except Exception as exc:  # noqa: BLE001 — blob ausente ou interpretação indisponível: falha declarada
                 counts['falhas'].append({'capture_id': row['id'], 'motivo': str(exc)})
+                fonte['falhas'][str(exc)[:80]] = fonte['falhas'].get(str(exc)[:80], 0) + 1
                 continue
             try:
                 doc = self._get(row['source_id']).parse(response)
+                conferencia = None
+                if decisao[2] == ORIGEM_LEGADO_CONFERIDO:
+                    # Padrão da fonte só com modelo anterior idêntico ao relido; senão, falha (0065, emenda).
+                    try:
+                        anterior = _hash_modelo(json.loads(row['model_json']))
+                    except ValueError:
+                        anterior = None
+                    novo = _hash_modelo(asdict(doc))
+                    if anterior is None or anterior != novo:
+                        raise _InterpretacaoIndisponivel('interpretacao_indisponivel')
+                    conferencia = json.dumps({'modelo_anterior_sha256': anterior, 'modelo_novo_sha256': novo})
                 key = WorkKey(work['authority'],work['kind'],work['number'],work['year'])
                 validate_identity(key,doc,row['work_date'])
                 repo.persist_parsed_document(self.conn,capture_id=row['id'],document=doc,work_id=work['id'],work_date=row['work_date'],amending_act_texts=json.loads(row['amending_texts_json'] or '{}'))
+                if row['content_type'] is None and row['origem_da_codificacao'] is None:
+                    # Recibo (imutável) sem decisão: o derivado registra a desta releitura (0065).
+                    with self.conn:
+                        self.conn.execute('UPDATE parsed_document SET interpretacao_codificacao=?, '
+                                          'interpretacao_origem=?, interpretacao_conferencia=? WHERE capture_id=?',
+                                          (decisao[1], decisao[2], conferencia, row['id']))
                 counts['reprocessados'] += 1
+                fonte[{ORIGEM_LEGADO: 'reprocessadas_legadas', ORIGEM_LEGADO_CONFERIDO: 'reprocessadas_legadas_conferidas'}
+                      .get(decisao[2], 'reprocessadas_atuais')] += 1
             except IdentityMismatch:
                 with self.conn:
                     self.conn.execute('UPDATE work SET authority=? WHERE id=?',('invalidated:'+work['authority'],work['id']))
                 counts['divergentes'].append(work['id'])
             except Exception as exc:
                 counts['falhas'].append({'capture_id':row['id'],'motivo':str(exc)})
+                fonte['falhas'][str(exc)[:80]] = fonte['falhas'].get(str(exc)[:80], 0) + 1
         with self.conn:  # 0034: capturas que perdem dispositivos deixam de ser canônicas
             counts['divergentes'] += repo.aplicar_monotonia(self.conn)
         self._resolver = MemoryResolver()
         return counts
 
-    def _resposta_da_captura(self, row) -> "Response":
-        """`Response` relido do recibo com o Content-Type persistido, para a mesma função única (F-22, decisão 0064).
+    def _resposta_da_captura(self, row) -> tuple["Response", tuple]:
+        """(`Response` relido do recibo, decisão de interpretação), pela mesma função única (F-22, 0064, 0065).
 
-        Captura anterior à 014 usa o `content-type` de `headers_json`; sem nenhum, ou com decisão persistida que a
-        função atual não reproduz, `_InterpretacaoIndisponivel`: nunca outra interpretação, em silêncio.
+        Captura anterior à 014 usa o `content-type` de `headers_json`; sem nenhum, a decisão vem só dos bytes
+        (`legado_sem_cabecalho`, sem Content-Type inventado); sem declaração nos bytes e inválida em UTF-8, a
+        `CODIFICACAO_LEGADA_POR_FONTE`, cuja conferência com o modelo anterior cabe ao chamador
+        (`legado_padrao_da_fonte_conferido`, 0065, emenda). Bytes ininterpretáveis ou decisão registrada (no recibo
+        ou, para recibo sem ela, no derivado) que a função atual não reproduz: `_InterpretacaoIndisponivel`, nunca
+        outra interpretação, em silêncio.
         """
         from freoa_verifica.transport import Response
 
         headers = json.loads(row['headers_json'] or '{}')
-        persistido = row['content_type'] if 'content_type' in row.keys() else None
-        ctype = persistido or headers.get('content-type')
-        if not ctype:
-            raise _InterpretacaoIndisponivel('interpretacao_indisponivel')
+        recibo = (row['content_type'], row['codificacao'], row['origem_da_codificacao'])
+        ctype = recibo[0] or headers.get('content-type')
         body = blobs.get_blob(row['sha256'], home=self.home)
         response = Response(row['url'], row['final_url'], row['status'], headers, body, row['sha256'],
-                            row['fetched_at'], [], row['mime'], content_type=ctype)
-        if persistido is not None:
-            decisao = (row['content_type'], row['codificacao'], row['origem_da_codificacao'])
-            if repo.interpretacao_do_recibo(response) != decisao:
-                raise _InterpretacaoIndisponivel('interpretacao_divergente')
-        return response
+                            row['fetched_at'], [], row['mime'], content_type=ctype or "")
+        decisao = repo.interpretacao_do_recibo(response)
+        if decisao == (None, None, None) and not ctype:
+            padrao = interpretar_legado_padrao(body, row['source_id'])
+            if padrao is not None:
+                response = replace(response, interpretacao_legada=padrao)
+                decisao = (None, padrao.codificacao, padrao.origem)
+        if decisao == (None, None, None):
+            raise _InterpretacaoIndisponivel('interpretacao_indisponivel')
+        if recibo[0] is not None or recibo[2] is not None:
+            divergente = decisao != recibo
+        else:
+            no_derivado = (row['interpretacao_codificacao'], row['interpretacao_origem'])
+            divergente = no_derivado[1] is not None and decisao[1:] != no_derivado
+        if divergente:
+            raise _InterpretacaoIndisponivel('interpretacao_divergente')
+        return response, decisao
 
     def _identity_rows(self, invalidated=False):
         predicate = "LIKE" if invalidated else "NOT LIKE"
@@ -1331,6 +1397,7 @@ class Verifica:
                     "fetched_at": rw.fetched_at,
                     "sha256": rw.sha256,
                 },
+                **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
             }
         if rw.persisted_incomplete:
             return {"status": "unknown", "reason_code": "DADOS_PERSISTIDOS_INCOMPLETOS"}
@@ -1405,6 +1472,7 @@ class Verifica:
                 "fetched_at": rw.fetched_at,
                 "sha256": rw.sha256,
             },
+            **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
         }
 
     @_authenticated_output
@@ -2954,7 +3022,15 @@ class Verifica:
             ctype = cap.get("content_type") or (json.loads(cap.get("headers_json") or "{}") or {}).get("content-type")
         except (ValueError, AttributeError):
             ctype = None
-        text = texto_para_exibicao(body, ctype or cap.get("mime"))
+        # Sem Content-Type: só os bytes, como prova degradada declarada (0065); o MIME gravado não é Content-Type.
+        # Padrão da fonte só se a reconstrução o conferiu e registrou no derivado (0065, emenda).
+        conferida = None
+        if not ctype:
+            der = self.conn.execute("SELECT interpretacao_origem FROM parsed_document WHERE capture_id=?",
+                                    (capture_id,)).fetchone()
+            if der is not None and der[0] == ORIGEM_LEGADO_CONFERIDO:
+                conferida = interpretar_legado_padrao(body, cap.get("source_id"))
+        text = conferida.texto if conferida is not None else texto_para_exibicao(body, ctype)
         if not text:
             text = f"[binário {cap.get('mime') or 'application/octet-stream'}; {len(body)} bytes]"
         slice_ = text[offset : offset + max_chars]
@@ -2978,6 +3054,8 @@ class Verifica:
             "offset": offset,
             "max_chars": max_chars,
             "cursor": str(offset + max_chars) if truncado else None,
+            **({} if ctype else {"proveniencia": {
+                "interpretacao": ORIGEM_LEGADO_CONFERIDO if conferida is not None else ORIGEM_LEGADO}}),
         }
 
     def _capacidade_e_recorte(self, cid: str, coverage: dict[str, Any]) -> tuple[str, dict[str, Any]]:

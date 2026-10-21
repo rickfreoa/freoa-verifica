@@ -394,6 +394,8 @@ def _declarado(corpo: bytes, content_type: str | None, mime: str) -> tuple[str, 
         if achado is None:
             raise _invalida(f"Charset não suportado: {rotulo}")
         return (*achado, "header")
+    if not mime and corpo.lstrip(_ESPACOS)[:1] in (b"{", b"["):
+        return (*_ROTULOS["utf-8"], "padrao")  # JSON sem Content-Type: UTF-8 (RFC 8259 §8.1), sem prescan HTML (0065)
     if not mime or mime == "text/html":
         achado = _prescan_html(corpo)
         if achado is not None:
@@ -405,7 +407,10 @@ def _declarado(corpo: bytes, content_type: str | None, mime: str) -> tuple[str, 
     return (*_ROTULOS["utf-8"], "padrao")
 
 
-ORIGENS = ("bom", "header", "meta", "declaracao_xml", "padrao", "binario")
+ORIGEM_LEGADO = "legado_sem_cabecalho"
+ORIGEM_LEGADO_CONFERIDO = "legado_padrao_da_fonte_conferido"
+ORIGENS = ("bom", "header", "meta", "declaracao_xml", "padrao", "binario", ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO)
+_MAGICOS_BINARIOS = (b"%PDF-", b"PK\x03\x04")
 
 
 @dataclass(frozen=True)
@@ -459,6 +464,48 @@ def interpretar(corpo: bytes, content_type: str | None = None, *, parcial: bool 
     return Interpretacao(texto, nome, origem)
 
 
+def interpretar_legado(corpo: bytes) -> Interpretacao:
+    """Captura sem Content-Type (1.2.0 gravava `headers_json={}`): decisão só dos próprios bytes (decisão 0065).
+
+    A mesma `interpretar`, sem Content-Type: BOM → prescan WHATWG → declaração XML → JSON e demais em UTF-8 estrito.
+    PDF/DOCX pela assinatura são binários (sem codec). Nenhum Content-Type é inventado; a origem declara a prova
+    degradada. Bytes inválidos: `RespostaInvalida`.
+    """
+    if corpo.startswith(_MAGICOS_BINARIOS):
+        return Interpretacao(corpo.decode("latin-1"), None, ORIGEM_LEGADO)
+    decisao = interpretar(corpo, None)
+    return Interpretacao(decisao.texto, decisao.codificacao, ORIGEM_LEGADO)
+
+
+# Codificação alternativa única por fonte, para captura legada sem declaração nos bytes e inválida em UTF-8 (0065,
+# emenda). Só vale com conferência: o modelo relido tem de ser idêntico ao já persistido para a captura.
+CODIFICACAO_LEGADA_POR_FONTE = {"planalto": "windows-1252"}
+
+
+def interpretar_legado_padrao(corpo: bytes, fonte: str | None) -> Interpretacao | None:
+    """Releitura pela `CODIFICACAO_LEGADA_POR_FONTE`, PENDENTE de conferência pelo chamador (0065, emenda).
+
+    None se a fonte não tem entrada, se os bytes declaram a codificação (BOM, `<meta>`, declaração XML), se são JSON
+    ou binário pela assinatura, ou se são UTF-8 válido: nesses casos vale só `interpretar_legado`.
+    """
+    achado = _encoding(CODIFICACAO_LEGADA_POR_FONTE.get(fonte or ""))
+    inicio = corpo.lstrip(_ESPACOS)[:1]
+    if (achado is None or corpo.startswith(_MAGICOS_BINARIOS) or any(corpo.startswith(b) for b, _ in _BOMS)
+            or inicio in (b"{", b"[") or _prescan_html(corpo) is not None or _declaracao_xml(corpo) is not None):
+        return None
+    try:
+        corpo.decode("utf-8")
+        return None
+    except UnicodeDecodeError:
+        pass
+    enc, nome = achado
+    try:
+        texto = corpo.decode(nome, "fv_whatwg_c1" if enc == "windows-1252" else "strict")
+    except UnicodeDecodeError:
+        return None
+    return Interpretacao(texto, nome, ORIGEM_LEGADO_CONFERIDO)
+
+
 def texto_da_resposta(corpo: bytes | str | None, content_type: str | None = None, *, parcial: bool = False) -> str:
     """Texto de `interpretar`; `str` já é texto, `None` é vazio."""
     if corpo is None:
@@ -501,6 +548,8 @@ def content_type_do_response(resp) -> str | None:
 
 def texto_do_response(resp, *, parcial: bool = False) -> str:
     """Texto do corpo de um `Response`, com o Content-Type cru que o transporte guardou."""
+    if getattr(resp, "interpretacao_legada", None) is not None:  # releitura legada sob conferência (0065, emenda)
+        return resp.interpretacao_legada.texto
     return texto_da_resposta(resp.body, content_type_do_response(resp), parcial=parcial)
 
 

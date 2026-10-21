@@ -86,7 +86,7 @@ def _sha(path):
 
 
 def test_home_novo_tem_derived_version_e_responde(novo):
-    assert derivados.versao(novo.conn) == derivados.DERIVED_VERSION == 4
+    assert derivados.versao(novo.conn) == derivados.DERIVED_VERSION == 5
     esperado = _respostas(novo)
     assert esperado[0][2] == ("verified", esperado[0][2][1])  # art. 60 permanente verified
     assert esperado[1][3][0] != "verified"  # trecho do ADCT não confirma o permanente
@@ -189,7 +189,7 @@ def test_manifesto_carrega_derived_version_real(tmp_path, novo):
     import json
     dest = tmp_path / "snap"
     novo.snapshot_export(dest)
-    assert json.loads((dest / "MANIFEST.json").read_text())["derived_version"] == "4"
+    assert json.loads((dest / "MANIFEST.json").read_text())["derived_version"] == "5"
 
 
 # ---------------------------------------------------------------------------
@@ -272,9 +272,10 @@ def test_snapshot_v102_instala_reconstroi_e_reinstala(tmp_path, novo):
         assert _respostas(alvo) == esperado
 
 
-def test_snapshot_v102_sem_content_type_no_recibo_falha_declarada(tmp_path):
-    """F-22 (0064): captura sem Content-Type persistido nunca é reinterpretada de outro modo; a instalação que precisa
-    reprocessar recusa, declarando `interpretacao_indisponivel`, e o home não muda."""
+def test_snapshot_v102_sem_content_type_no_recibo_e_relido_como_legado(tmp_path, novo):
+    """F-24 (0065, revê a 0064 neste ponto): captura sem Content-Type persistido é relida só dos bytes, com a decisão
+    `legado_sem_cabecalho` registrada no derivado; nenhum Content-Type é inventado e as respostas declaram a prova."""
+    esperado = _respostas(novo)
     legado = _home_legado(tmp_path)
     try:
         dest, _ = _snapshot_v102(tmp_path, legado, content_type_no_recibo=False)
@@ -282,8 +283,16 @@ def test_snapshot_v102_sem_content_type_no_recibo_falha_declarada(tmp_path):
         legado.close()
     with Verifica(home=tmp_path / "alvo") as alvo:
         out = alvo.snapshot_install(dest, aceitar_nao_vinculado=True)
-        assert out["status"] == "erro" and "interpretacao_indisponivel" in out["motivo"], out
-        assert alvo.conn.execute("SELECT COUNT(*) FROM work").fetchone()[0] == 0
+        assert out["status"] == "ok" and "aviso" in out, out
+        assert derivados.compativel(alvo.conn)
+        linhas = alvo.conn.execute(
+            "SELECT c.content_type, p.interpretacao_codificacao, p.interpretacao_origem FROM capture c "
+            "JOIN parsed_document p ON p.capture_id=c.id ORDER BY c.source_id").fetchall()
+        assert [tuple(r) for r in linhas] == [(None, None, "legado_sem_cabecalho"),  # DOCX: binário, sem codec
+                                              (None, "utf-8", "legado_sem_cabecalho")]
+        assert _respostas(alvo) == esperado
+        r = alvo.verificar_citacao(*CONSULTAS[0])
+        assert r["text"]["evidence"][0]["proveniencia"] == {"interpretacao": "legado_sem_cabecalho"}
 
 
 def test_snapshot_de_esquema_futuro_ou_nao_prefixo_e_recusado(tmp_path, novo):

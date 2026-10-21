@@ -21,15 +21,20 @@ class IdentityConflict(Exception):
 def interpretacao_do_recibo(resp: Response) -> tuple[str | None, str | None, str | None]:
     """(content_type cru, codec, origem) da interpretação única do corpo, para o recibo (FIX18/F-22, decisão 0064).
 
-    Sem Content-Type conhecido, tudo None (a releitura falha declarada). Corpo que a função única recusa guarda o
-    Content-Type e decisão None: a releitura chega à mesma recusa.
+    Sem Content-Type conhecido, a decisão vem só dos bytes, como prova degradada (`legado_sem_cabecalho`, decisão
+    0065), e o Content-Type fica nulo; bytes ininterpretáveis deixam tudo None. Corpo que a função única recusa
+    guarda o Content-Type e decisão None: a releitura chega à mesma recusa.
     """
-    from freoa_verifica.texto_resposta import content_type_do_response, interpretar
+    from freoa_verifica.texto_resposta import content_type_do_response, interpretar, interpretar_legado
     from freoa_verifica.transport import RespostaInvalida
 
     content_type = content_type_do_response(resp)
     if content_type is None:
-        return None, None, None
+        try:
+            legado = interpretar_legado(resp.body)
+        except RespostaInvalida:
+            return None, None, None
+        return None, legado.codificacao, legado.origem
     try:
         decisao = interpretar(resp.body, content_type)
     except RespostaInvalida:

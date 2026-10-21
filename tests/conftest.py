@@ -73,6 +73,9 @@ def verifica_populada(tmp_path, monkeypatch, _lsa_art254a):
         fetched_at=entry.get("capturado_em"),
         work_date=WORK_DATE_LSA,
         label="Lei nº 6.404/1976",
+        # FIX19: sem Content-Type, a decisão viria só dos bytes (0065) e o cp1252 sem <meta> é recusado; o charset é
+        # o mesmo do `_PlanaltoOffline` abaixo (shortcut da FIX18).
+        content_type="text/html; charset=windows-1252",
     )
     yield svc, rw, doc
     svc.close()
