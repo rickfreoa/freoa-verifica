@@ -76,7 +76,12 @@ try {
     $fv = "$destino\.venv\Scripts\fv.exe"
     $etapa = "instalar wheel"
     $pipArgs = @("-m", "pip", "install", "$wheel`[server`]")
-    if ($temLock) { $pipArgs += @("-c", $lock) }
+    if ($temLock) {
+        # O lock tem hashes, o que liga --require-hashes; o próprio wheel entra então com o hash já conferido.
+        $req = Join-Path $destino "requirements-wheel.txt"
+        Set-Content -Encoding ascii -LiteralPath $req -Value "freoa-verifica[server] @ $(([Uri]$wheel).AbsoluteUri) --hash=sha256:$shaWheel"
+        $pipArgs = @("-m", "pip", "install", "-r", $req, "-c", $lock)
+    }
     Invoke-NativeChecked $etapa $python $pipArgs | Out-Host
     $etapa = "validar versao"
     $v = (Invoke-NativeChecked $etapa $fv @("--version")) -join "`n"
