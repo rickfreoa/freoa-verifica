@@ -51,10 +51,14 @@ class Integra:
 class Resultado:
     vinculadas: list[tuple[Integra, str]] = field(default_factory=list)  # (íntegra, chave do espelho)
     ambiguas: list[tuple[Integra, list[str]]] = field(default_factory=list)
-    descartes: dict[str, int] = field(default_factory=dict)
+    descartes: dict[str, int] = field(default_factory=dict)  # por documento (item de metadados)
+    orfaos: dict[str, int] = field(default_factory=dict)  # por texto que não vincula a documento ou espelho
 
     def descartar(self, motivo: str) -> None:
         self.descartes[motivo] = self.descartes.get(motivo, 0) + 1
+
+    def orfao(self, motivo: str) -> None:
+        self.orfaos[motivo] = self.orfaos.get(motivo, 0) + 1
 
 
 def _sem_acento(s: str) -> str:
@@ -384,6 +388,8 @@ def combinar(metadados_body: bytes, zip_body: bytes,
     por_seq: dict[str, list[dict[str, Any]]] = {}
     for md in metas:
         por_seq.setdefault(str(md.get("SeqDocumento") or "").strip(), []).append(md)
+    for seq in sorted({*textos, *recusadas} - set(por_seq)):  # texto sem metadado nunca vincula, mas é contado
+        res.orfao("texto_sem_metadado" if seq in textos else recusadas[seq])
     candidatos: list[tuple[Integra, tuple]] = []
     for seq, grupo in por_seq.items():
         if not (seq.isascii() and seq.isdecimal()):
@@ -446,6 +452,7 @@ def combinar(metadados_body: bytes, zip_body: bytes,
             continue
         if not compat:
             res.descartar("fora_do_recorte_ou_sem_espelho")
+            res.orfao("texto_sem_espelho")
             continue
         if prova is None:  # sem órgão e sessão no texto não há prova do julgamento individual
             res.descartar("sem_prova_do_julgamento")

@@ -363,6 +363,21 @@ def test_divergencia_local_central_recusa_a_entrada_com_motivo(kw, motivo):
     assert ler_textos(z) == {}  # a entrada recusada não entra
 
 
+def test_entrada_recusada_e_contada_no_resultado_sem_derrubar_o_recurso():
+    s0 = str(M[0]["SeqDocumento"])
+    z = _zip_manual({f"{s0}.txt": ABERTURA, "999.txt": b"sem metadado"}, local={"crc": 1})
+    assert ler_textos_detalhado(z)[1] == {s0: "zip_local_crc_divergente", "999": "zip_local_crc_divergente"}
+    res = combinar(MD, z, ESP)
+    assert not res.vinculadas
+    assert res.descartes["zip_local_crc_divergente"] == 1  # o Seq com metadado
+    assert res.descartes["texto_ausente_no_zip"] == 1  # o outro acórdão não está no ZIP
+    assert res.orfaos == {"zip_local_crc_divergente": 1}  # a 999 não tem metadado
+    # a entrada íntegra do mesmo recurso continua valendo
+    ok = _zip_manual({f"{M[1]['SeqDocumento']}.txt": ABERTURA})
+    esp = {r: [v[0][:5] + (EMS,)] for r, v in ESP.items()}
+    assert [k for _, k in combinar(MD, ok, esp).vinculadas] == ["e2"]
+
+
 def test_divergencia_de_nome_continua_recusando_o_recurso_inteiro():
     z = bytearray(_zip_manual({"1.txt": TXT}))
     z[30] = ord("2")  # nome do cabeçalho local diverge do central
@@ -370,3 +385,18 @@ def test_divergencia_de_nome_continua_recusando_o_recurso_inteiro():
         ler_textos(bytes(z))
 
 
+# ---- M1: textos órfãos são contados e nunca vinculam ------------------------------------------------
+def test_texto_sem_metadado_e_contado_e_nao_vincula():
+    zb = _zip({**{f"{m['SeqDocumento']}.txt": ABERTURA for m in M}, "999.txt": ABERTURA, "1000.txt": ABERTURA})
+    res = combinar(MD, zb, {r: [v[0][:5] + (EMS,)] for r, v in ESP.items()})
+    assert res.orfaos == {"texto_sem_metadado": 2}
+    assert sorted(i.seq for i, _ in res.vinculadas) == sorted(str(m["SeqDocumento"]) for m in M[:2])
+    assert combinar(MD, ZB, ESP).orfaos == {}  # sem órfãos o relatório não os inventa
+
+
+def test_texto_sem_espelho_e_contado_e_nao_vincula():
+    res = combinar(MD, ZB, {REGS[0]: ESP[REGS[0]]})
+    assert res.orfaos == {"texto_sem_espelho": 1} and [k for _, k in res.vinculadas] == ["e1"]
+    res = combinar(MD, ZB, {})
+    assert res.orfaos == {"texto_sem_espelho": 2} and not res.vinculadas
+    assert res.descartes["fora_do_recorte_ou_sem_espelho"] == 2
