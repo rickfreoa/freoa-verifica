@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## Não lançado (1.4.0)
+
+### Fontes
+
+- Íntegras do STJ (decisão 0044): parser isolado do pacote oficial de íntegras, com vínculo ao espelho por registro, classe composta e número, prova do julgamento lida do texto (órgão, sessão e ementa do espelho), ambiguidade sem escolha, limites de ZIP e hash dos bytes brutos. Ainda não ligado ao acervo nem ao snapshot.
+- Íntegras do STJ, abertos do PR #5: a fórmula de abertura só vale antes do marcador `EMENTA`; intervalo de sessão incompleto, data inexistente no calendário ou fim anterior ao início deixam o documento sem prova (I2). O ZIP confronta cabeçalho local, data descriptor e extra ZIP64 com o diretório central e recusa a entrada divergente com motivo contado (I3). Textos órfãos (sem metadado ou sem espelho) são contados em `Resultado.orfaos`, sem vincular (M1).
+- Fixtures `tests/fixtures/stj_integras/*` registradas em `FIXTURES.json` como sintéticas (recorte da amostra de 08/10/2026; proveniência da captura original não documentada).
+
 ## 1.3.0 — 20/10/2026
 
 Origem: plano `docs/PLANO-1.3.0.md` e comparativo com o juscraper (`docs/auditoria/2026-10-19-comparativo-juscraper.md`). Decisões 0045 a 0057.

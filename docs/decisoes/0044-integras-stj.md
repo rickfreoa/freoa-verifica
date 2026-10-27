@@ -1,6 +1,6 @@
 # 0044 — Íntegras do STJ
 
-Estado: aceita para o parser; ligação ao acervo pendente (1.3.0).
+Estado: aceita para o parser; ligação ao acervo pendente (1.4.0).
 
 ## Contexto
 
@@ -25,8 +25,13 @@ Sessão Virtual de 29/09/2026 a 06/10/2026".
    igual ao do espelho (abreviações CE, S1, S2, S3 normalizadas) e data de julgamento do
    espelho dentro da sessão declarada e a ementa do espelho (ao menos 120 caracteres
    normalizados, até 400 conferidos) reproduzida no texto da íntegra. Órgão e sessão sozinhos
-   não individualizam o julgamento (Codex, 2ª rodada, B1). Sem a fórmula de abertura, ou com mais de uma, o
-   documento fica pendente (`sem_prova_do_julgamento`); candidatos sem compatibilidade de
+   não individualizam o julgamento (Codex, 2ª rodada, B1). A fórmula só vale na abertura, o trecho que antecede o
+   marcador `EMENTA` (até 3.000 caracteres; sem o marcador não há abertura); citação em outro
+   ponto do texto não conta nem repete a fórmula. Sem a fórmula na abertura, ou com mais de uma, o
+   documento fica pendente (`sem_prova_do_julgamento`). A sessão é uma data (`de DD/MM/AAAA`) ou um intervalo completo
+   (`de DD/MM/AAAA a DD/MM/AAAA`); intervalo incompleto (`de X a`, `a 06/10`), data inexistente no
+   calendário (também a do espelho) ou fim anterior ao início não recuam para o dia inicial e
+   deixam o documento pendente pelo mesmo motivo, sem vincular. Candidatos sem compatibilidade de
    órgão e data dão `julgamento_divergente_do_espelho`. Nunca há recuo para o único espelho
    do registro.
 4. Mais de um espelho com a mesma prova, ou duas íntegras do dia para a mesma identidade:
@@ -41,32 +46,42 @@ Sessão Virtual de 29/09/2026 a 06/10/2026".
 7. Limites do ZIP: 5.000 entradas, 200 MB lidos, 5 MB por entrada, razão 100. O fluxo é
    lido pelo cabeçalho local e descompactado sem confiar em tamanho ou CRC declarados
    (STORED exige tamanhos iguais; DEFLATE exige fim de fluxo sem sobra; tamanho e CRC reais
-   devem coincidir com os declarados). Nome fora de `[0-9]+.txt`, diretório, NUL no nome,
+   devem coincidir com os declarados). O cabeçalho local é confrontado com o diretório central:
+   flags, método, CRC, tamanhos, extra ZIP64 (tamanho original e comprimido; a sentinela
+   0xFFFFFFFF sem extra diverge) e, com o bit 3, o data descriptor (com ou sem assinatura, 4 ou 8
+   bytes por tamanho). Divergência recusa só aquela entrada, com motivo contado nos descartes
+   (`zip_local_flags_divergente`, `zip_local_metodo_divergente`, `zip_local_crc_divergente`,
+   `zip_local_tamanho_divergente`, `zip_zip64_divergente`, `zip_descriptor_divergente`,
+   `zip_local_extra_invalido`). Nome fora de `[0-9]+.txt`, diretório, NUL no nome,
    nome local divergente do central, entrada cifrada ou método não suportado recusam o
    recurso inteiro.
 8. A cobertura textual do ZIP é parcial; `texto_ausente_no_zip` é descarte esperado e não
    pode ser lido como falha da fonte.
+9. Textos órfãos são contados em `Resultado.orfaos` e nunca vinculam: `texto_sem_metadado` (Seq do
+   ZIP sem item nos metadados), `texto_sem_espelho` (acórdão cujo registro, classe e número não têm
+   nenhum espelho candidato; também contado em `descartes` por documento) e, para entrada recusada
+   do ZIP sem metadado, o motivo da recusa. Texto com candidato, mas sem prova do julgamento, fica
+   nos descartes (`sem_prova_do_julgamento`, `julgamento_divergente_do_espelho`).
 
-## Ligação pendente (1.3.0)
+## Ligação pendente (1.4.0)
 
 Capturar ZIP e metadados pelo transporte comum (recibo com sha256), gravar
 `decision_document(kind='inteiro_teor', capture_id=<zip>)` na decisão do espelho, janela
 padrão de 90 dias com checkpoint por recurso (0039), atualizar `coverage` do conector e
 FONTES.md, e só então novo snapshot, após auditoria independente.
 
-## Abertos antes da ligação (Codex, 2ª rodada)
+## Corrigidos antes da ligação (Codex, 2ª rodada: I2, I3, M1)
 
-- I2: a fórmula de abertura é procurada nos 3.000 primeiros caracteres sem delimitar a
-  abertura efetiva; intervalo incompleto recua para data única; datas não são validadas
-  pelo calendário.
-- I3: a leitura manual não confronta método, flags, CRC e tamanhos do cabeçalho local nem o
-  data descriptor e o extra ZIP64 com o diretório central.
-- M1: textos do ZIP sem metadado não são contados.
+A delimitação da abertura, o intervalo e o calendário (I2), o confronto do cabeçalho local, do
+descritor e do extra ZIP64 com o diretório central (I3) e a contagem de textos órfãos (M1) estão
+nos itens 3, 7 e 9. A ligação ao acervo segue pendente de auditoria independente.
 
 ## Limites conhecidos
 
 - A prova do julgamento é a fórmula de abertura; sessões presenciais e textos antigos podem
-  usar outra redação e ficarão pendentes até serem medidos.
+  usar outra redação, ou trazer a ementa antes do acórdão, e ficarão pendentes até serem medidos.
+- A sessão não é conferida contra dia útil nem contra o intervalo de aquisição pedido; só contra o
+  calendário e a data do espelho.
 - Espelhos duplicados no índice com chaves distintas produzem `ambiguous`; deduplicar antes
   da ligação.
 - Republicação com sha256 diferente deve ser tratada como conflito pelo chamador.
