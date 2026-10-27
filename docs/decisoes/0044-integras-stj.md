@@ -24,21 +24,29 @@ Sessão Virtual de 29/09/2026 a 06/10/2026".
 3. Entre os candidatos, o vínculo exige prova do julgamento individual lida do texto: órgão
    igual ao do espelho (abreviações CE, S1, S2, S3 normalizadas) e data de julgamento do
    espelho dentro da sessão declarada e a ementa do espelho (ao menos 120 caracteres
-   normalizados, até 400 conferidos) reproduzida na ementa PRÓPRIA da íntegra: o bloco que vai do
-   marcador `EMENTA` da abertura até o título seguinte (RELATÓRIO, VOTO, ACÓRDÃO, DECISÃO ou PARECER).
-   Ocorrência posterior (ementa citada como precedente) nunca vale; sem título que feche o bloco, o
-   documento fica pendente (`sem_prova_do_julgamento`). Órgão e sessão sozinhos
-   não individualizam o julgamento (Codex, 2ª rodada, B1). A fórmula, as datas e os marcadores são lidos numa visão textual (quebras `<br>`, `<p>`, CR/LF
-   e espaços Unicode viram quebra ou espaço único; entidades como `&nbsp;` são resolvidas), sem
-   alterar o texto bruto nem o hash. A fórmula só vale na abertura, o trecho que antecede o
-   marcador `EMENTA` (até 3.000 caracteres; sem o marcador não há abertura); citação em outro
-   ponto do texto não conta nem repete a fórmula. Sem a fórmula na abertura, ou com mais de uma, o
-   documento fica pendente (`sem_prova_do_julgamento`). A sessão é uma data (`de DD/MM/AAAA`) ou um intervalo completo
-   (`de DD/MM/AAAA a DD/MM/AAAA`); intervalo incompleto (`de X a`, `a 06/10`), data inexistente no
-   calendário (também a do espelho) ou fim anterior ao início não recuam para o dia inicial e
-   deixam o documento pendente pelo mesmo motivo, sem vincular. Candidatos sem compatibilidade de
-   órgão e data dão `julgamento_divergente_do_espelho`. Nunca há recuo para o único espelho
-   do registro.
+   normalizados, até 400 conferidos) reproduzida na ementa PRÓPRIA da íntegra. Método: prova positiva do caso bom; todo o resto é
+   `sem_prova_do_julgamento` ou recusa. A ementa própria só existe se (a) há um marcador `EMENTA` sozinho
+   na linha dentro dos primeiros 3.000 caracteres; (b) o bloco seguinte termina num título canônico
+   (RELATÓRIO, VOTO, ACÓRDÃO, DECISÃO ou PARECER) sozinho na sua linha; (c) o bloco não contém outro
+   marcador `EMENTA` nem linha que comece por título canônico seguido de texto; (d) não resta `<` nem `>`
+   no bloco. Ocorrência posterior (ementa citada como precedente) nunca vale. Órgão e sessão sozinhos
+   não individualizam o julgamento (Codex, 2ª rodada, B1).
+   A estrutura, a fórmula e as datas são lidas numa visão textual do texto, sem alterar o texto bruto nem
+   o hash: só tags de bloco (`br`, `p`, `div`, `li`, `tr`, `h1` a `h6`) viram quebra de linha; qualquer
+   outra tag (`span`, `b`, `i`, `font`, `a` e as não listadas) é removida sem inserir espaço, de modo que
+   `RELAT<span>Ó</span>RIO` é uma palavra; entidades são decodificadas depois e o resultado é texto, nunca
+   reinterpretado como marcação (`&lt;br&gt;` fica como os caracteres `<br>`); espaços Unicode e
+   invisíveis são normalizados. A fórmula só vale na abertura, o trecho que antecede o marcador
+   `EMENTA`; citação em outro ponto não conta nem repete a fórmula. Sem a fórmula na abertura, ou com
+   mais de uma, o documento fica pendente (`sem_prova_do_julgamento`). A sessão é uma data
+   (`de DD/MM/AAAA`) ou um intervalo completo (`de DD/MM/AAAA a DD/MM/AAAA`), e o que vem depois da data
+   (ou da data final) tem de ser um terminador explícito após espaços: vírgula, ponto, ponto e vírgula,
+   parêntese, quebra de linha ou fim da fórmula. Intervalo incompleto (`de X a`, `a 06/10`, `até`, também
+   quando a marcação ou uma entidade o disfarça), conectivo parcial, resíduo de marcação, texto não
+   reconhecido, data inexistente no calendário (também a do espelho) ou fim anterior ao início não
+   recuam para o dia inicial e deixam o documento pendente pelo mesmo motivo, sem vincular. Candidatos
+   sem compatibilidade de órgão e data dão `julgamento_divergente_do_espelho`. Nunca há recuo para o
+   único espelho do registro.
 4. Mais de um espelho com a mesma prova, ou duas íntegras do dia para a mesma identidade:
    `ambiguous`, sem escolha. Mesmo `SeqDocumento` com metadados divergentes: todos
    descartados; duplicata idêntica é contada.
@@ -60,11 +68,16 @@ Sessão Virtual de 29/09/2026 a 06/10/2026".
    `zip_local_tamanho_divergente`, `zip_zip64_divergente`, `zip_descriptor_divergente`,
    `zip_local_extra_invalido`). Nome fora de `[0-9]+.txt`, diretório, NUL no nome,
    nome local divergente do central, entrada cifrada ou método não suportado recusam o
-   recurso inteiro. Os limites de entradas (5.000) e de tamanho do diretório central (2 MiB) são
-   conferidos no EOCD (e no EOCD64) antes de instanciar `ZipFile` (`zip_entradas_excedidas`,
-   `zip_diretorio_excedido`). Extra ZIP64 do diretório central, quando existe, tem de coincidir
-   com os campos comuns e com o local, mesmo sem sentinela nos campos de 32 bits
-   (`zip_zip64_divergente`).
+   recurso inteiro. O diretório central efetivo é percorrido
+   antes de instanciar `ZipFile` (que aloca um `ZipInfo` por registro e anda por `size_cd` bytes, sem
+   confiar na contagem declarada): o laço reproduz a localização do `zipfile` (EOCD, EOCD64 e
+   localizador) e é limitado a 5.000 registros e 2 MiB de bytes lidos; contagem e tamanho declarados são
+   reconciliados com os percorridos (`zip_entradas_excedidas`, `zip_diretorio_excedido`,
+   `zip_diretorio_divergente`). O limite de 2 MiB é restrição de compatibilidade e não foi validado
+   contra pacotes oficiais; 5.000 nomes `<seq>.txt` ocupam cerca de 0,4 MB. O extra ZIP64 do diretório
+   central segue a APPNOTE 4.5.3: contém só os campos cujo valor comum é a sentinela (0xFFFFFFFF; disco
+   0xFFFF), na ordem tamanho descompactado, compactado, deslocamento e disco, com comprimento exatamente
+   igual; extra sem sentinela, curto, longo ou repetido recusa a entrada (`zip_zip64_divergente`).
 8. A cobertura textual do ZIP é parcial; `texto_ausente_no_zip` é descarte esperado e não
    pode ser lido como falha da fonte.
 9. Textos órfãos são contados em `Resultado.orfaos` e nunca vinculam: `texto_sem_metadado` (Seq do

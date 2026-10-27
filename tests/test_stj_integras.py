@@ -488,18 +488,6 @@ def test_i1_extra_zip64_central_contraditorio_sem_sentinela_recusa_a_entrada():
         assert ler_textos_detalhado(z) == ({}, {"1": "zip_zip64_divergente"}), valores
 
 
-def test_i1_extra_zip64_central_coincidente_ou_malformado():
-    import hashlib
-    ok = {"1": (TXT.decode(), hashlib.sha256(TXT).hexdigest())}
-    for valores in [(len(TXT), len(TXT)), (len(TXT),)]:  # redundante e coerente com os campos comuns e o local
-        assert ler_textos_detalhado(_zip_manual({"1.txt": TXT}, z64_central_valores=valores)) == (ok, {})
-    z = bytearray(_zip_manual({"1.txt": TXT}, z64_central_valores=(len(TXT), len(TXT))))
-    c = z.index(b"PK\x01\x02")
-    n_nome = struct.unpack("<H", z[c + 28:c + 30])[0]
-    z[c + 46 + n_nome + 2] = 15  # tamanho do extra deixa de ser múltiplo de 8
-    assert ler_textos_detalhado(bytes(z))[1].get("1") == "zip_zip64_divergente"
-
-
 # I2: o limite de entradas e do diretório vale ANTES de ZipFile alocar um ZipInfo por entrada
 def _sem_zipfile(monkeypatch):
     def proibido(*a, **k):
@@ -522,18 +510,6 @@ def test_i2_diretorio_central_grande_demais_recusado_antes_de_zipfile(monkeypatc
     _sem_zipfile(monkeypatch)
     with pytest.raises(IntegrasInvalidas, match="zip_diretorio_excedido"):
         ler_textos_detalhado(bytes(z))
-
-
-def test_i2_total_de_entradas_no_eocd64_tambem_vale(monkeypatch):
-    z = _zip_manual({"1.txt": b"a"})
-    fim = z.rindex(b"PK\x05\x06")
-    eocd64 = struct.pack("<4sQHHIIQQQQ", b"PK\x06\x06", 44, 45, 45, 0, 0, 5001, 5001, 46, fim - fim)
-    loc = struct.pack("<4sIQI", b"PK\x06\x07", 0, fim, 1)
-    novo_eocd = struct.pack("<4sHHHHIIH", b"PK\x05\x06", 0, 0, 0xFFFF, 0xFFFF, 46, 0, 0)
-    z64 = z[:fim] + eocd64 + loc + novo_eocd
-    _sem_zipfile(monkeypatch)
-    with pytest.raises(IntegrasInvalidas, match="zip_entradas_excedidas"):
-        ler_textos_detalhado(z64)
 
 
 def test_i2_no_limite_exato_e_aceito():
@@ -564,3 +540,225 @@ def test_i3_seq_monocratico_com_crc_divergente_e_intacto_sem_crc():
     assert res.orfaos == {"zip_local_crc_divergente": 1}
     bom = _zip_manual({f"{M[2]['SeqDocumento']}.txt": b"decisao"})
     assert combinar(md, bom, {}).orfaos == {}  # sem recusa no ZIP não há o que contar
+
+
+# ---- Codex, rodada 2 do PR #10: prova positiva do caso bom; o resto é sem_prova ou recusa -----------------------
+# B1 (rodada 2): a delimitação da ementa não pode ser enganada por marcação, título com texto ou segundo EMENTA
+_CITADA = "<br>VOTO<br>Nesse sentido:<br>" + EMS + "<br>É o voto."
+
+
+@pytest.mark.parametrize("titulo", ["RELAT<span>Ó</span>RIO", "RELAT<b>ÓRIO</b>", "<i>RELATÓRIO</i>",
+                                    "RELAT<font color=red>Ó</font>RIO", "RELAT<x-novo>Ó</x-novo>RIO",
+                                    "Relatório:", "RELAT&Oacute;RIO"])
+def test_b2r_titulo_com_marcacao_inline_fecha_a_ementa_e_a_citada_nao_vincula(titulo):
+    texto = _FORM + _OUTRA + f"<br>{titulo}<br>Relatório.{_CITADA}"
+    assert ementa_propria(texto).strip() == _OUTRA.strip()  # o bloco terminou no título, não absorveu a citação
+    res = _vincula(texto)
+    assert not res.vinculadas and res.descartes == {"julgamento_divergente_do_espelho": 1}
+
+
+@pytest.mark.parametrize("titulo", ["RELAT<span>Ó</span>RIO", "RELAT<b>ÓRIO</b>", "Relatório:", "<em>VOTO</em>"])
+def test_b2r_ementa_propria_com_marcacao_inline_continua_vinculando(titulo):
+    texto = _FORM + "<b>" + EMS.replace(" ", "<span> </span>", 3) + f"</b><br>{titulo}<br>Relatório."
+    assert [k for _, k in _vincula(texto).vinculadas] == ["x"]
+
+
+@pytest.mark.parametrize("linha", ["RELATÓRIO Cita-se: ", "VOTO: ", "RELAT<b>ÓRIO</b> texto: ", "Decisão anterior: ",
+                                   "ACÓRDÃO recorrido: ", "PARECER do MPF: "])
+def test_b2r_titulo_seguido_de_texto_na_mesma_linha_nao_delimita(linha):
+    texto = _FORM + _OUTRA + "<br>" + linha + EMS + "<br>RELATÓRIO<br>Relatório.<br>" + EMS
+    assert ementa_propria(texto) is None
+    res = _vincula(texto)
+    assert not res.vinculadas and res.descartes == {"sem_prova_do_julgamento": 1}
+
+
+def test_b2r_segundo_marcador_ementa_antes_da_citacao_nao_delimita():
+    texto = _FORM + _OUTRA + "<br>EMENTA<br>" + EMS + "<br>RELATÓRIO<br>Relatório."
+    assert ementa_propria(texto) is None
+    for outro in ("EMENTA", "Ementa:", "<b>EMENTA</b>", "EM<span>ENTA</span>"):
+        t = _FORM + _OUTRA + f"<br>{outro}<br>" + EMS + "<br>RELATÓRIO<br>R."
+        assert not _vincula(t).vinculadas and ementa_propria(t) is None
+
+
+def test_b2r_marcador_ementa_depois_do_titulo_nao_atrapalha_a_ementa_propria():
+    # como nos textos da fixture: o EMENTA repetido vem depois do RELATÓRIO
+    texto = _FORM + EMS + "<br>RELATÓRIO<br>Relatório.<br>EMENTA<br>" + EMS + "<br>VOTO<br>V."
+    assert [k for _, k in _vincula(texto).vinculadas] == ["x"]
+
+
+@pytest.mark.parametrize("residuo", ["&lt;br&gt;", "&#60;br&#62;", "&lt;/span&gt;", "a < b", "x > y", "&amp;lt;b&amp;gt;"])
+def test_b2r_residuo_de_marcacao_no_bloco_nao_da_prova(residuo):
+    # entidades viram texto e nunca são reinterpretadas como tag; resíduo < ou > no bloco: sem prova
+    texto = _FORM + EMS + f" {residuo}" + "<br>RELATÓRIO<br>R."
+    if residuo.startswith("&amp;"):  # "&amp;lt;" decodifica uma vez para "&lt;": texto sem < nem >
+        assert [k for _, k in _vincula(texto).vinculadas] == ["x"]
+    else:
+        assert ementa_propria(texto) is None
+        assert not _vincula(texto).vinculadas
+
+
+def test_b2r_visao_textual_remove_inline_sem_espaco_e_decodifica_depois():
+    assert visao_textual("RELAT<span>Ó</span>RIO") == "RELATÓRIO"
+    assert visao_textual("a<b>b</b><i>c</i><em>d</em><strong>e</strong><u>f</u><sup>g</sup><sub>h</sub>") == "abcdefgh"
+    assert visao_textual("a<br>b<p>c</p>d<div>e</div><li>f<tr>g<h1>h</h1>i") == "a\nb\nc\nd\ne\nf\ng\nh\ni"
+    assert visao_textual("&lt;br&gt;") == "<br>"  # texto, não quebra
+    assert visao_textual("a&nbsp;b c d") == "a b c d"
+    assert visao_textual("a<!-- <br> -->b") == "ab"
+    assert visao_textual("<param>x<pre>y") == "xy"  # `param` e `pre` não são `p`
+
+
+# B2 (rodada 2): data única só com terminador explícito
+@pytest.mark.parametrize("sessao", [
+    "29/09/2026 at<b>é</b> 06/10", "29/09/2026 at<span>é</span> 06/10/26", "29/09/2026 a<b></b>té 06/10",
+    "29/09/2026&lt;br&gt;a 06/10", "29/09/2026 &#60;br&#62; a 06/10", "29/09/2026&lt;/b&gt;",
+    "29/09/2026 &amp;lt;br&amp;gt;a 06/10", "29/09/2026 <b>a</b> 06/10", "29/09/2026 <span>a</span>",
+    "29/09/2026 (a 06/10/2026)", "29/09/2026 xyz", "29/09/2026 e 06/10/2026", "29/09/2026 - 06/10/2026",
+    "29/09/2026 a 06/10/2026 xyz", "29/09/2026 a 06/10/2026/", "29/09/2026 a 06/10/2026&lt;br&gt;",
+])
+def test_b2r_resto_nao_reconhecido_depois_da_data_nao_da_prova(sessao):
+    assert julgamento_no_texto(_abertura(sessao, "por unanimidade.")) is None, sessao
+
+
+def test_b2r_data_sem_terminador_nem_virgula_nao_da_prova():
+    sem = ("ACÓRDÃO<br>acordam os Ministros da QUARTA TURMA do Superior Tribunal de Justiça, em Sessão Virtual de "
+           "29/09/2026 por unanimidade.<br>EMENTA<br>x<br>RELATÓRIO<br>y")
+    assert julgamento_no_texto(sem) is None
+
+
+@pytest.mark.parametrize("fecho", [",", ".", ";", ")", " , ", "\n", "<br>", "</p>", ""])
+@pytest.mark.parametrize("sessao, esperado", [
+    ("05/10/2026", ("QUARTA TURMA", "2026-10-05", "2026-10-05")),
+    ("29/09/2026 a 06/10/2026", ("QUARTA TURMA", "2026-09-29", "2026-10-06"))])
+def test_b2r_terminador_explicito_da_prova(sessao, esperado, fecho):
+    abre = "(" if fecho == ")" else ""
+    resto = " por unanimidade" if fecho in (",", ".", ";", ")", " , ") else ""
+    texto = ("ACÓRDÃO<br>" + abre + "acordam os Ministros da QUARTA TURMA do Superior Tribunal de Justiça, em "
+             f"Sessão Virtual de {sessao}{fecho}{resto}<br>EMENTA<br>x<br>RELATÓRIO<br>y")
+    assert julgamento_no_texto(texto) == esperado, (sessao, fecho)
+
+
+def test_b2r_virgula_seguida_de_continuacao_de_intervalo_nao_recua():
+    assert julgamento_no_texto(_abertura("29/09/2026, a 06/10/2026")) is None
+    assert julgamento_no_texto(_abertura("29/09/2026, a unanimidade", "")) is not None  # "a unanimidade" não é data
+
+
+# I1 (rodada 2): extra ZIP64 central exatamente igual ao das sentinelas (APPNOTE 4.5.3)
+@pytest.mark.parametrize("valores", [(3, 0), (0,), (3,), (len(TXT), len(TXT)), (), (0, 0, 0), (len(TXT), len(TXT), 0, 0)])
+def test_i1r_extra_zip64_sem_nenhuma_sentinela_recusa(valores):
+    z = _zip_manual({"1.txt": TXT}, z64_central_valores=valores)
+    assert ler_textos_detalhado(z) == ({}, {"1": "zip_zip64_divergente"}), valores
+
+
+@pytest.mark.parametrize("sentinelas, valores", [
+    (("tam",), (len(TXT), 0)),  # (3, 0): um campo a mais do que as sentinelas
+    (("tam",), (len(TXT), len(TXT))),
+    (("tam", "comp"), (len(TXT), len(TXT), 0)),
+    (("comp",), (len(TXT), len(TXT))),
+])
+def test_i1r_extra_zip64_com_numero_de_campos_diferente_das_sentinelas_recusa(sentinelas, valores):
+    z = _zip_manual({"1.txt": TXT}, z64_central_valores=valores, z64_central_sentinelas=sentinelas)
+    assert ler_textos_detalhado(z) == ({}, {"1": "zip_zip64_divergente"}), (sentinelas, valores)
+
+
+@pytest.mark.parametrize("valores", [(len(TXT),), ()])
+def test_i1r_extra_zip64_curto_para_as_sentinelas_recusa_o_arquivo(valores):
+    # com sentinela e campo faltando o próprio zipfile recusa; o recurso inteiro vira zip_invalido
+    z = _zip_manual({"1.txt": TXT}, z64_central_valores=valores, z64_central_sentinelas=("tam", "comp"))
+    with pytest.raises(IntegrasInvalidas, match="zip_invalido"):
+        ler_textos_detalhado(z)
+
+
+def test_i1r_extra_zip64_com_as_sentinelas_exatas_e_aceito():
+    import hashlib
+    ok = {"1": (TXT.decode(), hashlib.sha256(TXT).hexdigest())}
+    assert ler_textos_detalhado(_zip_manual({"1.txt": TXT}, z64_central=True)) == (ok, {})  # tam e comp
+    z = _zip_manual({"1.txt": TXT}, z64_central_valores=(len(TXT),), z64_central_sentinelas=("tam",))
+    assert zipfile.ZipFile(io.BytesIO(z)).read("1.txt") == TXT and ler_textos_detalhado(z) == (ok, {})
+    z = _zip_manual({"1.txt": TXT}, z64_central_valores=(len(TXT),), z64_central_sentinelas=("comp",))
+    assert ler_textos_detalhado(z) == (ok, {})
+
+
+def test_i1r_extra_zip64_repetido_ou_malformado_recusa():
+    z = bytearray(_zip_manual({"1.txt": TXT}, z64_central_valores=(len(TXT), len(TXT)), z64_central_sentinelas=("tam", "comp")))
+    c = z.index(b"PK\x01\x02")
+    n_nome = struct.unpack("<H", z[c + 28:c + 30])[0]
+    z[c + 46 + n_nome + 2] = 15  # tamanho declarado do extra deixa de caber/ser múltiplo de 8
+    try:
+        assert ler_textos_detalhado(bytes(z))[1].get("1") == "zip_zip64_divergente"
+    except IntegrasInvalidas as exc:  # ou o próprio zipfile recusa o extra corrompido
+        assert str(exc) == "zip_invalido"
+
+
+# I2 (rodada 2): o diretório central efetivo é percorrido antes de ZipFile; contagem e tamanho são reconciliados
+def _eocd_editado(z: bytes, *, total=None, tam=None, desloc=None) -> bytes:
+    b = bytearray(z)
+    pos = bytes(b).rindex(b"PK\x05\x06")
+    if total is not None:
+        b[pos + 8:pos + 12] = struct.pack("<HH", total, total)
+    if tam is not None:
+        b[pos + 12:pos + 16] = struct.pack("<I", tam)
+    if desloc is not None:
+        b[pos + 16:pos + 20] = struct.pack("<I", desloc)
+    return bytes(b)
+
+
+def _com_eocd64(z: bytes, *, total=None, tam=None) -> bytes:
+    pos = z.rindex(b"PK\x05\x06")
+    ent = struct.unpack("<H", z[pos + 10:pos + 12])[0]
+    tam_r = struct.unpack("<I", z[pos + 12:pos + 16])[0]
+    off_r = struct.unpack("<I", z[pos + 16:pos + 20])[0]
+    n = ent if total is None else total
+    e64 = struct.pack("<4sQHHIIQQQQ", b"PK\x06\x06", 44, 45, 45, 0, 0, n, n, tam_r if tam is None else tam, off_r)
+    loc = struct.pack("<4sIQI", b"PK\x06\x07", 0, pos, 1)
+    eocd = struct.pack("<4sHHHHIIH", b"PK\x05\x06", 0, 0, 0xFFFF, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0)
+    return z[:pos] + e64 + loc + eocd
+
+
+def _muitos(n: int) -> bytes:
+    return _zip_manual({f"{i}.txt": b"a" for i in range(1, n + 1)})
+
+
+_MUTACOES = {
+    # (nome) -> (construtor do ZIP, motivo esperado)
+    "5001_reais_declara_1": (lambda: _eocd_editado(_muitos(5001), total=1), "zip_entradas_excedidas"),
+    "20000_reais_declara_1": (lambda: _eocd_editado(_muitos(20000), total=1), "zip_entradas_excedidas"),
+    "40000_reais_declara_1": (lambda: _eocd_editado(_muitos(40000), total=1), "zip_diretorio_excedido"),
+    "1_real_declara_5001": (lambda: _eocd_editado(_muitos(1), total=5001), "zip_entradas_excedidas"),
+    "1_real_tamanho_3MiB": (lambda: _eocd_editado(_muitos(1), tam=3 * 1024 * 1024), "zip_diretorio_excedido"),
+    "3_reais_declara_2": (lambda: _eocd_editado(_muitos(3), total=2), "zip_diretorio_divergente"),
+    "1_real_declara_2": (lambda: _eocd_editado(_muitos(1), total=2), "zip_diretorio_divergente"),
+    "eocd64_declara_5001": (lambda: _com_eocd64(_muitos(1), total=5001), "zip_entradas_excedidas"),
+    "eocd64_5001_reais_declara_1": (lambda: _com_eocd64(_muitos(5001), total=1), "zip_entradas_excedidas"),
+    "eocd64_tamanho_3MiB": (lambda: _com_eocd64(_muitos(1), tam=3 * 1024 * 1024), "zip_diretorio_excedido"),
+    "eocd64_2_reais_declara_3": (lambda: _com_eocd64(_muitos(2), total=3), "zip_diretorio_divergente"),
+}
+
+
+@pytest.mark.parametrize("nome", sorted(_MUTACOES))
+def test_i2r_mutacao_do_diretorio_recusada_sem_instanciar_zipfile_nem_zipinfo(nome, monkeypatch):
+    construir, motivo = _MUTACOES[nome]
+    z = construir()
+    _sem_zipfile(monkeypatch)
+    with pytest.raises(IntegrasInvalidas, match=motivo):
+        ler_textos_detalhado(z)
+
+
+def test_i2r_tamanho_declarado_maior_que_o_percorrido_nao_instancia_zipfile(monkeypatch):
+    z = _eocd_editado(_muitos(2), tam=struct.unpack("<I", _muitos(2)[-10:-6])[0] + 10)
+    _sem_zipfile(monkeypatch)
+    with pytest.raises(IntegrasInvalidas):
+        ler_textos_detalhado(z)
+
+
+def test_i2r_eocd64_verdadeiro_e_aceito_e_o_zipinfo_so_aparece_depois_dos_limites():
+    z = _com_eocd64(_muitos(3))
+    assert zipfile.ZipFile(io.BytesIO(z)).namelist() == ["1.txt", "2.txt", "3.txt"]
+    assert sorted(ler_textos_detalhado(z)[0]) == ["1", "2", "3"]
+
+
+def test_i2r_zip_comum_com_comentario_e_aceito():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("1.txt", b"abc")
+        zf.comment = b"comentario do arquivo"
+    assert list(ler_textos_detalhado(buf.getvalue())[0]) == ["1"]

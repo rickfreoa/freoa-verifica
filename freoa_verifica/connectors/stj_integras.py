@@ -102,46 +102,101 @@ def ler_textos(raw: bytes) -> dict[str, tuple[str | None, str]]:
     return ler_textos_detalhado(raw)[0]
 
 
-def _conferir_limites_do_diretorio(raw: bytes) -> None:
-    """Lê o EOCD (e o EOCD64) e recusa o recurso se entradas ou tamanho do diretório central passarem do limite.
+@dataclass(frozen=True)
+class _RegistroCentral:
+    """Campos de 32/16 bits de um registro do diretório central, como estão no arquivo (com as sentinelas)."""
 
-    Sem EOCD legível nada é recusado aqui: `ZipFile` recusa como `zip_invalido`.
+    flags: int
+    usize: int
+    csize: int
+    disco: int
+    deslocamento: int
+    nome: bytes
+    extra: bytes
+
+
+_EOCD = b"PK\x05\x06"
+_CENTRAL = b"PK\x01\x02"
+
+
+def _percorrer_diretorio_central(raw: bytes) -> list[_RegistroCentral]:
+    """Percorre o diretório central efetivo antes de `ZipFile` (que aloca um ZipInfo por registro).
+
+    Reproduz a localização do `zipfile` (EOCD no fim ou por busca nos últimos 64 KiB; EOCD64 imediatamente
+    antes do localizador, que fica imediatamente antes do EOCD) e o seu laço, que anda por `size_cd` bytes e
+    ignora a contagem declarada. O laço aqui é limitado a MAX_ENTRADAS+1 registros e a MAX_DIRETORIO_CENTRAL
+    bytes. Contagem e tamanho declarados são reconciliados com os percorridos; divergência recusa o recurso.
     """
     import struct
 
-    fim = raw.rfind(b"PK\x05\x06", max(0, len(raw) - 22 - 0xFFFF))
-    if fim < 0 or fim + 22 > len(raw):
-        return
-    entradas, tam_cd = struct.unpack("<10xHI", raw[fim:fim + 16])
-    if 0xFFFFFFFF == tam_cd or entradas == 0xFFFF:  # ZIP64: valores reais no EOCD64, apontado pelo localizador
-        loc = fim - 20
-        if loc >= 0 and raw[loc:loc + 4] == b"PK\x06\x07":
-            (pos64,) = struct.unpack("<8xQ", raw[loc:loc + 16])
-            if 0 <= pos64 and pos64 + 56 <= len(raw) and raw[pos64:pos64 + 4] == b"PK\x06\x06":
-                entradas, tam_cd = struct.unpack("<32xQQ", raw[pos64:pos64 + 48])
-    if entradas > MAX_ENTRADAS:
+    n = len(raw)
+    if n >= 22 and raw[n - 22:n - 18] == _EOCD and raw[n - 2:] == b"\x00\x00":
+        pos = n - 22
+    else:
+        ini = max(n - 0xFFFF - 22, 0)
+        achado = raw[ini:].rfind(_EOCD)
+        if achado < 0 or ini + achado + 22 > n:
+            raise IntegrasInvalidas("zip_invalido")
+        pos = ini + achado
+    _, _, _, _, total_decl, tam_cd, desloc_cd, _ = struct.unpack("<4sHHHHIIH", raw[pos:pos + 22])
+    zip64 = False
+    loc = raw[pos - 20:pos] if pos >= 20 else b""
+    if len(loc) == 20 and loc[:4] == b"PK\x06\x07":
+        disco, _, discos = struct.unpack("<4xIQI", loc)
+        if disco != 0 or discos > 1:
+            raise IntegrasInvalidas("zip_invalido")
+        e64 = raw[pos - 76:pos - 20] if pos >= 76 else b""
+        if len(e64) == 56 and e64[:4] == b"PK\x06\x06":
+            _, _, _, _, _, _, _, total_decl, tam_cd, desloc_cd = struct.unpack("<4sQHHIIQQQQ", e64)
+            zip64 = True
+    if total_decl > MAX_ENTRADAS:
         raise IntegrasInvalidas("zip_entradas_excedidas")
     if tam_cd > MAX_DIRETORIO_CENTRAL:
         raise IntegrasInvalidas("zip_diretorio_excedido")
+    concat = pos - tam_cd - desloc_cd - (76 if zip64 else 0)
+    inicio = desloc_cd + concat
+    if inicio < 0:
+        raise IntegrasInvalidas("zip_invalido")
+    dados = raw[inicio:inicio + tam_cd]
+    registros: list[_RegistroCentral] = []
+    total = 0
+    while total < tam_cd:
+        if len(registros) >= MAX_ENTRADAS:
+            raise IntegrasInvalidas("zip_entradas_excedidas")
+        cab = dados[total:total + 46]
+        if len(cab) != 46 or cab[:4] != _CENTRAL:
+            raise IntegrasInvalidas("zip_invalido")
+        (_, _, _, flags, _, _, _, _, csize, usize, n_nome, n_extra, n_com, disco, _, _, desloc) = \
+            struct.unpack("<4sHHHHHHIIIHHHHHII", cab)
+        fim = total + 46 + n_nome + n_extra + n_com
+        if fim > len(dados):
+            raise IntegrasInvalidas("zip_invalido")
+        registros.append(_RegistroCentral(
+            flags, usize, csize, disco, desloc, dados[total + 46:total + 46 + n_nome],
+            dados[total + 46 + n_nome:total + 46 + n_nome + n_extra]))
+        total = fim
+    if total != tam_cd or len(registros) != total_decl:
+        raise IntegrasInvalidas("zip_diretorio_divergente")
+    return registros
 
 
 def ler_textos_detalhado(raw: bytes) -> tuple[dict[str, tuple[str | None, str]], dict[str, str]]:
     """(textos, recusadas). textos: SeqDocumento -> (texto ou None se não UTF-8, sha256 dos bytes);
     recusadas: SeqDocumento -> motivo, para entrada cujo cabeçalho local, data descriptor ou extra ZIP64
     diverge do diretório central. Limites de entradas, tamanho, razão e nomes recusam o recurso inteiro."""
-    _conferir_limites_do_diretorio(raw)  # antes de ZipFile: ele aloca um ZipInfo por entrada do diretório central
+    registros = _percorrer_diretorio_central(raw)  # antes de ZipFile: ele aloca um ZipInfo por registro
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile as exc:
         raise IntegrasInvalidas("zip_invalido") from exc
     with zf:
         infos = zf.infolist()
-        if len(infos) > MAX_ENTRADAS:
-            raise IntegrasInvalidas("zip_entradas_excedidas")
+        if len(infos) != len(registros):
+            raise IntegrasInvalidas("zip_diretorio_divergente")
         total = lidos = 0
         out: dict[str, tuple[str | None, str]] = {}
         recusadas: dict[str, str] = {}
-        for info in infos:
+        for info, registro in zip(infos, registros):
             if info.orig_filename != info.filename or "\x00" in info.orig_filename:
                 raise IntegrasInvalidas("zip_nome_inesperado")
             m = _NOME.fullmatch(info.filename)  # diretórios também caem aqui: não pertencem ao formato
@@ -160,7 +215,7 @@ def ler_textos_detalhado(raw: bytes) -> tuple[dict[str, tuple[str | None, str]],
             if seq in out or seq in recusadas:
                 raise IntegrasInvalidas("zip_seq_repetido")
             try:
-                _conferir_zip64_central(info)
+                _conferir_zip64_central(registro)
                 data = _ler_bruto(zf, info)
             except EntradaRecusada as exc:
                 recusadas[seq] = str(exc)
@@ -195,29 +250,21 @@ def _extra_local(extra: bytes, motivo: str = "zip_local_extra_invalido") -> dict
     return campos
 
 
-def _conferir_zip64_central(info: zipfile.ZipInfo) -> None:
-    """Extra ZIP64 do diretório central presente: seus valores precisam coincidir com os campos comuns.
+def _conferir_zip64_central(reg: _RegistroCentral) -> None:
+    """Extra ZIP64 do diretório central exatamente como a APPNOTE 4.5.3 manda.
 
-    `zipfile` só consome o extra quando o campo de 32 bits tem a sentinela; um extra contraditório sem
-    sentinela seria ignorado em silêncio. Os valores (tamanho, comprimido, deslocamento, nesta ordem, só
-    dos campos com sentinela) devem ser uma subsequência ordenada dos valores finais da entrada.
+    O extra contém só os campos cujo valor comum é a sentinela (0xFFFFFFFF; 0xFFFF para disco), na ordem
+    fixa: tamanho descompactado (8 bytes), compactado (8), deslocamento (8) e disco (4). O comprimento tem
+    de ser exatamente o das sentinelas presentes; extra ZIP64 sem sentinela, curto, longo ou repetido
+    recusa a entrada. `zipfile` consome o extra só quando há sentinela e ignora o que sobra.
     """
-    import struct
-
-    z64 = _extra_local(info.extra, "zip_zip64_divergente").get(0x0001)
+    z64 = _extra_local(reg.extra, "zip_zip64_divergente").get(0x0001)
+    esperado = 8 * sum(v == _ZIP64_SENTINELA for v in (reg.usize, reg.csize, reg.deslocamento))
+    esperado += 4 * (reg.disco == 0xFFFF)
     if z64 is None:
-        return
-    if len(z64) % 8 or len(z64) > 32:
+        return  # sentinela sem extra, ou extra curto: o `zipfile` recusa o arquivo (zip_invalido) antes de chegar aqui
+    if esperado == 0 or len(z64) != esperado:  # extra ZIP64 sem nenhuma sentinela também diverge
         raise EntradaRecusada("zip_zip64_divergente")
-    valores = list(struct.unpack(f"<{len(z64) // 8}Q", z64))
-    finais = [info.file_size, info.compress_size, info.header_offset]
-    i = 0
-    for v in valores:
-        while i < len(finais) and finais[i] != v:
-            i += 1
-        if i == len(finais):
-            raise EntradaRecusada("zip_zip64_divergente")
-        i += 1
 
 
 def _conferir_local(info: zipfile.ZipInfo, local: bytes, extra: bytes) -> tuple[bool, bool]:
@@ -343,21 +390,26 @@ def _classe_da_integra(md: Mapping[str, Any]) -> tuple[tuple[str, ...], str] | N
 _FORMULA = re.compile(r"acordam os Ministros d[ao] (.{3,40}?) do Superior Tribunal de Justi.a,\s+em Sess.o"
                       r"(?: Virtual)? de (\d{2}/\d{2}/\d{4})(?!\d)", re.I)
 _FIM_DO_INTERVALO = re.compile(r"\s+a\s+(\d{2}/\d{2}/\d{4})(?!\d)", re.I)
-_INTERVALO_ABERTO = re.compile(r"\s*(?:a|à|até)\b", re.I)
+_INTERVALO_ABERTO = re.compile(r"\s*(?:a|à|até)\b|[\s,;.)]*(?:a|à|até)\s*\d", re.I)
+_TERMINADOR = re.compile(r"[ ]*(?:\Z|[.,;)\n])")
 _ABERTURA_MAX = 3000
-_QUEBRA = re.compile(r"(?i)<\s*/?\s*(?:br|p|div|li|tr|h[1-6])\b[^>]*>")
+_BLOCO = re.compile(r"</?(?:br|p|div|li|tr|h[1-6])\b[^<>]*>", re.I)
+_MARCACAO = re.compile(r"<!--.*?-->|</?[A-Za-z][^<>]*>|<[!?][^<>]*>", re.S)
 _INVISIVEIS = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"))
 
 
 def visao_textual(texto: str) -> str:
     """Texto sem a marcação da fonte, só para ler a estrutura; o hash da prova é sempre dos bytes brutos.
 
-    Quebras (`<br>`, `<p>`, `<div>`, CR, LF) viram uma única quebra de linha; outras marcações viram espaço;
-    entidades (`&nbsp;`) são resolvidas; espaços Unicode (NBSP, em space, ideográfico) e invisíveis são
-    normalizados. A fórmula, as datas e os marcadores de seção são lidos nesta visão.
+    Só tags de bloco (`br`, `p`, `div`, `li`, `tr`, `h1` a `h6`) viram quebra de linha. Qualquer outra tag
+    (`span`, `b`, `i`, `em`, `font`, `a`... e as não listadas) é removida SEM inserir espaço, de modo que
+    `RELAT<span>Ó</span>RIO` seja uma palavra só. Entidades são decodificadas DEPOIS da remoção das tags e o
+    resultado é texto: um `&lt;br&gt;` vira os caracteres `<br>` e nunca é reinterpretado como marcação.
+    Espaços Unicode e invisíveis são normalizados.
     """
-    t = _QUEBRA.sub("\n", texto)
-    t = re.sub(r"<[^>]*>", " ", t)
+    t = _MARCACAO.sub("", texto) if "<!--" in texto else texto
+    t = _BLOCO.sub("\n", t)
+    t = _MARCACAO.sub("", t)
     t = html.unescape(t).translate(_INVISIVEIS)
     t = t.replace("\r\n", "\n").replace("\r", "\n")
     t = re.sub(r"[^\S\n]+", " ", t)
@@ -365,27 +417,45 @@ def visao_textual(texto: str) -> str:
     return t.strip()
 
 
-_MARCA_EMENTA = re.compile(r"(?im)^[ ]*EMENTA[ ]*[:.]?[ ]*$")
-_MARCA_FIM_EMENTA = re.compile(r"(?im)^[ ]*(?:RELAT[ÓO]RIO|VOTO|AC[ÓO]RD[ÃA]O|DECIS[ÃA]O|PARECER)[ ]*[:.]?[ ]*$")
+_MARCA_EMENTA = re.compile(r"EMENTA[ ]*[:.]?")
+_TITULO_DE_FECHO = re.compile(r"(?:RELATORIO|VOTO|ACORDAO|DECISAO|PARECER)[ ]*[:.]?")
+_TITULO_COM_TEXTO = re.compile(r"(?:RELATORIO|VOTO|ACORDAO|DECISAO|PARECER)\b")
 
 
 def _estrutura(texto: str) -> tuple[str, str | None] | None:
     """(abertura, ementa própria) na visão textual; None sem marcador EMENTA dentro do limite da abertura.
 
-    A abertura é o que antecede o primeiro marcador `EMENTA` (até 3.000 caracteres). A ementa própria vai
-    do marcador até o primeiro título seguinte (RELATÓRIO, VOTO, ACÓRDÃO, DECISÃO, PARECER); sem esse título
-    ela não está delimitada (None) e não prova nada. Ocorrência posterior (ementa citada) nunca vale.
+    Método de prova positiva: a ementa própria só existe se (1) há um marcador EMENTA sozinho na linha dentro
+    dos primeiros 3.000 caracteres; (2) o bloco que o segue termina num título canônico (RELATÓRIO, VOTO,
+    ACÓRDÃO, DECISÃO, PARECER) sozinho na sua linha; (3) no bloco não há outro marcador EMENTA nem linha que
+    comece por título canônico seguido de texto; (4) não resta `<` nem `>` no bloco. Qualquer outra
+    configuração devolve a abertura com ementa None (`sem_prova_do_julgamento`).
     """
-    v = visao_textual(texto)
-    m = _MARCA_EMENTA.search(v)
-    if m is None or m.start() > _ABERTURA_MAX:
+    linhas = visao_textual(texto).split("\n")
+    pos = 0
+    ini = None
+    for i, linha in enumerate(linhas):
+        if _MARCA_EMENTA.fullmatch(_sem_acento(linha)):
+            ini = i
+            break
+        pos += len(linha) + 1
+    if ini is None or pos > _ABERTURA_MAX:
         return None
-    fim = _MARCA_FIM_EMENTA.search(v, m.end())
-    return v[:m.start()], (v[m.end():fim.start()] if fim else None)
+    abertura = "\n".join(linhas[:ini])
+    bloco: list[str] = []
+    for linha in linhas[ini + 1:]:
+        d = _sem_acento(linha)
+        if _TITULO_DE_FECHO.fullmatch(d):
+            corpo = "\n".join(bloco)
+            return abertura, (None if "<" in corpo or ">" in corpo else corpo)
+        if _MARCA_EMENTA.fullmatch(d) or _TITULO_COM_TEXTO.match(d):
+            return abertura, None
+        bloco.append(linha)
+    return abertura, None
 
 
 def abertura_do_texto(texto: str) -> str | None:
-    """Trecho que antecede o marcador EMENTA (decisão 0044, item 3); None sem marcador ou além do limite.
+    """Trecho (visão textual) que antecede o marcador EMENTA; None sem marcador ou além do limite.
 
     A fórmula só vale se estiver nesse trecho: citação de outro acórdão no corpo não é a abertura.
     """
@@ -394,7 +464,7 @@ def abertura_do_texto(texto: str) -> str | None:
 
 
 def ementa_propria(texto: str) -> str | None:
-    """Bloco da ementa do próprio acórdão (visão textual), ou None se não estiver delimitado."""
+    """Bloco da ementa do próprio acórdão (visão textual), ou None se a prova positiva não se completa."""
     est = _estrutura(texto)
     return est[1] if est else None
 
@@ -408,10 +478,12 @@ def _data_br(d: str) -> str | None:
 
 
 def julgamento_no_texto(texto: str) -> tuple[str, str, str] | None:
-    """(órgão, início, fim ISO) da fórmula de abertura do acórdão.
+    """(órgão, início, fim ISO) da fórmula de abertura do acórdão, lida na visão textual.
 
-    None se faltar abertura delimitada, se a fórmula estiver ausente ou repetida nela, se o intervalo
-    ("de X a Y") vier incompleto, com data inexistente no calendário ou com fim anterior ao início.
+    Prova positiva: a data da sessão (ou o intervalo "de X a Y" completo) é seguida, após espaços, de um
+    terminador explícito (vírgula, ponto, ponto e vírgula, parêntese, quebra de linha ou fim da fórmula).
+    Resíduo de marcação, conectivo parcial ("a", "até" sem data), data inexistente no calendário, fim anterior
+    ao início ou qualquer texto não reconhecido entre a data e o terminador devolve None.
     """
     abertura = abertura_do_texto(texto)
     if abertura is None:
@@ -423,16 +495,19 @@ def julgamento_no_texto(texto: str) -> tuple[str, str, str] | None:
     ini = _data_br(m.group(2))
     if ini is None:
         return None
-    resto = abertura[m.end():m.end() + 40]
+    resto = abertura[m.end():]
     fim_m = _FIM_DO_INTERVALO.match(resto)
     if fim_m:
         fim = _data_br(fim_m.group(1))
         if fim is None or fim < ini:
             return None
+        resto = resto[fim_m.end():]
     elif _INTERVALO_ABERTO.match(resto):  # "de X a" sem data final válida: não recua para o dia X
         return None
     else:
         fim = ini
+    if not _TERMINADOR.match(resto):
+        return None
     return _sem_acento(m.group(1)), ini, fim
 
 
@@ -451,8 +526,12 @@ def _data_iso(v: Any) -> str | None:
     return _data_br(f"{d[6:8]}/{d[4:6]}/{d[:4]}")
 
 
+def _alfanumerico(visao: str) -> str:
+    return re.sub(r"[^0-9A-Z]+", " ", _sem_acento(visao)).strip()
+
+
 def _normal(t: str) -> str:
-    return re.sub(r"[^0-9A-Z]+", " ", _sem_acento(visao_textual(t))).strip()
+    return _alfanumerico(visao_textual(t))
 
 
 _EMENTA_MIN = 120
@@ -573,7 +652,7 @@ def combinar(metadados_body: bytes, zip_body: bytes,
         if bloco is None:  # ementa própria não delimitada (sem título seguinte): não há como confrontar
             res.descartar("sem_prova_do_julgamento")
             continue
-        texto_n = _normal(bloco)
+        texto_n = _alfanumerico(bloco)  # o bloco já é visão textual: não se lê duas vezes
         chaves = sorted({e[0] for e in compat
                          if _orgao(e[3]) == orgao and _data_iso(e[4]) and ini <= _data_iso(e[4]) <= fim
                          and _ementa_no_texto(e[5] if len(e) > 5 else None, texto_n)})
