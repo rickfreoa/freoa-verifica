@@ -76,8 +76,19 @@ def ler_metadados(body: bytes) -> list[dict[str, Any]]:
     return data
 
 
+class EntradaRecusada(Exception):
+    """Entrada do ZIP recusada por divergência interna; o recurso segue e o motivo é contado."""
+
+
 def ler_textos(raw: bytes) -> dict[str, tuple[str | None, str]]:
-    """SeqDocumento -> (texto ou None se não UTF-8, sha256 dos bytes), com limites de entradas, tamanho, razão de compressão e nomes."""
+    """Textos aceitos do ZIP (ver `ler_textos_detalhado`); as entradas recusadas ficam de fora."""
+    return ler_textos_detalhado(raw)[0]
+
+
+def ler_textos_detalhado(raw: bytes) -> tuple[dict[str, tuple[str | None, str]], dict[str, str]]:
+    """(textos, recusadas). textos: SeqDocumento -> (texto ou None se não UTF-8, sha256 dos bytes);
+    recusadas: SeqDocumento -> motivo, para entrada cujo cabeçalho local, data descriptor ou extra ZIP64
+    diverge do diretório central. Limites de entradas, tamanho, razão e nomes recusam o recurso inteiro."""
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile as exc:
@@ -88,6 +99,7 @@ def ler_textos(raw: bytes) -> dict[str, tuple[str | None, str]]:
             raise IntegrasInvalidas("zip_entradas_excedidas")
         total = lidos = 0
         out: dict[str, tuple[str | None, str]] = {}
+        recusadas: dict[str, str] = {}
         for info in infos:
             if info.orig_filename != info.filename or "\x00" in info.orig_filename:
                 raise IntegrasInvalidas("zip_nome_inesperado")
@@ -103,17 +115,93 @@ def ler_textos(raw: bytes) -> dict[str, tuple[str | None, str]]:
                 raise IntegrasInvalidas("zip_razao_compressao")
             if info.flag_bits & 0x1:
                 raise IntegrasInvalidas("zip_criptografado")
-            data = _ler_bruto(zf, info)
+            seq = m.group(1)
+            if seq in out or seq in recusadas:
+                raise IntegrasInvalidas("zip_seq_repetido")
+            try:
+                data = _ler_bruto(zf, info)
+            except EntradaRecusada as exc:
+                recusadas[seq] = str(exc)
+                continue
             if len(data) > MAX_POR_ENTRADA:
                 raise IntegrasInvalidas("zip_entrada_grande")
             lidos += len(data)
             if lidos > MAX_DESCOMPACTADO:
                 raise IntegrasInvalidas("zip_descompactado_excedido")
-            seq = m.group(1)
-            if seq in out:
-                raise IntegrasInvalidas("zip_seq_repetido")
             out[seq] = (_decodificar(data), hashlib.sha256(data).hexdigest())
-        return out
+        return out, recusadas
+
+
+_ZIP64_SENTINELA = 0xFFFFFFFF
+_ASSINATURA_DESCRITOR = b"PK\x07\x08"
+
+
+def _extra_local(extra: bytes) -> dict[int, bytes]:
+    """Campos do extra do cabeçalho local (id -> dados); extra malformado ou com id repetido recusa a entrada."""
+    import struct
+
+    campos: dict[int, bytes] = {}
+    i = 0
+    while i < len(extra):
+        if i + 4 > len(extra):
+            raise EntradaRecusada("zip_local_extra_invalido")
+        ident, tam = struct.unpack("<HH", extra[i:i + 4])
+        if i + 4 + tam > len(extra) or ident in campos:
+            raise EntradaRecusada("zip_local_extra_invalido")
+        campos[ident] = extra[i + 4:i + 4 + tam]
+        i += 4 + tam
+    return campos
+
+
+def _conferir_local(info: zipfile.ZipInfo, local: bytes, extra: bytes) -> tuple[bool, bool]:
+    """Confronta método, flags, CRC, tamanhos e extra ZIP64 do cabeçalho local com o diretório central.
+
+    Devolve (tem_descritor, zip64). Divergência levanta EntradaRecusada com o motivo.
+    """
+    import struct
+
+    flags, metodo, crc, comp, tam = struct.unpack("<HH4xIII", local[6:26])
+    if flags != info.flag_bits:
+        raise EntradaRecusada("zip_local_flags_divergente")
+    if metodo != info.compress_type:
+        raise EntradaRecusada("zip_local_metodo_divergente")
+    descritor = bool(flags & 0x8)  # com descritor, CRC e tamanhos do local podem vir zerados
+
+    def igual(valor: int, central: int) -> bool:
+        return valor == central or (descritor and valor == 0)
+
+    z64 = _extra_local(extra).get(0x0001)
+    if z64 is not None:  # no local o extra ZIP64 traz tamanho original e comprimido, nesta ordem
+        if len(z64) != 16:
+            raise EntradaRecusada("zip_zip64_divergente")
+        z_tam, z_comp = struct.unpack("<QQ", z64)
+        if not (igual(z_tam, info.file_size) and igual(z_comp, info.compress_size)):
+            raise EntradaRecusada("zip_zip64_divergente")
+        # com extra, os campos de 32 bits trazem a sentinela (ou o valor real, igual ao central)
+        if not all(v == _ZIP64_SENTINELA or igual(v, c) for v, c in ((comp, info.compress_size), (tam, info.file_size))):
+            raise EntradaRecusada("zip_local_tamanho_divergente")
+    elif not (igual(comp, info.compress_size) and igual(tam, info.file_size)):
+        # inclui a sentinela sem extra: o tamanho real seria desconhecido
+        raise EntradaRecusada("zip_zip64_divergente" if _ZIP64_SENTINELA in (comp, tam) else "zip_local_tamanho_divergente")
+    if not igual(crc, info.CRC):
+        raise EntradaRecusada("zip_local_crc_divergente")
+    return descritor, z64 is not None
+
+
+def _conferir_descritor(info: zipfile.ZipInfo, depois: bytes, zip64: bool) -> None:
+    """O data descriptor (com ou sem assinatura, 4 ou 8 bytes por tamanho) deve repetir o diretório central."""
+    import struct
+
+    largura = 8 if zip64 else 4
+    formato = "<I" + ("QQ" if largura == 8 else "II")
+    tamanho = struct.calcsize(formato)
+    alvo = (info.CRC, info.compress_size, info.file_size)
+    candidatos = [depois[4:4 + tamanho]] if depois[:4] == _ASSINATURA_DESCRITOR else []
+    candidatos.append(depois[:tamanho])
+    for c in candidatos:
+        if len(c) == tamanho and struct.unpack(formato, c) == alvo:
+            return
+    raise EntradaRecusada("zip_descriptor_divergente")
 
 
 def _ler_bruto(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
@@ -129,12 +217,17 @@ def _ler_bruto(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
     n_nome, n_extra = struct.unpack("<HH", local[26:30])
     if fp.read(n_nome) != info.orig_filename.encode("cp437" if not info.flag_bits & 0x800 else "utf-8"):
         raise IntegrasInvalidas("zip_nome_divergente")
-    fp.read(n_extra)
+    extra = fp.read(n_extra)
+    if len(extra) != n_extra:
+        raise IntegrasInvalidas("zip_truncado")
+    descritor, zip64 = _conferir_local(info, local, extra)
     if info.compress_size > MAX_POR_ENTRADA:
         raise IntegrasInvalidas("zip_entrada_grande")
     comp = fp.read(info.compress_size)
     if len(comp) != info.compress_size:
         raise IntegrasInvalidas("zip_truncado")
+    if descritor:
+        _conferir_descritor(info, fp.read(24), zip64)
     if info.compress_type == zipfile.ZIP_STORED:
         if info.compress_size != info.file_size:
             raise IntegrasInvalidas("zip_tamanho_divergente")
@@ -285,7 +378,7 @@ def combinar(metadados_body: bytes, zip_body: bytes,
     O registro abriga vários acórdãos (REsp, AgInt no REsp, EDcl...): o vínculo exige registro,
     classe composta e número iguais. Um candidato: vínculo. Vários: ambíguo. Nenhum: descarte.
     """
-    textos = ler_textos(zip_body)
+    textos, recusadas = ler_textos_detalhado(zip_body)
     res = Resultado()
     metas = ler_metadados(metadados_body)
     por_seq: dict[str, list[dict[str, Any]]] = {}
@@ -319,6 +412,9 @@ def combinar(metadados_body: bytes, zip_body: bytes,
         classe = _classe_da_integra(md)
         if classe is None:
             res.descartar("processo_invalido")
+            continue
+        if seq in recusadas:  # entrada do ZIP recusada por divergência interna: o motivo é o do ZIP
+            res.descartar(recusadas[seq])
             continue
         if seq not in textos:
             res.descartar("texto_ausente_no_zip")

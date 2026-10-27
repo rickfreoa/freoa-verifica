@@ -213,7 +213,7 @@ def test_diretorio_e_nul_recusados(nome):
 
 # ---- I2: abertura delimitada, intervalo completo e calendário (decisão 0044, item 3) ----------------
 from freoa_verifica.connectors.stj_integras import (  # noqa: E402
-    _data_iso, julgamento_no_texto)
+    _data_iso, julgamento_no_texto, ler_textos_detalhado)
 
 
 def _abertura(sessao: str, corpo: str = "por unanimidade, negar provimento.") -> str:
@@ -277,5 +277,96 @@ def test_data_do_espelho_precisa_existir_no_calendario():
     bom = ("e", "REsp", "123", "QUARTA TURMA", "20260228", EMS)
     assert not combinar(md, zb, {"202600000001": [ruim]}).vinculadas
     assert [k for _, k in combinar(md, zb, {"202600000001": [bom]}).vinculadas] == ["e"]
+
+
+# ---- I3: cabeçalho local, data descriptor e extra ZIP64 contra o diretório central ------------------
+import struct  # noqa: E402
+import zlib  # noqa: E402
+
+
+def _zip_manual(entradas, *, local=None, central=None, descritor=None, z64_local=None, z64_central=False,
+                metodo=zipfile.ZIP_STORED):
+    """ZIP escrito à mão. `local`/`central`: sobrescritas (flags, metodo, crc, comp, tam) de todas as entradas.
+    `descritor`: None ou (assinatura, crc, comp, tam, largura); None nos valores = o correto; ativa o bit 3.
+    `z64_local`: (tam, comp) do extra ZIP64 do local, ou None. `z64_central`: central com sentinela e extra."""
+    corpo, cds, off = bytearray(), bytearray(), 0
+    for nome, dado in entradas.items():
+        nome_b = nome.encode("ascii")
+        comp = dado if metodo == zipfile.ZIP_STORED else zlib.compress(dado)[2:-4]
+        crc = zlib.crc32(dado) & 0xFFFFFFFF
+        base = {"flags": 0x8 if descritor else 0, "metodo": metodo, "crc": crc, "comp": len(comp), "tam": len(dado)}
+        l, c = {**base, **(local or {})}, {**base, **(central or {})}
+        extra_l = b""
+        if z64_local is not None:
+            extra_l = struct.pack("<HHQQ", 1, 16, *z64_local)
+            l["comp"] = l["tam"] = 0xFFFFFFFF
+        zero = bool(descritor)
+        cab = struct.pack("<4sHHHHHIIIHH", b"PK\x03\x04", 45, l["flags"], l["metodo"], 0, 0x21,
+                          0 if zero else l["crc"], 0 if zero else l["comp"], 0 if zero else l["tam"],
+                          len(nome_b), len(extra_l))
+        bloco = cab + nome_b + extra_l + comp
+        if descritor:
+            ass, d_crc, d_comp, d_tam, larg = descritor
+            vals = (crc if d_crc is None else d_crc, len(comp) if d_comp is None else d_comp,
+                    len(dado) if d_tam is None else d_tam)
+            bloco += (b"PK\x07\x08" if ass else b"") + struct.pack("<I" + ("QQ" if larg == 8 else "II"), *vals)
+        extra_c, c_comp, c_tam = b"", c["comp"], c["tam"]
+        if z64_central:
+            extra_c = struct.pack("<HHQQ", 1, 16, c["tam"], c["comp"])
+            c_comp = c_tam = 0xFFFFFFFF
+        cds += struct.pack("<4sHHHHHHIIIHHHHHII", b"PK\x01\x02", 45, 45, c["flags"], c["metodo"], 0, 0x21, c["crc"],
+                           c_comp, c_tam, len(nome_b), len(extra_c), 0, 0, 0, 0, off) + nome_b + extra_c
+        corpo += bloco
+        off += len(bloco)
+    fim = struct.pack("<4sHHHHIIH", b"PK\x05\x06", 0, 0, len(entradas), len(entradas), len(cds), off, 0)
+    return bytes(corpo + cds + fim)
+
+
+TXT = b"texto de teste"
+
+
+def test_zip_manual_integro_e_aceito_em_todas_as_variantes():
+    import hashlib
+    esperado = {"1": (TXT.decode(), hashlib.sha256(TXT).hexdigest())}
+    for metodo in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+        assert ler_textos_detalhado(_zip_manual({"1.txt": TXT}, metodo=metodo)) == (esperado, {})
+        for ass in (True, False):  # data descriptor com e sem assinatura; local zerado
+            z = _zip_manual({"1.txt": TXT}, metodo=metodo, descritor=(ass, None, None, None, 4))
+            assert zipfile.ZipFile(io.BytesIO(z)).read("1.txt") == TXT
+            assert ler_textos_detalhado(z) == (esperado, {})
+        comp = len(TXT) if metodo == zipfile.ZIP_STORED else len(zlib.compress(TXT)[2:-4])
+        z = _zip_manual({"1.txt": TXT}, metodo=metodo, z64_local=(len(TXT), comp), z64_central=True)
+        assert ler_textos_detalhado(z) == (esperado, {})
+        z = _zip_manual({"1.txt": TXT}, metodo=metodo, z64_local=(0, 0), z64_central=True,
+                        descritor=(True, None, None, None, 8))
+        assert ler_textos_detalhado(z) == (esperado, {})
+
+
+@pytest.mark.parametrize("kw, motivo", [
+    ({"local": {"metodo": zipfile.ZIP_DEFLATED}}, "zip_local_metodo_divergente"),
+    ({"local": {"flags": 0x800}}, "zip_local_flags_divergente"),
+    ({"local": {"crc": 1}}, "zip_local_crc_divergente"),
+    ({"local": {"comp": 3}}, "zip_local_tamanho_divergente"),
+    ({"local": {"tam": 3}}, "zip_local_tamanho_divergente"),
+    ({"local": {"comp": 0xFFFFFFFF}}, "zip_zip64_divergente"),  # sentinela sem extra ZIP64
+    ({"descritor": (True, 123, None, None, 4)}, "zip_descriptor_divergente"),
+    ({"descritor": (True, None, 3, None, 4)}, "zip_descriptor_divergente"),
+    ({"descritor": (False, None, None, 3, 4)}, "zip_descriptor_divergente"),
+    ({"z64_local": (3, len(TXT)), "z64_central": True}, "zip_zip64_divergente"),
+    ({"z64_local": (len(TXT), 3), "z64_central": True}, "zip_zip64_divergente"),
+    ({"z64_local": (0, 0), "z64_central": True, "descritor": (True, None, 3, None, 8)}, "zip_descriptor_divergente"),
+])
+def test_divergencia_local_central_recusa_a_entrada_com_motivo(kw, motivo):
+    z = _zip_manual({"1.txt": TXT}, **kw)
+    textos, recusadas = ler_textos_detalhado(z)
+    assert textos == {} and recusadas == {"1": motivo}
+    assert ler_textos(z) == {}  # a entrada recusada não entra
+
+
+def test_divergencia_de_nome_continua_recusando_o_recurso_inteiro():
+    z = bytearray(_zip_manual({"1.txt": TXT}))
+    z[30] = ord("2")  # nome do cabeçalho local diverge do central
+    with pytest.raises(IntegrasInvalidas, match="zip_nome_divergente"):
+        ler_textos(bytes(z))
 
 
