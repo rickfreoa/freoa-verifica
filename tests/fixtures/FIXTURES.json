@@ -491,6 +491,22 @@
   "url": "https://dadosabertos.web.stj.jus.br/dataset/a927747a-2fc9-46f7-be25-c3f12e7d560c/resource/f3eeebe9-48ef-4879-a0bf-c2ee71386695/download/20260831.json",
   "url_final": "https://dadosabertos.web.stj.jus.br/dataset/a927747a-2fc9-46f7-be25-c3f12e7d560c/resource/f3eeebe9-48ef-4879-a0bf-c2ee71386695/download/20260831.json"
  },
+ "stj_integras_metadados": {
+  "bytes": 1304,
+  "categoria": "sintetica",
+  "file": "stj_integras/metadados.json",
+  "gerador": "manual",
+  "proposito": "recorte manual de 3 itens do metadadosAAAAMMDD.json da amostra de 08/10/2026 do pacote de íntegras do STJ (2 acórdãos e 1 decisão monocrática); URL, data e status da captura original não documentados, por isso não é captura_real (tests/test_stj_integras.py, decisão 0044)",
+  "sha256": "e9dccc6d881f7d71425a788c37e6f5a901534bcdbde2aa89bd5f62cb65dbbb54"
+ },
+ "stj_integras_textos": {
+  "bytes": 13403,
+  "categoria": "sintetica",
+  "file": "stj_integras/textos.zip",
+  "gerador": "manual",
+  "proposito": "ZIP remontado em 19/10/2026 com 3 dos 37 textos da amostra de 08/10/2026 do pacote de íntegras do STJ (bytes do ZIP oficial não preservados; URL, data e status da captura original não documentados), por isso não é captura_real (tests/test_stj_integras.py, decisão 0044)",
+  "sha256": "51984522c191b42ff2009594ba2aa933198b3b846f9ba134d4733296d565479b"
+ },
  "stj_package_primeira_turma": {
   "bytes": 42159,
   "capturado_em": "2026-10-17T21:41:10.308641+00:00",
