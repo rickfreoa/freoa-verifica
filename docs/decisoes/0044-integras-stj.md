@@ -24,8 +24,13 @@ Sessão Virtual de 29/09/2026 a 06/10/2026".
 3. Entre os candidatos, o vínculo exige prova do julgamento individual lida do texto: órgão
    igual ao do espelho (abreviações CE, S1, S2, S3 normalizadas) e data de julgamento do
    espelho dentro da sessão declarada e a ementa do espelho (ao menos 120 caracteres
-   normalizados, até 400 conferidos) reproduzida no texto da íntegra. Órgão e sessão sozinhos
-   não individualizam o julgamento (Codex, 2ª rodada, B1). A fórmula só vale na abertura, o trecho que antecede o
+   normalizados, até 400 conferidos) reproduzida na ementa PRÓPRIA da íntegra: o bloco que vai do
+   marcador `EMENTA` da abertura até o título seguinte (RELATÓRIO, VOTO, ACÓRDÃO, DECISÃO ou PARECER).
+   Ocorrência posterior (ementa citada como precedente) nunca vale; sem título que feche o bloco, o
+   documento fica pendente (`sem_prova_do_julgamento`). Órgão e sessão sozinhos
+   não individualizam o julgamento (Codex, 2ª rodada, B1). A fórmula, as datas e os marcadores são lidos numa visão textual (quebras `<br>`, `<p>`, CR/LF
+   e espaços Unicode viram quebra ou espaço único; entidades como `&nbsp;` são resolvidas), sem
+   alterar o texto bruto nem o hash. A fórmula só vale na abertura, o trecho que antecede o
    marcador `EMENTA` (até 3.000 caracteres; sem o marcador não há abertura); citação em outro
    ponto do texto não conta nem repete a fórmula. Sem a fórmula na abertura, ou com mais de uma, o
    documento fica pendente (`sem_prova_do_julgamento`). A sessão é uma data (`de DD/MM/AAAA`) ou um intervalo completo
@@ -55,13 +60,18 @@ Sessão Virtual de 29/09/2026 a 06/10/2026".
    `zip_local_tamanho_divergente`, `zip_zip64_divergente`, `zip_descriptor_divergente`,
    `zip_local_extra_invalido`). Nome fora de `[0-9]+.txt`, diretório, NUL no nome,
    nome local divergente do central, entrada cifrada ou método não suportado recusam o
-   recurso inteiro.
+   recurso inteiro. Os limites de entradas (5.000) e de tamanho do diretório central (2 MiB) são
+   conferidos no EOCD (e no EOCD64) antes de instanciar `ZipFile` (`zip_entradas_excedidas`,
+   `zip_diretorio_excedido`). Extra ZIP64 do diretório central, quando existe, tem de coincidir
+   com os campos comuns e com o local, mesmo sem sentinela nos campos de 32 bits
+   (`zip_zip64_divergente`).
 8. A cobertura textual do ZIP é parcial; `texto_ausente_no_zip` é descarte esperado e não
    pode ser lido como falha da fonte.
 9. Textos órfãos são contados em `Resultado.orfaos` e nunca vinculam: `texto_sem_metadado` (Seq do
    ZIP sem item nos metadados), `texto_sem_espelho` (acórdão cujo registro, classe e número não têm
    nenhum espelho candidato; também contado em `descartes` por documento) e, para entrada recusada
-   do ZIP sem metadado, o motivo da recusa. Texto com candidato, mas sem prova do julgamento, fica
+   do ZIP sem metadado, o motivo da recusa. Documento descartado cedo pelo metadado (tipo, registro,
+   processo) cujo texto foi recusado pelo ZIP também tem o motivo da recusa em `orfaos`. Texto com candidato, mas sem prova do julgamento, fica
    nos descartes (`sem_prova_do_julgamento`, `julgamento_divergente_do_espelho`).
 
 ## Ligação pendente (1.4.0)

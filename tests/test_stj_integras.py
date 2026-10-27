@@ -2,13 +2,14 @@
 
 import io
 import json
+import struct
 import zipfile
 from pathlib import Path
 
 import pytest
 
 from freoa_verifica.connectors.stj_integras import (
-    IntegrasInvalidas, MAX_RAZAO, classe_tokens, combinar, ler_metadados, ler_textos)
+    IntegrasInvalidas, MAX_RAZAO, classe_tokens, combinar, ementa_propria, ler_metadados, ler_textos)
 
 FIX = Path(__file__).parent / "fixtures" / "stj_integras"
 MD = (FIX / "metadados.json").read_bytes()
@@ -25,16 +26,18 @@ def _zip(entradas: dict[str, bytes], metodo=zipfile.ZIP_DEFLATED) -> bytes:
 
 
 M = json.loads(MD.decode("utf-8"))
-# fixture real: REsp 2280461 (recurso null) e EDcl no AREsp 3264125; a terceira ? monocrática
-# ambas da QUARTA TURMA, sessão virtual de 29/09/2026 a 06/10/2026 (lida do texto)
-import re as _re
+# fixtures sintéticas (recorte da amostra de 08/10/2026; ver FIXTURES.json): REsp 2280461 (recurso null) e EDcl no
+# AREsp 3264125; a terceira é monocrática. Ambas da QUARTA TURMA, sessão virtual de 29/09/2026 a 06/10/2026.
+# Os espelhos usados aqui derivam do próprio texto (não são conjunto-ouro independente): provam o mecanismo
+# de vínculo, não a taxa de acerto contra espelhos reais do acervo.
+import re as _re  # noqa: F401
 _TXT = {s: t for s, (t, _) in ler_textos(ZB).items()}
 
 
 def _ementa_de(seq) -> str:
-    """Trecho real do próprio texto, com a pontuação e o <br> originais, como a ementa do espelho."""
-    t = _re.sub(r"(?i)<br\s*/?>", " ", _TXT[str(seq)])
-    i = t.index(" ", t.find("Superior Tribunal de Justiça") + 400)
+    """Trecho do bloco da ementa do próprio texto da fixture, como a ementa do espelho (derivada, não independente)."""
+    t = ementa_propria(_TXT[str(seq)])
+    i = t.index(" ", 50)
     return t[i:t.rindex(" ", 0, i + 500)]
 
 
@@ -44,10 +47,11 @@ ESP = {REGS[0]: [("e1", "REsp", "2280461", "QUARTA TURMA", "20261006", EM0)],
        REGS[1]: [("e2", "EDcl no AREsp", "3264125", "QUARTA TURMA", "20261006", EM1)]}
 ABERTURA = ("ACÓRDÃO<br>Vistos e relatados estes autos em que são partes as acima indicadas, acordam os Ministros "
             "da QUARTA TURMA do Superior Tribunal de Justiça, em Sessão Virtual de 29/09/2026 a 06/10/2026, "
-            "por unanimidade, negar provimento.<br>EMENTA<br>").encode("utf-8") + EMS.encode("utf-8")
+            "por unanimidade, negar provimento.<br>EMENTA<br>").encode("utf-8") + EMS.encode("utf-8") + \
+    "<br>RELATÓRIO<br>Relatório do caso.".encode("utf-8")
 
 
-def test_fixture_real_vincula_acordaos_e_descarta_monocratica():
+def test_fixture_sintetica_vincula_acordaos_e_descarta_monocratica():
     res = combinar(MD, ZB, ESP)
     assert [(i.numero_registro, k) for i, k in res.vinculadas] == [(REGS[0], "e1"), (REGS[1], "e2")]
     assert res.descartes == {"monocratica_fora_desta_versao": 1}
@@ -150,7 +154,7 @@ def test_cadeia_profunda_ausente_no_metadado_nao_cai_no_espelho_raso():
     assert [k for _, k in combinar(md, zb, {"202600000001": [raso_mesma, fundo]}).vinculadas] == ["correto"]
 
 
-def test_troca_dos_textos_reais_nao_vincula():
+def test_troca_dos_textos_da_fixture_nao_vincula():
     # bytes do EDcl no AREsp 3264125 sob o Seq do REsp 2280461: mesma turma e sessão, ementa diferente
     s0, s1 = str(M[0]["SeqDocumento"]), str(M[1]["SeqDocumento"])
     zb = _zip({f"{s0}.txt": _TXT[s1].encode("utf-8"), f"{s1}.txt": _TXT[s1].encode("utf-8")})
@@ -213,12 +217,12 @@ def test_diretorio_e_nul_recusados(nome):
 
 # ---- I2: abertura delimitada, intervalo completo e calendário (decisão 0044, item 3) ----------------
 from freoa_verifica.connectors.stj_integras import (  # noqa: E402
-    _data_iso, julgamento_no_texto, ler_textos_detalhado)
+    _data_iso, julgamento_no_texto, ler_textos_detalhado, visao_textual)
 
 
 def _abertura(sessao: str, corpo: str = "por unanimidade, negar provimento.") -> str:
     return (f"ACÓRDÃO<br>Vistos e relatados, acordam os Ministros da QUARTA TURMA do Superior Tribunal de Justiça, "
-            f"em Sessão Virtual de {sessao}, {corpo}<br>EMENTA<br>{EMS}")
+            f"em Sessão Virtual de {sessao}, {corpo}<br>EMENTA<br>{EMS}<br>RELATÓRIO<br>x")
 
 
 def test_abertura_completa_e_data_unica_dao_prova():
@@ -394,3 +398,169 @@ def test_membro_do_zip_com_bom_ou_nao_utf8_e_descartado_sem_redecodificar():
     (t, _), = ler_textos(_zip({"1.txt": b"\xef\xbb\xbfabc"})).values()
     assert t == "﻿abc"  # sem BOM alternativo: o BOM não é engolido
     assert ler_textos(_zip({"2.txt": b"AC\xd3RD\xc3O"}))["2"][0] is None
+
+
+# ---- Codex, rodada 1 do PR #10 --------------------------------------------------------------------------------
+# B1: a ementa do espelho só prova o julgamento quando é a ementa PRÓPRIA, delimitada na abertura
+REG_X = "202600000001"
+_MD_X = json.dumps([{"SeqDocumento": 7, "tipoDocumento": "ACÓRDÃO", "numeroRegistro": REG_X,
+                     "processo": "REsp 123", "recurso": None}]).encode("utf-8")
+_ESP_X = {REG_X: [("x", "REsp", "123", "QUARTA TURMA", "20261001", EMS)]}
+_OUTRA = "OUTRO JULGAMENTO. " + "Tese de outro processo, sem relação com o espelho. " * 8
+_FORM = ("ACÓRDÃO<br>Vistos, acordam os Ministros da QUARTA TURMA do Superior Tribunal de Justiça, em Sessão "
+         "Virtual de 29/09/2026 a 06/10/2026, por unanimidade.<br>EMENTA<br>")
+
+
+def _vincula(texto: str):
+    return combinar(_MD_X, _zip({"7.txt": texto.encode("utf-8")}), _ESP_X)
+
+
+def test_b1_ementa_propria_do_espelho_vincula():
+    res = _vincula(_FORM + EMS + "<br>RELATÓRIO<br>Relatório.<br>VOTO<br>Voto.")
+    assert [k for _, k in res.vinculadas] == ["x"]
+
+
+def test_b1_ementa_do_espelho_citada_como_precedente_em_outro_julgamento_nao_vincula():
+    # prova do auditor: órgão e sessão iguais, ementa PRÓPRIA diferente, ementa esperada citada depois
+    for citacao in ("PRECEDENTE CITADO: ", "Nesse sentido:<br>"):
+        texto = (_FORM + _OUTRA + "<br>RELATÓRIO<br>Relatório.<br>VOTO<br>" + citacao + EMS + "<br>É o voto.")
+        res = _vincula(texto)
+        assert not res.vinculadas and res.descartes == {"julgamento_divergente_do_espelho": 1}
+    # também com uma segunda marcação EMENTA no voto reproduzindo a esperada
+    texto = _FORM + _OUTRA + "<br>RELATÓRIO<br>R.<br>EMENTA<br>" + EMS + "<br>VOTO<br>V."
+    assert not _vincula(texto).vinculadas
+
+
+def test_b1_ementa_sem_delimitacao_e_sem_prova():
+    # sem título depois da ementa (RELATÓRIO, VOTO...) o bloco não se delimita: nada a confrontar
+    res = _vincula(_FORM + _OUTRA + "<br>Precedente citado: " + EMS)
+    assert not res.vinculadas and res.descartes == {"sem_prova_do_julgamento": 1}
+    # ementa esperada só depois dos 3.000 primeiros caracteres: não há abertura
+    res = _vincula("ACÓRDÃO<br>" + "x " * 2000 + _FORM + EMS + "<br>RELATÓRIO<br>R.")
+    assert not res.vinculadas and res.descartes == {"sem_prova_do_julgamento": 1}
+
+
+def test_b1_ementa_propria_e_o_bloco_ate_o_proximo_titulo():
+    assert "OUTRO" in ementa_propria(_FORM + _OUTRA + "<br>RELATÓRIO<br>R.<br>VOTO<br>V.")
+    assert ementa_propria(_FORM + _OUTRA) is None
+    assert "V." not in ementa_propria(_FORM + _OUTRA + "<br>VOTO<br>V.")
+
+
+# B2: quebras e marcação da fonte não podem fazer o intervalo incompleto recuar para data única
+_QUEBRAS = ["<br>", "<br/>", "<BR />", "<p>", "</p><p>", "<div>", "&nbsp;", "&#160;", "\r\n", "\r", "\n", " ",
+            " ", " ", "　", " \u200b ", " <br> ", "&nbsp;<br>"]
+
+
+def _sessao(antes: str, sep: str, depois: str) -> str:
+    return (f"ACÓRDÃO<br>acordam os Ministros da QUARTA TURMA do Superior Tribunal de Justiça, em Sessão Virtual de "
+            f"{antes}{sep}{depois}, por unanimidade.<br>EMENTA<br>x<br>RELATÓRIO<br>y")
+
+
+@pytest.mark.parametrize("sep", _QUEBRAS)
+def test_b2_intervalo_incompleto_com_quebra_nao_recua_para_data_unica(sep):
+    for depois in ("a 06/10", "a", "a 06/10/26", "até"):
+        assert julgamento_no_texto(_sessao("29/09/2026", sep, depois)) is None, (sep, depois)
+    # a quebra também pode vir DENTRO do intervalo, antes da data final inválida
+    assert julgamento_no_texto(_sessao("29/09/2026", sep, "a" + sep + "31/02/2026")) is None
+
+
+@pytest.mark.parametrize("sep", _QUEBRAS)
+def test_b2_intervalo_completo_com_quebra_e_lido_inteiro(sep):
+    assert julgamento_no_texto(_sessao("29/09/2026", sep, "a" + sep + "06/10/2026")) == (
+        "QUARTA TURMA", "2026-09-29", "2026-10-06")
+    assert julgamento_no_texto(_sessao("05/10/2026", sep, "")) == ("QUARTA TURMA", "2026-10-05", "2026-10-05")
+
+
+def test_b2_visao_textual_nao_altera_o_hash_nem_o_texto_bruto():
+    import hashlib
+    bruto = (_FORM + EMS + "<br>RELATÓRIO<br>R.").replace("2026 a", "2026&nbsp;a").encode("utf-8")
+    res = _vincula(bruto.decode("utf-8"))
+    (integra, _), = res.vinculadas
+    assert integra.sha256_texto == hashlib.sha256(bruto).hexdigest() and "&nbsp;" in integra.texto
+    assert "&nbsp;" not in visao_textual(integra.texto) and "<br" not in visao_textual(integra.texto)
+
+
+# I1: extra ZIP64 central contraditório não é ignorado quando os campos de 32 bits não têm sentinela
+def test_i1_extra_zip64_central_contraditorio_sem_sentinela_recusa_a_entrada():
+    for valores in [(len(TXT) + 1, len(TXT)), (len(TXT), len(TXT) + 1), (7,), (len(TXT), len(TXT), 99)]:
+        z = _zip_manual({"1.txt": TXT}, z64_central_valores=valores)
+        assert zipfile.ZipFile(io.BytesIO(z)).read("1.txt") == TXT  # zipfile ignora o extra e lê o conteúdo
+        assert ler_textos_detalhado(z) == ({}, {"1": "zip_zip64_divergente"}), valores
+
+
+def test_i1_extra_zip64_central_coincidente_ou_malformado():
+    import hashlib
+    ok = {"1": (TXT.decode(), hashlib.sha256(TXT).hexdigest())}
+    for valores in [(len(TXT), len(TXT)), (len(TXT),)]:  # redundante e coerente com os campos comuns e o local
+        assert ler_textos_detalhado(_zip_manual({"1.txt": TXT}, z64_central_valores=valores)) == (ok, {})
+    z = bytearray(_zip_manual({"1.txt": TXT}, z64_central_valores=(len(TXT), len(TXT))))
+    c = z.index(b"PK\x01\x02")
+    n_nome = struct.unpack("<H", z[c + 28:c + 30])[0]
+    z[c + 46 + n_nome + 2] = 15  # tamanho do extra deixa de ser múltiplo de 8
+    assert ler_textos_detalhado(bytes(z))[1].get("1") == "zip_zip64_divergente"
+
+
+# I2: o limite de entradas e do diretório vale ANTES de ZipFile alocar um ZipInfo por entrada
+def _sem_zipfile(monkeypatch):
+    def proibido(*a, **k):
+        raise AssertionError("ZipFile/ZipInfo instanciado antes dos limites do diretório")
+    monkeypatch.setattr(zipfile, "ZipFile", proibido)
+    monkeypatch.setattr(zipfile, "ZipInfo", proibido)
+
+
+def test_i2_entradas_acima_do_limite_recusadas_sem_instanciar_zipinfo(monkeypatch):
+    z = _zip_manual({f"{i}.txt": b"a" for i in range(1, 5002)})
+    _sem_zipfile(monkeypatch)
+    with pytest.raises(IntegrasInvalidas, match="zip_entradas_excedidas"):
+        ler_textos_detalhado(z)
+
+
+def test_i2_diretorio_central_grande_demais_recusado_antes_de_zipfile(monkeypatch):
+    z = bytearray(_zip_manual({"1.txt": b"a"}))
+    fim = z.rindex(b"PK\x05\x06")
+    z[fim + 12:fim + 16] = struct.pack("<I", 3 * 1024 * 1024)
+    _sem_zipfile(monkeypatch)
+    with pytest.raises(IntegrasInvalidas, match="zip_diretorio_excedido"):
+        ler_textos_detalhado(bytes(z))
+
+
+def test_i2_total_de_entradas_no_eocd64_tambem_vale(monkeypatch):
+    z = _zip_manual({"1.txt": b"a"})
+    fim = z.rindex(b"PK\x05\x06")
+    eocd64 = struct.pack("<4sQHHIIQQQQ", b"PK\x06\x06", 44, 45, 45, 0, 0, 5001, 5001, 46, fim - fim)
+    loc = struct.pack("<4sIQI", b"PK\x06\x07", 0, fim, 1)
+    novo_eocd = struct.pack("<4sHHHHIIH", b"PK\x05\x06", 0, 0, 0xFFFF, 0xFFFF, 46, 0, 0)
+    z64 = z[:fim] + eocd64 + loc + novo_eocd
+    _sem_zipfile(monkeypatch)
+    with pytest.raises(IntegrasInvalidas, match="zip_entradas_excedidas"):
+        ler_textos_detalhado(z64)
+
+
+def test_i2_no_limite_exato_e_aceito():
+    z = _zip_manual({f"{i}.txt": b"a" for i in range(1, 5001)})
+    assert len(ler_textos_detalhado(z)[0]) == 5000
+
+
+# I3: a recusa estrutural do ZIP aparece mesmo quando o metadado do Seq sai antes (tipo, registro...)
+@pytest.mark.parametrize("campo, valor, descarte", [
+    ("tipoDocumento", "DECISÃO", "monocratica_fora_desta_versao"),
+    ("tipoDocumento", "FORMATO NOVO", "tipo_documento_desconhecido"),
+    ("numeroRegistro", "123", "registro_invalido"),
+    ("processo", "sem numero", "processo_invalido"),
+])
+def test_i3_recusa_do_zip_nao_some_por_saida_antecipada_do_metadado(campo, valor, descarte):
+    md = json.dumps([dict(M[0], **{campo: valor})], ensure_ascii=False).encode("utf-8")
+    z = _zip_manual({f"{M[0]['SeqDocumento']}.txt": ABERTURA}, local={"crc": 1})
+    res = combinar(md, z, ESP)
+    assert res.descartes == {descarte: 1} and res.orfaos == {"zip_local_crc_divergente": 1}
+    assert not res.vinculadas and not res.ambiguas
+
+
+def test_i3_seq_monocratico_com_crc_divergente_e_intacto_sem_crc():
+    md = json.dumps([M[2]], ensure_ascii=False).encode("utf-8")
+    ruim = _zip_manual({f"{M[2]['SeqDocumento']}.txt": b"decisao"}, local={"crc": 1})
+    res = combinar(md, ruim, {})
+    assert res.descartes == {"monocratica_fora_desta_versao": 1}
+    assert res.orfaos == {"zip_local_crc_divergente": 1}
+    bom = _zip_manual({f"{M[2]['SeqDocumento']}.txt": b"decisao"})
+    assert combinar(md, bom, {}).orfaos == {}  # sem recusa no ZIP não há o que contar

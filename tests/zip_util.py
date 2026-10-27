@@ -8,10 +8,12 @@ import zlib
 
 
 def zip_manual(entradas, *, local=None, central=None, descritor=None, z64_local=None, z64_central=False,
+               z64_central_valores=None,
                metodo=zipfile.ZIP_STORED):
     """ZIP escrito à mão. `local`/`central`: sobrescritas (flags, metodo, crc, comp, tam) de todas as entradas.
     `descritor`: None ou (assinatura, crc, comp, tam, largura); None nos valores = o correto; ativa o bit 3.
-    `z64_local`: (tam, comp) do extra ZIP64 do local, ou None. `z64_central`: central com sentinela e extra."""
+    `z64_local`: (tam, comp) do extra ZIP64 do local, ou None. `z64_central`: central com sentinela e extra.
+    `z64_central_valores`: valores (Q) de um extra ZIP64 central SEM sentinela nos campos de 32 bits."""
     corpo, cds, off = bytearray(), bytearray(), 0
     for nome, dado in entradas.items():
         nome_b = nome.encode("ascii")
@@ -34,6 +36,8 @@ def zip_manual(entradas, *, local=None, central=None, descritor=None, z64_local=
                     len(dado) if d_tam is None else d_tam)
             bloco += (b"PK\x07\x08" if ass else b"") + struct.pack("<I" + ("QQ" if larg == 8 else "II"), *vals)
         extra_c, c_comp, c_tam = b"", c["comp"], c["tam"]
+        if z64_central_valores is not None:
+            extra_c = struct.pack(f"<HH{len(z64_central_valores)}Q", 1, 8 * len(z64_central_valores), *z64_central_valores)
         if z64_central:
             extra_c = struct.pack("<HHQQ", 1, 16, c["tam"], c["comp"])
             c_comp = c_tam = 0xFFFFFFFF

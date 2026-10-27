@@ -9,6 +9,7 @@ coleção oficial, nunca por comprimento (decisão 0038).
 from __future__ import annotations
 
 import hashlib
+import html
 import io
 import json
 import re
@@ -24,6 +25,7 @@ MAX_ENTRADAS = 5000
 MAX_DESCOMPACTADO = 200 * 1024 * 1024
 MAX_POR_ENTRADA = 5 * 1024 * 1024
 MAX_RAZAO = 100.0
+MAX_DIRETORIO_CENTRAL = 2 * 1024 * 1024  # bytes; 5.000 nomes de `<seq>.txt` ocupam cerca de 0,4 MB
 _NOME = re.compile(r"([0-9]{1,15})\.txt")  # fullmatch: sem \n final nem dígitos Unicode
 _REGISTRO = re.compile(r"[0-9]{12}")
 
@@ -100,10 +102,34 @@ def ler_textos(raw: bytes) -> dict[str, tuple[str | None, str]]:
     return ler_textos_detalhado(raw)[0]
 
 
+def _conferir_limites_do_diretorio(raw: bytes) -> None:
+    """Lê o EOCD (e o EOCD64) e recusa o recurso se entradas ou tamanho do diretório central passarem do limite.
+
+    Sem EOCD legível nada é recusado aqui: `ZipFile` recusa como `zip_invalido`.
+    """
+    import struct
+
+    fim = raw.rfind(b"PK\x05\x06", max(0, len(raw) - 22 - 0xFFFF))
+    if fim < 0 or fim + 22 > len(raw):
+        return
+    entradas, tam_cd = struct.unpack("<10xHI", raw[fim:fim + 16])
+    if 0xFFFFFFFF == tam_cd or entradas == 0xFFFF:  # ZIP64: valores reais no EOCD64, apontado pelo localizador
+        loc = fim - 20
+        if loc >= 0 and raw[loc:loc + 4] == b"PK\x06\x07":
+            (pos64,) = struct.unpack("<8xQ", raw[loc:loc + 16])
+            if 0 <= pos64 and pos64 + 56 <= len(raw) and raw[pos64:pos64 + 4] == b"PK\x06\x06":
+                entradas, tam_cd = struct.unpack("<32xQQ", raw[pos64:pos64 + 48])
+    if entradas > MAX_ENTRADAS:
+        raise IntegrasInvalidas("zip_entradas_excedidas")
+    if tam_cd > MAX_DIRETORIO_CENTRAL:
+        raise IntegrasInvalidas("zip_diretorio_excedido")
+
+
 def ler_textos_detalhado(raw: bytes) -> tuple[dict[str, tuple[str | None, str]], dict[str, str]]:
     """(textos, recusadas). textos: SeqDocumento -> (texto ou None se não UTF-8, sha256 dos bytes);
     recusadas: SeqDocumento -> motivo, para entrada cujo cabeçalho local, data descriptor ou extra ZIP64
     diverge do diretório central. Limites de entradas, tamanho, razão e nomes recusam o recurso inteiro."""
+    _conferir_limites_do_diretorio(raw)  # antes de ZipFile: ele aloca um ZipInfo por entrada do diretório central
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile as exc:
@@ -134,6 +160,7 @@ def ler_textos_detalhado(raw: bytes) -> tuple[dict[str, tuple[str | None, str]],
             if seq in out or seq in recusadas:
                 raise IntegrasInvalidas("zip_seq_repetido")
             try:
+                _conferir_zip64_central(info)
                 data = _ler_bruto(zf, info)
             except EntradaRecusada as exc:
                 recusadas[seq] = str(exc)
@@ -151,21 +178,46 @@ _ZIP64_SENTINELA = 0xFFFFFFFF
 _ASSINATURA_DESCRITOR = b"PK\x07\x08"
 
 
-def _extra_local(extra: bytes) -> dict[int, bytes]:
-    """Campos do extra do cabeçalho local (id -> dados); extra malformado ou com id repetido recusa a entrada."""
+def _extra_local(extra: bytes, motivo: str = "zip_local_extra_invalido") -> dict[int, bytes]:
+    """Campos de um extra (id -> dados); extra malformado ou com id repetido recusa a entrada."""
     import struct
 
     campos: dict[int, bytes] = {}
     i = 0
     while i < len(extra):
         if i + 4 > len(extra):
-            raise EntradaRecusada("zip_local_extra_invalido")
+            raise EntradaRecusada(motivo)
         ident, tam = struct.unpack("<HH", extra[i:i + 4])
         if i + 4 + tam > len(extra) or ident in campos:
-            raise EntradaRecusada("zip_local_extra_invalido")
+            raise EntradaRecusada(motivo)
         campos[ident] = extra[i + 4:i + 4 + tam]
         i += 4 + tam
     return campos
+
+
+def _conferir_zip64_central(info: zipfile.ZipInfo) -> None:
+    """Extra ZIP64 do diretório central presente: seus valores precisam coincidir com os campos comuns.
+
+    `zipfile` só consome o extra quando o campo de 32 bits tem a sentinela; um extra contraditório sem
+    sentinela seria ignorado em silêncio. Os valores (tamanho, comprimido, deslocamento, nesta ordem, só
+    dos campos com sentinela) devem ser uma subsequência ordenada dos valores finais da entrada.
+    """
+    import struct
+
+    z64 = _extra_local(info.extra, "zip_zip64_divergente").get(0x0001)
+    if z64 is None:
+        return
+    if len(z64) % 8 or len(z64) > 32:
+        raise EntradaRecusada("zip_zip64_divergente")
+    valores = list(struct.unpack(f"<{len(z64) // 8}Q", z64))
+    finais = [info.file_size, info.compress_size, info.header_offset]
+    i = 0
+    for v in valores:
+        while i < len(finais) and finais[i] != v:
+            i += 1
+        if i == len(finais):
+            raise EntradaRecusada("zip_zip64_divergente")
+        i += 1
 
 
 def _conferir_local(info: zipfile.ZipInfo, local: bytes, extra: bytes) -> tuple[bool, bool]:
@@ -292,8 +344,59 @@ _FORMULA = re.compile(r"acordam os Ministros d[ao] (.{3,40}?) do Superior Tribun
                       r"(?: Virtual)? de (\d{2}/\d{2}/\d{4})(?!\d)", re.I)
 _FIM_DO_INTERVALO = re.compile(r"\s+a\s+(\d{2}/\d{2}/\d{4})(?!\d)", re.I)
 _INTERVALO_ABERTO = re.compile(r"\s*(?:a|à|até)\b", re.I)
-_EMENTA = re.compile(r"(?:^|<br\s*/?>|\n)[ \t]*EMENTA[ \t]*[:.]?[ \t]*(?=<br\s*/?>|\n|$)", re.I)
 _ABERTURA_MAX = 3000
+_QUEBRA = re.compile(r"(?i)<\s*/?\s*(?:br|p|div|li|tr|h[1-6])\b[^>]*>")
+_INVISIVEIS = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"))
+
+
+def visao_textual(texto: str) -> str:
+    """Texto sem a marcação da fonte, só para ler a estrutura; o hash da prova é sempre dos bytes brutos.
+
+    Quebras (`<br>`, `<p>`, `<div>`, CR, LF) viram uma única quebra de linha; outras marcações viram espaço;
+    entidades (`&nbsp;`) são resolvidas; espaços Unicode (NBSP, em space, ideográfico) e invisíveis são
+    normalizados. A fórmula, as datas e os marcadores de seção são lidos nesta visão.
+    """
+    t = _QUEBRA.sub("\n", texto)
+    t = re.sub(r"<[^>]*>", " ", t)
+    t = html.unescape(t).translate(_INVISIVEIS)
+    t = t.replace("\r\n", "\n").replace("\r", "\n")
+    t = re.sub(r"[^\S\n]+", " ", t)
+    t = re.sub(r" ?\n[ \n]*", "\n", t)
+    return t.strip()
+
+
+_MARCA_EMENTA = re.compile(r"(?im)^[ ]*EMENTA[ ]*[:.]?[ ]*$")
+_MARCA_FIM_EMENTA = re.compile(r"(?im)^[ ]*(?:RELAT[ÓO]RIO|VOTO|AC[ÓO]RD[ÃA]O|DECIS[ÃA]O|PARECER)[ ]*[:.]?[ ]*$")
+
+
+def _estrutura(texto: str) -> tuple[str, str | None] | None:
+    """(abertura, ementa própria) na visão textual; None sem marcador EMENTA dentro do limite da abertura.
+
+    A abertura é o que antecede o primeiro marcador `EMENTA` (até 3.000 caracteres). A ementa própria vai
+    do marcador até o primeiro título seguinte (RELATÓRIO, VOTO, ACÓRDÃO, DECISÃO, PARECER); sem esse título
+    ela não está delimitada (None) e não prova nada. Ocorrência posterior (ementa citada) nunca vale.
+    """
+    v = visao_textual(texto)
+    m = _MARCA_EMENTA.search(v)
+    if m is None or m.start() > _ABERTURA_MAX:
+        return None
+    fim = _MARCA_FIM_EMENTA.search(v, m.end())
+    return v[:m.start()], (v[m.end():fim.start()] if fim else None)
+
+
+def abertura_do_texto(texto: str) -> str | None:
+    """Trecho que antecede o marcador EMENTA (decisão 0044, item 3); None sem marcador ou além do limite.
+
+    A fórmula só vale se estiver nesse trecho: citação de outro acórdão no corpo não é a abertura.
+    """
+    est = _estrutura(texto)
+    return est[0] if est else None
+
+
+def ementa_propria(texto: str) -> str | None:
+    """Bloco da ementa do próprio acórdão (visão textual), ou None se não estiver delimitado."""
+    est = _estrutura(texto)
+    return est[1] if est else None
 
 
 def _data_br(d: str) -> str | None:
@@ -302,17 +405,6 @@ def _data_br(d: str) -> str | None:
         return date(int(d[6:]), int(d[3:5]), int(d[:2])).isoformat()
     except ValueError:
         return None
-
-
-def abertura_do_texto(texto: str) -> str | None:
-    """Trecho que antecede o marcador EMENTA (decisão 0044, item 3); None sem marcador ou além do limite.
-
-    A fórmula só vale se estiver nesse trecho: citação de outro acórdão no corpo não é a abertura.
-    """
-    m = _EMENTA.search(texto)
-    if m is None or m.start() > _ABERTURA_MAX:
-        return None
-    return texto[:m.start()]
 
 
 def julgamento_no_texto(texto: str) -> tuple[str, str, str] | None:
@@ -360,17 +452,20 @@ def _data_iso(v: Any) -> str | None:
 
 
 def _normal(t: str) -> str:
-    t = re.sub(r"(?i)<br\s*/?>", " ", t)
-    return re.sub(r"[^0-9A-Z]+", " ", _sem_acento(t)).strip()
+    return re.sub(r"[^0-9A-Z]+", " ", _sem_acento(visao_textual(t))).strip()
 
 
 _EMENTA_MIN = 120
 
 
-def _ementa_no_texto(ementa: Any, texto_normal: str) -> bool:
-    """O acórdão reproduz a própria ementa: o trecho inicial dela individualiza o julgamento."""
+def _ementa_no_texto(ementa: Any, ementa_propria_normal: str | None) -> bool:
+    """O bloco da ementa do próprio acórdão reproduz a do espelho (trecho inicial, ao menos 120 caracteres).
+
+    Só o bloco delimitado vale: a ementa do espelho citada como precedente em outro ponto do texto não prova
+    o julgamento. Sem bloco delimitado (None) não há prova.
+    """
     e = _normal(str(ementa or ""))
-    return len(e) >= _EMENTA_MIN and e[:400] in texto_normal
+    return ementa_propria_normal is not None and len(e) >= _EMENTA_MIN and e[:400] in ementa_propria_normal
 
 
 def _cadeia_compativel(meta: tuple[str, ...], espelho: tuple[str, ...]) -> bool:
@@ -402,6 +497,7 @@ def combinar(metadados_body: bytes, zip_body: bytes,
         por_seq.setdefault(str(md.get("SeqDocumento") or "").strip(), []).append(md)
     for seq in sorted({*textos, *recusadas} - set(por_seq)):  # texto sem metadado nunca vincula, mas é contado
         res.orfao("texto_sem_metadado" if seq in textos else recusadas[seq])
+    zip_contado: set[str] = set()
     candidatos: list[tuple[Integra, tuple]] = []
     for seq, grupo in por_seq.items():
         if not (seq.isascii() and seq.isdecimal()):
@@ -433,6 +529,7 @@ def combinar(metadados_body: bytes, zip_body: bytes,
             continue
         if seq in recusadas:  # entrada do ZIP recusada por divergência interna: o motivo é o do ZIP
             res.descartar(recusadas[seq])
+            zip_contado.add(seq)
             continue
         if seq not in textos:
             res.descartar("texto_ausente_no_zip")
@@ -449,6 +546,8 @@ def combinar(metadados_body: bytes, zip_body: bytes,
             tipo="acordao", data_publicacao=md.get("dataPublicacao"), ministro=md.get("NM_MINISTRO"),
             texto=texto, sha256_texto=sha_bytes, metadados=dict(md))
         candidatos.append((integra, (registro, *classe)))
+    for seq in sorted(set(recusadas) & set(por_seq) - zip_contado):
+        res.orfao(recusadas[seq])  # saída antecipada por metadado (tipo, registro...) não esconde a recusa do ZIP
     mapa = {r: list(v) for r, v in espelhos_por_registro.items()}  # Iterable consumível: materializa uma vez
     repetidas: dict[tuple, int] = {}
     for _, ident in candidatos:
@@ -470,7 +569,11 @@ def combinar(metadados_body: bytes, zip_body: bytes,
             res.descartar("sem_prova_do_julgamento")
             continue
         orgao, ini, fim = prova
-        texto_n = _normal(integra.texto)
+        bloco = ementa_propria(integra.texto)
+        if bloco is None:  # ementa própria não delimitada (sem título seguinte): não há como confrontar
+            res.descartar("sem_prova_do_julgamento")
+            continue
+        texto_n = _normal(bloco)
         chaves = sorted({e[0] for e in compat
                          if _orgao(e[3]) == orgao and _data_iso(e[4]) and ini <= _data_iso(e[4]) <= fim
                          and _ementa_no_texto(e[5] if len(e) > 5 else None, texto_n)})
