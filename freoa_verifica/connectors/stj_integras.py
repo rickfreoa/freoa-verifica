@@ -14,6 +14,7 @@ import json
 import re
 import zipfile
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Iterable, Mapping
 
 MAX_ENTRADAS = 5000
@@ -156,7 +157,7 @@ def _ler_bruto(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
 
 
 def _decodificar(data: bytes) -> str | None:
-    """UTF-8 estrito (formato observado); falha não ? mascarada: o documento ? descartado."""
+    """UTF-8 estrito (formato observado); falha não é mascarada: o documento é descartado."""
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -179,18 +180,60 @@ def _classe_da_integra(md: Mapping[str, Any]) -> tuple[tuple[str, ...], str] | N
     return classe_tokens(f"{md.get('recurso') or ''} {m.group(1)}"), m.group(2)
 
 
-_SESSAO = re.compile(r"acordam os Ministros d[ao] (.{3,40}?) do Superior Tribunal de Justi.a,\s+em Sess.o"
-                     r"(?: Virtual)? de (\d{2}/\d{2}/\d{4})(?: a (\d{2}/\d{2}/\d{4}))?", re.I)
+_FORMULA = re.compile(r"acordam os Ministros d[ao] (.{3,40}?) do Superior Tribunal de Justi.a,\s+em Sess.o"
+                      r"(?: Virtual)? de (\d{2}/\d{2}/\d{4})(?!\d)", re.I)
+_FIM_DO_INTERVALO = re.compile(r"\s+a\s+(\d{2}/\d{2}/\d{4})(?!\d)", re.I)
+_INTERVALO_ABERTO = re.compile(r"\s*(?:a|à|até)\b", re.I)
+_EMENTA = re.compile(r"(?:^|<br\s*/?>|\n)[ \t]*EMENTA[ \t]*[:.]?[ \t]*(?=<br\s*/?>|\n|$)", re.I)
+_ABERTURA_MAX = 3000
+
+
+def _data_br(d: str) -> str | None:
+    """dd/mm/aaaa pelo calendário (31/02 e 00/00 não existem) -> ISO."""
+    try:
+        return date(int(d[6:]), int(d[3:5]), int(d[:2])).isoformat()
+    except ValueError:
+        return None
+
+
+def abertura_do_texto(texto: str) -> str | None:
+    """Trecho que antecede o marcador EMENTA (decisão 0044, item 3); None sem marcador ou além do limite.
+
+    A fórmula só vale se estiver nesse trecho: citação de outro acórdão no corpo não é a abertura.
+    """
+    m = _EMENTA.search(texto)
+    if m is None or m.start() > _ABERTURA_MAX:
+        return None
+    return texto[:m.start()]
 
 
 def julgamento_no_texto(texto: str) -> tuple[str, str, str] | None:
-    """(órgão, início, fim ISO) da fórmula de abertura do acórdão; None se ausente ou repetida."""
-    achados = _SESSAO.findall(texto[:3000])
+    """(órgão, início, fim ISO) da fórmula de abertura do acórdão.
+
+    None se faltar abertura delimitada, se a fórmula estiver ausente ou repetida nela, se o intervalo
+    ("de X a Y") vier incompleto, com data inexistente no calendário ou com fim anterior ao início.
+    """
+    abertura = abertura_do_texto(texto)
+    if abertura is None:
+        return None
+    achados = list(_FORMULA.finditer(abertura))
     if len(achados) != 1:
         return None
-    orgao, ini, fim = achados[0]
-    iso = lambda d: f"{d[6:]}-{d[3:5]}-{d[:2]}"
-    return _sem_acento(orgao), iso(ini), iso(fim or ini)
+    m = achados[0]
+    ini = _data_br(m.group(2))
+    if ini is None:
+        return None
+    resto = abertura[m.end():m.end() + 40]
+    fim_m = _FIM_DO_INTERVALO.match(resto)
+    if fim_m:
+        fim = _data_br(fim_m.group(1))
+        if fim is None or fim < ini:
+            return None
+    elif _INTERVALO_ABERTO.match(resto):  # "de X a" sem data final válida: não recua para o dia X
+        return None
+    else:
+        fim = ini
+    return _sem_acento(m.group(1)), ini, fim
 
 
 _ORGAOS = {"CE": "CORTE ESPECIAL", "S1": "PRIMEIRA SECAO", "S2": "SEGUNDA SECAO", "S3": "TERCEIRA SECAO"}
@@ -203,7 +246,9 @@ def _orgao(v: Any) -> str:
 
 def _data_iso(v: Any) -> str | None:
     d = re.sub(r"[^0-9]", "", str(v or ""))
-    return f"{d[:4]}-{d[4:6]}-{d[6:8]}" if len(d) == 8 and d[:2] in ("19", "20") else None
+    if len(d) != 8 or d[:2] not in ("19", "20"):
+        return None
+    return _data_br(f"{d[6:8]}/{d[4:6]}/{d[:4]}")
 
 
 def _normal(t: str) -> str:
@@ -234,7 +279,7 @@ def combinar(metadados_body: bytes, zip_body: bytes,
     """Une metadados e textos e vincula cada acórdão a um espelho do acervo.
 
     `espelhos_por_registro`: numeroRegistro -> (chave, siglaClasse, numeroProcesso,
-    nomeOrgaoJulgador, dataDecisao, ementa) dos espelhos. Classe dos metadados ? parcial: o vínculo
+    nomeOrgaoJulgador, dataDecisao, ementa) dos espelhos. Classe dos metadados é parcial: o vínculo
     exige ainda órgão e data de julgamento do espelho dentro da sessão declarada no texto e a
     ementa do espelho reproduzida no texto (prova positiva do julgamento individual).
     O registro abriga vários acórdãos (REsp, AgInt no REsp, EDcl...): o vínculo exige registro,

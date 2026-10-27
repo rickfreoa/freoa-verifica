@@ -209,3 +209,73 @@ def test_tamanho_e_crc_forjados_recusados(metodo):
 def test_diretorio_e_nul_recusados(nome):
     with pytest.raises(IntegrasInvalidas):
         ler_textos(_zip({nome: b"" if nome.endswith("/") else b"x", "1.txt": b"a"}))
+
+
+# ---- I2: abertura delimitada, intervalo completo e calendário (decisão 0044, item 3) ----------------
+from freoa_verifica.connectors.stj_integras import (  # noqa: E402
+    _data_iso, julgamento_no_texto)
+
+
+def _abertura(sessao: str, corpo: str = "por unanimidade, negar provimento.") -> str:
+    return (f"ACÓRDÃO<br>Vistos e relatados, acordam os Ministros da QUARTA TURMA do Superior Tribunal de Justiça, "
+            f"em Sessão Virtual de {sessao}, {corpo}<br>EMENTA<br>{EMS}")
+
+
+def test_abertura_completa_e_data_unica_dao_prova():
+    assert julgamento_no_texto(_abertura("29/09/2026 a 06/10/2026")) == ("QUARTA TURMA", "2026-09-29", "2026-10-06")
+    assert julgamento_no_texto(_abertura("05/10/2026")) == ("QUARTA TURMA", "2026-10-05", "2026-10-05")
+    assert julgamento_no_texto(_abertura("26/02/2024 a 29/02/2024"))[2] == "2024-02-29"  # bissexto
+
+
+def test_formula_fora_da_abertura_nao_da_prova():
+    # a fórmula só aparece depois do marcador EMENTA (citação de outro acórdão no corpo)
+    citada = ("ACÓRDÃO<br>Vistos e relatados.<br>EMENTA<br>Conforme precedente, acordam os Ministros da QUARTA TURMA "
+              "do Superior Tribunal de Justiça, em Sessão Virtual de 29/09/2026 a 06/10/2026, por unanimidade.")
+    assert julgamento_no_texto(citada) is None
+    # sem marcador EMENTA não há abertura delimitada
+    assert julgamento_no_texto(_abertura("29/09/2026 a 06/10/2026").replace("EMENTA", "RESUMO")) is None
+    # a citação no corpo não torna repetida a fórmula da abertura: a abertura prevalece
+    com_citacao = _abertura("29/09/2026 a 06/10/2026") + (
+        "<br>Precedente: acordam os Ministros da TERCEIRA TURMA do Superior Tribunal de Justiça, "
+        "em Sessão Virtual de 01/03/2020 a 08/03/2020.")
+    assert julgamento_no_texto(com_citacao) == ("QUARTA TURMA", "2026-09-29", "2026-10-06")
+
+
+def test_formula_repetida_na_abertura_nao_da_prova():
+    dupla = ("ACÓRDÃO<br>acordam os Ministros da QUARTA TURMA do Superior Tribunal de Justiça, em Sessão Virtual de "
+             "29/09/2026 a 06/10/2026; acordam os Ministros da QUARTA TURMA do Superior Tribunal de Justiça, "
+             "em Sessão Virtual de 13/10/2026.<br>EMENTA<br>x")
+    assert julgamento_no_texto(dupla) is None
+
+
+@pytest.mark.parametrize("sessao", ["29/09/2026 a", "29/09/2026 a 06/10", "29/09/2026 a 06/10/26", "29/09/2026 até",
+                                    "29/09/2026 a 31/02/2026", "29/09/2026 a 28/09/2026"])
+def test_intervalo_incompleto_ou_invertido_nao_recua_para_data_unica(sessao):
+    assert julgamento_no_texto(_abertura(sessao, "por unanimidade.")) is None
+
+
+@pytest.mark.parametrize("sessao", ["31/02/2026", "29/02/2026", "00/09/2026", "15/13/2026", "32/01/2026"])
+def test_data_inexistente_no_calendario_nao_da_prova(sessao):
+    assert julgamento_no_texto(_abertura(sessao)) is None
+
+
+def test_recurso_com_intervalo_incompleto_nao_vincula_nem_conta_como_completo():
+    zb = _zip({f"{M[0]['SeqDocumento']}.txt": _abertura("29/09/2026 a 06/10").encode("utf-8"),
+               f"{M[1]['SeqDocumento']}.txt": ABERTURA})
+    res = combinar(MD, zb, {r: [v[0][:5] + (EMS,)] for r, v in ESP.items()})
+    assert res.descartes["sem_prova_do_julgamento"] == 1 and [k for _, k in res.vinculadas] == ["e2"]
+
+
+def test_data_do_espelho_precisa_existir_no_calendario():
+    texto = _abertura("01/02/2026 a 03/03/2026").encode("utf-8")
+    md = json.dumps([{"SeqDocumento": 7, "tipoDocumento": "ACÓRDÃO", "numeroRegistro": "202600000001",
+                      "processo": "REsp 123", "recurso": None}]).encode("utf-8")
+    zb = _zip({"7.txt": texto})
+    assert _data_iso("20260231") is None and _data_iso("20260228") == "2026-02-28"
+    # 31/02 ficaria entre as duas datas por ordem de texto; no calendário não existe
+    ruim = ("e", "REsp", "123", "QUARTA TURMA", "20260231", EMS)
+    bom = ("e", "REsp", "123", "QUARTA TURMA", "20260228", EMS)
+    assert not combinar(md, zb, {"202600000001": [ruim]}).vinculadas
+    assert [k for _, k in combinar(md, zb, {"202600000001": [bom]}).vinculadas] == ["e"]
+
+
