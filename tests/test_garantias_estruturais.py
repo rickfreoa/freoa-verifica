@@ -36,6 +36,7 @@ RAIZ = Path(os.environ.get("FV_GARANTIAS_RAIZ") or Path(__file__).resolve().pare
 
 # (arquivo relativo, função) -> justificativa. Nenhuma é corpo de resposta HTTP.
 DECODE_JUSTIFICADOS = {
+    ("connectors/stj_integras.py", "_decodificar"): "membro de ZIP do pacote CKAN (corpo binário), UTF-8 estrito sem BOM alternativo; recusa conforme decisão 0044 item 5",
     ("captura.py", "_ler_manifesto"): "lê tests/fixtures/FIXTURES.json do disco (manifesto local, não resposta)",
     ("fronteira.py", "validar"): "cabeçalhos da requisição ASGI recebida pelo servidor local (latin-1, RFC 9110)",
     ("mcp_server.py", "__call__"): "cabeçalho Authorization da requisição recebida pelo servidor MCP",

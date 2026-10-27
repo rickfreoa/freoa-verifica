@@ -17,6 +17,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable, Mapping
 
+from freoa_verifica.texto_resposta import interpretar
+from freoa_verifica.transport import RespostaInvalida
+
 MAX_ENTRADAS = 5000
 MAX_DESCOMPACTADO = 200 * 1024 * 1024
 MAX_POR_ENTRADA = 5 * 1024 * 1024
@@ -67,10 +70,18 @@ def _sem_acento(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn").upper().strip()
 
 
-def ler_metadados(body: bytes) -> list[dict[str, Any]]:
+def ler_metadados(body: bytes, content_type: str | None = None) -> list[dict[str, Any]]:
+    """Metadados do dia. O corpo passa pela interpretação única (decisões 0061 a 0064) e só UTF-8 vale
+    (decisão 0044, item 5); o JSON é lido sobre o texto, nunca sobre bytes (que aceitariam UTF-16/32)."""
     try:
-        data = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        interp = interpretar(body, content_type)
+    except RespostaInvalida as exc:
+        raise IntegrasInvalidas(f"metadados_invalidos: {exc}") from exc
+    if interp.codificacao not in ("utf-8", "utf-8-sig"):
+        raise IntegrasInvalidas(f"metadados_nao_utf8: {interp.codificacao}")
+    try:
+        data = json.loads(interp.texto)
+    except json.JSONDecodeError as exc:
         raise IntegrasInvalidas(f"metadados_invalidos: {exc}") from exc
     if not isinstance(data, list):
         raise IntegrasInvalidas("metadados_nao_lista")
@@ -254,9 +265,9 @@ def _ler_bruto(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
 
 
 def _decodificar(data: bytes) -> str | None:
-    """UTF-8 estrito (formato observado); falha não é mascarada: o documento é descartado."""
+    """UTF-8 estrito, sem BOM alternativo (decisão 0044, item 5); falha não é mascarada: o documento é descartado."""
     try:
-        return data.decode("utf-8-sig")
+        return data.decode("utf-8", errors="strict")
     except UnicodeDecodeError:
         return None
 
@@ -372,7 +383,8 @@ def _cadeia_compativel(meta: tuple[str, ...], espelho: tuple[str, ...]) -> bool:
 
 
 def combinar(metadados_body: bytes, zip_body: bytes,
-             espelhos_por_registro: Mapping[str, Iterable[tuple[str, str, str, str, str, str]]]) -> Resultado:
+             espelhos_por_registro: Mapping[str, Iterable[tuple[str, str, str, str, str, str]]],
+             metadados_content_type: str | None = None) -> Resultado:
     """Une metadados e textos e vincula cada acórdão a um espelho do acervo.
 
     `espelhos_por_registro`: numeroRegistro -> (chave, siglaClasse, numeroProcesso,
@@ -384,7 +396,7 @@ def combinar(metadados_body: bytes, zip_body: bytes,
     """
     textos, recusadas = ler_textos_detalhado(zip_body)
     res = Resultado()
-    metas = ler_metadados(metadados_body)
+    metas = ler_metadados(metadados_body, metadados_content_type)
     por_seq: dict[str, list[dict[str, Any]]] = {}
     for md in metas:
         por_seq.setdefault(str(md.get("SeqDocumento") or "").strip(), []).append(md)

@@ -38,8 +38,9 @@ Sessão Virtual de 29/09/2026 a 06/10/2026".
    `ambiguous`, sem escolha. Mesmo `SeqDocumento` com metadados divergentes: todos
    descartados; duplicata idêntica é contada.
 5. Inteiro teor por declaração da coleção oficial (0038), nunca por comprimento. O hash da
-   prova é dos bytes brutos do arquivo no ZIP. Texto que não é UTF-8 descarta o documento
-   (`texto_nao_utf8`, contado), sem redecodificação; a limpeza de `<br>` serve só à leitura.
+   prova é dos bytes brutos do arquivo no ZIP. Texto que não é UTF-8 estrito (sem BOM alternativo) descarta o documento
+   (`texto_nao_utf8`, contado), sem redecodificação; os metadados, que são corpo de resposta, passam
+   pela interpretação única (0061 a 0064) e só UTF-8 vale (`metadados_nao_utf8` recusa o recurso); a limpeza de `<br>` serve só à leitura.
 6. Contrato da fonte: item de metadados que não é objeto recusa o recurso; tipo de documento
    desconhecido tem motivo próprio, nunca é contado como monocrática. Decisões
    monocráticas ficam fora nesta versão e são contadas.
