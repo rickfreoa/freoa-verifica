@@ -10,7 +10,7 @@ Fato que muda o objetivo: o titular deixará de usar o Jusratio. A ferramenta pa
 
 A ferramenta é rigorosa no que verifica e insuficiente no que cobre. As duas coisas são verdade ao mesmo tempo, e a segunda decide o objetivo novo.
 
-O que continua válido e é a vantagem competitiva: proveniência por hash, abstenção declarada, zero confirmação indevida no comparativo, cobertura declarada por consulta (bloco `cobertura`), indisponibilidade classificada por prova (decisão 0045), snapshot com attestation e instalação por digest. Nenhum concorrente público reúne isso.
+O que continua válido e define o produto: proveniência por hash, abstenção declarada, zero confirmação indevida na bateria existente, cobertura declarada por consulta (bloco `cobertura`), indisponibilidade classificada por prova (decisão 0045), snapshot com attestation e instalação por digest.
 
 O que impede a substituição:
 
@@ -19,8 +19,8 @@ O que impede a substituição:
 | Cobertura de TJs praticamente nula | TJDFT com 112 decisões de semente; TJSP só por número; nenhum outro TJ | O uso principal do Jusratio (pesquisa temática estadual) não é atendido |
 | Superiores sem inteiro teor | STJ 32.668 espelhos (ementa) de 4 órgãos; STF só súmulas; TST ausente | Resposta temática sem o voto, que é onde está a razão de decidir |
 | Legislação congelada | Planalto recusa o UA identificado (decisão 0048) | Acervo de normas envelhece desde a 1.3.0 |
-| Busca só lexical | FTS5, bm25 e tesauro determinístico | Precisão temática 21/35 contra 25/35 do Jusratio |
-| Comparativo favorável ao acervo | 42 casos do próprio projeto, 35 dentro do acervo | O placar mede o que já existe, não a pesquisa ampla; não autoriza desligar nada |
+| Busca só lexical | FTS5, bm25 e tesauro determinístico | Precisão temática abaixo do necessário na bateria existente (resultado nos artefatos de bench) |
+| Bateria atual favorável ao acervo | 42 casos do próprio projeto, 35 dentro do acervo | Mede o que já existe, não a pesquisa ampla; não autoriza desligar nada |
 | Distribuição incompleta | PyPI nunca publicada; bench e testes ao vivo completos não executados na 1.3.0 | "Concluído" ainda não foi alcançado nem no ciclo anterior |
 | Custo de auditoria desproporcional | 17 rodadas na 1.3.0, concentradas em gramática HTTP, charset e Content-Encoding (decisões 0059 a 0066) | O esforço foi para endurecer o transporte, não para ampliar a cobertura; correto para segurança, errado como alocação diante do objetivo novo |
 | Funções do Jusratio sem equivalente | informativos, timeline, overruling por tema, ramos do direito, chunks, pedidos de autos | Paridade funcional inexistente |

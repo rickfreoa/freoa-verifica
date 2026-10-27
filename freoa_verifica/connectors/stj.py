@@ -113,6 +113,14 @@ _JSON_MIMES = frozenset(
 _DEFAULT_DB = Path.home() / ".cache" / "freoa-verifica" / "stj_fts.sqlite"
 
 
+# Consulta paginada do acervo local; valor idêntico ao da 1.3.0 (espaços e quebras incluídos).
+_SQL_PAGINA_PREFIXO = (
+    "\n                SELECT key, title, ementa, organ, rapporteur, decision_date, class_name, payload"
+    "\n                FROM fts_stj WHERE "
+)
+_SQL_PAGINA_SUFIXO = " LIMIT ?\n                "
+
+
 @register
 class StjConnector(Connector):
     id = "stj"
@@ -268,8 +276,7 @@ class StjConnector(Connector):
             n = int(cur.fetchone()["n"])
             if n == 0:
                 return CandidateList([], total=0, total_exato=True)
-            colunas = "key, title, ementa, organ, rapporteur, decision_date, class_name, payload"
-            sql = f"SELECT {colunas} FROM fts_stj WHERE {where} LIMIT ?"  # noqa: S608 (where: fragmentos constantes e placeholders)
+            sql = _SQL_PAGINA_PREFIXO + where + _SQL_PAGINA_SUFIXO  # noqa: S608 (where: fragmentos constantes e placeholders)
             rows = conn.execute(
                 sql,
                 (*params, limite),

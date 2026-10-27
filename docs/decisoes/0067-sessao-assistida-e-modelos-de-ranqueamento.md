@@ -22,6 +22,11 @@ admitem ou não distinguem:
    - a ferramenta abre contexto de navegador dedicado e isolado, sem o perfil pessoal;
    - o humano resolve a barreira; a ferramenta captura os bytes das respostas daquela sessão, com hash e
      `modalidade_acesso: sessao_assistida`;
+   - regra 4: o navegador da sessão só é usado pelo humano; a captura entra no sistema exclusivamente por uma porta
+     única de `freoa_verifica.transport` (`transport.capturar_assistida`), que aplica às respostas recebidas as
+     mesmas validações do fluxo automático (lista de origens da fonte, media type, limites de tamanho, Content-Encoding,
+     interpretação textual, desafio, hash e recibo) e recusa o que não passaria por elas; nenhum conector ou parser lê
+     bytes do navegador por outro caminho, e o aceite do I3 exige teste que o prove;
    - cookies e segredos da sessão não entram em logs, evidências, fixtures nem snapshot, e são descartados ao fim;
    - não há repetição automática nem renovação silenciosa da sessão;
    - captura assistida não conta como cobertura automática: a matriz de cobertura e o bloco `cobertura` a declaram
