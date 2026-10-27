@@ -157,10 +157,12 @@ def test_queda_entre_etapas_e_recuperavel(envios, tmp_path, monkeypatch, ponto, 
         if nome == ponto:
             raise _Queda(nome)
 
-    monkeypatch.setattr(captura, "_etapa", cai)
-    with pytest.raises(_Queda):
-        captura.registrar_fixture(reg, "tjdft_k", fx)
-    monkeypatch.undo()  # volta o comportamento normal na "abertura seguinte"
+    # Só a queda é desfeita na "abertura seguinte"; `monkeypatch.undo()` desfaria também o transporte falso de
+    # `envios`, e a segunda captura iria à rede real (a fonte indisponível tornava o teste dependente do ambiente).
+    with monkeypatch.context() as m:
+        m.setattr(captura, "_etapa", cai)
+        with pytest.raises(_Queda):
+            captura.registrar_fixture(reg, "tjdft_k", fx)
     captura.recuperar_pendentes(fx)
     assert validar_inventario(fx) == []
     assert ("tjdft_k" in json.loads((fx / "FIXTURES.json").read_bytes())) is publicada
