@@ -28,12 +28,14 @@ DERIVED_VERSION = 5
 # Captura reprocessável com modelo e sem decisão de interpretação no recibo (0064) nem no derivado (0065), com ou
 # sem Content-Type (F-26, 0066). Decisão = origem e codec, salvo binário: o mesmo de `repo.decisao_registrada`.
 _DECIDIDA = "({o} IS NOT NULL AND ({c} IS NOT NULL OR {o} IN ('binario','legado_sem_cabecalho')))"
-_SEM_DECISAO = (
-    "SELECT 1 FROM capture c JOIN parsed_document p ON p.capture_id=c.id JOIN work w ON w.id=p.work_id "
+_SEM_DECISAO_JUNCAO = (
+    "FROM capture c JOIN parsed_document p ON p.capture_id=c.id JOIN work w ON w.id=p.work_id "
     "WHERE p.model_json IS NOT NULL AND c.source_id IN ('planalto','cvm_normas','bcb') "
-    "AND w.authority NOT LIKE 'invalidated:%' "
+    "AND w.authority NOT LIKE 'invalidated:%' ")
+_SEM_DECISAO_FILTRO = (
     f"AND NOT {_DECIDIDA.format(o='c.origem_da_codificacao', c='c.codificacao')} "
-    f"AND NOT {_DECIDIDA.format(o='p.interpretacao_origem', c='p.interpretacao_codificacao')} LIMIT 1")
+    f"AND NOT {_DECIDIDA.format(o='p.interpretacao_origem', c='p.interpretacao_codificacao')}")
+_SEM_DECISAO = f"SELECT 1 {_SEM_DECISAO_JUNCAO}{_SEM_DECISAO_FILTRO} LIMIT 1"  # noqa: S608 (SQL constante do módulo)
 
 REASON = "ACERVO_DESATUALIZADO"
 REASON_NAO_PUBLICADA = "ACERVO_DE_VERSAO_NAO_PUBLICADA"
@@ -146,7 +148,7 @@ def reindexar_fts(conn: sqlite3.Connection, divergentes: list | None = None) -> 
 
 
 def _contagens(conn: sqlite3.Connection) -> dict[str, int]:
-    return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+    return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]  # noqa: S608 (tabelas da tupla fixa abaixo)
             for t in ("work", "capture", "extract", "run", "decision", "parsed_document")}
 
 
