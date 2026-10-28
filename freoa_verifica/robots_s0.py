@@ -21,7 +21,8 @@ Lacunas da regra, resolvidas aqui por conservadorismo (regra invariável 2) e re
 `Allow`/`Disallow` que não é interpretável (sem `User-agent`, ou misturado a linhas desconhecidas) é barreira
 (`regras_ambiguas`), e não "sem restrições". O `urllib.robotparser` não implementa `*`, `$` nem a precedência por
 correspondência mais longa do RFC 9309; por isso a decisão por caminho só libera o que o `robotparser` e o
-avaliador RFC deste módulo liberam (vedado se qualquer um vedar).
+avaliador RFC deste módulo liberam (vedado se qualquer um vedar). Corpo 200 que não se examina com segurança (charset
+que não fecha, NUL, UTF-16/32 sem BOM) é barreira `corpo_nao_interpretavel`, nunca "sem restrições".
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ import re
 import urllib.robotparser
 from dataclasses import dataclass
 from typing import Any, Mapping
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import urlsplit
 
 from freoa_verifica.connectors.challenge import detect_challenge
 from freoa_verifica.texto_resposta import texto_da_resposta, vista_bytes
@@ -129,12 +130,36 @@ def ler_robots(
     return _barreira("status_inesperado", f"HTTP {status}", status=status)
 
 
-def _texto(corpo: bytes, content_type: str | None) -> str:
-    """Texto do corpo pela interpretação única; se o charset não fecha, a vista latin-1 (só para ler diretivas ASCII)."""
+def _texto(corpo: bytes, content_type: str | None) -> str | None:
+    """Texto do corpo pela interpretação única, ou None se o charset não fecha (corpo que não se examina com segurança)."""
     try:
         return texto_da_resposta(corpo, content_type)
     except (RespostaInvalida, ValueError):
-        return vista_bytes(corpo)
+        return None
+
+
+_LARGURAS_SEM_BOM = ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be")
+
+
+def _diretiva_escondida(corpo: bytes) -> bool:
+    """Busca suplementar nos bytes: User-agent/Allow/Disallow em UTF-16 ou UTF-32 sem BOM (invisível no texto ASCII).
+
+    Só acrescenta detecção: achar significa que há regras que a leitura não consegue obedecer; não achar nada
+    não libera coisa alguma.
+    """
+    for codec in _LARGURAS_SEM_BOM:
+        visto = str(corpo, codec, "ignore")  # busca de detecção, não interpretação do texto
+        if any(_diretiva(ln) in ("user-agent", "allow", "disallow") for ln in _linhas_uteis(visto)):
+            return True
+    return False
+
+
+def _tem_regras_no_texto(texto: str) -> bool:
+    return any(_diretiva(ln) in ("user-agent", "allow", "disallow") for ln in _linhas_uteis(texto))
+
+
+def _mime_textual(mime: str) -> bool:
+    return not mime or mime.startswith("text/") or mime.endswith(("/json", "+json", "/xml", "+xml", "/javascript"))
 
 
 def _linhas_uteis(texto: str) -> list[str]:
@@ -179,6 +204,15 @@ def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[
     base["sha256"] = sha
     texto = _texto(corpo, content_type)
     mime = (content_type or "").split(";", 1)[0].strip().lower()
+    inexaminavel = texto is None or ("\x00" in texto and _mime_textual(mime)) or (
+        not _tem_regras_no_texto(texto) and _diretiva_escondida(corpo))
+    if inexaminavel:  # nunca libera: a busca de marcador nos bytes só acrescenta detecção
+        achado = _desafio(corpo, content_type, cabecalhos)
+        if achado:
+            return _desafio_no_robots(achado, base)
+        return _barreira("corpo_nao_interpretavel", "200 cujo corpo não pôde ser examinado com segurança (charset que "
+                         "não fecha, NUL no texto ou diretivas em UTF-16/32 sem BOM): barreira por conservadorismo "
+                         "(decisão 0071)", **base)
     if mime != "text/plain":  # fora de text/plain o marcador de desafio vence, mesmo que haja linhas de regra
         achado = _desafio(corpo, content_type, cabecalhos)
         if achado:
@@ -257,14 +291,41 @@ def _grupos(linhas: tuple[str, ...]) -> list[tuple[list[str], list[tuple[bool, s
             atual[0].append(valor.lower())
             ultimo_foi_agente = True
             continue
-        ultimo_foi_agente = False
-        if atual is not None and nome in ("allow", "disallow") and valor:
+        if nome not in ("allow", "disallow"):
+            continue  # extensão (Crawl-delay, Request-rate, Sitemap...): não interfere no agrupamento (RFC 9309, 2.2.4)
+        ultimo_foi_agente = False  # só Allow/Disallow encerram a sequência de agentes
+        if atual is not None and valor:
             atual[1].append((nome == "allow", valor))
     return grupos
 
 
+_NAO_RESERVADOS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+_CRUS = _NAO_RESERVADOS | frozenset("/*$?&=:@;,+!'()[]")  # permanecem como estão; o resto vira %XX
+_HEX = frozenset("0123456789abcdefABCDEF")
+
+
 def _normalizar(texto: str) -> str:
-    return quote(unquote(texto), safe="/*$?&=:@;,+-._~!'()")
+    """Forma única para comparar caminho e regra (RFC 9309, 2.2.2; RFC 3986, 6.2.2.2).
+
+    Decodifica só octetos não reservados (RFC 3986 unreserved) e deixa em caixa alta os demais octetos codificados:
+    `%2F` continua distinto de `/`. Caracteres fora do ASCII viram os octetos UTF-8 em `%XX`.
+    """
+    saida: list[str] = []
+    i = 0
+    while i < len(texto):
+        c = texto[i]
+        if c == "%" and i + 2 < len(texto) and texto[i + 1] in _HEX and texto[i + 2] in _HEX:
+            octeto = int(texto[i + 1:i + 3], 16)
+            letra = chr(octeto)
+            saida.append(letra if letra in _NAO_RESERVADOS else f"%{octeto:02X}")
+            i += 3
+            continue
+        if c in _CRUS:
+            saida.append(c)
+        else:
+            saida.extend(f"%{b:02X}" for b in c.encode("utf-8", "surrogateescape"))
+        i += 1
+    return "".join(saida)
 
 
 def _casa(padrao: str, caminho: str) -> int:

@@ -269,3 +269,46 @@ def test_rodada_2_so_pede_o_robots_dos_nove_hosts_e_nenhum_com_barreira(tmp_path
     assert sorted(urlsplit(u).hostname for u in pedidas) == sorted(hosts)
     assert all(urlsplit(u).path == "/robots.txt" for u in pedidas) and len(pedidas) == len(set(pedidas))
     assert sorted(rel["hosts"]) == sorted(hosts)
+
+
+def test_i1_traceback_do_instrumento_nao_leva_caminho_de_maquina_ao_relatorio(tmp_path):
+    """Parecer r1 I1: antes só a pasta de saída era removida; checkout, interpretador e dependências vazavam."""
+    import sys
+
+    mod = _carregar()
+    tb = (
+        "Traceback (most recent call last):\n"
+        f'  File "{mod._RAIZ_DO_REPO}/scripts/capturar_fixture.py", line 10, in <module>\n'
+        f'  File "{sys.prefix}/lib/python3.13/site-packages/httpx/_client.py", line 5, in send\n'
+        f'  File "{sys.executable}", line 1, in <module>\n'
+        '  File "/opt/outro/lib/python3.11/site-packages/x/y.py", line 7, in f\n'
+        '  File "C:\\Users\\ana\\AppData\\Local\\Python\\x.py", line 2, in g\n'
+        f'  File "{tmp_path}/tst/a.captura.json", line 3, in h\n'
+        "TransportError: GET https://x.jus.br/a/b falhou em /robots.txt\n"
+    )
+
+    def quebrado(args):
+        return SimpleNamespace(returncode=1, stdout=tb, stderr=tb)
+
+    rel = orq.orquestrar(ROTEIRO, tmp_path / "saida", executor=quebrado, hosts={"a.jus.br"})
+    texto = json.dumps(rel, ensure_ascii=False)
+    proibidos = [str(mod._RAIZ_DO_REPO), sys.prefix, sys.executable, "/opt/outro", "C:\\\\Users", "AppData", "ana",
+                 str(tmp_path)]
+    for p in proibidos:
+        assert p not in texto, p
+    item = rel["hosts"]["a.jus.br"]["comandos"][0]
+    assert "TransportError: GET https://x.jus.br/a/b falhou em /robots.txt" in item["stderr"]
+    assert "<caminho>" in item["stderr"] or "<repo>" in item["stderr"]
+
+
+def test_i1_limpo_marca_as_raizes_conhecidas_e_qualquer_outra_raiz(tmp_path):
+    import sys
+
+    mod = _carregar()
+    limpo = mod._limpo
+    assert limpo(f"{mod._RAIZ_DO_REPO}/scripts/x.py", tmp_path) == "<repo>/scripts/x.py"
+    assert limpo(f"{tmp_path}/a/b.json", tmp_path) == "<saida>/a/b.json"
+    assert limpo("/qualquer/raiz/lib/x.py falhou", tmp_path) == "<caminho> falhou"
+    assert limpo("D:/dados/x/y.txt falhou", tmp_path) == "<caminho> falhou"
+    assert "https://host/a/b" in limpo("ver https://host/a/b", tmp_path)
+    assert sys.prefix not in limpo(f"{sys.prefix}/lib/python3.13/site-packages/z.py", tmp_path)

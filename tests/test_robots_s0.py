@@ -176,10 +176,86 @@ def test_diretivas_nao_padrao_comuns_nao_escondem_o_disallow():
     assert ler_robots(200, "text/plain", corpo).decidir(HOST + "/a").acao == VEDADO
 
 
-def test_charset_que_nao_fecha_usa_a_vista_latin1_para_ler_as_diretivas():
+@pytest.mark.parametrize("mime", ["text/plain", "text/html"])
+def test_charset_que_nao_fecha_e_barreira_e_nao_libera(mime):
     corpo = "User-agent: *\n# não indexar\nDisallow: /admin/\n".encode("latin-1")
+    r = ler_robots(200, mime, corpo)
+    assert (r.estado, r.motivo) == (BARREIRA, "corpo_nao_interpretavel") and r.sha256 == _sha(corpo)
+    assert r.decidir(HOST + "/admin/").acao == BARREIRA
+
+
+@pytest.mark.parametrize("mime", ["text/plain", "text/html", "text/plain; charset=utf-8"])
+@pytest.mark.parametrize("codec", ["utf-16-le", "utf-16-be"])
+def test_utf16_sem_bom_com_regras_e_barreira_e_nao_sem_restricoes(mime, codec):
+    """Parecer r1 B2: a decodificação estrita falha (ou deixa NULs) e a vista latin-1 não achava marcador."""
+    corpo = "User-agent: *\nDisallow: /secret\n".encode(codec)
+    r = ler_robots(200, mime, corpo)
+    assert (r.estado, r.motivo) == (BARREIRA, "corpo_nao_interpretavel")
+    assert r.decidir(HOST + "/secret").acao == BARREIRA
+
+
+def test_utf16_sem_bom_em_octet_stream_tambem_e_barreira_mas_binario_comum_continua_sem_restricoes():
+    corpo = "User-agent: *\nDisallow: /secret\n".encode("utf-16-le")
+    assert ler_robots(200, "application/octet-stream", corpo).motivo == "corpo_nao_interpretavel"
+    assert ler_robots(200, "application/octet-stream", b"\x00\x01\x02\xff binario").estado == SEM_RESTRICOES
+
+
+def test_corpo_inexaminavel_com_marcador_de_desafio_e_desafio():
+    corpo = "Verifique que voce e humano: captcha <html> ã".encode("latin-1")
+    assert ler_robots(200, "text/html", corpo).motivo == "desafio_no_robots"
+
+
+def test_corpo_inexaminavel_e_barreira_na_decisao_composta_com_registro(tmp_path):
+    corpo = "User-agent: *\nDisallow: /secret\n".encode("utf-16-le")
+    reg = {"status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "text/html"}}
+    assert robots_s0.ler_do_registro(reg, corpo).decidir(HOST + "/secret").acao == BARREIRA
+
+
+# --- parecer PR #17 r1: B1 (%2F), B3 (extensões no agrupamento) -------------------------------------------------
+
+
+def test_b1_octeto_reservado_codificado_mantem_a_distincao_entre_barra_e_2f():
+    corpo = b"User-agent: *\nDisallow: /private%2Fsecret\nAllow: /private/secret\n"
     r = ler_robots(200, "text/plain", corpo)
-    assert r.estado == robots_s0.REGRAS and r.decidir(HOST + "/admin/").acao == VEDADO
+    assert r.decidir("https://x/private%2Fsecret").acao == VEDADO
+    assert r.decidir("https://x/private%2fsecret").acao == VEDADO  # caixa uniforme
+    linhas = tuple(corpo.decode().splitlines())
+    assert robots_s0._permitido_rfc(linhas, "https://x/private/secret") is True  # o robotparser do 3.11 veda; a soma veda
+    assert robots_s0._permitido_rfc(linhas, "https://x/private%2Fsecret") is False
+
+
+def test_b1_regra_com_barra_nao_veda_o_caminho_com_2f():
+    r = ler_robots(200, "text/plain", b"User-agent: *\nDisallow: /private/secret\n")
+    assert robots_s0._permitido_rfc(("User-agent: *", "Disallow: /private/secret"), "https://x/private%2Fsecret") is True
+    assert r.decidir("https://x/private/secret").acao == VEDADO
+
+
+def test_b1_so_nao_reservados_sao_normalizados():
+    n = robots_s0._normalizar
+    assert n("/%7Euser/%61b") == "/~user/ab"
+    assert n("/a%2fb%3a") == "/a%2Fb%3A"
+    assert n("/caf\u00e9") == "/caf%C3%A9" == n("/caf%c3%a9")
+    assert n("/100%") == "/100%25"
+    assert n("/*.pdf$") == "/*.pdf$"
+
+
+def test_b3_extensao_entre_user_agents_nao_encerra_o_grupo():
+    corpo = b"User-agent: freoa-verifica\nCrawl-delay: 1\nUser-agent: Other\nDisallow: /secret\n"
+    r = ler_robots(200, "text/plain", corpo)
+    assert r.decidir("https://x/secret").acao == VEDADO
+    assert robots_s0._permitido_rfc(tuple(corpo.decode().splitlines()), "https://x/secret") is False
+
+
+@pytest.mark.parametrize("ext", ["Crawl-delay: 1", "Request-rate: 1/5", "Sitemap: https://x/s.xml", "Host: x"])
+def test_b3_nenhuma_extensao_interfere_no_agrupamento(ext):
+    corpo = f"User-agent: freoa-verifica\n{ext}\nUser-agent: Other\nDisallow: /secret\n".encode()
+    assert ler_robots(200, "text/plain", corpo).decidir("https://x/secret").acao == VEDADO
+
+
+def test_b3_allow_ou_disallow_ainda_encerram_a_sequencia_de_agentes():
+    corpo = b"User-agent: freoa-verifica\nAllow: /ok\nUser-agent: Other\nDisallow: /secret\n"
+    r = ler_robots(200, "text/plain", corpo)
+    assert r.decidir("https://x/secret").acao == SEGUIR  # o Disallow é do grupo `Other`
 
 
 def test_bom_utf8_e_utf16():
