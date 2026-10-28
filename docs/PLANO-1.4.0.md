@@ -93,7 +93,7 @@ Um incremento só está concluído com todas as etapas abaixo cumpridas e regist
 | I1.4 | Bench e bateria ao vivo completos, pela primeira vez |
 | I1.5 | `release/acceptance_manifest.json` e seu gerador |
 | I1.6 | Decisão 0067: reescrita da regra 7 (D2) e da regra 3 com a sessão assistida (D3) |
-| S0 | Sondas de volume (seção 4), TST, STF acórdãos, BNP, DJEN, e-SAJ dos quatro TJs, portais de jurisprudência do TRF1, TRF2 e TRF3 e pesquisa unificada do CJF, só pelo instrumento `capturar_fixture.py --sonda` |
+| S0 | Sondas de volume (seção 4), TST, STF acórdãos, BNP, DJEN, e-SAJ dos quatro TJs, portais de jurisprudência do TRF1, TRF2 e TRF3 e pesquisa unificada do CJF, só pelo instrumento `capturar_fixture.py --sonda` - reduzida à rodada 1 (PR #15); S0b parte 1 adiada para I2.7 (`docs/auditoria/1.4.0/pr18-adiamento.md`) |
 
 ### I2 (1.4.0a2): superiores e paridade
 
@@ -104,6 +104,7 @@ Um incremento só está concluído com todas as etapas abaixo cumpridas e regist
 | I2.3 | BNP/Pangea integral e informativos de STF, STJ e TST |
 | I2.4 | Tools `informativo_juridico`, `timeline_decisoes` (DataJud), `listar_overruling_por_tema`, `listar_tribunais`, `listar_ramos_direito`, chunks em `obter_decisao` |
 | I2.5 | Conjunto de desenvolvimento e reserva da Porta A congelados por hash (Luna), revisão de método (terra) |
+| I2.7 | S0b parte 1: robots pelo RFC 9309 (decisão 0071), adiada do I1 em 28/10/2026 (`docs/auditoria/1.4.0/pr18-adiamento.md`); ramo `feat/s0b-robots-r2` como base |
 
 ### I3 (1.4.0a3): tribunais estaduais e federais, DJEN, sessão assistida, Planalto
 
