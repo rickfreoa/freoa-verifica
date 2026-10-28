@@ -1,0 +1,35 @@
+PASSED tests/live/test_live_bcb.py::test_live_bcb_positivo
+PASSED tests/live/test_live_bcb.py::test_live_bcb_negativo
+PASSED tests/live/test_live_bcb.py::test_live_bcb_documento
+PASSED tests/live/test_live_cvm_colegiado.py::test_live_cvm_colegiado_positivo
+PASSED tests/live/test_live_cvm_colegiado.py::test_live_cvm_colegiado_negativo
+PASSED tests/live/test_live_cvm_colegiado.py::test_live_cvm_colegiado_documento
+PASSED tests/live/test_live_cvm_normas.py::test_live_cvm_normas_positivo
+PASSED tests/live/test_live_cvm_normas.py::test_live_cvm_normas_negativo
+PASSED tests/live/test_live_cvm_normas.py::test_live_cvm_normas_documento
+PASSED tests/live/test_live_datajud.py::test_live_datajud_positivo
+PASSED tests/live/test_live_datajud.py::test_live_datajud_negativo
+PASSED tests/live/test_live_datajud.py::test_live_datajud_documento_stf_ausente
+PASSED tests/live/test_live_senado.py::test_live_senado_positivo
+PASSED tests/live/test_live_senado.py::test_live_senado_negativo
+PASSED tests/live/test_live_senado.py::test_live_senado_documento
+PASSED tests/live/test_live_stf.py::test_live_stf_positivo
+PASSED tests/live/test_live_stf.py::test_live_stf_negativo_busca_waf
+PASSED tests/live/test_live_stf.py::test_live_stf_documento
+PASSED tests/live/test_live_stj.py::test_live_stj_positivo
+PASSED tests/live/test_live_stj.py::test_live_stj_negativo
+PASSED tests/live/test_live_stj.py::test_live_stj_documento
+PASSED tests/live/test_live_tcu.py::test_live_tcu_positivo
+PASSED tests/live/test_live_tcu.py::test_live_tcu_documento
+PASSED tests/live/test_live_tjdft.py::test_live_tjdft_positivo
+PASSED tests/live/test_live_tjdft.py::test_live_tjdft_negativo_estrutural
+PASSED tests/live/test_live_tjdft.py::test_live_tjdft_documento_captura_e_parse
+PASSED tests/live/test_live_tjdft.py::test_live_tjdft_acordao_sem_integra_fica_so_com_ementa
+XFAIL tests/live/test_live_tjsp.py::test_live_tjsp_positivo - ambiental_desafio:desafio_captcha
+XFAIL tests/live/test_live_tjsp.py::test_live_tjsp_negativo - ambiental_desafio:desafio_captcha
+XFAIL tests/live/test_live_tjsp.py::test_live_tjsp_documento - ambiental_desafio:desafio_captcha
+FAILED tests/live/test_live_planalto.py::test_live_planalto_positivo - freoa_...
+FAILED tests/live/test_live_planalto.py::test_live_planalto_negativo - Assert...
+FAILED tests/live/test_live_planalto.py::test_live_planalto_documento - freoa...
+FAILED tests/live/test_live_tcu.py::test_live_tcu_negativo - freoa_verifica.c...
+4 failed, 27 passed, 6987 deselected, 3 xfailed in 128.09s (0:02:08)
