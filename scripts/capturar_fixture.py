@@ -9,7 +9,8 @@ Exemplo:
         --url https://portal.stf.jus.br/robots.txt --user-agent identificado
     python scripts/capturar_fixture.py --fonte-sonda tjac --sonda --saida C:/dev/fv14-sondas/tjac --chave r1 \\
         --url https://esaj.tjac.jus.br/robots.txt
-(`--fonte-sonda`: fonte oficial ainda sem conector, do catálogo `freoa_verifica.sondas`; só com `--sonda` e `--url`.)
+(`--fonte-sonda`: fonte oficial ainda sem conector, do catálogo `freoa_verifica.sondas`; só com `--sonda` e `--url`.
+Host de nível B do catálogo é recusado salvo `--confirmado-por-titular`; nunca se sobrescreve um `.captura.json`.)
 """
 
 from __future__ import annotations
@@ -41,7 +42,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sonda", action="store_true", help="grava fora do repositório; não toca o manifesto")
     ap.add_argument("--saida", type=Path, help="diretório da sonda (obrigatório com --sonda)")
     ap.add_argument("--user-agent", dest="user_agent", choices=UA_MODOS, default="conector")
+    ap.add_argument("--confirmado-por-titular", dest="confirmado_por_titular", action="store_true",
+                    help="libera a sonda em host de nível B (confirmação documental pendente); fica registrado no "
+                         ".captura.json; só com --fonte-sonda")
     args = ap.parse_args(argv)
+    if args.confirmado_por_titular and args.fonte_sonda is None:
+        ap.error("--confirmado-por-titular só vale com --fonte-sonda")
     if args.fonte_sonda is not None:
         if not args.sonda:
             ap.error("--fonte-sonda exige --sonda")
@@ -53,7 +59,8 @@ def main(argv: list[str] | None = None) -> int:
             consulta = json.loads(args.consulta)
             if not isinstance(consulta, dict):
                 raise ValueError("a consulta deve ser um objeto JSON")
-        comum = {"url": args.url, "user_agent": args.user_agent, "chave": args.chave, "fonte_sonda": args.fonte_sonda}
+        comum = {"url": args.url, "user_agent": args.user_agent, "chave": args.chave, "fonte_sonda": args.fonte_sonda,
+                 "confirmado_por_titular": args.confirmado_por_titular}
         if args.sonda:
             if args.saida is None:
                 ap.error("--sonda exige --saida")

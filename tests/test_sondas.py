@@ -7,7 +7,9 @@ import dataclasses
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -17,6 +19,7 @@ from freoa_verifica.connectors.base import CATEGORIAS_INDISPONIBILIDADE, Unavail
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.sondas import FONTES_SONDA, HOSTS_RECUSADOS, FonteSonda, prefixos_por_host
 from freoa_verifica.transport import Response
+from tests.test_transport import _fast_guards, _wire_local
 
 IDS = (
     "tst", "stf_acordaos", "bnp", "djen", "cjf_unificada", "trf1", "trf2", "trf3",
@@ -47,10 +50,14 @@ def envios(monkeypatch):
 
 
 def _urls_validas(fonte: FonteSonda):
-    """Uma URL dentro do escopo por host: a raiz nos hosts sem prefixo, o primeiro prefixo nos demais."""
+    """Uma URL dentro do escopo por host: a primeira rota documentada, ou o robots.txt se o host só admite ele."""
     for host in sorted(fonte.hosts):
-        caminho = "/" if host in fonte.hosts_sem_prefixo else fonte.path_prefixes[0]
-        yield f"https://{host}{caminho}"
+        yield f"https://{host}{(fonte.rotas[host] or ('/robots.txt',))[0]}"
+
+
+def _liberado(fonte: FonteSonda, url: str) -> bool:
+    """Host B só vai à rede com a confirmação do titular; o teste a dá, para exercitar a allowlist."""
+    return url.split("/")[2] in fonte.hosts_b
 
 
 def _cada_fonte_e_host():
@@ -71,7 +78,7 @@ def test_catalogo_tem_exatamente_os_ids_da_especificacao_e_e_imutavel():
         FONTES_SONDA["tst"].id = "outro"  # type: ignore[misc]
     for f in FONTES_SONDA.values():
         assert isinstance(f.hosts, frozenset) and isinstance(f.mimes, frozenset)
-        assert isinstance(f.path_prefixes, tuple) and f.id in IDS and f.descricao and f.origem_hosts
+        assert f.confirmacao in ('A', 'B') and f.id in IDS and f.descricao and f.origem_hosts
 
 
 def test_catalogo_sem_host_fora_de_dominio_oficial():
@@ -91,29 +98,59 @@ def test_cada_host_tem_origem_oficial_e_nenhum_recusado_entra():
     assert not any("juridico" in h or "jusbrasil" in h for h in catalogados)
 
 
-def test_escopo_de_caminho_consistente():
+def test_escopo_de_caminho_consistente_sem_host_livre():
     for f in FONTES_SONDA.values():
-        assert f.hosts_sem_prefixo <= f.hosts
-        assert all(p.startswith("/") and p != "/" for p in f.path_prefixes)
+        assert not hasattr(f, "hosts_sem_prefixo") and not hasattr(f, "path_prefixes")
+        assert set(f.rotas) == set(f.hosts)
+        for host, rotas in f.rotas.items():
+            assert type(rotas) is tuple
+            assert all(p.startswith("/") and p != "/" and not p.lower().startswith("/robots.txt") for p in rotas)
         mapa = prefixos_por_host(f)
-        if f.hosts_sem_prefixo == f.hosts:
-            assert mapa is None
-        else:
-            assert set(mapa) == f.hosts - f.hosts_sem_prefixo
-            assert all(v == f.path_prefixes and isinstance(v, tuple) for v in mapa.values())
-    # só estas fontes admitem host inteiro; qualquer outra aparição exige revisão deliberada
-    livres = {f.id: set(f.hosts_sem_prefixo) for f in FONTES_SONDA.values() if f.hosts_sem_prefixo}
-    assert set(livres) == {"tst", "bnp", "cjf_unificada", "trf1", "trf2"}
+        assert set(mapa) == set(f.hosts)  # todo host tem escopo explícito: nunca None, nunca host inteiro
+        for host, prefixos in mapa.items():
+            assert prefixos == (f.rotas[host] or ("/robots.txt",)) and "/" not in prefixos
+    # hosts que só admitem o robots.txt (nenhuma rota documentada em página oficial lida)
+    so_robots = {(f.id, h) for f in FONTES_SONDA.values() for h, r in f.rotas.items() if not r}
+    assert so_robots == {
+        ("bnp", "bnp.pdpj.jus.br"), ("bnp", "pangeabnp.pdpj.jus.br"), ("djen", "comunicaapi.pje.jus.br"),
+        ("cjf_unificada", "jurisprudencia.cjf.jus.br"), ("trf1", "jurisprudencia.cjf.jus.br"),
+        ("trf1", "arquivo.trf1.jus.br"), ("trf2", "jurisprudencia.trf2.jus.br"),
+    }
+
+
+PALAVRAS_PROIBIDAS = ("cadastro", "login", "institucional", "nota-tecnica", "admin", "senha", "usuario")
+
+
+def test_nenhuma_rota_de_cadastro_login_ou_area_institucional():
+    for f in FONTES_SONDA.values():
+        for host, rotas in f.rotas.items():
+            for rota in rotas:
+                assert not any(p in rota.lower() for p in PALAVRAS_PROIBIDAS), (f.id, host, rota)
 
 
 def test_fonte_incoerente_e_recusada_na_construcao():
-    base = dict(id="x", descricao="d", mimes=frozenset({"text/html"}))
-    with pytest.raises(ValueError):
-        FonteSonda(hosts=frozenset({"a.jus.br"}), path_prefixes=(), origem_hosts="a.jus.br=https://a.jus.br/", **base)
-    with pytest.raises(ValueError):
-        FonteSonda(hosts=frozenset({"a.jus.br"}), path_prefixes=("/",), origem_hosts="a.jus.br=https://a.jus.br/", **base)
-    with pytest.raises(ValueError):
-        FonteSonda(hosts=frozenset({"a.jus.br"}), path_prefixes=("/x/",), origem_hosts="", **base)
+    base = dict(id="x", descricao="d", mimes=frozenset({"text/html"}), confirmacao="A")
+    h = frozenset({"a.jus.br"})
+    origem = "a.jus.br=https://a.jus.br/"
+    FonteSonda(hosts=h, rotas={"a.jus.br": ("/x/",)}, origem_hosts=origem, **base)  # válida
+    FonteSonda(hosts=h, rotas={"a.jus.br": ()}, origem_hosts=origem, **base)  # só robots.txt
+    ruins = [
+        dict(hosts=h, rotas={}, origem_hosts=origem),  # host sem rota declarada
+        dict(hosts=h, rotas={"a.jus.br": ("/",)}, origem_hosts=origem),  # raiz = host inteiro
+        dict(hosts=h, rotas={"a.jus.br": ("/robots.txt",)}, origem_hosts=origem),  # exceção não é rota
+        dict(hosts=h, rotas={"a.jus.br": ("x",)}, origem_hosts=origem),
+        dict(hosts=h, rotas={"a.jus.br": ["/x/"]}, origem_hosts=origem),  # não é tupla
+        dict(hosts=h, rotas={"a.jus.br": ("/x/",), "b.jus.br": ()}, origem_hosts=origem),  # rota de host fora
+        dict(hosts=h, rotas={"a.jus.br": ("/x/",)}, origem_hosts=""),  # sem origem
+        dict(hosts=h, rotas={"a.jus.br": ("/x/",)}, origem_hosts=origem, hosts_b=h),  # B declarado com A
+    ]
+    for kw in ruins:
+        with pytest.raises(ValueError):
+            FonteSonda(**{**base, **kw})
+    with pytest.raises(ValueError):  # B sem host B
+        FonteSonda(**{**base, "confirmacao": "B"}, hosts=h, rotas={"a.jus.br": ("/x/",)}, origem_hosts=origem)
+    with pytest.raises(ValueError):  # nível inexistente
+        FonteSonda(**{**base, "confirmacao": "C"}, hosts=h, rotas={"a.jus.br": ("/x/",)}, origem_hosts=origem)
 
 
 def test_registry_do_produto_nao_muda():
@@ -130,12 +167,16 @@ def test_registry_do_produto_nao_muda():
 def test_get_na_allowlist_da_fonte_usa_transporte_comum_e_ua_identificado(envios, tmp_path, fid, url):
     fonte = FONTES_SONDA[fid]
     reg = captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="s", fonte_sonda=fid,
-                           user_agent="identificado")
+                           user_agent="identificado", confirmado_por_titular=_liberado(fonte, url))
     assert not reg.unavailable and reg.metodo == "GET" and reg.parametros is None
     visto = envios[0]
     assert visto["url"] == url and visto["method"] == "GET" and visto["body"] is None
-    assert visto["allowed_hosts"] == fonte.hosts and visto["allowed_mimes"] == fonte.mimes
-    assert visto["allowed_path_prefixes"] == prefixos_por_host(fonte)
+    assert visto["allowed_hosts"] == fonte.hosts
+    if url.endswith("/robots.txt"):  # host só-robots: política do robots.txt (ver teste próprio)
+        assert visto["allowed_mimes"] == frozenset({"text/plain"})
+    else:
+        assert visto["allowed_mimes"] == fonte.mimes
+        assert visto["allowed_path_prefixes"] == prefixos_por_host(fonte)
     assert visto["headers"]["User-Agent"] == USER_AGENT_IDENTIFICADO
     assert "mozilla" not in visto["headers"]["User-Agent"].lower()
     salvo = json.loads((tmp_path / "s.captura.json").read_text(encoding="utf-8"))
@@ -165,8 +206,9 @@ def test_url_fora_da_allowlist_recusada_antes_da_rede(envios, tmp_path, fid):
         "https://exemplo.invalid/robots.txt",
         f"https://user@{host}/x",
     ]
-    for h in sorted(fonte.hosts - fonte.hosts_sem_prefixo):  # fora do prefixo, onde há escopo de caminho
-        ruins += [f"https://{h}/fora/do/escopo", f"https://{h}/", f"https://{h}/robots.txt?x=1"]
+    for h in sorted(fonte.hosts):  # fora das rotas: todo host tem escopo de caminho
+        ruins += [f"https://{h}/fora/do/escopo", f"https://{h}/", f"https://{h}/robots.txt?x=1", f"https://{h}/Robots.txt",
+                 f"https://{h}/robots.txt.bak", f"https://{h}/robots.txt/x"]
     for url in ruins:
         with pytest.raises(ValueError, match="fora da allowlist da fonte-sonda"):
             captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="s", fonte_sonda=fid)
@@ -176,11 +218,13 @@ def test_url_fora_da_allowlist_recusada_antes_da_rede(envios, tmp_path, fid):
 @pytest.mark.parametrize("fid", sorted(IDS))
 def test_robots_txt_de_cada_host_da_fonte(envios, tmp_path, fid):
     fonte = FONTES_SONDA[fid]
-    for host in sorted(fonte.hosts):
-        captura.capturar(None, url=f"https://{host}/robots.txt", destino=tmp_path, sonda=True, chave="r",
-                         fonte_sonda=fid)
+    for i, host in enumerate(sorted(fonte.hosts)):
+        captura.capturar(None, url=f"https://{host}/robots.txt", destino=tmp_path, sonda=True, chave=f"r{i}",
+                         fonte_sonda=fid, confirmado_por_titular=host in fonte.hosts_b)
         visto = envios[-1]
-        assert visto["allowed_path_prefixes"] is None and "text/plain" in visto["allowed_mimes"]
+        # exceção de caminho só para o robots.txt exato: prefixo exato em todos os hosts, só text/plain, sem salto
+        assert visto["allowed_path_prefixes"] == {h: ("/robots.txt",) for h in fonte.hosts}
+        assert visto["allowed_mimes"] == frozenset({"text/plain"}) and visto["max_redirects"] == 0
         assert visto["allowed_hosts"] == fonte.hosts
 
 
@@ -436,24 +480,396 @@ def test_detector_de_fecho_acusa_importacao_indireta_e_relativa(tmp_path):
 ROTEIRO = Path(__file__).resolve().parents[1] / "docs" / "S0-SONDAS.md"
 
 
+COMANDO_FONTE = re.compile(
+    r'python scripts/capturar_fixture\.py --fonte-sonda (\w+) --sonda --saida C:/dev/fv14-sondas/(\w+) '
+    r'--chave (\w+) --url "([^"]+)"'
+)
+COMANDO_CONECTOR = re.compile(
+    r'python scripts/capturar_fixture\.py --conector (\w+) --sonda --saida C:/dev/fv14-sondas/(\w+) '
+    r"--chave (\w+) (?:--url \"([^\"]+)\"|--consulta '[^']+')"
+)
+
+
+def _comandos_do_roteiro():
+    """Comandos na ordem do arquivo: (tipo, id, pasta, chave, url|None, bloqueado). Formato exato ou o teste falha."""
+    achados, fence = [], None
+    for ln in ROTEIRO.read_text(encoding="utf-8").splitlines():
+        if ln.startswith("```"):
+            fence = ln[3:].strip() or None
+            continue
+        if fence is None or not ln.startswith("python "):
+            continue
+        assert fence in ("powershell", "powershell-bloqueado"), fence
+        m = COMANDO_FONTE.fullmatch(ln.strip())
+        if m:
+            fid, pasta, chave, url = m.groups()
+            achados.append(("fonte", fid, pasta, chave, url, fence == "powershell-bloqueado"))
+            continue
+        m = COMANDO_CONECTOR.fullmatch(ln.strip())
+        assert m, f"comando fora do formato exato: {ln}"
+        cid, pasta, chave, url = m.groups()
+        achados.append(("conector", cid, pasta, chave, url, False))
+    return achados
+
+
 @pytest.mark.repositorio
 def test_toda_url_do_roteiro_esta_na_allowlist_da_fonte_e_toda_fonte_tem_comando():
-    import re
+    comandos = _comandos_do_roteiro()
+    fontes = [c for c in comandos if c[0] == "fonte"]
+    for _, fid, pasta, chave, url, bloqueado in fontes:
+        assert fid == pasta and fid in FONTES_SONDA and chave.startswith(f"{fid}_")
+        fonte = FONTES_SONDA[fid]
+        # levanta ValueError se a URL sair da allowlist, ou se o host for B sem a confirmação do titular
+        plano = captura._planejar_sonda(fid, None, url, confirmado_por_titular=True)
+        assert plano["metodo"] == "GET" and plano["hosts"] == fonte.hosts
+        assert bloqueado == (urlsplit(url).hostname in fonte.hosts_b)  # bloco bloqueado = host B, e só ele
+        if bloqueado:
+            with pytest.raises(ValueError, match="nível B"):
+                captura._planejar_sonda(fid, None, url)
+        else:
+            captura._planejar_sonda(fid, None, url)
+    assert {c[1] for c in fontes} == set(IDS)
+    for fid in IDS:
+        assert any(c[4].endswith("/robots.txt") for c in fontes if c[1] == fid), fid
+    for _, cid, *_ in (c for c in comandos if c[0] == "conector"):
+        assert cid in registry()
 
-    linhas = [ln for ln in ROTEIRO.read_text(encoding="utf-8").splitlines() if "--fonte-sonda" in ln and "--url" in ln]
-    achados = []
-    for ln in linhas:
-        m = re.fullmatch(
-            r'python scripts/capturar_fixture\.py --fonte-sonda (\w+) --sonda --saida C:/dev/fv14-sondas/(\w+) '
-            r'--url "([^"]+)"', ln.strip(),
-        )
-        assert m, f"comando fora do formato exato: {ln}"
-        fid, pasta, url = m.groups()
-        assert fid == pasta and fid in FONTES_SONDA
-        plano = captura._planejar_sonda(fid, None, url)  # levanta ValueError se a URL sair da allowlist
-        assert plano["metodo"] == "GET" and plano["hosts"] == FONTES_SONDA[fid].hosts
-        achados.append(fid)
-    assert set(achados) == set(IDS)
-    for fid in IDS:  # robots.txt, página de pesquisa e ao menos mais uma URL por fonte
-        urls = [ln for ln in linhas if f"--fonte-sonda {fid} " in ln]
-        assert len(urls) >= 2 and any("/robots.txt" in u for u in urls), fid
+
+@pytest.mark.repositorio
+def test_primeiro_comando_de_cada_host_do_roteiro_e_o_robots_txt():
+    """B3: nenhum host é acessado antes do seu robots.txt, no arquivo todo e dentro de cada fonte."""
+    comandos = [c for c in _comandos_do_roteiro() if c[4] is not None]
+    vistos_globais, vistos_fonte = {}, {}
+    hosts = set()
+    for tipo, cid, _, chave, url, _ in comandos:
+        host = urlsplit(url).hostname
+        hosts.add(host)
+        caminho = urlsplit(url).path
+        for escopo, chave_escopo in ((vistos_globais, host), (vistos_fonte, (cid, host))):
+            if chave_escopo not in escopo:
+                escopo[chave_escopo] = (chave, caminho)
+                assert caminho == "/robots.txt" and not urlsplit(url).query, f"{cid}: {host} acessado antes do robots.txt"
+    # os hosts que o roteiro toca incluem os problemáticos do parecer
+    assert {"bnp.pdpj.jus.br", "www.cjf.jus.br", "pangeabnp.pdpj.jus.br"} <= hosts
+    for f in FONTES_SONDA.values():  # todo host com rota do catálogo usada no roteiro tem robots antes
+        for host in f.hosts:
+            usados = [c for c in comandos if c[1] == f.id and urlsplit(c[4]).hostname == host]
+            if usados:
+                assert urlsplit(usados[0][4]).path == "/robots.txt", (f.id, host)
+
+
+@pytest.mark.repositorio
+def test_roteiro_usa_chave_distinta_por_comando_e_nunca_repete_arquivo_de_saida():
+    comandos = _comandos_do_roteiro()
+    destinos = [(c[2], c[3]) for c in comandos]
+    assert len(destinos) == len(set(destinos)) and len({c[3] for c in comandos}) == len(comandos)
+    for _, cid, pasta, chave, *_ in comandos:
+        assert CHAVE_VALIDA.fullmatch(chave) and chave.startswith(f"{cid}_")
+
+
+CHAVE_VALIDA = re.compile(r"[a-z0-9_]+")
+
+
+@pytest.mark.repositorio
+def test_roteiro_sem_descoberta_de_endpoint_fora_do_instrumento_nem_rota_de_cadastro():
+    texto = ROTEIRO.read_text(encoding="utf-8")
+    low = texto.lower()
+    for proibido in ("descubra no navegador", "aba rede", "refazer no notebook", "devtools"):
+        assert proibido not in low, proibido
+    assert not re.search(r"descubra\b", low)
+    assert "/nota-tecnica" not in low
+    for c in _comandos_do_roteiro():
+        if c[4]:
+            assert not any(p in urlsplit(c[4]).path.lower() for p in PALAVRAS_PROIBIDAS), c[4]
+    # arbitragem do supervisor (B2): primeiro e único acesso, barreira registrada, sem nova rota
+    assert "primeiro e único acesso do produto" in texto and "outra rede ou rota" in texto
+    assert "S0b" in texto and "sessão assistida" in texto and "decisão 0067" in texto
+
+
+@pytest.mark.repositorio
+def test_roteiro_marca_bloqueio_de_host_b_e_nao_afirma_confirmacao_geral():
+    texto = ROTEIRO.read_text(encoding="utf-8")
+    assert "bloqueada até confirmação documental (página oficial lida ou confirmação do titular)" in texto
+    assert "--confirmado-por-titular" in texto
+    assert "Nenhum host de nível B foi confirmado" in texto
+    bs = {(f.id, h) for f in FONTES_SONDA.values() for h in f.hosts_b}
+    assert bs == {("cjf_unificada", "www.cjf.jus.br"), ("tjal", "www2.tjal.jus.br"),
+                  ("tjam", "consultasaj.tjam.jus.br"), ("tjms", "esaj.tjms.jus.br"),
+                  ("tjrj", "www3.tjrj.jus.br"), ("tjrs", "www.tjrs.jus.br")}
+    assert {f.id for f in FONTES_SONDA.values() if f.confirmacao == "B"} == {i for i, _ in bs}
+    # todo comando de host B está em bloco bloqueado e vice-versa (também checado na allowlist, acima)
+    for tipo, cid, _, _, url, bloqueado in _comandos_do_roteiro():
+        if tipo == "fonte":
+            assert bloqueado == (urlsplit(url).hostname in FONTES_SONDA[cid].hosts_b)
+
+
+@pytest.mark.repositorio
+def test_roteiro_nao_promete_categoria_para_429():
+    """M1: 429 sai sem categoria (decisão 0045); o roteiro e o registro da auditoria não podem prometê-la."""
+    texto = ROTEIRO.read_text(encoding="utf-8")
+    assert "429 e outros status sem regra própria saem sem categoria" in texto
+    assert not re.search(r"403/429/5xx\)[^.\n]*com categoria", texto)
+    from freoa_verifica.connectors.challenge import map_transport_error
+    from freoa_verifica.transport import HTTPStatusError
+
+    u = map_transport_error(HTTPStatusError(429), "https://x.jus.br/")
+    assert u.reason == "http_429" and u.categoria is None
+
+
+# --- B1 (parecer PR #14 r1): robots.txt não segue redirecionamento -------------------------------------
+
+
+def _servidor_robots(location: str):
+    """Servidor local: /robots.txt devolve 302 para `location`; qualquer outro caminho devolve 200 e é registrado."""
+    import socketserver
+    import threading
+
+    class H(socketserver.BaseRequestHandler):
+        def handle(self):
+            self.request.settimeout(2)
+            try:
+                dados = self.request.recv(65536)
+            except OSError:
+                return
+            caminho = dados.split(b"\r\n", 1)[0].decode("latin-1").split(" ")[1]
+            self.server.percursos.append(caminho)
+            if caminho == "/robots.txt":
+                self.request.sendall(
+                    f"HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\n\r\n".encode("latin-1")
+                )
+            else:
+                corpo = b"area restrita: login"
+                self.request.sendall(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s"
+                    % (len(corpo), corpo)
+                )
+
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), H)
+    server.daemon_threads = True
+    server.percursos = []
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+DESTINOS_DE_REDIRECIONAMENTO = [
+    "/admin/login",  # cenário exato do parecer: mesmo host, rota fora do escopo
+    "/robots.txt.bak",  # variante que o prefixo "/robots.txt" sozinho aceitaria
+    "/robots.txt/../admin",
+]
+
+
+@pytest.mark.parametrize("destino", DESTINOS_DE_REDIRECIONAMENTO)
+@pytest.mark.parametrize("alvo", [
+    pytest.param(("fonte", "tst", "https://jurisprudencia.tst.jus.br/robots.txt"), id="fonte-sonda-escopo-estreito"),
+    pytest.param(("fonte", "bnp", "https://pangeabnp.pdpj.jus.br/robots.txt"), id="fonte-sonda-so-robots"),
+    pytest.param(("conector", "tjsp", "https://esaj.tjsp.jus.br/robots.txt"), id="conector-tjsp"),
+    pytest.param(("conector", "stf", "https://portal.stf.jus.br/robots.txt"), id="conector-stf"),
+])
+def test_robots_com_302_nao_e_seguido_e_vira_unavailable(monkeypatch, tmp_path, alvo, destino):
+    tipo, id_, url = alvo
+    monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
+    server = _servidor_robots(destino)
+    _fast_guards(monkeypatch)
+    _wire_local(monkeypatch, server.server_address[1])
+    try:
+        kw = {"fonte_sonda": id_} if tipo == "fonte" else {}
+        reg = captura.capturar(None if tipo == "fonte" else id_, url=url, destino=tmp_path, sonda=True,
+                               chave="r", **kw)
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert server.percursos == ["/robots.txt"]  # nenhum pedido ao destino do redirecionamento
+    assert reg.unavailable and reg.motivo and reg.corpo is None and reg.arquivo is None
+    salvo = json.loads((tmp_path / "r.captura.json").read_text(encoding="utf-8"))
+    assert salvo["unavailable"] is True and salvo["motivo"] and not list(tmp_path.glob("r.[!c]*"))
+
+
+def test_robots_redirecionando_para_outro_host_da_allowlist_nao_e_seguido(monkeypatch, tmp_path):
+    monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
+    server = _servidor_robots("https://comunicaapi.pje.jus.br/api/v1/qualquer")
+    _fast_guards(monkeypatch)
+    _wire_local(monkeypatch, server.server_address[1])
+    try:
+        reg = captura.capturar(None, url="https://comunica.pje.jus.br/robots.txt", destino=tmp_path, sonda=True,
+                               chave="r", fonte_sonda="djen")
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert server.percursos == ["/robots.txt"] and reg.unavailable
+
+
+def test_robots_200_text_plain_continua_capturado(monkeypatch, tmp_path):
+    import socketserver
+    import threading
+
+    class H(socketserver.BaseRequestHandler):
+        def handle(self):
+            self.request.settimeout(2)
+            self.request.recv(65536)
+            c = b"User-agent: *\nDisallow: /admin/\n"
+            self.request.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s"
+                                 % (len(c), c))
+
+    monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), H)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    _fast_guards(monkeypatch)
+    _wire_local(monkeypatch, server.server_address[1])
+    try:
+        reg = captura.capturar(None, url="https://web.trf3.jus.br/robots.txt", destino=tmp_path, sonda=True,
+                               chave="r", fonte_sonda="trf3")
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert not reg.unavailable and reg.status == 200 and (tmp_path / "r.txt").read_bytes().startswith(b"User-agent")
+
+
+def test_robots_so_admite_text_plain(monkeypatch, tmp_path):
+    """A política entregue ao transporte para o robots.txt exclui HTML (casca de SPA não é robots interpretável)."""
+    monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
+    vistos = []
+
+    def espia(u, **kw):
+        vistos.append(kw)
+        return _resp(u, b"User-agent: *\n", 200, "text/plain")
+
+    monkeypatch.setattr(httputil, "transport_fetch", espia)
+    captura.capturar(None, url="https://pangeabnp.pdpj.jus.br/robots.txt", destino=tmp_path, sonda=True, chave="h",
+                     fonte_sonda="bnp")
+    assert vistos[0]["allowed_mimes"] == frozenset({"text/plain"})
+
+
+# --- I2: proveniência (confirmacao A/B) e bloqueio de host B ------------------------------------------
+
+BS = {(f.id, h) for f in FONTES_SONDA.values() for h in f.hosts_b}
+
+
+def _url_b(fid, host):
+    return f"https://{host}{(FONTES_SONDA[fid].rotas[host] or ('/robots.txt',))[0]}"
+
+
+@pytest.mark.parametrize("fid,host", sorted(BS))
+def test_host_b_e_recusado_antes_da_rede_inclusive_robots(envios, tmp_path, fid, host):
+    for url in (_url_b(fid, host), f"https://{host}/robots.txt"):
+        with pytest.raises(ValueError, match="nível B"):
+            captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="b", fonte_sonda=fid)
+    assert envios == [] and not any(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("fid,host", sorted(BS))
+def test_host_b_com_confirmacao_do_titular_vai_e_fica_registrado(envios, tmp_path, fid, host):
+    reg = captura.capturar(None, url=_url_b(fid, host), destino=tmp_path, sonda=True, chave="b", fonte_sonda=fid,
+                           confirmado_por_titular=True)
+    assert envios and reg.confirmado_por_titular is True and reg.confirmacao_host == "B"
+    salvo = json.loads((tmp_path / "b.captura.json").read_text(encoding="utf-8"))
+    assert salvo["confirmado_por_titular"] is True and salvo["confirmacao_host"] == "B"
+    assert salvo["fonte_sonda"] == fid
+
+
+def test_host_a_registra_nivel_a_e_sem_confirmacao_do_titular(envios, tmp_path):
+    url = next(_urls_validas(FONTES_SONDA["tjac"]))
+    captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="a", fonte_sonda="tjac")
+    salvo = json.loads((tmp_path / "a.captura.json").read_text(encoding="utf-8"))
+    assert salvo["confirmacao_host"] == "A" and salvo["confirmado_por_titular"] is False
+
+
+def test_fonte_com_host_a_e_host_b_so_bloqueia_o_b(envios, tmp_path):
+    f = FONTES_SONDA["cjf_unificada"]
+    assert f.confirmacao == "B" and f.hosts_b == {"www.cjf.jus.br"}
+    captura.capturar(None, url="https://jurisprudencia.cjf.jus.br/robots.txt", destino=tmp_path, sonda=True,
+                     chave="a", fonte_sonda="cjf_unificada")  # host A: sem flag
+    with pytest.raises(ValueError, match="nível B"):
+        captura.capturar(None, url="https://www.cjf.jus.br/robots.txt", destino=tmp_path, sonda=True, chave="b",
+                         fonte_sonda="cjf_unificada")
+    assert len(envios) == 1
+
+
+def test_confirmado_por_titular_so_vale_com_fonte_sonda(envios, tmp_path):
+    with pytest.raises(ValueError, match="só vale com fonte-sonda"):
+        captura.capturar("tjsp", url="https://esaj.tjsp.jus.br/cjsg/", destino=tmp_path, sonda=True, chave="c",
+                         confirmado_por_titular=True)
+    assert envios == []
+
+
+def test_registro_de_conector_nao_tem_nivel_nem_confirmacao(envios, tmp_path):
+    captura.capturar("tjsp", url="https://esaj.tjsp.jus.br/cjsg/x", destino=tmp_path, sonda=True, chave="c")
+    salvo = json.loads((tmp_path / "c.captura.json").read_text(encoding="utf-8"))
+    assert salvo["confirmacao_host"] is None and salvo["confirmado_por_titular"] is False
+
+
+@pytest.mark.repositorio
+def test_cli_recusa_host_b_sem_flag_e_registra_com_flag(envios, tmp_path, capsys):
+    cli = _cli()
+    saida = str(tmp_path / "s")
+    argv = ["--fonte-sonda", "tjal", "--sonda", "--saida", saida, "--chave", "k", "--url", _url_b("tjal", "www2.tjal.jus.br")]
+    assert cli.main(argv) == 2 and envios == [] and "nível B" in capsys.readouterr().err
+    assert not (tmp_path / "s").exists()
+    assert cli.main([*argv, "--confirmado-por-titular"]) == 0
+    salvo = json.loads((tmp_path / "s" / "k.captura.json").read_text(encoding="utf-8"))
+    assert salvo["confirmado_por_titular"] is True and salvo["confirmacao_host"] == "B"
+    with pytest.raises(SystemExit) as exc:  # a flag não vale fora de --fonte-sonda
+        cli.main(["--conector", "tjsp", "--sonda", "--saida", saida, "--url", "https://esaj.tjsp.jus.br/cjsg/",
+                  "--confirmado-por-titular"])
+    assert exc.value.code == 2
+    capsys.readouterr()
+
+
+# --- I3: evidência não se sobrescreve -----------------------------------------------------------------
+
+
+def test_nao_sobrescreve_captura_json_existente_e_recusa_antes_da_rede(envios, tmp_path):
+    url = next(_urls_validas(FONTES_SONDA["tjac"]))
+    captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="x", fonte_sonda="tjac")
+    antes = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    assert len(envios) == 1
+    with pytest.raises(ValueError, match="já existe x.captura.json"):
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="x", fonte_sonda="tjac")
+    assert len(envios) == 1  # nenhum pedido à fonte para depois recusar a gravação
+    assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == antes
+
+
+def test_respostas_identicas_com_chaves_distintas_convivem(envios, tmp_path):
+    url = next(_urls_validas(FONTES_SONDA["tjac"]))
+    for chave in ("tjac_a", "tjac_b"):
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave=chave, fonte_sonda="tjac")
+    assert {p.name for p in tmp_path.iterdir()} == {"tjac_a.captura.json", "tjac_a.json", "tjac_b.captura.json",
+                                                    "tjac_b.json"}
+
+
+def test_chave_derivada_do_hash_tambem_nao_sobrescreve(envios, tmp_path):
+    url = next(_urls_validas(FONTES_SONDA["tjac"]))
+    reg = captura.capturar(None, url=url, destino=tmp_path, sonda=True, fonte_sonda="tjac")  # sem --chave
+    antes = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    with pytest.raises(ValueError, match="já existe"):  # mesma resposta, mesma chave derivada
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, fonte_sonda="tjac")
+    assert len(envios) == 2 and {p.name: p.read_bytes() for p in tmp_path.iterdir()} == antes
+    assert reg.arquivo and (tmp_path / reg.arquivo).is_file()
+
+
+def test_corpo_orfao_existente_tambem_impede_a_gravacao(envios, tmp_path):
+    url = next(_urls_validas(FONTES_SONDA["tjac"]))
+    (tmp_path / "o.json").write_bytes(b"evidencia anterior")
+    with pytest.raises(ValueError, match="já existe o.json"):
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="o", fonte_sonda="tjac")
+    assert (tmp_path / "o.json").read_bytes() == b"evidencia anterior" and not (tmp_path / "o.captura.json").exists()
+
+
+def test_unavailable_tambem_nao_sobrescreve_registro(monkeypatch, tmp_path):
+    monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
+    monkeypatch.setattr(httputil, "transport_fetch", lambda u, **k: _resp(u, b"<html>x</html>", 403, "text/html"))
+    url = next(_urls_validas(FONTES_SONDA["djen"]))
+    captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="u", fonte_sonda="djen")
+    antes = (tmp_path / "u.captura.json").read_bytes()
+    with pytest.raises(ValueError, match="já existe"):
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="u", fonte_sonda="djen")
+    assert (tmp_path / "u.captura.json").read_bytes() == antes
+
+
+@pytest.mark.repositorio
+def test_cli_recusa_sobrescrita_com_erro(envios, tmp_path, capsys):
+    cli = _cli()
+    argv = ["--fonte-sonda", "tjac", "--sonda", "--saida", str(tmp_path / "s"), "--chave", "k",
+            "--url", next(_urls_validas(FONTES_SONDA["tjac"]))]
+    assert cli.main(argv) == 0
+    assert cli.main(argv) == 2 and len(envios) == 1 and "não se sobrescreve" in capsys.readouterr().err

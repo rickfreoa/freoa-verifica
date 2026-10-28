@@ -4,20 +4,23 @@ Uma fonte-sonda NÃO é fonte do produto: não entra em `registry()`, não é im
 MCP (teste estrutural em `tests/test_sondas.py`) e só é alcançada por `scripts/capturar_fixture.py --fonte-sonda`
 com `--sonda` e `--url`. O pedido sai pelo transporte comum, com UA identificado do pacote.
 
-Cada host consta aqui só se foi confirmado em página oficial (tribunal, CNJ ou CJF); `origem_hosts` registra, host a
-host, a URL oficial da confirmação. Hosts não confirmados ficam em `HOSTS_RECUSADOS`, com o motivo. Nunca host de
-agregador privado.
+Proveniência (`confirmacao`, `hosts_b`): nível A = o host consta de página oficial (tribunal, CNJ ou CJF) que foi
+LIDA, ou de configuração publicada pelo próprio portal; `origem_hosts` registra, host a host, a URL da confirmação.
+Nível B = a página do próprio sistema, no domínio do tribunal, foi só indexada por busca, não lida. Hosts B ficam no
+catálogo, mas o instrumento recusa a sonda neles (inclusive o `robots.txt`) sem `--confirmado-por-titular`, registrado
+no `.captura.json`. Hosts sem nenhuma indicação oficial ficam em `HOSTS_RECUSADOS`. Nunca host de agregador privado.
 
-Escopo de caminho: `path_prefixes` vale para todos os hosts da fonte, exceto os de `hosts_sem_prefixo`. Estes são
-páginas de aplicação de página única cuja raiz (`/`) o transporte não admite como prefixo (`allowed_path_prefixes`
-recusa "/"); neles vale o host inteiro, ainda GET, ainda HTTPS, ainda com a allowlist de MIME.
+Escopo de caminho: `rotas` dá, host a host, os prefixos de caminho que a sonda pode pedir, sempre estreitos e só de
+rotas documentadas em página oficial lida. A raiz `/` não entra: o transporte não admite `/` como prefixo (aceitaria
+tudo sob o host). Host sem rota documentada tem `()`: só o `robots.txt`, que é exceção de caminho exato, sem
+redirecionamento. Não há host de escopo livre. Rota de cadastro, login ou área institucional nunca entra.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Mapping
+from typing import Literal, Mapping
 
 _MIMES = frozenset({"text/html", "application/json", "text/plain"})
 _MIMES_PDF = _MIMES | {"application/pdf"}
@@ -28,117 +31,139 @@ class FonteSonda:
     id: str
     descricao: str
     hosts: frozenset[str]
-    path_prefixes: tuple[str, ...]
+    rotas: Mapping[str, tuple[str, ...]]  # host -> prefixos de caminho permitidos; () = só robots.txt
     mimes: frozenset[str]
     origem_hosts: str  # "host=URL oficial; host=URL oficial": onde cada host foi confirmado
-    hosts_sem_prefixo: frozenset[str] = frozenset()
+    confirmacao: Literal["A", "B"]  # pior nível entre os hosts: "B" se algum host é B
+    hosts_b: frozenset[str] = frozenset()  # hosts de nível B (indexados, não lidos): sonda bloqueada
     nota: str = ""
 
     def __post_init__(self) -> None:
-        if not self.hosts or not self.hosts_sem_prefixo <= self.hosts:
-            raise ValueError(f"hosts inconsistentes em {self.id}")
-        if not self.path_prefixes and self.hosts_sem_prefixo != self.hosts:
-            raise ValueError(f"sem prefixos, todos os hosts devem ser sem_prefixo: {self.id}")
-        if any(not p.startswith("/") or p == "/" for p in self.path_prefixes):
-            raise ValueError(f"prefixo inválido em {self.id}")
+        if not self.hosts or set(self.rotas) != set(self.hosts):
+            raise ValueError(f"hosts e rotas inconsistentes em {self.id}")
+        if self.confirmacao not in ("A", "B"):
+            raise ValueError(f"confirmacao inválida em {self.id}")
+        if not self.hosts_b <= self.hosts or (self.confirmacao == "B") != bool(self.hosts_b):
+            raise ValueError(f"confirmacao e hosts_b inconsistentes em {self.id}")
+        for host, prefixos in self.rotas.items():
+            if type(prefixos) is not tuple or any(
+                not isinstance(p, str) or not p.startswith("/") or p == "/" or p.lower().startswith("/robots.txt")
+                for p in prefixos
+            ):
+                raise ValueError(f"rota inválida em {self.id}: {host}")
         for host in self.hosts:
             if f"{host}=" not in self.origem_hosts:
                 raise ValueError(f"host sem origem registrada: {host}")
 
 
-def prefixos_por_host(fonte: FonteSonda) -> dict[str, tuple[str, ...]] | None:
-    """Mapa host -> prefixos no formato do transporte; None quando nenhum host tem escopo de caminho."""
-    mapa = {h: fonte.path_prefixes for h in sorted(fonte.hosts - fonte.hosts_sem_prefixo)}
-    return mapa or None
+def prefixos_por_host(fonte: FonteSonda) -> dict[str, tuple[str, ...]]:
+    """Mapa host -> prefixos no formato do transporte; host sem rota documentada admite só o robots.txt."""
+    return {h: (fonte.rotas[h] or ("/robots.txt",)) for h in sorted(fonte.hosts)}
 
 
-def _f(id_: str, descricao: str, hosts: set[str], prefixos: tuple[str, ...], origem: str, *, mimes=_MIMES,
-       livres: set[str] = frozenset(), nota: str = "") -> tuple[str, FonteSonda]:
-    return id_, FonteSonda(id_, descricao, frozenset(hosts), prefixos, mimes, origem, frozenset(livres), nota)
+def _f(id_: str, descricao: str, rotas: dict[str, tuple[str, ...]], origem: str, *, mimes=_MIMES,
+       b: set[str] = frozenset(), nota: str = "") -> tuple[str, FonteSonda]:
+    return id_, FonteSonda(
+        id_, descricao, frozenset(rotas), MappingProxyType(dict(rotas)), mimes, origem,
+        "B" if b else "A", frozenset(b), nota,
+    )
 
 
 _ESAJ = "e-SAJ, consulta de jurisprudência de 2º grau (cjsg)"
-_B = "confirmação nível B: página do próprio sistema, indexada por busca, não lida; "
+_B = "confirmação nível B: página do próprio sistema, indexada por busca, não lida; sonda bloqueada até confirmação "
+_B += "documental (página oficial lida ou confirmação do titular); "
+_S0B = "endpoint de resultado não documentado em página oficial: fora da S0, pendência S0b; "
 
 FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
     _f("tst", "TST: pesquisa de jurisprudência (portal, backend REST e consulta de documento)",
-       {"jurisprudencia.tst.jus.br", "jurisprudencia-backend.tst.jus.br", "consultadocumento.tst.jus.br"},
-       ("/rest/", "/consultaDocumento/"),
+       {"jurisprudencia.tst.jus.br": ("/config.json",),
+        "jurisprudencia-backend.tst.jus.br": ("/rest/orgaos-judicantes", "/rest/indicadores"),
+        "consultadocumento.tst.jus.br": ("/consultaDocumento/",)},
        "jurisprudencia.tst.jus.br=https://jurisprudencia.tst.jus.br/ (portal oficial); "
        "jurisprudencia-backend.tst.jus.br=https://jurisprudencia.tst.jus.br/config.json (campo base_url do portal); "
        "consultadocumento.tst.jus.br=https://jurisprudencia.tst.jus.br/config.json (campos consulta_acordao_url e "
        "consulta_despacho_url)",
-       mimes=_MIMES_PDF, livres={"jurisprudencia.tst.jus.br"},
-       nota="nível A: o próprio portal publica seus endpoints; www.tst.jus.br respondeu 202 sem corpo (desafio) à "
-            "leitura de pesquisa e não foi usado. A pesquisa textual é POST JSON em /rest/pesquisa-textual/: o "
-            "instrumento só faz GET (ver docs/S0-SONDAS.md)."),
+       mimes=_MIMES_PDF,
+       nota="nível A: o próprio portal publica seus endpoints (config.json e JavaScript do portal); www.tst.jus.br "
+            "respondeu 202 sem corpo (desafio) à leitura de pesquisa da ferramenta do agente e não foi usado. A "
+            "pesquisa textual é POST JSON: o instrumento só faz GET, pendência S0b. A raiz do portal fica fora "
+            "(o transporte não admite `/` como prefixo)."),
     _f("stf_acordaos", "STF: pesquisa de jurisprudência (acórdãos)",
-       {"jurisprudencia.stf.jus.br"}, ("/pages/search", "/api/"),
+       {"jurisprudencia.stf.jus.br": ("/pages/search",)},
        "jurisprudencia.stf.jus.br=https://portal.stf.jus.br/jurisprudencia/ (links para /pages/search)",
-       nota="o conector stf registra o prefixo /api/ no mesmo host e declara WAF na busca textual"),
+       nota=_S0B + "o conector stf declara WAF na busca textual"),
     _f("bnp", "CNJ: Banco Nacional de Precedentes (Pangea/BNP)",
-       {"pangeabnp.pdpj.jus.br", "bnp.pdpj.jus.br"}, (),
+       {"pangeabnp.pdpj.jus.br": (), "bnp.pdpj.jus.br": ()},
        "pangeabnp.pdpj.jus.br=https://docs.pdpj.jus.br/servicos-negociais/BNP-Pangea/BNP%20-%20Manual%20de%20Utiliza%C3%A7%C3%A3o; "
        "bnp.pdpj.jus.br=https://www.cnj.jus.br/tecnologia-da-informacao-e-comunicacao/justica-4-0/banco-nacional-de-precedentes-bnp/",
-       mimes=_MIMES, livres={"pangeabnp.pdpj.jus.br", "bnp.pdpj.jus.br"},
-       nota="aplicação de página única; o caminho da API de pesquisa não consta de fonte oficial lida e deve ser "
-            "descoberto na sonda (host inteiro admitido por isso)"),
-    _f("djen", "CNJ: Diário de Justiça Eletrônico Nacional (consulta e API de comunicações)",
-       {"comunica.pje.jus.br", "comunicaapi.pje.jus.br"}, ("/consulta", "/api/v1/"),
+       mimes=_MIMES,
+       nota="aplicação de página única; nenhuma rota consta de página oficial lida (a raiz não é admitida): só o "
+            "robots.txt. " + _S0B.strip()),
+    _f("djen", "CNJ: Diário de Justiça Eletrônico Nacional (consulta pública)",
+       {"comunica.pje.jus.br": ("/consulta",), "comunicaapi.pje.jus.br": ()},
        "comunica.pje.jus.br=https://www.cnj.jus.br/programas-e-acoes/processo-judicial-eletronico-pje/comunicacoes-processuais/; "
        "comunicaapi.pje.jus.br=https://www.cnj.jus.br/programas-e-acoes/processo-judicial-eletronico-pje/comunicacoes-processuais/orientacoes-aos-tribunais/",
-       nota="a página oficial documenta /api/v1 como API de envio dos tribunais, com autenticação; a consulta "
-            "pública em GET /api/v1/comunicacao não está documentada nela e é o que a sonda testa"),
+       nota="a página oficial documenta /api/v1 como API de envio dos tribunais, com autenticação: não é sondada. "
+            "A consulta pública pela API não está documentada: " + _S0B.strip()),
     _f("cjf_unificada", "CJF: pesquisa unificada de jurisprudência da Justiça Federal",
-       {"jurisprudencia.cjf.jus.br", "www.cjf.jus.br"}, ("/jurisprudencia/",),
+       {"jurisprudencia.cjf.jus.br": (), "www.cjf.jus.br": ("/jurisprudencia/unificada/",)},
        "jurisprudencia.cjf.jus.br=https://www.trf1.jus.br/trf1/busca/ (menu Pesquisa > Jurisprudência: "
        "https://jurisprudencia.cjf.jus.br/?tribunal=trf1); "
        "www.cjf.jus.br=https://www.cjf.jus.br/jurisprudencia/unificada/",
-       livres={"jurisprudencia.cjf.jus.br"},
-       nota=_B + "www.cjf.jus.br; jurisprudencia.cjf.jus.br é nível A (link lido no portal do TRF1)"),
+       b={"www.cjf.jus.br"},
+       nota=_B + "www.cjf.jus.br; jurisprudencia.cjf.jus.br é nível A (link lido no portal do TRF1), mas a "
+            "única rota documentada é a raiz, fora do escopo: só robots.txt. " + _S0B.strip()),
     _f("trf1", "TRF1: pesquisa de jurisprudência (via CJF) e inteiro teor de acórdãos",
-       {"jurisprudencia.cjf.jus.br", "arquivo.trf1.jus.br"}, (),
+       {"jurisprudencia.cjf.jus.br": (), "arquivo.trf1.jus.br": ()},
        "jurisprudencia.cjf.jus.br=https://www.trf1.jus.br/trf1/busca/ (menu Pesquisa > Jurisprudência); "
        "arquivo.trf1.jus.br=https://www.trf1.jus.br/trf1/busca/ (menu Inteiro Teor)",
-       mimes=_MIMES_PDF, livres={"jurisprudencia.cjf.jus.br", "arquivo.trf1.jus.br"},
-       nota="nível A; o menu oficial do TRF1 aponta a pesquisa ao CJF (?tribunal=trf1), sem host próprio"),
+       mimes=_MIMES_PDF,
+       nota="nível A; o menu oficial do TRF1 aponta a pesquisa ao CJF (?tribunal=trf1), sem host próprio; as rotas "
+            "documentadas são raízes, fora do escopo: só robots.txt. " + _S0B.strip()),
     _f("trf2", "TRF2: portal de jurisprudência da 2ª Região",
-       {"jurisprudencia.trf2.jus.br", "www10.trf2.jus.br"}, ("/consultas/",),
+       {"jurisprudencia.trf2.jus.br": (), "www10.trf2.jus.br": ("/consultas/servicos/jurisprudencia/",)},
        "jurisprudencia.trf2.jus.br=https://www.trf2.jus.br/trf2/artigo/coport/consulta-de-jurisprudencia; "
        "www10.trf2.jus.br=https://www.trf2.jus.br/trf2/noticia/2024/trf2-portal-de-jurisprudencia-conta-com-novo-mecanismo-de-busca",
-       livres={"jurisprudencia.trf2.jus.br"},
-       nota="nível A; juris.trf2.jus.br aparece só em resultado de busca e ficou fora"),
+       nota="nível A; a raiz do portal fica fora (só robots.txt); juris.trf2.jus.br aparece só em resultado de "
+            "busca e ficou fora. " + _S0B.strip()),
     _f("trf3", "TRF3: busca de jurisprudência e acórdãos",
-       {"web.trf3.jus.br"}, ("/jurisprudencia", "/acordaos/"),
+       {"web.trf3.jus.br": ("/jurisprudencia", "/acordaos/Acordao")},
        "web.trf3.jus.br=https://www.trf3.jus.br/carta-servicos/acordaos (links /jurisprudencia e /acordaos/Acordao)",
-       mimes=_MIMES_PDF, nota="nível A"),
-    _f("tjac", _ESAJ + " do TJAC", {"esaj.tjac.jus.br"}, ("/cjsg/",),
+       mimes=_MIMES_PDF, nota="nível A; " + _S0B.strip()),
+    _f("tjac", _ESAJ + " do TJAC",
+       {"esaj.tjac.jus.br": ("/cjsg/consultaCompleta.do", "/cjsg/resultadoCompleta.do")},
        "esaj.tjac.jus.br=https://www.tjac.jus.br/ (links /cjsg/consultaCompleta.do e /cjsg/resultadoCompleta.do)",
-       mimes=_MIMES_PDF, nota="nível A"),
-    _f("tjal", _ESAJ + " do TJAL", {"www2.tjal.jus.br"}, ("/cjsg/",),
+       mimes=_MIMES_PDF,
+       nota="nível A: caminhos lidos em página oficial; os parâmetros do resultado são inferência do e-SAJ"),
+    _f("tjal", _ESAJ + " do TJAL", {"www2.tjal.jus.br": ("/cjsg/consultaCompleta.do",)},
        "www2.tjal.jus.br=https://www2.tjal.jus.br/cjsg/consultaCompleta.do (página do próprio tribunal)",
-       mimes=_MIMES_PDF, nota=_B + "www2.tjal.jus.br"),
-    _f("tjam", _ESAJ + " do TJAM", {"consultasaj.tjam.jus.br"}, ("/cjsg/",),
+       mimes=_MIMES_PDF, b={"www2.tjal.jus.br"}, nota=_B + "www2.tjal.jus.br; " + _S0B.strip()),
+    _f("tjam", _ESAJ + " do TJAM", {"consultasaj.tjam.jus.br": ("/cjsg/consultaCompleta.do",)},
        "consultasaj.tjam.jus.br=https://consultasaj.tjam.jus.br/cjsg/consultaCompleta.do (página do próprio tribunal)",
-       mimes=_MIMES_PDF, nota=_B + "consultasaj.tjam.jus.br"),
-    _f("tjms", _ESAJ + " do TJMS", {"esaj.tjms.jus.br"}, ("/cjsg/",),
+       mimes=_MIMES_PDF, b={"consultasaj.tjam.jus.br"}, nota=_B + "consultasaj.tjam.jus.br; " + _S0B.strip()),
+    _f("tjms", _ESAJ + " do TJMS", {"esaj.tjms.jus.br": ("/cjsg/consultaCompleta.do",)},
        "esaj.tjms.jus.br=https://esaj.tjms.jus.br/cjsg/consultaCompleta.do (página do próprio tribunal)",
-       mimes=_MIMES_PDF, nota=_B + "esaj.tjms.jus.br"),
-    _f("tjrj", "TJRJ: eJuris, consulta de jurisprudência", {"www3.tjrj.jus.br"}, ("/ejuris/",),
+       mimes=_MIMES_PDF, b={"esaj.tjms.jus.br"}, nota=_B + "esaj.tjms.jus.br; " + _S0B.strip()),
+    _f("tjrj", "TJRJ: eJuris, consulta de jurisprudência",
+       {"www3.tjrj.jus.br": ("/ejuris/ConsultarJurisprudencia.aspx",)},
        "www3.tjrj.jus.br=https://www3.tjrj.jus.br/ejuris/ConsultarJurisprudencia.aspx (página do próprio sistema)",
+       b={"www3.tjrj.jus.br"},
        nota=_B + "www3.tjrj.jus.br; a leitura das páginas do portal www.tjrj.jus.br foi recusada pelo robots.txt do "
-            "site à ferramenta de pesquisa e não foi contornada; www4.tjrj.jus.br ficou fora"),
-    _f("tjmg", "TJMG: consulta de jurisprudência", {"www5.tjmg.jus.br"}, ("/jurisprudencia/",),
+            "site à ferramenta de pesquisa do agente e não foi contornada; www4.tjrj.jus.br ficou fora"),
+    _f("tjmg", "TJMG: consulta de jurisprudência",
+       {"www5.tjmg.jus.br": ("/jurisprudencia/formEspelhoAcordao.do", "/jurisprudencia/ajuda.do")},
        "www5.tjmg.jus.br=https://www.tjmg.jus.br/portal-tjmg/jurisprudencia/consulta-de-jurisprudencia/ "
        "(links /jurisprudencia/decisao.do, formEspelhoAcordao.do)",
-       nota="nível A; os links oficiais usam http, a sonda exige https"),
-    _f("tjrs", "TJRS: pesquisa de jurisprudência", {"www.tjrs.jus.br"}, ("/novo/buscas-solr/", "/novo/busca/"),
+       nota="nível A; os links oficiais usam http, a sonda exige https; " + _S0B.strip()),
+    _f("tjrs", "TJRS: pesquisa de jurisprudência", {"www.tjrs.jus.br": ("/novo/buscas-solr/",)},
        "www.tjrs.jus.br=https://www.tjrs.jus.br/novo/buscas-solr/ (página do próprio tribunal)",
-       nota=_B + "www.tjrs.jus.br; a leitura foi recusada pelo robots.txt do site à ferramenta de pesquisa e não foi "
-            "contornada; www3.tjrs.jus.br/site_php/consulta ficou fora (legado, não confirmado)"),
-    _f("tjpr", "TJPR: consulta de jurisprudência", {"portal.tjpr.jus.br"}, ("/jurisprudencia/",),
+       b={"www.tjrs.jus.br"},
+       nota=_B + "www.tjrs.jus.br; a leitura foi recusada pelo robots.txt do site à ferramenta de pesquisa do "
+            "agente e não foi contornada; www3.tjrs.jus.br/site_php/consulta ficou fora (legado, não confirmado); "
+            + _S0B.strip()),
+    _f("tjpr", "TJPR: consulta de jurisprudência", {"portal.tjpr.jus.br": ("/jurisprudencia/",)},
        "portal.tjpr.jus.br=https://www.tjpr.jus.br/jurisprudencia (link https://portal.tjpr.jus.br/jurisprudencia/)",
-       nota="nível A"),
+       nota="nível A; " + _S0B.strip()),
 ]))
 
 HOSTS_RECUSADOS: Mapping[str, str] = MappingProxyType({
