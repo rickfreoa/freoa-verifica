@@ -32,3 +32,9 @@ def test_attestation_obrigatoria_com_excecao_explicita():
     assert "-SemAttestation" in texto
     assert "quando instalado" not in texto
     assert "exige e confere a attestation" in texto
+
+
+def test_instalador_windows_fixa_a_estavel_enquanto_for_pre_release():
+    texto = README.read_text(encoding="utf-8")
+    if re.search(r"(a|b|rc)\d+$", __version__):
+        assert f"instalar-freoa-verifica.ps1 -Versao {ULTIMA_ESTAVEL}" in texto

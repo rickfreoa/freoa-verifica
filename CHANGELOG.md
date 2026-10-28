@@ -50,7 +50,9 @@ Medida sobre a 1.3.0 instalada pelo instrumento oficial, no notebook do titular,
 ### Distribuição
 
 - Versão 1.4.0a1 em `pyproject.toml`, `freoa_verifica/__init__.py` e no padrão de `-Versao` de `scripts/instalar-freoa-verifica.ps1`. Nenhuma outra mudança no instalador.
-- O digest do snapshot da 1.4.0a1 ainda não consta de `freoa_verifica/data/snapshots-oficiais.json`: é acrescentado depois da exportação, pelo procedimento de `docs/RELEASE.md`. Até então, `fv snapshot install` desta versão recusa o snapshot por vínculo ausente. O README continua apontando para a última versão estável (1.3.0).
+- O digest do snapshot da 1.4.0a1 consta de `freoa_verifica/data/snapshots-oficiais.json` (acrescentado depois da exportação, pelo procedimento de `docs/RELEASE.md`) e a instalação vinculada foi feita (`docs/auditoria/1.4.0/release-1.4.0a1.md`). O README continua apontando para a última versão estável (1.3.0).
+- Vínculo do snapshot por igualdade de versão (decisão 0051, emenda 1.4.0a1): `_da_versao_instalada` compara a versão normalizada (PEP 440) inteira, não só os números iniciais; 1.4.0a2 e 1.4.0 recusam a entrada da 1.4.0a1 (`SNAPSHOT_OUTRA_VERSAO`).
+- Notas da release: o workflow publica só a seção da versão da tag (`scripts/notas_da_versao.py`), não o CHANGELOG inteiro; seção ausente falha o job.
 
 ## 1.3.0 — 20/10/2026
 
@@ -129,7 +131,7 @@ Responde à avaliação externa de 18/10/2026 (achados A1–A12; plano em `docs/
 - Snapshot vinculado ao pacote (decisão 0042): `data/snapshots-oficiais.json`; fora da lista só com `--aceitar-nao-vinculado`, e o acervo fica `vinculado: false` de forma permanente (`fv snapshot info`, `fv doctor`); `latest` escolhe o snapshot vinculado. `fv snapshot install` sai com código 1 em recusa.
 - Reconhecimento de consultas (decisão 0043): número citado com UF acha registro sem UF (e declara `uf_citada_nao_conferida`); classe comparada sem acento ("Sumula" casa "Súmula"); número CNJ isolado devolve só o próprio processo, com dígito verificador conferido e consulta à API oficial do TJDFT; "<norma> art. N" sem vírgula, na citação avulsa, é exato; `verificar_citacao` de súmula, julgado ou CNJ usa a confirmação do acervo (antes, `not_found`).
 - Busca temática: sigla de tribunal solta na consulta vira filtro (fora de aspas); raridade do termo (IDF) ordena a complementação OR; termos na ementa pesam mais que termos espalhados no inteiro teor; TJDFT pedido explicitamente é consultado ao vivo, com locuções jurídicas entre aspas (`locucoes-1`); resultado sem ementa mostra `trecho_inteiro_teor` em torno do termo, nunca sob o rótulo `ementa`.
-- Comparativo com o JusRatio sobre conjunto-ouro independente de 42 casos (`docs/auditoria/comparativo-120/`): dentro do acervo, 34/35 contra 35/35; não temáticos 28/28 nos dois; resultados temáticos úteis 33/35 nos dois; nenhuma confirmação indevida.
+- Conjunto-ouro independente de 42 casos (`docs/auditoria/comparativo-120/`): dentro do acervo, 34/35; não temáticos 28/28; resultados temáticos úteis 33/35; nenhuma confirmação indevida. Comparações com outras ferramentas ficam só no artefato de bench, nunca neste histórico.
 - Cobertura do STJ declara só o que é adquirido (íntegras não implementadas). README e FONTES descrevem só o estado atual.
 - Instalador Windows interrompe na etapa que falhar e só declara sucesso após conferir versão, acervo vinculado e `fv doctor`; verifica a attestation do wheel e do lock com `gh` (workflow de release, tag e runners hospedados) e registra quando não pôde verificar. Release: permissões mínimas na suíte, escrita só no build, tag conferida contra a versão, lock e `SHA256SUMS` atestados.
 - Atualização sem limpar checkpoint (decisão 0039): recursos mensais do STJ são revalidados (dois meses mais recentes e capturas com mais de 30 dias; metadado CKAN alterado invalida o checkpoint), `fv doctor` informa `stj_atualizacao`; súmulas e SV do STF são recapturadas após 30 dias.
