@@ -1,0 +1,135 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://github.com/rickfreoa/freoa-verifica/release/acceptance_manifest.schema.json",
+ "title": "Manifesto de aceite do plano 1.4.0",
+ "description": "Documental. A validação executável, com os invariantes a a e (catálogo fixo de itens por incremento, jobs de CI exigidos, recibos tipados por etapa, igualdades entre etapas, pareceres locais da bateria, da instalação e da incorporação terminados em SEM BLOQUEADOR e conferidos contra os bytes, incremento concluído, reduções, datas e caminhos confinados), é scripts/manifesto_aceite.py validar; este schema não substitui essas regras. O manifesto não consulta o GitHub nem a PyPI e não valida o conteúdo da bateria nem do ambiente: a conferência material é do auditor, por recibo de parecer.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": ["plano", "atualizado_em", "incrementos", "excecoes"],
+ "properties": {
+  "plano": {"type": "string", "minLength": 1},
+  "atualizado_em": {"$ref": "#/$defs/instante"},
+  "incrementos": {"type": "array", "items": {"$ref": "#/$defs/incremento"}},
+  "excecoes": {"type": "array", "items": {"$ref": "#/$defs/excecao"}}
+ },
+ "$defs": {
+  "estado_etapa": {"enum": ["pendente", "concluida"]},
+  "tipo_evidencia": {
+   "enum": ["especificacao", "run_ci", "bateria_live", "commit", "parecer", "merge", "tag", "release", "pypi", "snapshot", "instalacao", "doctor"]
+  },
+  "campos_por_tipo": {
+   "description": "Documental: campos obrigatórios (e só eles) do recibo de cada tipo de evidência; formatos e igualdades entre etapas são do validador.",
+   "const": {
+    "especificacao": ["especificacao", "ramo"],
+    "run_ci": ["url", "commit", "conclusao", "jobs"],
+    "bateria_live": ["relatorio", "sha256", "saude_fontes", "saude_fontes_sha256", "commit", "parecer_bateria", "parecer_bateria_sha256"],
+    "commit": ["commit"],
+    "parecer": ["parecer", "sha256", "commit_auditado"],
+    "merge": ["commit"],
+    "tag": ["tag", "commit"],
+    "release": ["url", "attestation_verificada", "sha256_wheel", "sha256_sdist"],
+    "pypi": ["versao", "sha256_wheel", "sha256_sdist"],
+    "snapshot": ["pacotes", "bateria_s4", "lista_embutida_commit"],
+    "instalacao": ["concluida", "commit", "attestation_verificada", "digests", "parecer_instalacao", "parecer_instalacao_sha256"],
+    "doctor": ["ok", "alertas"]
+   }
+  },
+  "tipos_da_etapa": {
+   "description": "Documental: a etapa concluída exige exatamente uma evidência de cada tipo listado.",
+   "const": {
+    "1_desenvolvimento": ["especificacao"],
+    "2_teste": ["run_ci", "bateria_live"],
+    "3_commit": ["commit"],
+    "4_incorporacao": ["parecer", "merge"],
+    "5_publicacao": ["tag", "release", "pypi"],
+    "6_distribuicao": ["snapshot"],
+    "7_instalacao": ["instalacao"],
+    "8_execucao": ["doctor", "bateria_live"]
+   }
+  },
+  "instante": {"type": "string", "format": "date-time", "description": "RFC 3339 completo, com segundos e fuso Z ou ±HH:MM"},
+  "incremento": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["id", "versao", "estado", "rotulo", "itens", "etapas", "reducoes_de_escopo"],
+   "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "versao": {"type": "string", "minLength": 1},
+    "estado": {"enum": ["aberto", "concluido", "adiado"]},
+    "rotulo": {"type": ["string", "null"], "minLength": 1},
+    "itens": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "etapas": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": ["1_desenvolvimento", "2_teste", "3_commit", "4_incorporacao", "5_publicacao", "6_distribuicao", "7_instalacao", "8_execucao"],
+     "properties": {
+      "1_desenvolvimento": {"$ref": "#/$defs/etapa"},
+      "2_teste": {"$ref": "#/$defs/etapa"},
+      "3_commit": {"$ref": "#/$defs/etapa"},
+      "4_incorporacao": {"$ref": "#/$defs/etapa"},
+      "5_publicacao": {"$ref": "#/$defs/etapa"},
+      "6_distribuicao": {"$ref": "#/$defs/etapa"},
+      "7_instalacao": {"$ref": "#/$defs/etapa"},
+      "8_execucao": {"$ref": "#/$defs/etapa"}
+     }
+    },
+    "reducoes_de_escopo": {"type": "array", "items": {"$ref": "#/$defs/reducao"}}
+   }
+  },
+  "item": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["id", "estado", "nota"],
+   "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "estado": {"enum": ["pendente", "concluido", "reduzido", "adiado"]},
+    "nota": {"type": "string"}
+   }
+  },
+  "etapa": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["estado", "evidencias", "nota"],
+   "properties": {
+    "estado": {"$ref": "#/$defs/estado_etapa"},
+    "evidencias": {"type": "array", "items": {"$ref": "#/$defs/evidencia"}},
+    "nota": {"type": "string"}
+   }
+  },
+  "evidencia": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["tipo", "campos", "data"],
+   "properties": {
+    "tipo": {"$ref": "#/$defs/tipo_evidencia"},
+    "campos": {"type": "object"},
+    "data": {"$ref": "#/$defs/instante"}
+   }
+  },
+  "reducao": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["item", "data", "decisao", "registro", "motivo"],
+   "properties": {
+    "item": {"type": "string", "minLength": 1},
+    "data": {"type": "string", "format": "date"},
+    "decisao": {"type": "string", "minLength": 1},
+    "registro": {"type": "string", "minLength": 1, "description": "caminho relativo existente no repositório"},
+    "motivo": {"type": "string", "minLength": 1}
+   }
+  },
+  "excecao": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["alvo", "tipo", "estado", "revisar_em", "registro", "nota"],
+   "properties": {
+    "alvo": {"type": "string", "minLength": 1},
+    "tipo": {"enum": ["tribunal", "funcao"]},
+    "estado": {"enum": ["bloqueio_externo_documentado", "excluida_pelo_titular"]},
+    "revisar_em": {"type": ["string", "null"], "format": "date"},
+    "registro": {"type": "string", "minLength": 1},
+    "nota": {"type": "string", "description": "obrigatória (fundamento) quando revisar_em não é null"}
+   }
+  }
+ }
+}
