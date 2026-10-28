@@ -1,0 +1,474 @@
+{
+ "hosts": {
+  "jurisprudencia.tst.jus.br": {
+   "comandos": [
+    {
+     "chave": "tst_robots_portal",
+     "url": "https://jurisprudencia.tst.jus.br/robots.txt",
+     "executado": true,
+     "rc": 0,
+     "stdout": "200 26 bytes sha256=133e4db054e73a10017a1f429c80c35cd5bfa9c3a1aba581b364ecc459c48a4b",
+     "stderr": "",
+     "unavailable": false,
+     "motivo": null,
+     "categoria": null,
+     "status": 200,
+     "content_type": "text/plain",
+     "bytes": 26,
+     "sha256": "133e4db054e73a10017a1f429c80c35cd5bfa9c3a1aba581b364ecc459c48a4b",
+     "arquivo": "tst_robots_portal.txt",
+     "url_final": "https://jurisprudencia.tst.jus.br/robots.txt"
+    },
+    {
+     "chave": "tst_config",
+     "url": "https://jurisprudencia.tst.jus.br/config.json",
+     "executado": false,
+     "razao": "Disallow aplicável"
+    }
+   ],
+   "parada": null
+  },
+  "jurisprudencia-backend.tst.jus.br": {
+   "comandos": [
+    {
+     "chave": "tst_robots_backend",
+     "url": "https://jurisprudencia-backend.tst.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(http_404)",
+     "unavailable": true,
+     "motivo": "http_404",
+     "categoria": null,
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    },
+    {
+     "chave": "tst_orgaos",
+     "url": "https://jurisprudencia-backend.tst.jus.br/rest/orgaos-judicantes",
+     "executado": false,
+     "razao": "host parado"
+    },
+    {
+     "chave": "tst_indicadores",
+     "url": "https://jurisprudencia-backend.tst.jus.br/rest/indicadores",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "indisponível ou erro em tst_robots_backend: http_404"
+  },
+  "jurisprudencia.stf.jus.br": {
+   "comandos": [
+    {
+     "chave": "stf_acordaos_robots",
+     "url": "https://jurisprudencia.stf.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(transporte_RespostaInvalida)",
+     "unavailable": true,
+     "motivo": "transporte_RespostaInvalida",
+     "categoria": "resposta_inesperada",
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    },
+    {
+     "chave": "stf_acordaos_pesquisa",
+     "url": "https://jurisprudencia.stf.jus.br/pages/search",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "indisponível ou erro em stf_acordaos_robots: transporte_RespostaInvalida"
+  },
+  "pangeabnp.pdpj.jus.br": {
+   "comandos": [
+    {
+     "chave": "bnp_robots_pangea",
+     "url": "https://pangeabnp.pdpj.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(transporte_RespostaInvalida)",
+     "unavailable": true,
+     "motivo": "transporte_RespostaInvalida",
+     "categoria": "resposta_inesperada",
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    }
+   ],
+   "parada": "indisponível ou erro em bnp_robots_pangea: transporte_RespostaInvalida"
+  },
+  "bnp.pdpj.jus.br": {
+   "comandos": [
+    {
+     "chave": "bnp_robots_cnj",
+     "url": "https://bnp.pdpj.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(transporte_RespostaInvalida)",
+     "unavailable": true,
+     "motivo": "transporte_RespostaInvalida",
+     "categoria": "resposta_inesperada",
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    }
+   ],
+   "parada": "indisponível ou erro em bnp_robots_cnj: transporte_RespostaInvalida"
+  },
+  "comunica.pje.jus.br": {
+   "comandos": [
+    {
+     "chave": "djen_robots_consulta",
+     "url": "https://comunica.pje.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(transporte_RespostaInvalida)",
+     "unavailable": true,
+     "motivo": "transporte_RespostaInvalida",
+     "categoria": "resposta_inesperada",
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    },
+    {
+     "chave": "djen_consulta",
+     "url": "https://comunica.pje.jus.br/consulta",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "indisponível ou erro em djen_robots_consulta: transporte_RespostaInvalida"
+  },
+  "comunicaapi.pje.jus.br": {
+   "comandos": [
+    {
+     "chave": "djen_robots_api",
+     "url": "https://comunicaapi.pje.jus.br/robots.txt",
+     "executado": true,
+     "rc": 0,
+     "stdout": "200 24 bytes sha256=e5c4b84484ee4216e9373be99380320c25dd94805f99f0a805846f087636553f",
+     "stderr": "",
+     "unavailable": false,
+     "motivo": null,
+     "categoria": null,
+     "status": 200,
+     "content_type": "text/plain",
+     "bytes": 24,
+     "sha256": "e5c4b84484ee4216e9373be99380320c25dd94805f99f0a805846f087636553f",
+     "arquivo": "djen_robots_api.txt",
+     "url_final": "https://comunicaapi.pje.jus.br/robots.txt"
+    }
+   ],
+   "parada": null
+  },
+  "jurisprudencia.cjf.jus.br": {
+   "comandos": [
+    {
+     "chave": "cjf_unificada_robots_jurisprudencia",
+     "url": "https://jurisprudencia.cjf.jus.br/robots.txt",
+     "executado": true,
+     "rc": 0,
+     "stdout": "200 95 bytes sha256=442755e25c6203bc4a53e13639770c1ff5d15751a7afcc19e8858b7cdf9d30de",
+     "stderr": "",
+     "unavailable": false,
+     "motivo": null,
+     "categoria": null,
+     "status": 200,
+     "content_type": "text/plain",
+     "bytes": 95,
+     "sha256": "442755e25c6203bc4a53e13639770c1ff5d15751a7afcc19e8858b7cdf9d30de",
+     "arquivo": "cjf_unificada_robots_jurisprudencia.txt",
+     "url_final": "https://jurisprudencia.cjf.jus.br/robots.txt"
+    },
+    {
+     "chave": "trf1_robots_cjf",
+     "url": "https://jurisprudencia.cjf.jus.br/robots.txt",
+     "executado": false,
+     "razao": "robots.txt já lido neste host; sem segundo pedido"
+    }
+   ],
+   "parada": null
+  },
+  "arquivo.trf1.jus.br": {
+   "comandos": [
+    {
+     "chave": "trf1_robots_arquivo",
+     "url": "https://arquivo.trf1.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(http_404)",
+     "unavailable": true,
+     "motivo": "http_404",
+     "categoria": null,
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    }
+   ],
+   "parada": "indisponível ou erro em trf1_robots_arquivo: http_404"
+  },
+  "jurisprudencia.trf2.jus.br": {
+   "comandos": [
+    {
+     "chave": "trf2_robots_portal",
+     "url": "https://jurisprudencia.trf2.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(transporte_BlockedHost)",
+     "unavailable": true,
+     "motivo": "transporte_BlockedHost",
+     "categoria": null,
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    }
+   ],
+   "parada": "indisponível ou erro em trf2_robots_portal: transporte_BlockedHost"
+  },
+  "www10.trf2.jus.br": {
+   "comandos": [
+    {
+     "chave": "trf2_robots_servicos",
+     "url": "https://www10.trf2.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(http_503)",
+     "unavailable": true,
+     "motivo": "http_503",
+     "categoria": "fonte_fora",
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    },
+    {
+     "chave": "trf2_servico",
+     "url": "https://www10.trf2.jus.br/consultas/servicos/jurisprudencia/",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "indisponível ou erro em trf2_robots_servicos: http_503"
+  },
+  "web.trf3.jus.br": {
+   "comandos": [
+    {
+     "chave": "trf3_robots",
+     "url": "https://web.trf3.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(transporte_Timeout)",
+     "unavailable": true,
+     "motivo": "transporte_Timeout",
+     "categoria": "fonte_fora",
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    },
+    {
+     "chave": "trf3_busca",
+     "url": "https://web.trf3.jus.br/jurisprudencia",
+     "executado": false,
+     "razao": "host parado"
+    },
+    {
+     "chave": "trf3_acordaos",
+     "url": "https://web.trf3.jus.br/acordaos/Acordao",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "indisponível ou erro em trf3_robots: transporte_Timeout"
+  },
+  "esaj.tjac.jus.br": {
+   "comandos": [
+    {
+     "chave": "tjac_robots",
+     "url": "https://esaj.tjac.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(transporte_RespostaInvalida)",
+     "unavailable": true,
+     "motivo": "transporte_RespostaInvalida",
+     "categoria": "resposta_inesperada",
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    },
+    {
+     "chave": "tjac_consulta",
+     "url": "https://esaj.tjac.jus.br/cjsg/consultaCompleta.do",
+     "executado": false,
+     "razao": "host parado"
+    },
+    {
+     "chave": "tjac_resultado",
+     "url": "https://esaj.tjac.jus.br/cjsg/resultadoCompleta.do?dados.buscaInteiroTeor=acordo+de+acionistas&dados.pesquisarComSinonimos=S&dados.origensSelecionadas=T&tipoDecisaoSelecionados=A&dados.ordenarPor=dtPublicacao",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "indisponível ou erro em tjac_robots: transporte_RespostaInvalida"
+  },
+  "www5.tjmg.jus.br": {
+   "comandos": [
+    {
+     "chave": "tjmg_robots",
+     "url": "https://www5.tjmg.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(http_404)",
+     "unavailable": true,
+     "motivo": "http_404",
+     "categoria": null,
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    },
+    {
+     "chave": "tjmg_formulario",
+     "url": "https://www5.tjmg.jus.br/jurisprudencia/formEspelhoAcordao.do",
+     "executado": false,
+     "razao": "host parado"
+    },
+    {
+     "chave": "tjmg_ajuda",
+     "url": "https://www5.tjmg.jus.br/jurisprudencia/ajuda.do",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "indisponível ou erro em tjmg_robots: http_404"
+  },
+  "portal.tjpr.jus.br": {
+   "comandos": [
+    {
+     "chave": "tjpr_robots",
+     "url": "https://portal.tjpr.jus.br/robots.txt",
+     "executado": true,
+     "rc": 0,
+     "stdout": "200 41 bytes sha256=3db0314d402ddcbc5a1ba40175309a30f33fdcc248b541193362f26a968954fb",
+     "stderr": "",
+     "unavailable": false,
+     "motivo": null,
+     "categoria": null,
+     "status": 200,
+     "content_type": "text/plain",
+     "bytes": 41,
+     "sha256": "3db0314d402ddcbc5a1ba40175309a30f33fdcc248b541193362f26a968954fb",
+     "arquivo": "tjpr_robots.txt",
+     "url_final": "https://portal.tjpr.jus.br/robots.txt"
+    },
+    {
+     "chave": "tjpr_pesquisa",
+     "url": "https://portal.tjpr.jus.br/jurisprudencia/",
+     "executado": true,
+     "rc": 0,
+     "stdout": "200 80587 bytes sha256=35705875e873c96d730d05d51947b32b606dae38cddf0f9439de6bb4699d70ba",
+     "stderr": "",
+     "unavailable": false,
+     "motivo": null,
+     "categoria": null,
+     "status": 200,
+     "content_type": "text/html",
+     "bytes": 80587,
+     "sha256": "35705875e873c96d730d05d51947b32b606dae38cddf0f9439de6bb4699d70ba",
+     "arquivo": "tjpr_pesquisa.html",
+     "url_final": "https://portal.tjpr.jus.br/jurisprudencia/"
+    }
+   ],
+   "parada": null
+  },
+  "esaj.tjsp.jus.br": {
+   "comandos": [
+    {
+     "chave": "tjsp_robots",
+     "url": "https://esaj.tjsp.jus.br/robots.txt",
+     "executado": false,
+     "razao": "host parado"
+    },
+    {
+     "chave": "tjsp_volume1",
+     "url": "https://esaj.tjsp.jus.br/cjsg/resultadoCompleta.do",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "barreira anterior registrada: C:/dev/fv14-sondas/s0_tjsp_volume.captura.json (27/10/2026, ambiental_desafio:desafio_captcha)"
+  },
+  "jurisdf.tjdft.jus.br": {
+   "comandos": [
+    {
+     "chave": "tjdft_robots",
+     "url": "https://jurisdf.tjdft.jus.br/robots.txt",
+     "executado": true,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "unavailable(transporte_RespostaInvalida)",
+     "unavailable": true,
+     "motivo": "transporte_RespostaInvalida",
+     "categoria": "resposta_inesperada",
+     "status": null,
+     "content_type": null,
+     "bytes": null,
+     "sha256": null,
+     "arquivo": null,
+     "url_final": null
+    },
+    {
+     "chave": "tjdft_volume1",
+     "url": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa",
+     "executado": false,
+     "razao": "host parado"
+    }
+   ],
+   "parada": "indisponível ou erro em tjdft_robots: transporte_RespostaInvalida"
+  }
+ }
+}

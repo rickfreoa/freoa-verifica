@@ -1,0 +1,27 @@
+{
+ "conector": null,
+ "versao": "1.3.0",
+ "url": "https://www5.tjmg.jus.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.3.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-28T03:37:27.020744+00:00",
+ "sonda": true,
+ "fonte_sonda": "tjmg",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": true,
+ "motivo": "http_404",
+ "categoria": null,
+ "evidencia": {
+  "status": 404,
+  "url": "https://www5.tjmg.jus.br/robots.txt"
+ },
+ "url_final": null,
+ "status": null,
+ "content_type": null,
+ "cabecalhos": {},
+ "sha256": null,
+ "bytes": null,
+ "arquivo": null
+}
