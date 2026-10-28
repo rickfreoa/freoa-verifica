@@ -94,3 +94,11 @@ Redução de escopo pelo D5 em 28/10/2026, após três rodadas COM BLOQUEADOR; r
 - `snapshot.pacotes`: lista com ao menos um pacote e digests; nada além disso é afirmado.
 - Os bloqueadores B1 e B2 da r3 e os importantes (ambiente, redação da 0068) deixam de ser regra do validar: sem `parecer_bateria` válido (ausente, inexistente, hash errado, COM BLOQUEADOR) o fechamento é recusado, mesmo com relatório "BATERIA NAO EXECUTADA" e saúde vazia.
 - Passe final independente a seguir; com bloqueador, o I1.5 é adiado e o I1 não fecha pela seção 5 até nova versão.
+
+## Correção de registro (decisão 0070, 28/10/2026)
+
+O passe final independente sobre `459faaa` terminou COM BLOQUEADOR só porque a redução do I1.5 não constava do
+manifesto nem do rótulo. Pela decisão 0070, o supervisor registrou o I1.5 como `reduzido`, com entrada em
+`reducoes_de_escopo` (registro `docs/auditoria/1.4.0/i15-reducao-escopo.md`) e rótulo que abrange as duas
+reduções do I1, e ajustou os dois testes que conferem esse estado. Nenhuma mudança de código ou de regra.
+Conferência curta do Codex a seguir.

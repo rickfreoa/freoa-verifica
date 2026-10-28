@@ -1,12 +1,12 @@
 {
  "plano": "1.4.0",
- "atualizado_em": "2026-10-28T02:31:13+00:00",
+ "atualizado_em": "2026-10-28T08:14:58+00:00",
  "incrementos": [
   {
    "id": "I1",
    "versao": "1.4.0a1",
    "estado": "aberto",
-   "rotulo": "1.4.0a1: sem íntegras do STJ; I1.2 adiado para 1.4.0a2 (I2.6) após passe final com bloqueador",
+   "rotulo": "1.4.0a1: sem íntegras do STJ (I1.2 adiado para I2.6); manifesto de aceite com conferência material da bateria e da instalação por parecer do auditor (I1.5 reduzido)",
    "itens": [
     {
      "id": "I1.1",
@@ -30,8 +30,8 @@
     },
     {
      "id": "I1.5",
-     "estado": "pendente",
-     "nota": ""
+     "estado": "reduzido",
+     "nota": "PR #11: reduzido pelo D5 (docs/auditoria/1.4.0/i15-reducao-escopo.md); correção de registro pela decisão 0070"
     },
     {
      "id": "I1.6",
@@ -93,6 +93,13 @@
      "decisao": "D5: passe final independente COM BLOQUEADOR sobre o escopo reduzido; I1.2 adiado inteiro para I2.6",
      "registro": "docs/auditoria/1.4.0/pr10-adiamento.md",
      "motivo": "candidato único pelos metadados vincula outro julgamento quando a ementa é só citada; recurso omite graus intermediários"
+    },
+    {
+     "item": "I1.5",
+     "data": "2026-10-28",
+     "decisao": "D5: três rodadas COM BLOQUEADOR; conteúdo da bateria e do ambiente conferido por parecer do auditor, não pelo validador",
+     "registro": "docs/auditoria/1.4.0/i15-reducao-escopo.md",
+     "motivo": "o validador não confrontava a saúde das fontes com escopo, contagens e commit"
     }
    ]
   },

@@ -673,16 +673,22 @@ def test_b5_manifesto_inicial_adia_o_i1_2_e_o_i2_6_incorpora_o_escopo():
     m = json.loads(MANIFESTO_REPO.read_text(encoding="utf-8"))
     i1, i2 = m["incrementos"][0], m["incrementos"][1]
     assert {it["id"]: it["estado"] for it in i1["itens"]}["I1.2"] == "adiado"
-    assert i1["reducoes_de_escopo"] == [{
+    reducoes = {r["item"]: r for r in i1["reducoes_de_escopo"]}
+    assert set(reducoes) == {"I1.2", "I1.5"}
+    assert reducoes["I1.2"] == {
         "item": "I1.2",
         "data": "2026-10-28",
         "decisao": "D5: passe final independente COM BLOQUEADOR sobre o escopo reduzido; I1.2 adiado inteiro para I2.6",
         "registro": "docs/auditoria/1.4.0/pr10-adiamento.md",
-        "motivo": i1["reducoes_de_escopo"][0]["motivo"],
-    }]
-    assert i1["rotulo"] == ("1.4.0a1: sem íntegras do STJ; I1.2 adiado para 1.4.0a2 (I2.6) "
-                            "após passe final com bloqueador")
-    assert (RAIZ / i1["reducoes_de_escopo"][0]["registro"]).is_file()
+        "motivo": reducoes["I1.2"]["motivo"],
+    }
+    # Correção de registro pela decisão 0070: a redução do I1.5 consta do manifesto e do rótulo.
+    assert {it["id"]: it["estado"] for it in i1["itens"]}["I1.5"] == "reduzido"
+    assert reducoes["I1.5"]["registro"] == "docs/auditoria/1.4.0/i15-reducao-escopo.md"
+    assert i1["rotulo"] == ("1.4.0a1: sem íntegras do STJ (I1.2 adiado para I2.6); manifesto de aceite com "
+                            "conferência material da bateria e da instalação por parecer do auditor (I1.5 reduzido)")
+    for r in reducoes.values():
+        assert (RAIZ / r["registro"]).is_file()
     assert (RAIZ / "docs/auditoria/1.4.0/pr10-reducao-escopo.md").is_file()
     assert "I1.2" in next(it for it in i2["itens"] if it["id"] == "I2.6")["nota"]
 
@@ -1073,7 +1079,7 @@ def test_estado_inicial_do_plano_1_4_0():
     assert [k for k, i in incs.items() if i["rotulo"] is not None] == ["I1"]
     estados = {it["id"]: it["estado"] for it in incs["I1"]["itens"]}
     assert estados == {"I1.1": "concluido", "I1.2": "adiado", "I1.3": "concluido", "I1.4": "pendente",
-                       "I1.5": "pendente", "I1.6": "concluido", "S0": "pendente"}
+                       "I1.5": "reduzido", "I1.6": "concluido", "S0": "pendente"}
     assert "I2.6" in {it["id"] for it in incs["I2"]["itens"]}
     assert all(e["estado"] == "pendente" for i in incs.values() for e in i["etapas"].values())
     assert all(e["evidencias"] == [] for i in incs.values() for e in i["etapas"].values())
