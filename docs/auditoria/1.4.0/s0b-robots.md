@@ -73,7 +73,7 @@ transporte decide a detecção antes dele. O efeito pedido é obtido por `robots
 
 | Verificação | Resultado |
 |---|---|
-| Suíte completa `pytest -m "not live"`, Python 3.13.18, Linux | 7273 passed, 9 skipped, 34 deselected (990 s). A primeira execução teve 2 falhas em `test_selecao_wheel` (o módulo de teste do orquestrador abria `scripts/` na coleta); corrigido por carga sob demanda e a suíte repetida inteira |
+| Suíte completa `pytest -m "not live"`, Python 3.13.18, Linux | 7273 passed, 9 skipped, 34 deselected (990 s) antes da correção do supervisor e do rebase; depois: ver abaixo. A primeira execução teve 2 falhas em `test_selecao_wheel` (o módulo de teste do orquestrador abria `scripts/` na coleta); corrigido por carga sob demanda e a suíte repetida inteira |
 | Arquivos tocados e vizinhos, Python 3.11.18, Linux (`test_robots_s0`, `test_s0_orquestrar`, `test_sondas`, `test_captura_instrumento`, `test_captura`, `test_garantias_estruturais`, `test_challenge`, `test_categorias_indisponibilidade`) | 412 passed |
 | `test_selecao_wheel` + testes novos, 3.13 e 3.11 | 122 passed em cada |
 | Ruff (`scripts/ruff_catraca.py`), `git diff --check` | sem achado novo; sem erro de espaço |
@@ -81,3 +81,7 @@ transporte decide a detecção antes dele. O efeito pedido é obtido por `robots
 
 Não verificado: Python 3.12 e 3.14 e Windows (o CI roda 3.11 a 3.14 em Linux e Windows). O código não usa nada
 específico de plataforma além de `PureWindowsPath` para o nome da pasta de saída do roteiro.
+
+Depois da correção do supervisor e do rebase sobre `origin/main` (`624f8a9`): suíte completa em Python 3.13.18,
+7602 passed, 9 skipped, 34 deselected (983 s); arquivos tocados e vizinhos em 3.11.18, 417 passed; Ruff
+(`scripts/ruff_catraca.py`) e `git diff --check` sem achado.
