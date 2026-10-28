@@ -135,5 +135,5 @@ Escolhas de interpretação a confirmar pelo supervisor: (1) o TJRS saiu do cat�
 PYTHONPATH=<caminho absoluto do worktree> python scripts/ruff_catraca.py -> rc 0
 ruff check <arquivos tocados>                                         -> All checks passed
 git diff --check                                                      -> limpo
-PYTHONPATH=<caminho absoluto do worktree> pytest tests -q -m "not live" -p no:cacheprovider -x -> 7152 passed, 9 skipped, 34 deselected em 899 s (rc 0)
+PYTHONPATH=<caminho absoluto do worktree> pytest tests -q -m "not live" -p no:cacheprovider -> 7152 passed, 9 skipped, 34 deselected em 899 s (rc 0)
 ```
