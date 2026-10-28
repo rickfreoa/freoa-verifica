@@ -83,3 +83,14 @@ Verificação (rodada 3):
 - Ruff (`scripts/ruff_catraca.py` e `ruff check` nos dois arquivos): sem achado. `git diff --check`: limpo. `validar` no manifesto do repositório: válido.
 - Suíte offline completa, `pytest tests -q -m "not live"`: 7314 passed, 9 skipped, 34 deselected, em 870 s (sem falhas).
 - Pendente de CI: matriz Windows e Python 3.11 a 3.14.
+
+## Redução de escopo (pós-r3)
+
+Redução de escopo pelo D5 em 28/10/2026, após três rodadas COM BLOQUEADOR; registro em `docs/auditoria/1.4.0/i15-reducao-escopo.md` e decisão 0068 reescrita.
+
+- O manifesto deixa de pretender validar o CONTEÚDO da bateria live e do ambiente. A conferência material passa ao auditor, por recibo de parecer, como na 1.3.0.
+- `bateria_live` (etapas 2 e 8): `relatorio`, `saude_fontes` (sha256 calculado pelo `registrar`, reconferido no `validar`), `commit` e `parecer_bateria` (com `parecer_bateria_sha256`), parecer local terminado em `SEM BLOQUEADOR`. Removidos: `aprovados`, `xfail`, `falhas`, `escopo`, `ambiente`, `falhas_fora_do_escopo` e a leitura do `saude-fontes.json`.
+- `instalacao` (etapa 7): campos anteriores mais `parecer_instalacao` (com `parecer_instalacao_sha256`). `doctor` mantém `ok` e `alertas`.
+- `snapshot.pacotes`: lista com ao menos um pacote e digests; nada além disso é afirmado.
+- Os bloqueadores B1 e B2 da r3 e os importantes (ambiente, redação da 0068) deixam de ser regra do validar: sem `parecer_bateria` válido (ausente, inexistente, hash errado, COM BLOQUEADOR) o fechamento é recusado, mesmo com relatório "BATERIA NAO EXECUTADA" e saúde vazia.
+- Passe final independente a seguir; com bloqueador, o I1.5 é adiado e o I1 não fecha pela seção 5 até nova versão.

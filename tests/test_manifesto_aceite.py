@@ -46,7 +46,6 @@ SPEC = "docs/spec.md"
 RELATORIO = "docs/relatorio.md"
 SAUDE = "docs/saude-fontes.json"
 JOBS_OK = [{"nome": n, "conclusao": "success"} for n in ma.JOBS_CI]
-AMBIENTE = {"so": "Windows 11", "python": "3.13.1", "pais_ip": "BR"}
 # Formato real de tests/live/conftest.py: completa e fontes[fonte].testes[].
 SAUDE_OK = {
     "commit": C_TESTE, "run_id": None, "inicio": DATA, "fim": DATA, "completa": True,
@@ -59,6 +58,8 @@ SAUDE_OK = {
     },
 }
 PARECER = "docs/auditoria/1.4.0/parecer-r2.md"
+PARECER_BATERIA = "docs/auditoria/1.4.0/parecer-bateria.md"
+PARECER_INSTALACAO = "docs/auditoria/1.4.0/parecer-instalacao.md"
 REGISTRO = "docs/auditoria/1.4.0/pr10-reducao-escopo.md"
 
 
@@ -103,10 +104,9 @@ def _sha_arquivo(raiz, rel):
 
 def _bateria(raiz, commit, **trocas):
     campos = {
-        "relatorio": RELATORIO, "sha256": _sha_arquivo(raiz, RELATORIO), "commit": commit,
-        "aprovados": 5, "xfail": 1, "falhas": 0, "escopo": ["stj"], "ambiente": dict(AMBIENTE),
-        "saude_fontes": SAUDE, "saude_fontes_sha256": _sha_arquivo(raiz, SAUDE),
-        "falhas_fora_do_escopo": [],
+        "relatorio": RELATORIO, "sha256": _sha_arquivo(raiz, RELATORIO),
+        "saude_fontes": SAUDE, "saude_fontes_sha256": _sha_arquivo(raiz, SAUDE), "commit": commit,
+        "parecer_bateria": PARECER_BATERIA, "parecer_bateria_sha256": _sha_arquivo(raiz, PARECER_BATERIA),
     }
     campos.update(trocas)
     return _ev("bateria_live", **campos)
@@ -134,7 +134,8 @@ def _etapas_validas(raiz):
                 bateria_s4="aprovada", lista_embutida_commit=C_LISTA)]),
         "7_instalacao": _etapa("concluida", [
             _ev("instalacao", concluida=True, commit=C_MERGE, attestation_verificada=True,
-                digests=[SHA_SNAP, SHA_PACOTE])]),
+                digests=[SHA_SNAP, SHA_PACOTE], parecer_instalacao=PARECER_INSTALACAO,
+                parecer_instalacao_sha256=_sha_arquivo(raiz, PARECER_INSTALACAO))]),
         "8_execucao": _etapa("concluida", [
             _ev("doctor", ok=True, alertas=[ALERTA]),
             _bateria(raiz, C_MERGE),
@@ -164,7 +165,10 @@ class Repo:
         (raiz / SAUDE).parent.mkdir(parents=True, exist_ok=True)
         (raiz / SAUDE).write_text(json.dumps(SAUDE_OK, ensure_ascii=False, indent=2), encoding="utf-8")
         for rel, texto in ((SPEC, "especificação\n"), (RELATORIO, "relatório\n"),
-                           (PARECER, "Achados: nenhum.\nSEM BLOQUEADOR\n"), (REGISTRO, "redução\n")):
+                           (PARECER, "Achados: nenhum.\nSEM BLOQUEADOR\n"),
+                           (PARECER_BATERIA, "Bateria conferida pelo auditor.\nSEM BLOQUEADOR\n"),
+                           (PARECER_INSTALACAO, "Instalação conferida pelo auditor.\nSEM BLOQUEADOR\n"),
+                           (REGISTRO, "redução\n")):
             arq = raiz / rel
             arq.parent.mkdir(parents=True, exist_ok=True)
             arq.write_text(texto, encoding="utf-8")
@@ -347,6 +351,9 @@ def test_b3_tipo_outro_nas_etapas_1_a_3_e_reprovado(repo):
         ("2_teste", "run_ci", "conclusao", "failure", "'success'"),
         ("2_teste", "bateria_live", "relatorio", "docs/nao-existe.md", "arquivo inexistente"),
         ("2_teste", "bateria_live", "commit", "d" * 40, "difere de 2_teste run_ci.commit"),
+        ("2_teste", "bateria_live", "parecer_bateria", "docs/nao-existe.md", "arquivo inexistente"),
+        ("8_execucao", "bateria_live", "parecer_bateria_sha256", "9" * 64, "difere do sha256 dos bytes"),
+        ("7_instalacao", "instalacao", "parecer_instalacao", "https://x/y.md", "caminho"),
         ("2_teste", "run_ci", "jobs", "success", "lista de {nome, conclusao}"),
         ("3_commit", "commit", "commit", "d" * 40, "3_commit commit"),
         ("4_incorporacao", "parecer", "commit_auditado", "d" * 40, "commit_auditado"),
@@ -872,12 +879,13 @@ def test_registrar_grava_o_recibo_com_campos_na_ordem_e_converte_booleanos(repo)
     assert repo.run("registrar", "--incremento", "I1", "--etapa", "7_instalacao", "--tipo", "instalacao",
                     "--campo", f"digests={SHA_SNAP}", "--campo", "concluida=true",
                     "--campo", f"commit={C_MERGE}", "--campo", "attestation_verificada=true",
+                    "--campo", f"parecer_instalacao={PARECER_INSTALACAO}",
                     "--estado", "concluida", "--nota", "feito") == 0
     etapa = repo.dados()["incrementos"][0]["etapas"]["7_instalacao"]
     assert etapa["estado"] == "concluida" and etapa["nota"] == "feito"
     ev = etapa["evidencias"][0]
     assert list(ev) == ["tipo", "campos", "data"]
-    assert list(ev["campos"]) == ["concluida", "commit", "attestation_verificada", "digests"]
+    assert list(ev["campos"]) == list(ma.CAMPOS_POR_TIPO["instalacao"])
     assert ev["campos"]["concluida"] is True and ev["campos"]["attestation_verificada"] is True
     dt.datetime.fromisoformat(ev["data"])
 
@@ -935,9 +943,8 @@ def test_registrar_incremento_inexistente(repo, capsys):
 
 
 def _campos_bateria_cli(commit):
-    return [f"relatorio={RELATORIO}", f"commit={commit}", "aprovados=5", "xfail=1", "falhas=0", "escopo=stj",
-            "ambiente.so=Windows 11", "ambiente.python=3.13.1", "ambiente.pais_ip=BR", f"saude_fontes={SAUDE}",
-            "falhas_fora_do_escopo="]
+    return [f"relatorio={RELATORIO}", f"saude_fontes={SAUDE}", f"commit={commit}",
+            f"parecer_bateria={PARECER_BATERIA}"]
 
 
 def test_fluxo_completo_pela_cli_fecha_o_incremento(repo):
@@ -957,7 +964,8 @@ def test_fluxo_completo_pela_cli_fecha_o_incremento(repo):
         ("6_distribuicao", "snapshot", [f"pacotes=nucleo={SHA_SNAP}", f"pacotes=stj={SHA_PACOTE}",
                                         "bateria_s4=aprovada", f"lista_embutida_commit={C_LISTA}"]),
         ("7_instalacao", "instalacao", ["concluida=true", f"commit={C_MERGE}", "attestation_verificada=true",
-                                        f"digests={SHA_SNAP}", f"digests={SHA_PACOTE}"]),
+                                        f"digests={SHA_SNAP}", f"digests={SHA_PACOTE}",
+                                        f"parecer_instalacao={PARECER_INSTALACAO}"]),
         ("8_execucao", "doctor", ["ok=true", f"alertas={ALERTA}"]),
         ("8_execucao", "bateria_live", _campos_bateria_cli(C_MERGE)),
     ]
@@ -976,7 +984,9 @@ def test_fluxo_completo_pela_cli_fecha_o_incremento(repo):
     bat = repo.dados()["incrementos"][0]["etapas"]["2_teste"]["evidencias"][1]["campos"]
     assert bat["sha256"] == _sha_arquivo(repo.raiz, RELATORIO)
     assert bat["saude_fontes_sha256"] == _sha_arquivo(repo.raiz, SAUDE)
-    assert bat["aprovados"] == 5 and bat["escopo"] == ["stj"] and bat["ambiente"] == AMBIENTE
+    assert bat["parecer_bateria_sha256"] == _sha_arquivo(repo.raiz, PARECER_BATERIA)
+    ins = repo.dados()["incrementos"][0]["etapas"]["7_instalacao"]["evidencias"][0]["campos"]
+    assert ins["parecer_instalacao_sha256"] == _sha_arquivo(repo.raiz, PARECER_INSTALACAO)
     assert repo.run("fechar", "--incremento", "I1") == 0
     assert repo.dados()["incrementos"][0]["estado"] == "concluido"
 
@@ -1110,194 +1120,152 @@ def test_documento_de_auditoria_nao_se_contradiz_sobre_o_ruff():
     assert "nao_aplicavel" not in texto.replace("`nao_aplicavel` deixou de existir", "")
 
 
-# ---------------------------------------------------------------- r2 B1: recibo da bateria live
+# ---------------------------------------------------------------- r4: bateria e instalação por parecer do auditor
+
+
+def _inc_com(repo, etapa, tipo, **trocas):
+    """Incremento válido com campos trocados no recibo `tipo` da etapa."""
+    inc = _concluido(repo.raiz)
+    ev = next(e for e in inc["etapas"][etapa]["evidencias"] if e["tipo"] == tipo)
+    ev["campos"].update(trocas)
+    return inc
 
 
 def _inc_bateria(repo, etapa="2_teste", **trocas):
-    inc = _concluido(repo.raiz)
-    evs = inc["etapas"][etapa]["evidencias"]
-    novo = _bateria(repo.raiz, C_TESTE if etapa == "2_teste" else C_MERGE, **trocas)
-    evs[next(i for i, e in enumerate(evs) if e["tipo"] == "bateria_live")] = novo
-    return inc
+    return _inc_com(repo, etapa, "bateria_live", **trocas)
 
 
-def _inc_ambas(repo, **trocas):
-    """Bateria das etapas 2 e 8 com as mesmas trocas (os dois recibos apontam para o mesmo saude-fontes)."""
-    inc = _inc_bateria(repo, "2_teste", **trocas)
-    evs = inc["etapas"]["8_execucao"]["evidencias"]
-    evs[next(i for i, e in enumerate(evs) if e["tipo"] == "bateria_live")] = _bateria(repo.raiz, C_MERGE, **trocas)
-    return inc
+def _reescreve(repo, rel, texto):
+    (repo.raiz / rel).write_text(texto, encoding="utf-8")
 
 
-def _salva_saude(repo, saude):
-    (repo.raiz / SAUDE).write_text(json.dumps(saude, ensure_ascii=False), encoding="utf-8")
-    return _sha_arquivo(repo.raiz, SAUDE)
+def test_r4_recibo_da_bateria_so_tem_os_campos_da_reducao():
+    assert list(ma.CAMPOS_POR_TIPO["bateria_live"]) == [
+        "relatorio", "sha256", "saude_fontes", "saude_fontes_sha256", "commit",
+        "parecer_bateria", "parecer_bateria_sha256"]
+    assert list(ma.CAMPOS_POR_TIPO["instalacao"]) == [
+        "concluida", "commit", "attestation_verificada", "digests",
+        "parecer_instalacao", "parecer_instalacao_sha256"]
+    assert list(ma.CAMPOS_POR_TIPO["doctor"]) == ["ok", "alertas"]
+    for retirado in ("aprovados", "xfail", "falhas", "escopo", "ambiente", "falhas_fora_do_escopo"):
+        assert retirado not in ma.CAMPOS_POR_TIPO["bateria_live"]
+    assert not hasattr(ma, "_motivos_saude") and not hasattr(ma, "_motivos_bateria")
 
 
-def test_r2_b1_recibo_so_com_caminho_e_commit_nao_vale_mais(repo):
-    """Cenário do parecer: `bateria_live` só com caminho e commit."""
-    inc = _concluido(repo.raiz)
-    for etapa in ("2_teste", "8_execucao"):
-        evs = inc["etapas"][etapa]["evidencias"]
-        c = next(e for e in evs if e["tipo"] == "bateria_live")["campos"]
-        c.clear()
-        c.update(relatorio=RELATORIO, commit=C_TESTE if etapa == "2_teste" else C_MERGE)
-    erros = repo.erros(_manifesto([inc]))
-    for campo in ("sha256", "aprovados", "xfail", "falhas", "escopo", "ambiente", "saude_fontes",
-                  "saude_fontes_sha256", "falhas_fora_do_escopo"):
-        assert any(f"falta o campo '{campo}'" in e for e in erros), campo
+@pytest.mark.parametrize("campo", ["aprovados", "xfail", "falhas", "escopo", "ambiente", "falhas_fora_do_escopo"])
+def test_r4_campo_retirado_da_bateria_e_recusado(repo, campo):
+    erros = repo.erros(_manifesto([_inc_bateria(repo, **{campo: 1})]))
+    assert any(f"campo não previsto '{campo}'" in e for e in erros)
 
 
 @pytest.mark.parametrize("etapa", ["2_teste", "8_execucao"])
-def test_r2_b1_relatorio_bateria_nao_executada_reprova(repo, etapa):
-    """Cenário do parecer: relatório 'BATERIA NAO EXECUTADA' fechava o incremento."""
-    (repo.raiz / RELATORIO).write_text("BATERIA NAO EXECUTADA\n", encoding="utf-8")
-    inc = _inc_bateria(repo, etapa, aprovados=0, xfail=0, sha256=_sha_arquivo(repo.raiz, RELATORIO))
+def test_r4_bateria_sem_parecer_valido_recusa_o_fechamento(repo, etapa, capsys):
+    """Cenário da r3: relatório 'BATERIA NAO EXECUTADA' e saúde vazia. Sem parecer válido, `fechar` recusa."""
+    _reescreve(repo, RELATORIO, "BATERIA NAO EXECUTADA\n")
+    _reescreve(repo, SAUDE, "{}")
+    commit = C_TESTE if etapa == "2_teste" else C_MERGE
+    bat = _bateria(repo.raiz, commit)
+    for variante in ("ausente", "inexistente", "hash_errado", "com_bloqueador", "url"):
+        campos = dict(bat["campos"])
+        if variante == "ausente":
+            del campos["parecer_bateria"], campos["parecer_bateria_sha256"]
+        elif variante == "inexistente":
+            campos["parecer_bateria"] = "docs/nao-existe.md"
+        elif variante == "hash_errado":
+            campos["parecer_bateria_sha256"] = "9" * 64
+        elif variante == "url":
+            campos["parecer_bateria"] = "https://x/parecer.md"
+        else:
+            _reescreve(repo, PARECER_BATERIA, "Achado B1.\nCOM BLOQUEADOR\n")
+            campos["parecer_bateria_sha256"] = _sha_arquivo(repo.raiz, PARECER_BATERIA)
+        inc = _concluido(repo.raiz)
+        evs = inc["etapas"][etapa]["evidencias"]
+        evs[next(i for i, e in enumerate(evs) if e["tipo"] == "bateria_live")] = {**bat, "campos": campos}
+        repo.cria(_manifesto([inc]))
+        assert repo.run("fechar", "--incremento", "I1") == 1, variante
+        capsys.readouterr()
+        assert repo.dados()["incrementos"][0]["estado"] == "aberto", variante
+
+
+def test_r4_parecer_da_bateria_valido_fecha_mesmo_com_relatorio_e_saude_quaisquer(repo):
+    """Fronteira da redução: o validar só confere existência, hash e parecer; o conteúdo é do auditor."""
+    _reescreve(repo, RELATORIO, "BATERIA NAO EXECUTADA\n")
+    _reescreve(repo, SAUDE, "{}")
+    assert repo.erros(_manifesto([_concluido(repo.raiz)])) == []
+    repo.cria(_manifesto([_concluido(repo.raiz)]))
+    assert repo.run("fechar", "--incremento", "I1") == 0
+
+
+@pytest.mark.parametrize("etapa", ["2_teste", "8_execucao"])
+@pytest.mark.parametrize("ultima", ["COM BLOQUEADOR", "sem bloqueador", "SEM BLOQUEADOR.", "SEM BLOQUEADOR\nrodada 4"])
+def test_r4_parecer_da_bateria_com_ultima_linha_diferente_reprova(repo, etapa, ultima):
+    _reescreve(repo, PARECER_BATERIA, f"Achados.\n{ultima}\n")
+    sha = _sha_arquivo(repo.raiz, PARECER_BATERIA)
+    erros = repo.erros(_manifesto([_inc_bateria(repo, etapa, parecer_bateria_sha256=sha)]))
+    assert any("parecer_bateria" in e and "última linha" in e for e in erros), erros
+
+
+def test_r4_parecer_da_bateria_alterado_depois_do_registro_reprova(repo):
+    inc = _concluido(repo.raiz)
+    _reescreve(repo, PARECER_BATERIA, "Outro texto.\nSEM BLOQUEADOR\n")
     erros = repo.erros(_manifesto([inc]))
-    assert any("aprovados + xfail deve ser pelo menos 1" in e for e in erros), erros
-    repo.cria(_manifesto([inc]))
-    assert repo.run("fechar", "--incremento", "I1") == 1
-
-
-def test_r2_b1_aprovados_mais_xfail_basta_um_de_cada(repo):
-    assert repo.erros(_manifesto([_inc_bateria(repo, aprovados=0, xfail=1)])) == []
-    assert repo.erros(_manifesto([_inc_bateria(repo, aprovados=1, xfail=0)])) == []
-
-
-@pytest.mark.parametrize("campo", ["aprovados", "xfail", "falhas"])
-@pytest.mark.parametrize("valor", [-1, "3", 1.5, True, None])
-def test_r2_b1_contagens_sao_inteiros_nao_negativos(repo, campo, valor):
-    erros = repo.erros(_manifesto([_inc_bateria(repo, **{campo: valor})]))
-    assert any(f"campos.{campo}: deve ser inteiro maior ou igual a 0" in e for e in erros), erros
-
-
-def test_r2_b1_sha256_do_relatorio_e_reconferido(repo):
-    inc = _inc_bateria(repo)
-    (repo.raiz / RELATORIO).write_text("relatório alterado depois do registro\n", encoding="utf-8")
-    assert any("sha256 registrado difere do sha256 dos bytes de relatorio" in e for e in repo.erros(_manifesto([inc])))
-
-
-def test_r2_b1_sha256_da_saude_e_reconferido(repo):
-    inc = _inc_bateria(repo)
-    _salva_saude(repo, {**SAUDE_OK, "fim": "2030-01-01T00:00:00+00:00"})
-    erros = repo.erros(_manifesto([inc]))
-    assert any("saude_fontes_sha256 registrado difere" in e for e in erros)
+    assert any("parecer_bateria" in e and "difere do sha256" in e for e in erros)
 
 
 @pytest.mark.parametrize("campo", ["relatorio", "saude_fontes"])
+def test_r4_sha256_do_relatorio_e_da_saude_continuam_reconferidos(repo, campo):
+    inc = _concluido(repo.raiz)
+    _reescreve(repo, RELATORIO if campo == "relatorio" else SAUDE, "{}\n")
+    erros = repo.erros(_manifesto([inc]))
+    assert any(f"bateria_live.{campo}" in e and "difere do sha256" in e for e in erros)
+
+
+@pytest.mark.parametrize("campo", ["relatorio", "saude_fontes", "parecer_bateria"])
 @pytest.mark.parametrize("ref", ["docs/nao-existe.md", "../fora.json", "/etc/passwd", "https://x/y.json"])
-def test_r2_b1_caminhos_da_bateria_sao_confinados_e_existem(repo, campo, ref):
+def test_r4_caminhos_da_bateria_sao_confinados_e_existem(repo, campo, ref):
     erros = repo.erros(_manifesto([_inc_bateria(repo, **{campo: ref})]))
-    assert any(f"bateria_live: {campo}:" in e or f"bateria_live.campos.{campo}" in e or f"bateria_live.{campo}" in e
-               for e in erros), erros
+    assert any(f"bateria_live.{campo}" in e for e in erros), erros
 
 
-@pytest.mark.parametrize("escopo", [[], "stj", ["stj", "stj"], ["stj", ""], [1]])
-def test_r2_b1_escopo_e_lista_nao_vazia_de_fontes(repo, escopo):
-    assert any("campos.escopo:" in e for e in repo.erros(_manifesto([_inc_bateria(repo, escopo=escopo)])))
+def test_r4_commit_da_bateria_mantem_as_igualdades_entre_etapas(repo):
+    assert any("difere de 2_teste run_ci.commit" in e
+               for e in repo.erros(_manifesto([_inc_bateria(repo, "2_teste", commit="d" * 40)])))
+    assert any("difere de 4_incorporacao merge.commit" in e
+               for e in repo.erros(_manifesto([_inc_bateria(repo, "8_execucao", commit="d" * 40)])))
 
 
-@pytest.mark.parametrize(
-    "ambiente",
-    [{}, {"so": "Windows"}, {"so": "w", "python": "3.13", "pais_ip": ""}, {"so": "w", "python": "3", "pais_ip": "BR", "x": "y"},
-     "Windows 11", None],
-)
-def test_r2_b1_ambiente_exige_so_python_e_pais_ip(repo, ambiente):
-    assert any("campos.ambiente:" in e for e in repo.erros(_manifesto([_inc_bateria(repo, ambiente=ambiente)])))
+@pytest.mark.parametrize("variante", ["ausente", "inexistente", "hash_errado", "com_bloqueador", "url"])
+def test_r4_instalacao_sem_parecer_valido_recusa_o_fechamento(repo, variante, capsys):
+    campos = {"parecer_instalacao": PARECER_INSTALACAO}
+    if variante == "ausente":
+        inc = _concluido(repo.raiz)
+        ev = inc["etapas"]["7_instalacao"]["evidencias"][0]["campos"]
+        del ev["parecer_instalacao"], ev["parecer_instalacao_sha256"]
+    else:
+        if variante == "inexistente":
+            campos["parecer_instalacao"] = "docs/nao-existe.md"
+        elif variante == "hash_errado":
+            campos["parecer_instalacao_sha256"] = "9" * 64
+        elif variante == "url":
+            campos["parecer_instalacao"] = "https://x/parecer.md"
+        else:
+            _reescreve(repo, PARECER_INSTALACAO, "Achado.\nCOM BLOQUEADOR\n")
+            campos["parecer_instalacao_sha256"] = _sha_arquivo(repo.raiz, PARECER_INSTALACAO)
+        inc = _inc_com(repo, "7_instalacao", "instalacao", **campos)
+    repo.cria(_manifesto([inc]))
+    assert repo.run("fechar", "--incremento", "I1") == 1
+    assert "instalacao" in capsys.readouterr().err
+    assert repo.dados()["incrementos"][0]["estado"] == "aberto"
 
 
-def test_r2_b1_falhas_igual_ao_tamanho_de_falhas_fora_do_escopo(repo):
-    fora = [{"teste": "tests/live/test_live_tjap.py::test_b", "motivo": "WAF", "registro": REGISTRO}]
-    assert repo.erros(_manifesto([_inc_bateria(repo, falhas=1, falhas_fora_do_escopo=fora)])) == []
-    erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=0, falhas_fora_do_escopo=fora)]))
-    assert any("falhas (0) difere de len(falhas_fora_do_escopo) (1)" in e for e in erros)
-    erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=2, falhas_fora_do_escopo=fora)]))
-    assert any("falhas (2) difere" in e for e in erros)
+def test_r4_instalacao_mantem_os_demais_campos_e_o_doctor_so_ok_e_alertas(repo):
+    assert any("difere de 4_incorporacao merge.commit" in e
+               for e in repo.erros(_manifesto([_inc_com(repo, "7_instalacao", "instalacao", commit=C_TESTE)])))
+    erros = repo.erros(_manifesto([_inc_com(repo, "8_execucao", "doctor", parecer_instalacao=PARECER)]))
+    assert any("campo não previsto 'parecer_instalacao'" in e for e in erros)
 
 
-def test_r2_b1_falha_de_fonte_do_escopo_nao_pode_estar_fora_do_escopo(repo):
-    fora = [{"teste": "tests/live/test_live_stj.py::test_a", "motivo": "ignorada", "registro": REGISTRO}]
-    erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=1, falhas_fora_do_escopo=fora)]))
-    assert any("falha de fonte do escopo em falhas_fora_do_escopo" in e for e in erros)
-
-
-def test_r2_b1_falha_fora_do_escopo_exige_registro_existente_e_confinado(repo):
-    for ref in ("docs/nao-existe.md", "../fora.md", "https://x/y"):
-        fora = [{"teste": "tests/live/test_live_tjap.py::test_b", "motivo": "WAF", "registro": ref}]
-        erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=1, falhas_fora_do_escopo=fora)]))
-        assert any("falhas_fora_do_escopo 'tests/live/test_live_tjap.py::test_b': registro:" in e for e in erros), ref
-
-
-@pytest.mark.parametrize(
-    "fora",
-    [[{"teste": "t", "motivo": "m"}], [{"teste": "t", "motivo": "m", "registro": REGISTRO, "x": 1}],
-     [{"teste": "", "motivo": "m", "registro": REGISTRO}], ["t"], "t",
-     [{"teste": "tests/live/test_live_a.py::t", "motivo": "m", "registro": REGISTRO},
-      {"teste": "tests/live/test_live_a.py::t", "motivo": "m", "registro": REGISTRO}]],
-)
-def test_r2_b1_forma_de_falhas_fora_do_escopo(repo, fora):
-    n = len(fora) if isinstance(fora, list) else 0
-    erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=n, falhas_fora_do_escopo=fora)]))
-    assert any("campos.falhas_fora_do_escopo:" in e for e in erros), erros
-
-
-def test_r2_b1_saude_incompleta_reprova(repo):
-    for completa in (False, None, "true"):
-        sha = _salva_saude(repo, {**SAUDE_OK, "completa": completa})
-        erros = repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)]))
-        assert any("'completa' deve ser true" in e for e in erros), completa
-
-
-def test_r2_b1_regressao_precisa_estar_em_falhas_fora_do_escopo(repo):
-    nome = "tests/live/test_live_tjap.py::test_b"
-    saude = json.loads(json.dumps(SAUDE_OK))
-    saude["fontes"]["tjap"]["testes"][0].update(estado="regressao", categoria=None)
-    sha = _salva_saude(repo, saude)
-    erros = repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)]))
-    assert any(f"regressão fora de falhas_fora_do_escopo: {nome}" in e for e in erros)
-    fora = [{"teste": nome, "motivo": "regressão em fonte fora do escopo, registrada", "registro": REGISTRO}]
-    assert repo.erros(_manifesto([_inc_ambas(repo, saude_fontes_sha256=sha, falhas=1,
-                                             falhas_fora_do_escopo=fora)])) == []
-
-
-def test_r2_b1_regressao_em_fonte_do_escopo_nunca_passa(repo):
-    nome = "tests/live/test_live_stj.py::test_a"
-    saude = json.loads(json.dumps(SAUDE_OK))
-    saude["fontes"]["stj"]["testes"][0].update(estado="regressao")
-    sha = _salva_saude(repo, saude)
-    fora = [{"teste": nome, "motivo": "m", "registro": REGISTRO}]
-    erros = repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha, falhas=1, falhas_fora_do_escopo=fora)]))
-    assert any("falha de fonte do escopo" in e for e in erros)
-    assert any("regressão fora" in e for e in repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)])))
-
-
-@pytest.mark.parametrize("categoria", [None, ""])
-def test_r2_b1_unavailable_exige_categoria(repo, categoria):
-    saude = json.loads(json.dumps(SAUDE_OK))
-    saude["fontes"]["tjap"]["testes"][0]["categoria"] = categoria
-    sha = _salva_saude(repo, saude)
-    erros = repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)]))
-    assert any("indisponibilidade sem categoria" in e for e in erros)
-
-
-@pytest.mark.parametrize("bruto", [b"{", b"[]", b'{"completa": true}', b'{"completa": true, "fontes": []}', b"\xff"])
-def test_r2_b1_saude_malformada_reprova(repo, bruto):
-    (repo.raiz / SAUDE).write_bytes(bruto)
-    sha = _sha_arquivo(repo.raiz, SAUDE)
-    assert repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)])), bruto
-
-
-def test_r2_b1_a_etapa_8_tambem_confere_a_bateria(repo):
-    erros = repo.erros(_manifesto([_inc_bateria(repo, "8_execucao", aprovados=0, xfail=0)]))
-    assert any("8_execucao: bateria_live:" in e and "aprovados + xfail" in e for e in erros)
-
-
-def test_r2_b1_fonte_do_teste_usa_a_regra_do_conftest():
-    assert ma._fonte_do_teste("tests/live/test_live_stj.py::test_a[x]") == "stj"
-    assert ma._fonte_do_teste("tests\\live\\test_live_tjsp.py::t") == "tjsp"
-
-
-def test_r2_b1_registrar_bateria_calcula_os_dois_sha256(repo):
+def test_r4_registrar_bateria_calcula_os_tres_sha256(repo):
     repo.cria()
     args = ["registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "bateria_live",
             *[x for c in _campos_bateria_cli(C_TESTE) for x in ("--campo", c)]]
@@ -1306,11 +1274,11 @@ def test_r2_b1_registrar_bateria_calcula_os_dois_sha256(repo):
     assert list(campos) == list(ma.CAMPOS_POR_TIPO["bateria_live"])
     assert campos["sha256"] == _sha_arquivo(repo.raiz, RELATORIO)
     assert campos["saude_fontes_sha256"] == _sha_arquivo(repo.raiz, SAUDE)
-    assert campos["falhas_fora_do_escopo"] == [] and isinstance(campos["aprovados"], int)
+    assert campos["parecer_bateria_sha256"] == _sha_arquivo(repo.raiz, PARECER_BATERIA)
 
 
-@pytest.mark.parametrize("hash_", ["sha256", "saude_fontes_sha256"])
-def test_r2_b1_registrar_bateria_recusa_sha256_informado(repo, capsys, hash_):
+@pytest.mark.parametrize("hash_", ["sha256", "saude_fontes_sha256", "parecer_bateria_sha256"])
+def test_r4_registrar_bateria_recusa_sha256_informado(repo, capsys, hash_):
     p = repo.cria()
     antes = p.read_bytes()
     args = ["registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "bateria_live",
@@ -1320,26 +1288,51 @@ def test_r2_b1_registrar_bateria_recusa_sha256_informado(repo, capsys, hash_):
     assert p.read_bytes() == antes
 
 
-def test_r2_b1_registrar_bateria_nao_executada_e_recusado(repo, capsys):
+def test_r4_registrar_bateria_exige_o_parecer(repo, capsys):
     p = repo.cria()
     antes = p.read_bytes()
-    campos = [c.replace("aprovados=5", "aprovados=0").replace("xfail=1", "xfail=0") for c in _campos_bateria_cli(C_TESTE)]
+    campos = [c for c in _campos_bateria_cli(C_TESTE) if not c.startswith("parecer_bateria")]
     assert repo.run("registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "bateria_live",
                     *[x for c in campos for x in ("--campo", c)]) == 1
-    assert "aprovados + xfail" in capsys.readouterr().err
+    assert "parecer_bateria" in capsys.readouterr().err
     assert p.read_bytes() == antes
 
 
-def test_r2_b1_registrar_falhas_fora_do_escopo_por_cli(repo):
-    repo.cria()
-    campos = [c for c in _campos_bateria_cli(C_TESTE) if not c.startswith("falhas_fora")]
-    campos = [c.replace("falhas=0", "falhas=1") for c in campos]
-    campos.append(f"falhas_fora_do_escopo=tests/live/test_live_tjap.py::test_b|WAF no TJAP|{REGISTRO}")
+def test_r4_registrar_bateria_com_parecer_com_bloqueador_e_recusado(repo, capsys):
+    p = repo.cria()
+    antes = p.read_bytes()
+    _reescreve(repo, PARECER_BATERIA, "Achado.\nCOM BLOQUEADOR\n")
     assert repo.run("registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "bateria_live",
+                    *[x for c in _campos_bateria_cli(C_TESTE) for x in ("--campo", c)]) == 1
+    assert "SEM BLOQUEADOR" in capsys.readouterr().err
+    assert p.read_bytes() == antes
+
+
+def test_r4_registrar_instalacao_calcula_o_sha256_do_parecer(repo):
+    repo.cria()
+    campos = ["concluida=true", f"commit={C_MERGE}", "attestation_verificada=true", f"digests={SHA_SNAP}",
+              f"parecer_instalacao={PARECER_INSTALACAO}"]
+    assert repo.run("registrar", "--incremento", "I1", "--etapa", "7_instalacao", "--tipo", "instalacao",
                     *[x for c in campos for x in ("--campo", c)]) == 0
-    c = repo.dados()["incrementos"][0]["etapas"]["2_teste"]["evidencias"][0]["campos"]
-    assert c["falhas_fora_do_escopo"] == [
-        {"teste": "tests/live/test_live_tjap.py::test_b", "motivo": "WAF no TJAP", "registro": REGISTRO}]
+    c = repo.dados()["incrementos"][0]["etapas"]["7_instalacao"]["evidencias"][0]["campos"]
+    assert c["parecer_instalacao_sha256"] == _sha_arquivo(repo.raiz, PARECER_INSTALACAO)
+
+
+def test_r4_registrar_instalacao_recusa_sha256_informado_e_exige_o_parecer(repo, capsys):
+    p = repo.cria()
+    antes = p.read_bytes()
+    base = ["concluida=true", f"commit={C_MERGE}", "attestation_verificada=true", f"digests={SHA_SNAP}"]
+    for extra, trecho in (([f"parecer_instalacao={PARECER_INSTALACAO}", f"parecer_instalacao_sha256={'a' * 64}"],
+                           "calculado pelo registrar"), ([], "parecer_instalacao")):
+        assert repo.run("registrar", "--incremento", "I1", "--etapa", "7_instalacao", "--tipo", "instalacao",
+                        *[x for c in (*base, *extra) for x in ("--campo", c)]) == 1
+        assert trecho in capsys.readouterr().err
+        assert p.read_bytes() == antes
+
+
+def test_r4_cli_nao_converte_mais_inteiros_nem_ambiente():
+    assert ma._campos_da_linha([("x", "5"), ("ambiente.so", "w")]) == {"x": "5", "ambiente.so": "w"}
+    assert ma.LISTAS == ("alertas", "digests", "jobs", "pacotes")
 
 
 # ---------------------------------------------------------------- r2 B1: jobs do CI e contrato MCP
@@ -1529,9 +1522,14 @@ DECISAO = RAIZ / "docs" / "decisoes" / "0068-manifesto-de-aceite.md"
 def test_r2_decisao_0068_registra_a_mudanca_de_regra():
     texto = DECISAO.read_text(encoding="utf-8")
     assert texto.startswith("# 0068 — ")
-    for trecho in ("## Contexto", "## Decisão", "## Limites", "seção 5", "D5", "catálogo", "adiament", "SEM BLOQUEADOR",
-                   "sha256", "confinad", "não consulta o GitHub nem a PyPI", "conferência material é do auditor"):
+    for trecho in ("## Contexto", "## Decisão", "## Conferência material do auditor", "seção 5", "D5", "catálogo",
+                   "adiament", "SEM BLOQUEADOR", "sha256", "confinad", "não consulta o GitHub nem a PyPI",
+                   "Redução de escopo pelo D5 em 28/10/2026, após três rodadas COM BLOQUEADOR "
+                   "(registro docs/auditoria/1.4.0/i15-reducao-escopo.md)",
+                   "parecer_bateria", "parecer_instalacao"):
         assert trecho in texto, trecho
+    for retirado in ("forma e coerência", "núcleo e um por tribunal", "falhas_fora_do_escopo", "saude-fontes.json lido"):
+        assert retirado not in texto, retirado
 
 
 def test_r2_nota_do_i2_6_e_linha_do_i1_2_no_plano():
@@ -1549,3 +1547,19 @@ def test_r2_documento_de_auditoria_registra_a_rodada_3():
     assert "## Rodada 3" in texto
     for trecho in ("B1", "B2", "CATALOGO_PLANO", "jobs", "pacotes", "0068", "contrato MCP"):
         assert trecho in texto, trecho
+
+
+REDUCAO = RAIZ / "docs" / "auditoria" / "1.4.0" / "i15-reducao-escopo.md"
+
+
+def test_r4_registro_da_reducao_de_escopo_existe_e_diz_fato_decisao_consequencia():
+    texto = REDUCAO.read_text(encoding="utf-8")
+    for trecho in ("## Fato", "## Decisão", "## Consequência", "B1", "B2", "parecer_bateria", "parecer_instalacao",
+                   "passe final independente", "adiado", "seção 5"):
+        assert trecho in texto, trecho
+
+
+def test_r4_documento_de_auditoria_tem_a_secao_de_reducao():
+    texto = AUDITORIA.read_text(encoding="utf-8")
+    assert "## Redução de escopo (pós-r3)" in texto
+    assert "i15-reducao-escopo.md" in texto

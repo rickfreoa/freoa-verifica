@@ -6,9 +6,11 @@ exceções. `validar` e `fechar` impõem os invariantes a a e; cada escrita vali
 manifesto inteiro antes de gravar e grava de forma atômica.
 
 Limite deliberado: o manifesto registra recibos tipados e confere a coerência entre eles
-(formatos, igualdades de commit, merge, hashes e digest, arquivos do repositório). Ele não
-consulta o GitHub nem a PyPI: a conferência material de run, release, attestation e pacote
-publicado é do auditor.
+(formatos, igualdades de commit, merge, hashes e digest, arquivos do repositório, pareceres locais
+terminados em SEM BLOQUEADOR). Ele não consulta o GitHub nem a PyPI e não valida o CONTEÚDO da
+bateria live nem do ambiente: essa conferência material (execução e cobertura da bateria, commit da
+saúde das fontes, ambiente, completude dos pacotes, run, release, attestation e pacote publicado)
+é do auditor, por recibo de parecer (`parecer_bateria`, `parecer_instalacao`).
 
 Uso:
     python scripts/manifesto_aceite.py validar
@@ -23,12 +25,11 @@ Uso:
     python scripts/manifesto_aceite.py rotulo --incremento I1 --texto ...
     python scripts/manifesto_aceite.py fechar --incremento I1
 
-Cada `--campo chave=valor` é repetível; true e false viram booleano; inteiros decimais viram número.
-Campos de lista acumulam uma ocorrência por elemento (`alertas`, `escopo`, `digests`; `jobs=nome=conclusao`;
-`pacotes=nome=sha256`; `falhas_fora_do_escopo=teste|motivo|registro`); a chave sozinha (`alertas=`) é lista
-vazia. `ambiente` vem em `ambiente.so`, `ambiente.python` e `ambiente.pais_ip`. O sha256 do parecer e os da
-bateria (`sha256` do relatório e `saude_fontes_sha256`) são calculados pelo `registrar` e reconferidos pelo
-`validar`.
+Cada `--campo chave=valor` é repetível; true e false viram booleano.
+Campos de lista acumulam uma ocorrência por elemento (`alertas`, `digests`; `jobs=nome=conclusao`;
+`pacotes=nome=sha256`); a chave sozinha (`alertas=`) é lista vazia. O sha256 do parecer, os da bateria
+(`sha256` do relatório, `saude_fontes_sha256` e `parecer_bateria_sha256`) e o da instalação
+(`parecer_instalacao_sha256`) são calculados pelo `registrar` e reconferidos pelo `validar`.
 
 Catálogo: cada incremento contém exatamente os itens de `CATALOGO_PLANO` (seção 6 do plano); item fora do
 catálogo ou ausente reprova. A retirada de um item só vale pelo procedimento de redução ou adiamento
@@ -82,11 +83,9 @@ CAMPOS_POR_TIPO: dict[str, dict[str, str]] = {
     "especificacao": {"especificacao": "caminho", "ramo": "texto"},
     "run_ci": {"url": "url_run", "commit": "commit", "conclusao": "sucesso", "jobs": "jobs"},
     "bateria_live": {
-        "relatorio": "caminho", "sha256": "sha", "commit": "commit",
-        "aprovados": "inteiro", "xfail": "inteiro", "falhas": "inteiro",
-        "escopo": "escopo", "ambiente": "ambiente",
-        "saude_fontes": "caminho", "saude_fontes_sha256": "sha",
-        "falhas_fora_do_escopo": "falhas_fora",
+        "relatorio": "caminho", "sha256": "sha",
+        "saude_fontes": "caminho", "saude_fontes_sha256": "sha", "commit": "commit",
+        "parecer_bateria": "caminho", "parecer_bateria_sha256": "sha",
     },
     "commit": {"commit": "commit"},
     "parecer": {"parecer": "caminho", "sha256": "sha", "commit_auditado": "commit"},
@@ -97,7 +96,7 @@ CAMPOS_POR_TIPO: dict[str, dict[str, str]] = {
     "pypi": {"versao": "versao", "sha256_wheel": "sha", "sha256_sdist": "sha"},
     "snapshot": {"pacotes": "pacotes", "bateria_s4": "aprovada", "lista_embutida_commit": "commit"},
     "instalacao": {"concluida": "verdadeiro", "commit": "commit", "attestation_verificada": "verdadeiro",
-                   "digests": "digests"},
+                   "digests": "digests", "parecer_instalacao": "caminho", "parecer_instalacao_sha256": "sha"},
     "doctor": {"ok": "verdadeiro", "alertas": "alertas"},
 }
 TIPOS_EVIDENCIA = tuple(CAMPOS_POR_TIPO)
@@ -114,11 +113,21 @@ TIPOS_DA_ETAPA = {
     "8_execucao": ("doctor", "bateria_live"),
 }
 SEM_BLOQUEADOR = "SEM BLOQUEADOR"
-AMBIENTE = ("so", "python", "pais_ip")
+# Pareceres locais por tipo de recibo: (campo do caminho, campo do sha256). O arquivo deve existir no
+# repositório, ter o sha256 registrado e terminar em SEM BLOQUEADOR.
+PARECERES_LOCAIS = {
+    "parecer": ("parecer", "sha256"),
+    "bateria_live": ("parecer_bateria", "parecer_bateria_sha256"),
+    "instalacao": ("parecer_instalacao", "parecer_instalacao_sha256"),
+}
+# Demais arquivos com sha256 (caminho, campo do hash): existência e hash são reconferidos, sem ler o conteúdo.
+HASHES_DE_ARQUIVO = {
+    "bateria_live": (("relatorio", "sha256"), ("saude_fontes", "saude_fontes_sha256")),
+}
 # Campos de sha256 que o `registrar` calcula (caminho, campo do hash) e o `validar` reconfere.
 HASHES_CALCULADOS = {
-    "parecer": (("parecer", "sha256"),),
-    "bateria_live": (("relatorio", "sha256"), ("saude_fontes", "saude_fontes_sha256")),
+    tipo: tuple(HASHES_DE_ARQUIVO.get(tipo, ())) + ((PARECERES_LOCAIS[tipo],) if tipo in PARECERES_LOCAIS else ())
+    for tipo in {*PARECERES_LOCAIS, *HASHES_DE_ARQUIVO}
 }
 
 # Baseline explícita da seção 6 do plano: os itens de cada incremento (o I2.6 vem do adiamento do I1.2).
@@ -312,32 +321,6 @@ def _erro_de_campo(tipo: str, valor: object) -> str | None:
             if erro:
                 return erro
         return None
-    if tipo == "inteiro":
-        return None if isinstance(valor, int) and not isinstance(valor, bool) and valor >= 0 else (
-            "deve ser inteiro maior ou igual a 0")
-    if tipo == "escopo":
-        if not isinstance(valor, list) or not valor:
-            return "deve ser lista não vazia de fontes"
-        if not all(isinstance(f, str) and f.strip() for f in valor) or len(set(valor)) != len(valor):
-            return "deve conter fontes (texto não vazio) sem repetição"
-        return None
-    if tipo == "ambiente":
-        if not isinstance(valor, dict) or set(valor) != set(AMBIENTE):
-            return f"deve ser objeto com exatamente {', '.join(AMBIENTE)}"
-        if not all(isinstance(v, str) and v.strip() for v in valor.values()):
-            return f"{', '.join(AMBIENTE)} devem ser texto não vazio"
-        return None
-    if tipo == "falhas_fora":
-        if not isinstance(valor, list):
-            return "deve ser lista de {teste, motivo, registro}"
-        for f in valor:
-            if not isinstance(f, dict) or set(f) != {"teste", "motivo", "registro"}:
-                return "cada falha deve ser objeto com exatamente teste, motivo e registro"
-            if not all(isinstance(v, str) and v.strip() for v in f.values()):
-                return "teste, motivo e registro de cada falha devem ser texto não vazio"
-        if len({f["teste"] for f in valor}) != len(valor):
-            return "teste repetido em falhas_fora_do_escopo"
-        return None
     if tipo == "jobs":
         if not isinstance(valor, list):
             return "deve ser lista de {nome, conclusao}"
@@ -486,89 +469,35 @@ def _ultima_linha_do_parecer(dados: bytes) -> str | None:
     return linhas[-1] if linhas else None
 
 
-def _motivo_parecer_reprovado(campos: dict, raiz: Path) -> str | None:
+def _motivo_parecer_reprovado(ref: object, sha: object, raiz: Path) -> str | None:
     """None quando o parecer aprova: arquivo existente no repositório, sha256 igual ao dos bytes e
     última linha não vazia exatamente 'SEM BLOQUEADOR'. URL não vale. O teto de rodadas não aprova."""
     try:
-        arquivo = arquivo_do_repositorio(campos["parecer"], raiz)
+        arquivo = arquivo_do_repositorio(ref, raiz)
         dados = arquivo.read_bytes()
         ultima = _ultima_linha_do_parecer(dados)
     except ErroAceite as exc:
         return str(exc)
     except (OSError, ValueError):
         return "não foi possível ler o arquivo do parecer como UTF-8"
-    if hashlib.sha256(dados).hexdigest() != campos["sha256"]:
+    if hashlib.sha256(dados).hexdigest() != sha:
         return "sha256 registrado difere do sha256 dos bytes do arquivo"
     if ultima != SEM_BLOQUEADOR:
         return f"a última linha não vazia do parecer não é '{SEM_BLOQUEADOR}'"
     return None
 
 
-def _fonte_do_teste(nodeid: str) -> str:
-    """Fonte de um teste live: nome do arquivo sem `test_live_` (mesma regra de tests/live/conftest.py)."""
-    arquivo = nodeid.split("::", 1)[0].replace("\\", "/").rsplit("/", 1)[-1]
-    return arquivo.removesuffix(".py").removeprefix("test_live_")
-
-
-def _motivos_bateria(campos: dict, raiz: Path) -> list[str]:
-    """Conferência da bateria live: sha256 dos dois arquivos, contagens, escopo, falhas fora do escopo
-    e o saude-fontes.json lido do disco (completa, regressão listada, indisponibilidade classificada)."""
-    motivos: list[str] = []
-    dados: dict[str, bytes] = {}
-    for chave, sha in (("relatorio", "sha256"), ("saude_fontes", "saude_fontes_sha256")):
-        try:
-            bruto = arquivo_do_repositorio(campos[chave], raiz).read_bytes()
-        except ErroAceite as exc:
-            motivos.append(f"{chave}: {exc}")
-            continue
-        except OSError:
-            motivos.append(f"{chave}: não foi possível ler o arquivo")
-            continue
-        dados[chave] = bruto
-        if hashlib.sha256(bruto).hexdigest() != campos[sha]:
-            motivos.append(f"{sha} registrado difere do sha256 dos bytes de {chave}")
-    if campos["aprovados"] + campos["xfail"] < 1:
-        motivos.append("aprovados + xfail deve ser pelo menos 1 (bateria não executada não fecha a etapa)")
-    fora = campos["falhas_fora_do_escopo"]
-    if campos["falhas"] != len(fora):
-        motivos.append(f"falhas ({campos['falhas']}) difere de len(falhas_fora_do_escopo) ({len(fora)})")
-    for f in fora:
-        if _fonte_do_teste(f["teste"]) in campos["escopo"]:
-            motivos.append(f"falha de fonte do escopo em falhas_fora_do_escopo: {f['teste']}")
-        try:
-            arquivo_do_repositorio(f["registro"], raiz)
-        except ErroAceite as exc:
-            motivos.append(f"falhas_fora_do_escopo '{f['teste']}': registro: {exc}")
-    if "saude_fontes" in dados:
-        motivos.extend(_motivos_saude(dados["saude_fontes"], {f["teste"] for f in fora}))
-    return motivos
-
-
-def _motivos_saude(bruto: bytes, listados: set[str]) -> list[str]:
-    """Formato real de saude-fontes.json (tests/live/conftest.py): completa e fontes[f].testes[]."""
+def _motivo_hash_divergente(ref: object, sha: object, raiz: Path) -> str | None:
+    """None quando o arquivo existe no repositório e o sha256 registrado é o dos seus bytes."""
     try:
-        saude = json.loads(bruto.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
-        return ["saude_fontes: JSON inválido"]
-    if not isinstance(saude, dict) or not isinstance(saude.get("fontes"), dict):
-        return ["saude_fontes: sem o objeto 'fontes'"]
-    motivos: list[str] = []
-    if saude.get("completa") is not True:
-        motivos.append("saude_fontes: 'completa' deve ser true")
-    for fonte, info in saude["fontes"].items():
-        testes = info.get("testes") if isinstance(info, dict) else None
-        if not isinstance(testes, list):
-            motivos.append(f"saude_fontes: fonte '{fonte}' sem lista 'testes'")
-            continue
-        for t in testes:
-            if not isinstance(t, dict) or not isinstance(t.get("nome"), str):
-                motivos.append(f"saude_fontes: teste malformado na fonte '{fonte}'")
-                continue
-            if t.get("estado") == "regressao" and t["nome"] not in listados:
-                motivos.append(f"saude_fontes: regressão fora de falhas_fora_do_escopo: {t['nome']}")
-            if t.get("estado") == "unavailable" and not (isinstance(t.get("categoria"), str) and t["categoria"]):
-                motivos.append(f"saude_fontes: indisponibilidade sem categoria: {t['nome']}")
-    return motivos
+        bruto = arquivo_do_repositorio(ref, raiz).read_bytes()
+    except ErroAceite as exc:
+        return str(exc)
+    except OSError:
+        return "não foi possível ler o arquivo"
+    if hashlib.sha256(bruto).hexdigest() != sha:
+        return "sha256 registrado difere do sha256 dos bytes do arquivo"
+    return None
 
 
 def _conferir_etapa(
@@ -587,19 +516,23 @@ def _conferir_etapa(
         else:
             por_tipo[tipo] = ev["campos"]
     for tipo, campos in por_tipo.items():
+        local = PARECERES_LOCAIS.get(tipo)
+        com_hash = {c for c, _ in HASHES_DE_ARQUIVO.get(tipo, ())}
         for chave, kind in CAMPOS_POR_TIPO[tipo].items():
-            if kind != "caminho" or tipo == "parecer":
+            if kind != "caminho" or (local is not None and chave == local[0]) or chave in com_hash:
                 continue
             try:
                 arquivo_do_repositorio(campos[chave], raiz)
             except ErroAceite as exc:
                 erros.append(f"{cam}: {tipo}.{chave}: {exc}")
-    if "parecer" in por_tipo:
-        motivo = _motivo_parecer_reprovado(por_tipo["parecer"], raiz)
-        if motivo:
-            erros.append(f"{cam}: parecer '{por_tipo['parecer']['parecer']}': {motivo}")
-    if "bateria_live" in por_tipo:
-        erros.extend(f"{cam}: bateria_live: {m}" for m in _motivos_bateria(por_tipo["bateria_live"], raiz))
+        for chave, sha in HASHES_DE_ARQUIVO.get(tipo, ()):
+            motivo = _motivo_hash_divergente(campos[chave], campos[sha], raiz)
+            if motivo:
+                erros.append(f"{cam}: {tipo}.{chave} '{campos[chave]}': {motivo}")
+        if local is not None:
+            motivo = _motivo_parecer_reprovado(campos[local[0]], campos[local[1]], raiz)
+            if motivo:
+                erros.append(f"{cam}: {tipo}.{local[0]} '{campos[local[0]]}': {motivo}")
     if etapa["estado"] == "concluida":
         for tipo in permitidos:
             if tipo not in por_tipo:
@@ -782,7 +715,7 @@ def _item(inc: dict, item_id: str) -> dict:
     raise ErroAceite(f"item '{item_id}' não existe no incremento {inc['id']}")
 
 
-LISTAS = ("alertas", "escopo", "digests", "jobs", "pacotes", "falhas_fora_do_escopo")
+LISTAS = ("alertas", "digests", "jobs", "pacotes")
 
 
 def _elemento_de_lista(chave: str, valor: str) -> object:
@@ -793,17 +726,11 @@ def _elemento_de_lista(chave: str, valor: str) -> object:
     if chave == "pacotes":
         nome, _, sha = valor.rpartition("=")
         return {"nome": nome, "sha256": sha}
-    if chave == "falhas_fora_do_escopo":
-        partes = valor.rsplit("|", 2)
-        if len(partes) != 3:
-            raise ErroAceite("falhas_fora_do_escopo espera teste|motivo|registro")
-        return dict(zip(("teste", "motivo", "registro"), partes, strict=True))
     return valor
 
 
-def _campos_da_linha(pares: list[tuple[str, str]], tipo: str) -> dict:
-    """Converte os `--campo chave=valor`: true/false viram bool, inteiros decimais viram número, campos de
-    lista acumulam e `ambiente.<chave>` monta o objeto `ambiente`."""
+def _campos_da_linha(pares: list[tuple[str, str]]) -> dict:
+    """Converte os `--campo chave=valor`: true/false viram bool e campos de lista acumulam."""
     campos: dict = {}
     for chave, valor in pares:
         if chave in LISTAS:
@@ -811,19 +738,9 @@ def _campos_da_linha(pares: list[tuple[str, str]], tipo: str) -> dict:
             if valor != "":
                 lista.append(_elemento_de_lista(chave, valor))
             continue
-        if chave.startswith("ambiente."):
-            sub = chave.removeprefix("ambiente.")
-            amb = campos.setdefault("ambiente", {})
-            if sub in amb:
-                raise ErroAceite(f"campo repetido: {chave}")
-            amb[sub] = valor
-            continue
         if chave in campos:
             raise ErroAceite(f"campo repetido: {chave}")
-        if re.fullmatch(r"[0-9]+", valor, _A) and CAMPOS_POR_TIPO[tipo].get(chave) == "inteiro":
-            campos[chave] = int(valor)
-        else:
-            campos[chave] = {"true": True, "false": False}.get(valor, valor)
+        campos[chave] = {"true": True, "false": False}.get(valor, valor)
     return campos
 
 
@@ -846,7 +763,7 @@ def cmd_validar(args: argparse.Namespace, caminho: Path, raiz: Path) -> int:
 
 
 def cmd_registrar(args: argparse.Namespace, caminho: Path, raiz: Path) -> int:
-    campos = _campos_da_linha(args.campo, args.tipo)
+    campos = _campos_da_linha(args.campo)
     for caminho_campo, sha_campo in HASHES_CALCULADOS.get(args.tipo, ()):
         if sha_campo in campos:
             raise ErroAceite(f"o {sha_campo} de {args.tipo} é calculado pelo registrar; não o informe")
