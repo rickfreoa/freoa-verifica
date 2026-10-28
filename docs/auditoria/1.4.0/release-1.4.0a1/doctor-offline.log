@@ -1,0 +1,258 @@
+Diagn├│stico
+-----------
+status: ok
+verificacoes:
+  - [0]
+    nome: versao
+    status: ok
+    detalhe: 1.4.0a1
+  - [1]
+    nome: home
+    status: ok
+    detalhe: <rel>\home-exp
+  - [2]
+    nome: banco
+    status: ok
+    detalhe: <rel>\home-exp\verifica.sqlite3
+  - [3]
+    nome: migracoes
+    status: ok
+    detalhe: 16 vers├Áes
+  - [4]
+    nome: fonte:bcb
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          Resolu├º├úo BCB
+        - [1]
+          Resolu├º├úo CMN
+        - [2]
+          Circular
+        - [3]
+          Carta Circular
+        - [4]
+          Instru├º├úo Normativa BCB
+      periodo: acervo SharePoint normativos
+      busca_textual: True
+      ementa: True
+      inteiro_teor: True
+      atualizacao: API buscanormativos
+  - [5]
+    nome: fonte:cvm_colegiado
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          decisoes_colegiado
+        - [1]
+          atas
+      periodo: 2002ÔÇôpresente
+      busca_textual: True
+      ementa: True
+      inteiro_teor: True
+      atualizacao: RSS + p├íginas decisoes/AAAA/
+  - [6]
+    nome: fonte:cvm_normas
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          resolucoes
+        - [1]
+          instrucoes
+        - [2]
+          pareceres-orientacao
+        - [3]
+          oficios-circulares
+        - [4]
+          deliberacoes
+      periodo: acervo portal
+      busca_textual: True
+      ementa: True
+      inteiro_teor: True
+      atualizacao: ├¡ndice OpenCms + p├ígina do ato
+  - [7]
+    nome: fonte:datajud
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          metadados_processuais
+      periodo: conforme tribunal
+      busca_textual: False
+      ementa: False
+      inteiro_teor: False
+      atualizacao: API p├║blica Elasticsearch
+      nota: Sem ├¡ndice do STF (404). Usado para confirmar exist├¬ncia de n├║mero CNJ.
+  - [8]
+    nome: fonte:planalto
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          leis
+        - [1]
+          lcp
+        - [2]
+          decreto-lei
+        - [3]
+          constituicao
+      periodo: variavel por esp├®cie
+      busca_textual: False
+      ementa: True
+      inteiro_teor: True
+      atualizacao: sob demanda (HTTP)
+  - [9]
+    nome: fonte:senado
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          DEC
+        - [1]
+          DEL
+        - [2]
+          DLG
+        - [3]
+          DSN
+        - [4]
+          EMC
+        - [5]
+          LCP
+        - [6]
+          LEI
+        - [7]
+          MPV
+      periodo: acervo Sigen
+      busca_textual: True
+      ementa: True
+      inteiro_teor: False
+      atualizacao: API dados abertos
+  - [10]
+    nome: fonte:stf
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          processos
+        - [1]
+          decisoes
+        - [2]
+          repercussao_geral
+        - [3]
+          sumulas
+        - [4]
+          sumulas_vinculantes
+      periodo: acervo portal
+      busca_textual: False
+      ementa: True
+      inteiro_teor: True
+      atualizacao: sob demanda
+      nota: busca textual livre ÔåÆ unavailable(stf_busca_textual_sob_waf)
+  - [11]
+    nome: fonte:stj
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          espelhos
+        - [1]
+          precedentes_qualificados
+      periodo: espelhos mensais publicados no portal de dados abertos (recorte do acervo instalado)
+      integras: nao_implementado
+      busca_textual: True
+      busca_textual_ao_vivo: False
+      ementa: True
+      inteiro_teor: False
+      atualizacao: fv sync stj --desde AAAA-MM
+      licenca: CC BY
+  - [12]
+    nome: fonte:tcu
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          acordaos
+      periodo: acervo API recupera-acordaos
+      busca_textual: True
+      busca_textual_ao_vivo: False
+      ementa: True
+      inteiro_teor: True
+      atualizacao: sincroniza├º├úo incremental por inicio
+  - [13]
+    nome: fonte:tjdft
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          acordaos
+        - [1]
+          decisoes-monocraticas
+        - [2]
+          decisoes-presidencia
+      periodo: acervo da API p├║blica de jurisprud├¬ncia
+      busca_textual: True
+      busca_textual_ao_vivo: True
+      consultar_ao_vivo_sempre: True
+      ementa: True
+      inteiro_teor: quando o registro o traz ├¡ntegro (ac├│rd├úos, decis├Áes monocr├íticas e da presid├¬ncia): n├║mero do processo, dispositivo e fecho; sen├úo s├│ ementa
+      atualizacao: sob demanda; semente tem├ítica
+  - [14]
+    nome: fonte:tjsp
+    status: ok
+    detalhe: offline ÔÇö health n├úo executado
+    cobertura:
+      colecoes:
+        - [0]
+          acord├úos_cjsg
+      periodo: acervo e-SAJ
+      busca_textual: True
+      ementa: True
+      inteiro_teor: True
+      atualizacao: sob demanda
+  - [15]
+    nome: snapshot_proveniencia
+    status: alerta
+    detalhe:
+      vinculado: False
+      snapshot_sha256: ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa
+      snapshot_derived_version: 5
+      vinculo_motivo: None
+  - [16]
+    nome: snapshot_digest
+    status: alerta
+    detalhe:
+      versao: 1.4.0a1
+      instalado: ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa
+      esperados:
+      confere: False
+  - [17]
+    nome: attestation
+    status: alerta
+    detalhe:
+      attestation_verificada: True
+      versao: 1.3.0
+      concluida: True
+      sha256_wheel: cd372ad74aace921ddb8a4fa5efcfff4bcdf9eae274aa7849a0ddecba5360bd0
+      digest_snapshot: b6921f68289a61fb35647e51397f008bebf39b3e69329ddc1e158b762ffc7fde
+      versao_instalada: 1.4.0a1
+      motivos:
+        - [0]
+          versao_divergente
+        - [1]
+          digest_snapshot_divergente
+  - [18]
+    nome: acervo
+    status: ok
+    detalhe: atende ao manifesto/m├¡nimo

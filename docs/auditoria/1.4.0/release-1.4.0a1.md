@@ -27,5 +27,15 @@ Instalação vinculada (passo 3 do RELEASE), 06:26–06:29, pacote reinstalado d
 `fv --home <vazio> snapshot install --arquivo ...` sem `--aceitar-nao-vinculado` → 0, `vinculado: true`,
 `snapshot_derived_version: 5`; S4 pós-instalação contra o mesmo manifesto → 0; `doctor --offline` → 0.
 
+Bench sobre a instalação vinculada (passo 2 do RELEASE; faltava na rodada 1 do PR #16), 06:58–06:59, pacote de
+`62c0df7`, `FV_HOME` no home vinculado, `scripts/comparativo_ouro.py` com o conjunto-ouro de 44 casos
+(`release-1.4.0a1/bench-freoa_raw.jsonl`): 44 de 44 iguais à linha de base da 1.3.0
+(`bench-1.3.0/freoa_raw.jsonl`) na projeção do I1.4 (status, identidade e situação; status e top-5). Tempo por
+consulta: p50 0,7 s; p95 8,8 s; máximo 11,9 s. O código de consulta não mudou entre as versões; a queda dos
+tempos frente à medição de 27/10 (p95 21,1 s) é atribuída à rede e às fontes no momento, não a melhoria do
+produto, e não altera o risco registrado para o piso do D4.
+
+Registros da instalação vinculada: `install-vinc.log`, `conferir-vinc.log`, `doctor-vinc.log`, `vinculado.txt`.
+
 Próximo: auditoria independente do commit (manifesto, instalador, digest, código), CI nas oito combinações, merge,
 tag `v1.4.0a1` e auditoria dos bytes da CI (passos 4 a 6).

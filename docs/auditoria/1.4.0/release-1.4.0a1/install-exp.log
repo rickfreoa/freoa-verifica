@@ -1,0 +1,13 @@
+{
+  "autenticidade": "Checksums demonstram integridade. `vinculado: true` significa que o sha256 do snapshot consta da lista embutida no pacote; a origem do pacote se prova pela attestation do wheel (`gh attestation verify`), conferida pelo instalador quando o GitHub CLI existe. N├úo h├í assinatura pr├│pria do snapshot.",
+  "backup": "<rel>\\home-exp\\verifica.sqlite3.bak-01M60WHJWZYETA5XKKQ6NZ1ENV",
+  "backup_blobs": null,
+  "capturas": 2069,
+  "divergentes": [],
+  "modo": "anexacao",
+  "obras": 826,
+  "snapshot_derived_version": null,
+  "snapshot_sha256": "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa",
+  "status": "ok",
+  "vinculado": false
+}
