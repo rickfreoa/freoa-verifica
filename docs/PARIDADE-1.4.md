@@ -111,10 +111,14 @@ decisão longa paginada e reconstruída por hash.
 
 ## 5. Notas de execução
 
-- Redução de escopo (D5), 28/10/2026: depois de três rodadas do Codex com bloqueador no PR #13, todas sobre a
-  forma de saída de CH6 (estado novo em campo fechado; depois colisão com o campo estável `parte`), o
+- Redução de escopo (D5), 28/10/2026: depois de três rodadas do Codex com bloqueador no PR #13 (na r1, sobre
+  LO2–LO4 e IJ6; nas r2 e r3, sobre a forma de saída de CH6: estado novo em campo fechado, depois colisão com
+  o campo estável `parte`), o
   esquema dessa saída sai deste documento e passa à decisão formal de C7, que precede o código de I2.4. CH6
   conserva só a garantia material (nada de vazio silencioso, nenhum campo existente alterado).
 - Segmentação tipada: o plano a atribui a I1.2. O I1.2 foi adiado para I2 depois do passe final com
   bloqueador do PR #10 (registro no ramo `feat/stj-integras-1.4`, `docs/auditoria/1.4.0/pr10-adiamento.md`,
   a incorporar com o manifesto de aceite). Até essa incorporação, a referência de CH5 é ao D1.
+- Correção de registro (decisão 0070), 28/10/2026: o passe final independente apontou como inexato o histórico
+  da primeira nota desta seção, que atribuía as três rodadas ao CH6; o texto foi corrigido. Nenhum requisito
+  mudou.
