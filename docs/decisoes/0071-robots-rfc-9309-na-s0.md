@@ -68,7 +68,17 @@ e do instrumento, não de barreira da fonte.
      - corpo 200 que não pode ser examinado com segurança (charset que não fecha, NUL no texto de MIME textual, ou
        diretivas `User-agent`/`Allow`/`Disallow` em UTF-16/UTF-32 sem BOM) é barreira `corpo_nao_interpretavel`; a
        busca de marcador de desafio nos bytes só acrescenta detecção (`desafio_no_robots`), nunca libera. Isso
-       revoga a leitura por vista latin-1 de arquivo em charset legado: robots com acento fora de UTF-8 é barreira;
+       revoga a leitura por vista latin-1 de arquivo em charset legado, mas só em parte: ver a decisão do titular
+       abaixo, que substitui a escolha "charset legado vira barreira";
+     - decisão do titular de 28/10/2026 (substitui a escolha anterior "charset legado vira barreira"): corpo 200 que
+       não decodifica em UTF-8 estrito nem no charset declarado é lido como charset legado compatível com ASCII
+       (byte a byte) somente se (a) não há byte nulo, (b) não há BOM nem padrão de UTF-16/UTF-32 e (c) todo byte
+       >= 0x80 está em comentário, isto é, depois de `#` na mesma linha. As regras são então lidas normalmente e a
+       leitura registra `charset_legado_em_comentario: true` (os bytes >= 0x80, todos em comentário, viram U+FFFD no
+       texto, para que U+0085 não parta linha). Continua barreira `corpo_nao_interpretavel` com byte >= 0x80 fora de
+       comentário (inclusive em linha de regra), byte nulo, padrão UTF-16/32 sem BOM ou qualquer outra impossibilidade
+       de exame seguro; a busca de marcador de desafio nos bytes só acrescenta detecção, nunca libera. Charset
+       declarado que decodifica continua valendo (sem a flag) e UTF-16 com BOM continua lido;
      - a comparação de caminho e regra normaliza só octetos não reservados (RFC 3986), em caixa alta uniforme para
        os demais: `%2F` continua distinto de `/` (RFC 9309, 2.2.2);
      - agrupamento pelo RFC 9309, 2.2.4: linhas `User-agent` consecutivas formam um grupo; só `Allow` e `Disallow`

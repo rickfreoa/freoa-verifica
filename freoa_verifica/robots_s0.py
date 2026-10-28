@@ -22,7 +22,10 @@ Lacunas da regra, resolvidas aqui por conservadorismo (regra invariável 2) e re
 (`regras_ambiguas`), e não "sem restrições". O `urllib.robotparser` não implementa `*`, `$` nem a precedência por
 correspondência mais longa do RFC 9309; por isso a decisão por caminho só libera o que o `robotparser` e o
 avaliador RFC deste módulo liberam (vedado se qualquer um vedar). Corpo 200 que não se examina com segurança (charset
-que não fecha, NUL, UTF-16/32 sem BOM) é barreira `corpo_nao_interpretavel`, nunca "sem restrições".
+que não fecha fora da exceção abaixo, NUL, UTF-16/32 sem BOM) é barreira `corpo_nao_interpretavel`, nunca "sem
+restrições". Exceção (decisão do titular de 28/10/2026, 0071 item 5): corpo que não decodifica em UTF-8 estrito nem no
+charset declarado é lido como charset legado ASCII-compatível só se não tem NUL, BOM nem padrão UTF-16/32 e todo byte
+>= 0x80 está em comentário (depois de `#` na mesma linha); o resultado registra `charset_legado_em_comentario`.
 """
 
 from __future__ import annotations
@@ -84,6 +87,7 @@ class LeituraRobots:
     sha256: str | None = None
     regras: tuple[str, ...] = ()  # linhas do arquivo; só com estado `regras`
     marcador: str | None = None  # tipo do desafio, quando o motivo é `desafio_no_robots`
+    charset_legado_em_comentario: bool = False  # corpo lido como charset legado ASCII-compatível (só em comentários)
 
     def decidir(self, url: str) -> Decisao:
         """Decisão para `url` (do mesmo host do robots): seguir, vedado, sem restrições ou barreira."""
@@ -136,6 +140,29 @@ def _texto(corpo: bytes, content_type: str | None) -> str | None:
         return texto_da_resposta(corpo, content_type)
     except (RespostaInvalida, ValueError):
         return None
+
+
+_SEPARADOR_LINHA = re.compile(rb"[\n\r\x0b\x0c\x1c\x1d\x1e]")  # os separadores ASCII de `str.splitlines`
+_BOMS = (b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff")
+_CHARSET_LARGO = re.compile(r"charset\s*=\s*[\"']?\s*(utf-?(?:16|32)|ucs-?[24])", re.I)
+
+
+def _texto_legado_em_comentario(corpo: bytes, content_type: str | None) -> str | None:
+    """Texto do corpo em charset legado ASCII-compatível, só se todo byte >= 0x80 está em comentário; senão None.
+
+    Decisão do titular de 28/10/2026 (0071, item 5). Recusa (None) com NUL, BOM, charset declarado de largura
+    variável (UTF-16/32), ou nenhum byte >= 0x80 (não é caso de charset legado). Os bytes >= 0x80, todos em
+    comentário, viram U+FFFD: não importa o que dizem, e assim `splitlines` não parte linha em U+0085.
+    """
+    if b"\x00" in corpo or corpo.startswith(_BOMS) or _CHARSET_LARGO.search(content_type or ""):
+        return None
+    if not any(b >= 0x80 for b in corpo):
+        return None
+    for linha in _SEPARADOR_LINHA.split(corpo):
+        antes, marca, depois = linha.partition(b"#")
+        if any(b >= 0x80 for b in antes):
+            return None
+    return "".join("\ufffd" if b >= 0x80 else chr(b) for b in corpo)
 
 
 _LARGURAS_SEM_BOM = ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be")
@@ -203,6 +230,10 @@ def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[
     sha = hashlib.sha256(corpo).hexdigest()
     base["sha256"] = sha
     texto = _texto(corpo, content_type)
+    legado = False
+    if texto is None:
+        texto = _texto_legado_em_comentario(corpo, content_type)
+        legado = texto is not None
     mime = (content_type or "").split(";", 1)[0].strip().lower()
     inexaminavel = texto is None or ("\x00" in texto and _mime_textual(mime)) or (
         not _tem_regras_no_texto(texto) and _diretiva_escondida(corpo))
@@ -219,7 +250,7 @@ def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[
             return _desafio_no_robots(achado, base)
     if interpretavel(texto):
         return LeituraRobots(REGRAS, "regras_interpretaveis", "grupo User-agent e só diretivas conhecidas",
-                             regras=tuple(texto.splitlines()), **base)
+                             regras=tuple(texto.splitlines()), charset_legado_em_comentario=legado, **base)
     nomes = {_diretiva(ln) for ln in _linhas_uteis(texto)}
     if not _PARECE_HTML.search(texto[:2048]) and nomes & {"allow", "disallow"}:
         return _barreira("regras_ambiguas", "Allow/Disallow em arquivo não interpretável (sem User-agent ou com linhas "
