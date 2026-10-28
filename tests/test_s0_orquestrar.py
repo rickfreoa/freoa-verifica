@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import importlib.util
 import json
@@ -18,14 +19,21 @@ pytestmark = pytest.mark.repositorio
 RAIZ = Path(__file__).resolve().parents[1]
 
 
+@functools.cache
 def _carregar():
+    """Carrega o script sob demanda: na coleta do job da wheel (sem `scripts/`) o módulo não pode abrir arquivo."""
     spec = importlib.util.spec_from_file_location("s0_orquestrar", RAIZ / "scripts" / "s0_orquestrar.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-orq = _carregar()
+class _Preguicoso:
+    def __getattr__(self, nome):
+        return getattr(_carregar(), nome)
+
+
+orq = _Preguicoso()
 
 
 def _cmd(fonte, chave, url, pasta=None):
@@ -211,14 +219,15 @@ def test_main_escreve_relatorio_e_aceita_arquivos_de_entrada(tmp_path, monkeypat
     (tmp_path / "barreiras.json").write_text(json.dumps({"a.jus.br": "barreira de teste"}), encoding="utf-8")
     (tmp_path / "hosts.json").write_text(json.dumps(["a.jus.br", "b.jus.br"]), encoding="utf-8")
     falso = Falso(HOSTS)
-    original = orq.orquestrar
+    mod = _carregar()
+    original = mod.orquestrar
 
     def com_falso(*a, **kw):
         kw.setdefault("executor", falso)
         return original(*a, **kw)
 
-    monkeypatch.setattr(orq, "orquestrar", com_falso)
-    rc = orq.main(["--roteiro", str(roteiro), "--saida", str(tmp_path / "s"), "--barreiras",
+    monkeypatch.setattr(mod, "orquestrar", com_falso)
+    rc = mod.main(["--roteiro", str(roteiro), "--saida", str(tmp_path / "s"), "--barreiras",
                    str(tmp_path / "barreiras.json"), "--hosts-arquivo", str(tmp_path / "hosts.json"),
                    "--relatorio", str(tmp_path / "rel.json")])
     rel = json.loads((tmp_path / "rel.json").read_text(encoding="utf-8"))
