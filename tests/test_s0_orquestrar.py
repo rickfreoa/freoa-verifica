@@ -312,3 +312,27 @@ def test_i1_limpo_marca_as_raizes_conhecidas_e_qualquer_outra_raiz(tmp_path):
     assert limpo("D:/dados/x/y.txt falhou", tmp_path) == "<caminho> falhou"
     assert "https://host/a/b" in limpo("ver https://host/a/b", tmp_path)
     assert sys.prefix not in limpo(f"{sys.prefix}/lib/python3.13/site-packages/z.py", tmp_path)
+
+
+def test_i1_r2_unc_e_absoluto_entre_aspas_saem_do_relatorio(tmp_path):
+    """Parecer PR #18 r2, I1: UNC (nas duas barras) e `File "/x"` de um componente vazavam."""
+    tb = ('  File "\\\\server\\share\\foo.py", line 1\n'
+          '  File "//server/share/bar.py", line 2\n'
+          '  File "/tmpfile", line 3\n'
+          "TransportError: GET https://x.jus.br/a/b falhou em /robots.txt\n")
+
+    def quebrado(args):
+        return SimpleNamespace(returncode=1, stdout=tb, stderr=tb)
+
+    rel = orq.orquestrar(ROTEIRO, tmp_path / "saida", executor=quebrado, hosts={"a.jus.br"})
+    texto = json.dumps(rel, ensure_ascii=False)
+    for p in ("server", "share", "foo.py", "bar.py", "tmpfile"):
+        assert p not in texto, p
+    item = rel["hosts"]["a.jus.br"]["comandos"][0]
+    assert "TransportError: GET https://x.jus.br/a/b falhou em /robots.txt" in item["stderr"]
+
+
+def test_i1_r2_limite_documentado_um_componente_em_texto_corrido_fica():
+    """Sem aspas, `/x` é sintaticamente igual a caminho de URL (`/robots.txt`) e não identifica a máquina."""
+    mod = _carregar()
+    assert mod._limpo("falhou em /robots.txt", Path("/nao/usada")) == "falhou em /robots.txt"

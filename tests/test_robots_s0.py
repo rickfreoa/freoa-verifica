@@ -115,7 +115,7 @@ def test_a_decisao_soma_restricoes_do_robotparser_e_do_avaliador_rfc(monkeypatch
 @pytest.mark.parametrize("mime,corpo", [
     ("text/html", b"<!doctype html><html><head><title>SPA</title></head><body><div id=app></div></body></html>"),
     ("text/html; charset=utf-8", b"<html><body>Pagina nao encontrada</body></html>"),
-    ("application/octet-stream", b"\x00\x01\x02\xff binario qualquer"),
+    ("application/octet-stream", b"conteudo qualquer sem diretivas"),  # com NUL: barreira (0071, PR #18 r2)
     ("application/json", b'{"ok":true}'),
     ("text/plain", b"Bem-vindo ao portal"),
     ("text/plain", b"# so comentario\n\n"),
@@ -279,10 +279,12 @@ def test_utf16_sem_bom_com_regras_e_barreira_e_nao_sem_restricoes(mime, codec):
     assert r.decidir(HOST + "/secret").acao == BARREIRA
 
 
-def test_utf16_sem_bom_em_octet_stream_tambem_e_barreira_mas_binario_comum_continua_sem_restricoes():
+def test_utf16_sem_bom_em_octet_stream_e_barreira_e_binario_com_nul_tambem():
     corpo = "User-agent: *\nDisallow: /secret\n".encode("utf-16-le")
     assert ler_robots(200, "application/octet-stream", corpo).motivo == "corpo_nao_interpretavel"
-    assert ler_robots(200, "application/octet-stream", b"\x00\x01\x02\xff binario").estado == SEM_RESTRICOES
+    # Parecer PR #18 r2, B2: sem critério que separe binário comum de UTF-16/32 sem BOM, NUL é barreira em
+    # qualquer MIME (0071, item 5, último subitem).
+    assert ler_robots(200, "application/octet-stream", b"\x00\x01\x02\xff binario").motivo == "corpo_nao_interpretavel"
 
 
 def test_corpo_inexaminavel_com_marcador_de_desafio_e_desafio():
@@ -503,7 +505,7 @@ def _sondar(monkeypatch, tmp_path, resposta: bytes, *, url=ROBOTS, fonte="tst"):
 
 @pytest.mark.parametrize("mime,corpo", [
     ("text/html; charset=utf-8", b"<!doctype html><html><body><div id=root></div></body></html>"),
-    ("application/octet-stream", b"\x00\x01 qualquer coisa"),
+    ("application/octet-stream", b"qualquer coisa"),  # com NUL: barreira (0071, PR #18 r2)
     ("application/json", b'{"nao":"e robots"}'),
     ("text/plain", b"pagina de boas-vindas"),
 ])
@@ -684,3 +686,43 @@ def test_lista_de_mimes_do_robots_valida_para_o_transporte():
 
     assert {"text/plain", "text/html", "application/octet-stream"} <= MIMES_ROBOTS
     assert all(re.fullmatch(r"[a-z0-9.+-]+/[a-z0-9.+-]+", m) for m in MIMES_ROBOTS)
+
+
+# --- parecer PR #18 r2: B1 (separadores fora do RFC), B2 (desafio largo em MIME binário) -------------------------
+
+_FORA_DO_RFC = [b"\x0b", b"\x0c", b"\x1c", b"\x1d", b"\x1e"]
+
+
+@pytest.mark.parametrize("sep", _FORA_DO_RFC)
+@pytest.mark.parametrize("alto", [b"\xe1", b""])  # com byte legado (caminho do legado) e sem ele (UTF-8 estrito)
+def test_b1_separador_fora_do_rfc_no_comentario_nao_cria_grupo_e_e_barreira(sep, alto):
+    corpo = b"User-agent: *\nDisallow: /secret\n#" + alto + sep + b"User-agent: freoa-verifica" + sep + b"Allow: /\n"
+    reg = {"status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "text/plain"}}
+    leitura = ler_do_registro(reg, corpo)
+    assert (leitura.estado, leitura.motivo) == (BARREIRA, "corpo_nao_interpretavel")
+    assert leitura.decidir(HOST + "/secret").acao == BARREIRA
+
+
+@pytest.mark.parametrize("sep", ["\x85", " ", " "])
+def test_b1_separador_unicode_fora_do_rfc_em_utf8_e_barreira(sep):
+    corpo = f"User-agent: *\nDisallow: /secret\n# x{sep}User-agent: freoa-verifica{sep}Allow: /\n".encode()
+    r = ler_robots(200, "text/plain; charset=utf-8", corpo)
+    assert (r.estado, r.motivo) == (BARREIRA, "corpo_nao_interpretavel")
+    assert r.decidir(HOST + "/secret").acao == BARREIRA
+
+
+def test_b1_cr_isolado_e_crlf_continuam_fim_de_linha():
+    for fim in (b"\r", b"\r\n"):
+        corpo = fim.join([b"User-agent: *", b"Disallow: /secret", b"# \xe1 nota", b""])
+        r = ler_robots(200, "text/plain", corpo)
+        assert r.estado == "regras" and r.decidir(HOST + "/secret").acao == VEDADO
+        assert r.decidir(HOST + "/livre").acao == SEGUIR
+
+
+@pytest.mark.parametrize("codec", ["utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be"])
+def test_b2_captcha_largo_sem_bom_em_octet_stream_e_barreira(codec):
+    corpo = "<html>CAPTCHA</html>".encode(codec)
+    r = ler_robots(200, "application/octet-stream", corpo)
+    assert r.estado == BARREIRA and r.decidir(HOST + "/secret").acao == BARREIRA
+    reg = {"status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "application/octet-stream"}}
+    assert ler_do_registro(reg, corpo).decidir(HOST + "/secret").acao == BARREIRA
