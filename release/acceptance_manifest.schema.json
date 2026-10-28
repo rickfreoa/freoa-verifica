@@ -1,0 +1,105 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://github.com/rickfreoa/freoa-verifica/release/acceptance_manifest.schema.json",
+ "title": "Manifesto de aceite do plano 1.4.0",
+ "description": "Documental. A validação executável, com os invariantes a a e (etapas, parecer SEM BLOQUEADOR, incremento concluído, datas e sha256), é scripts/manifesto_aceite.py validar; este schema não substitui essas regras.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": ["plano", "atualizado_em", "incrementos", "excecoes"],
+ "properties": {
+  "plano": {"type": "string", "minLength": 1},
+  "atualizado_em": {"type": "string", "format": "date-time"},
+  "incrementos": {"type": "array", "items": {"$ref": "#/$defs/incremento"}},
+  "excecoes": {"type": "array", "items": {"$ref": "#/$defs/excecao"}}
+ },
+ "$defs": {
+  "estado_etapa": {"enum": ["pendente", "concluida", "nao_aplicavel"]},
+  "tipo_evidencia": {
+   "enum": ["commit", "run_ci", "parecer", "tag", "release", "pypi", "snapshot", "instalacao", "doctor", "bateria_live", "bench", "outro"]
+  },
+  "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+  "incremento": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["id", "versao", "estado", "rotulo", "itens", "etapas", "reducoes_de_escopo"],
+   "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "versao": {"type": "string", "minLength": 1},
+    "estado": {"enum": ["aberto", "concluido", "adiado"]},
+    "rotulo": {"type": ["string", "null"], "minLength": 1},
+    "itens": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "etapas": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": ["1_desenvolvimento", "2_teste", "3_commit", "4_incorporacao", "5_publicacao", "6_distribuicao", "7_instalacao", "8_execucao"],
+     "properties": {
+      "1_desenvolvimento": {"$ref": "#/$defs/etapa"},
+      "2_teste": {"$ref": "#/$defs/etapa"},
+      "3_commit": {"$ref": "#/$defs/etapa"},
+      "4_incorporacao": {"$ref": "#/$defs/etapa"},
+      "5_publicacao": {"$ref": "#/$defs/etapa"},
+      "6_distribuicao": {"$ref": "#/$defs/etapa"},
+      "7_instalacao": {"$ref": "#/$defs/etapa"},
+      "8_execucao": {"$ref": "#/$defs/etapa"}
+     }
+    },
+    "reducoes_de_escopo": {"type": "array", "items": {"$ref": "#/$defs/reducao"}}
+   }
+  },
+  "item": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["id", "estado", "nota"],
+   "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "estado": {"enum": ["pendente", "concluido", "reduzido", "adiado"]},
+    "nota": {"type": "string"}
+   }
+  },
+  "etapa": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["estado", "evidencias", "nota"],
+   "properties": {
+    "estado": {"$ref": "#/$defs/estado_etapa"},
+    "evidencias": {"type": "array", "items": {"$ref": "#/$defs/evidencia"}},
+    "nota": {"type": "string"}
+   }
+  },
+  "evidencia": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["tipo", "ref", "sha256", "data"],
+   "properties": {
+    "tipo": {"$ref": "#/$defs/tipo_evidencia"},
+    "ref": {"type": "string", "minLength": 1},
+    "sha256": {"$ref": "#/$defs/sha256"},
+    "data": {"type": "string", "format": "date-time"}
+   }
+  },
+  "reducao": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["item", "data", "decisao", "registro", "motivo"],
+   "properties": {
+    "item": {"type": "string", "minLength": 1},
+    "data": {"type": "string", "format": "date"},
+    "decisao": {"type": "string", "minLength": 1},
+    "registro": {"type": "string", "minLength": 1, "description": "caminho no repositório"},
+    "motivo": {"type": "string", "minLength": 1}
+   }
+  },
+  "excecao": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["alvo", "tipo", "estado", "revisar_em", "registro"],
+   "properties": {
+    "alvo": {"type": "string", "minLength": 1},
+    "tipo": {"enum": ["tribunal", "funcao"]},
+    "estado": {"enum": ["bloqueio_externo_documentado", "excluida_pelo_titular"]},
+    "revisar_em": {"type": ["string", "null"], "format": "date"},
+    "registro": {"type": "string", "minLength": 1}
+   }
+  }
+ }
+}

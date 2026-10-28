@@ -1,0 +1,351 @@
+{
+ "plano": "1.4.0",
+ "atualizado_em": "2026-10-28T00:53:11+00:00",
+ "incrementos": [
+  {
+   "id": "I1",
+   "versao": "1.4.0a1",
+   "estado": "aberto",
+   "rotulo": null,
+   "itens": [
+    {
+     "id": "I1.1",
+     "estado": "concluido",
+     "nota": "Trusted Publisher; 1.3.0 publicada na PyPI pela reexecução do run 39676521181, hashes iguais ao SHA256SUMS da release"
+    },
+    {
+     "id": "I1.2",
+     "estado": "pendente",
+     "nota": "PR #10 em redução de escopo pelo D5; registro docs/auditoria/1.4.0/pr10-reducao-escopo.md no ramo feat/stj-integras-1.4"
+    },
+    {
+     "id": "I1.3",
+     "estado": "concluido",
+     "nota": "PR #9, commit 7cf2b7c"
+    },
+    {
+     "id": "I1.4",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I1.5",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I1.6",
+     "estado": "concluido",
+     "nota": "PR #9, commit 7cf2b7c"
+    },
+    {
+     "id": "S0",
+     "estado": "pendente",
+     "nota": ""
+    }
+   ],
+   "etapas": {
+    "1_desenvolvimento": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "2_teste": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "3_commit": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "4_incorporacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "5_publicacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "6_distribuicao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "7_instalacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "8_execucao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    }
+   },
+   "reducoes_de_escopo": []
+  },
+  {
+   "id": "I2",
+   "versao": "1.4.0a2",
+   "estado": "aberto",
+   "rotulo": null,
+   "itens": [
+    {
+     "id": "I2.1",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I2.2",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I2.3",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I2.4",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I2.5",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I2.6",
+     "estado": "pendente",
+     "nota": "segmentação tipada e ligação das íntegras do STJ ao acervo, vindas do I1.2 reduzido"
+    }
+   ],
+   "etapas": {
+    "1_desenvolvimento": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "2_teste": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "3_commit": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "4_incorporacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "5_publicacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "6_distribuicao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "7_instalacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "8_execucao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    }
+   },
+   "reducoes_de_escopo": []
+  },
+  {
+   "id": "I3",
+   "versao": "1.4.0a3",
+   "estado": "aberto",
+   "rotulo": null,
+   "itens": [
+    {
+     "id": "I3.1",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I3.2",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I3.3",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I3.4",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I3.5",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I3.6",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I3.7",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I3.8",
+     "estado": "pendente",
+     "nota": ""
+    }
+   ],
+   "etapas": {
+    "1_desenvolvimento": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "2_teste": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "3_commit": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "4_incorporacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "5_publicacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "6_distribuicao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "7_instalacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "8_execucao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    }
+   },
+   "reducoes_de_escopo": []
+  },
+  {
+   "id": "I4",
+   "versao": "1.4.0",
+   "estado": "aberto",
+   "rotulo": null,
+   "itens": [
+    {
+     "id": "I4.1",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I4.2",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I4.3",
+     "estado": "pendente",
+     "nota": ""
+    },
+    {
+     "id": "I4.4",
+     "estado": "pendente",
+     "nota": ""
+    }
+   ],
+   "etapas": {
+    "1_desenvolvimento": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "2_teste": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "3_commit": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "4_incorporacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "5_publicacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "6_distribuicao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "7_instalacao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    },
+    "8_execucao": {
+     "estado": "pendente",
+     "evidencias": [],
+     "nota": ""
+    }
+   },
+   "reducoes_de_escopo": []
+  }
+ ],
+ "excecoes": [
+  {
+   "alvo": "TJAP",
+   "tipo": "tribunal",
+   "estado": "bloqueio_externo_documentado",
+   "revisar_em": "2027-01-31",
+   "registro": "docs/PLANO-1.4.0.md D4"
+  },
+  {
+   "alvo": "pedidos de autos",
+   "tipo": "funcao",
+   "estado": "excluida_pelo_titular",
+   "revisar_em": null,
+   "registro": "docs/PLANO-1.4.0.md seção 9 item 4"
+  }
+ ]
+}
