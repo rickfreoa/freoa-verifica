@@ -21,7 +21,7 @@ caminho exato, sem redirecionamento. A sonda também não segue redirecionamento
 Barreira registrada: fonte que já respondeu recusa (403, desafio) a qualquer leitura registrada sai do catálogo e entra
 em `FONTES_BARRADAS` (e seus hosts em `HOSTS_RECUSADOS`); o instrumento a recusa antes da rede, sem nova tentativa por
 outra rede ou rota. Acesso só por decisão do titular, por sessão assistida (decisão 0067) ou por documentação oficial.
-Exceção: o DJEN (decisão 0069, restrição geográfica geral) segue no catálogo, sondável só do notebook do titular.
+Exceções: o DJEN (decisão 0069, restrição geográfica geral) e o TJRS (Disallow do robots.txt a outro User-Agent não é recusa ao produto) seguem no catálogo.
 """
 
 from __future__ import annotations
@@ -176,22 +176,22 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
        "www5.tjmg.jus.br=https://www.tjmg.jus.br/portal-tjmg/jurisprudencia/consulta-de-jurisprudencia/ "
        "(links /jurisprudencia/decisao.do, formEspelhoAcordao.do)",
        nota="nível A; os links oficiais usam http, a sonda exige https; " + _S0B.strip()),
+    _f("tjrs", "TJRS: pesquisa de jurisprudência", {"www.tjrs.jus.br": ("/novo/buscas-solr/",)},
+       "www.tjrs.jus.br=https://www.tjrs.jus.br/novo/buscas-solr/ (página do próprio tribunal)",
+       b={"www.tjrs.jus.br"},
+       nota=_B + "www.tjrs.jus.br; o Disallow do robots.txt do site à ferramenta de pesquisa do agente é política de "
+            "robots para aquele User-Agent, não recusa ao produto (decisão do supervisor, rodada 3 do PR #14); a "
+            "primeira sonda do host é o robots.txt, lido com o UA do produto; www3.tjrs.jus.br/site_php/consulta ficou fora (legado, não confirmado); "
+            + _S0B.strip()),
     _f("tjpr", "TJPR: consulta de jurisprudência", {"portal.tjpr.jus.br": ("/jurisprudencia/",)},
        "portal.tjpr.jus.br=https://www.tjpr.jus.br/jurisprudencia (link https://portal.tjpr.jus.br/jurisprudencia/)",
        nota="nível A; " + _S0B.strip()),
 ]))
 
-_TJRS = (
-    "barreira registrada: o robots.txt do site recusou a leitura à ferramenta de pesquisa do agente; sem nova "
-    "tentativa por outra rede ou rota; acesso só por decisão do titular, por sessão assistida (0067) ou por "
-    "documentação oficial de acesso"
-)
-
 # fonte-sonda barrada: id -> motivo. Fora do catálogo; o instrumento a recusa antes da rede.
-FONTES_BARRADAS: Mapping[str, str] = MappingProxyType({"tjrs": _TJRS})
+FONTES_BARRADAS: Mapping[str, str] = MappingProxyType({})
 
 HOSTS_RECUSADOS: Mapping[str, str] = MappingProxyType({
-    "www.tjrs.jus.br": "TJRS, " + _TJRS,
     "jurisprudencia.trf1.jus.br": "não consta de página oficial lida; o TRF1 publica a pesquisa no CJF",
     "jurisprudencia.trf3.jus.br": "não consta de página oficial lida; o TRF3 publica em web.trf3.jus.br",
     "juris.trf2.jus.br": "apenas resultado de busca, sem página oficial lida",

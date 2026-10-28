@@ -36,7 +36,7 @@ Roteiro executável pelo supervisor, no notebook com IP brasileiro, depois da au
 
 Fonte que já respondeu recusa (403, desafio, robots) a uma leitura registrada sai (exceto o DJEN, decisão 0069: o 403 de nuvem fora do Brasil não é recusa ao produto) do catálogo e do roteiro, e o instrumento a recusa antes da rede (`FONTES_BARRADAS`). Não há comando, nova tentativa, outra rede nem outra rota. Acesso só por decisão do titular, por sessão assistida (decisão 0067) ou por documentação oficial de acesso.
 
-- TJRS (`www.tjrs.jus.br`): barreira registrada: o `robots.txt` do site recusou a leitura à ferramenta de pesquisa do agente; mesma regra.
+(nenhuma fonte barrada no momento)
 
 ## Comandos por fonte
 
@@ -315,6 +315,24 @@ Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que ca
 
 Notas: Os links oficiais usam `http://`; a sonda exige `https://`, e a resposta diz se o host o serve. O caminho do resultado não consta de página oficial lida: pendência S0b.
 
+### tjrs: TJRS: pesquisa de jurisprudência
+
+Hosts e rotas do catálogo: `www.tjrs.jus.br`: `/novo/buscas-solr/`. Confirmação: B (hosts B: `www.tjrs.jus.br`).
+
+| # | O quê | Nível | Estado |
+|---|---|---|---|
+| 1 | robots.txt (host B) | P | bloqueada até confirmação documental (página oficial lida ou confirmação do titular) |
+| 2 | pesquisa de jurisprudência (host B) | B | bloqueada até confirmação documental (página oficial lida ou confirmação do titular) |
+
+```powershell-bloqueado
+python scripts/capturar_fixture.py --fonte-sonda tjrs --sonda --saida C:/dev/fv14-sondas/tjrs --chave tjrs_robots --url "https://www.tjrs.jus.br/robots.txt"
+python scripts/capturar_fixture.py --fonte-sonda tjrs --sonda --saida C:/dev/fv14-sondas/tjrs --chave tjrs_pesquisa --url "https://www.tjrs.jus.br/novo/buscas-solr/"
+```
+
+Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
+
+Notas: Host nível B: bloqueado. A primeira sonda do host é o `robots.txt`, lido com o UA do produto; um `Disallow` aplicável impede o caminho. O `Disallow` do site à ferramenta de pesquisa do agente é política de robots para aquele User-Agent, não recusa ao produto (decisão do supervisor, rodada 3 do PR #14). A ferramenta de pesquisa teve a leitura de `/novo/` recusada pelo robots.txt do site: se, liberado o host, o robots tiver `Disallow` sobre `/novo/buscas-solr/`, NÃO sonde o caminho e registre a recusa como achado (Porta A do TJRS passa pela camada (b)). Resultado: pendência S0b.
+
 ### tjpr: TJPR: consulta de jurisprudência
 
 Hosts e rotas do catálogo: `portal.tjpr.jus.br`: `/jurisprudencia/`. Confirmação: A.
@@ -360,7 +378,7 @@ Contagem total do TJSP: "Resultados 1 a N de M" no HTML do resultado; do TJDFT: 
 | Painel de Estatísticas do Poder Judiciário (CNJ) | https://paineis.cnj.jus.br/QvAJAXZfc/opendoc.htm?document=qvw_l%2FPainelCNJ.qvw&host=QVS%40neodimio03&anonymous=true&sheet=shResumoDespFT | Série de casos novos, baixados e pendentes por tribunal e grau |
 | Relatório interativo | https://www.cnj.jus.br/relatorio_interativo | Consulta por tribunal |
 
-Como usar, por tribunal do lote 1 (TJSP, TJRJ, TJMG, TJPR, TJDFT; o TJRS está barrado, ver acima) e dos TRF1, TRF2 e TRF3: no relatório ou no painel, tomar o 2º grau do tribunal, o último ano fechado, e ler casos novos e baixados no 2º grau e as decisões colegiadas/terminativas quando o capítulo as separar. Multiplicar por 2 (janela de 24 meses do plano) e por um tamanho médio de texto medido na sonda, e registrar o resultado como "estimativa CNJ x tamanho amostral". Anotar edição do relatório, página ou aba do painel e filtros, para reprodução.
+Como usar, por tribunal do lote 1 (TJSP, TJRJ, TJMG, TJPR, TJDFT) e dos TRF1, TRF2 e TRF3: no relatório ou no painel, tomar o 2º grau do tribunal, o último ano fechado, e ler casos novos e baixados no 2º grau e as decisões colegiadas/terminativas quando o capítulo as separar. Multiplicar por 2 (janela de 24 meses do plano) e por um tamanho médio de texto medido na sonda, e registrar o resultado como "estimativa CNJ x tamanho amostral". Anotar edição do relatório, página ou aba do painel e filtros, para reprodução.
 
 Comparar a estimativa do CNJ com a contagem total de cada sonda (quando houver): divergência grande indica que a ferramenta de pesquisa cobre só parte do acervo ou que o total é cota inferior.
 
@@ -369,4 +387,4 @@ Comparar a estimativa do CNJ com a contagem total de cada sonda (quando houver):
 
 - Sem POST nem sessão para fonte-sonda: TST (pesquisa textual), TJRJ (`__VIEWSTATE`), e-SAJ (resultado) e talvez TJPR, STF e BNP só entregam a contagem por POST. Se as sondas confirmarem, abrir S0b: modo `--consulta` para fonte-sonda, reaproveitando `build_cjsg_request` nos quatro e-SAJ, com o mesmo registro e a mesma recusa antes da rede.
 - S0b, endpoints: o endpoint de resultado não documentado em página oficial fica fora da S0 (STF acórdãos, BNP, DJEN, CJF, TRF1, TRF2, TRF3, TJMG, TJPR e e-SAJ de TJAL, TJAM e TJMS). Só entra por sessão assistida nos termos da decisão 0067 (o humano resolve a barreira em contexto dedicado, a ferramenta captura os bytes, rótulo `sessao_assistida`) ou por documentação oficial lida. Depois de documentado, entra no roteiro e, se fora das rotas, no catálogo com nova confirmação oficial.
-- Hosts de nível B (`www.cjf.jus.br`, TJAL, TJAM, TJMS, TJRJ): bloqueados até leitura da página oficial ou confirmação do titular.
+- Hosts de nível B (`www.cjf.jus.br`, TJAL, TJAM, TJMS, TJRJ, TJRS): bloqueados até leitura da página oficial ou confirmação do titular.

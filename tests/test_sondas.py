@@ -25,7 +25,7 @@ from tests.test_transport import _fast_guards, _wire_local
 
 IDS = (
     "tst", "stf_acordaos", "bnp", "djen", "cjf_unificada", "trf1", "trf2", "trf3",
-    "tjac", "tjal", "tjam", "tjms", "tjrj", "tjmg", "tjpr",
+    "tjac", "tjal", "tjam", "tjms", "tjrj", "tjmg", "tjrs", "tjpr",
 )
 CORPO = b'{"ok":true}'
 
@@ -598,7 +598,7 @@ def test_roteiro_marca_bloqueio_de_host_b_e_nao_afirma_confirmacao_geral():
     bs = {(f.id, h) for f in FONTES_SONDA.values() for h in f.hosts_b}
     assert bs == {("cjf_unificada", "www.cjf.jus.br"), ("tjal", "www2.tjal.jus.br"),
                   ("tjam", "consultasaj.tjam.jus.br"), ("tjms", "esaj.tjms.jus.br"),
-                  ("tjrj", "www3.tjrj.jus.br")}
+                  ("tjrj", "www3.tjrj.jus.br"), ("tjrs", "www.tjrs.jus.br")}
     assert {f.id for f in FONTES_SONDA.values() if f.confirmacao == "B"} == {i for i, _ in bs}
     # todo comando de host B está em bloco bloqueado e vice-versa (também checado na allowlist, acima)
     for tipo, cid, _, _, url, bloqueado in _comandos_do_roteiro():
@@ -1115,33 +1115,21 @@ def test_redirecionamento_de_rota_exata_nao_e_seguido(monkeypatch, tmp_path, des
 
 # --- B2: barreira registrada --------------------------------------------------------------------------
 
-BARRADAS = {"tjrs": ("www.tjrs.jus.br",)}
+def test_nenhuma_fonte_barrada_no_momento_e_tjrs_de_volta_em_nivel_b():
+    assert not FONTES_BARRADAS and not set(FONTES_BARRADAS) & set(FONTES_SONDA)
+    assert "tjrs" in FONTES_SONDA and FONTES_SONDA["tjrs"].hosts_b == {"www.tjrs.jus.br"}
+    assert "www.tjrs.jus.br" not in HOSTS_RECUSADOS
 
 
-def test_fontes_barradas_fora_do_catalogo_com_motivo_registrado():
-    assert set(FONTES_BARRADAS) == set(BARRADAS) and not set(FONTES_BARRADAS) & set(FONTES_SONDA)
-    for fid, hosts in BARRADAS.items():
-        assert "sem nova tentativa por outra rede ou rota" in FONTES_BARRADAS[fid]
-        assert "sessão assistida (0067)" in FONTES_BARRADAS[fid] and "documentação oficial" in FONTES_BARRADAS[fid]
-        for h in hosts:
-            assert h in HOSTS_RECUSADOS and not any(h in f.hosts for f in FONTES_SONDA.values())
+def test_instrumento_recusa_fonte_barrada_antes_da_rede(monkeypatch, envios, tmp_path):
+    from types import MappingProxyType
 
-
-@pytest.mark.parametrize("fid,host", [(f, h) for f, hs in BARRADAS.items() for h in hs])
-def test_instrumento_recusa_fonte_barrada_antes_da_rede(envios, tmp_path, fid, host):
-    for url in (f"https://{host}/robots.txt", f"https://{host}/consulta"):
+    monkeypatch.setattr(captura, "FONTES_BARRADAS", MappingProxyType({"tst": "barreira registrada: x"}))
+    for url in ("https://jurisprudencia.tst.jus.br/robots.txt", "https://jurisprudencia.tst.jus.br/config.json"):
         with pytest.raises(ValueError, match="barrada, sem sonda"):
-            captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="b", fonte_sonda=fid,
+            captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="b", fonte_sonda="tst",
                              confirmado_por_titular=True)
     assert envios == [] and not any(tmp_path.iterdir())
-
-
-def test_host_barrado_nao_vale_em_outra_fonte_sonda(envios, tmp_path):
-    for host in ("www.tjrs.jus.br",):
-        with pytest.raises(ValueError, match="fora da allowlist"):
-            captura.capturar(None, url=f"https://{host}/robots.txt", destino=tmp_path, sonda=True, chave="b",
-                             fonte_sonda="tst")
-    assert envios == []
 
 
 @pytest.mark.repositorio
@@ -1165,9 +1153,12 @@ def test_djen_referencia_a_decisao_0069_e_roteiro_sem_proxy_nem_repeticao():
 
 
 @pytest.mark.repositorio
-def test_registro_da_barreira_no_roteiro_e_na_auditoria():
+def test_tjrs_robots_primeiro_no_roteiro_e_decisao_na_auditoria():
     raiz = Path(__file__).resolve().parents[1]
-    for doc in ("docs/S0-SONDAS.md", "docs/auditoria/1.4.0/s0-instrumento.md"):
-        texto = (raiz / doc).read_text(encoding="utf-8")
-        assert "www.tjrs.jus.br" in texto and "--fonte-sonda tjrs" not in texto, doc
-    assert "--fonte-sonda tjrs" not in (raiz / "docs/S0-SONDAS.md").read_text(encoding="utf-8")
+    roteiro = (raiz / "docs/S0-SONDAS.md").read_text(encoding="utf-8")
+    secao = roteiro[roteiro.index("### tjrs:"):roteiro.index("### tjpr:")]
+    comandos = [l for l in secao.splitlines() if l.startswith("python scripts/capturar_fixture.py")]
+    assert comandos[0].endswith('--url "https://www.tjrs.jus.br/robots.txt"') and len(comandos) == 2
+    assert "UA do produto" in secao and "Disallow" in secao and "não recusa ao produto" in secao
+    audit = (raiz / "docs/auditoria/1.4.0/s0-instrumento.md").read_text(encoding="utf-8")
+    assert "TJRS de volta ao catálogo em nível B" in audit
