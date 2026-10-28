@@ -12,6 +12,7 @@ import pytest
 from freoa_verifica import __version__, captura
 from freoa_verifica.connectors import httputil, tjsp
 from freoa_verifica.connectors.base import Unavailable, registry
+from freoa_verifica.robots_s0 import MIMES_ROBOTS
 from freoa_verifica.transport import Response
 from tests.fixture_util import validar_inventario
 
@@ -287,9 +288,9 @@ def test_url_fora_da_allowlist_recusada_antes_da_rede(envios, tmp_path, url):
 def test_robots_txt_do_host_permitido(envios, tmp_path):
     captura.capturar("tjsp", url="https://esaj.tjsp.jus.br/robots.txt", destino=tmp_path, sonda=True, chave="r")
     visto = envios[0]
-    # exceção de caminho só para o robots.txt exato, sem redirecionamento e só text/plain (parecer PR #14 r1, B1)
+    # exceção de caminho só para o robots.txt exato e sem redirecionamento (parecer PR #14 r1, B1); MIME largo (0071)
     assert visto["allowed_path_prefixes"] == {"esaj.tjsp.jus.br": ("/robots.txt",)}
-    assert visto["allowed_mimes"] == frozenset({"text/plain"}) and visto["max_redirects"] == 0
+    assert visto["allowed_mimes"] == MIMES_ROBOTS and visto["max_redirects"] == 0
     with pytest.raises(ValueError, match="fora da allowlist"):
         captura.capturar("tjsp", url="https://www.example.org/robots.txt", destino=tmp_path, sonda=True)
 
