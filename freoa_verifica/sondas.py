@@ -26,7 +26,7 @@ Exceções: o DJEN (decisão 0069, restrição geográfica geral) e o TJRS (Disa
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal, Mapping
 
@@ -48,7 +48,7 @@ class FonteSonda:
     confirmacao: Literal["A", "B"]  # pior nível entre os hosts: "B" se algum host é B
     hosts_b: frozenset[str] = frozenset()  # hosts de nível B (indexados, não lidos): sonda bloqueada
     nota: str = ""
-    consultas: Mapping[str, tuple[str, ...]] = MappingProxyType({})  # host -> rotas (de `rotas`) que admitem consulta
+    consultas: Mapping[str, tuple[str, ...]] = field(default_factory=lambda: MappingProxyType({}))  # host -> rotas (de `rotas`) que admitem consulta
 
     def __post_init__(self) -> None:
         if not self.hosts or set(self.rotas) != set(self.hosts):
