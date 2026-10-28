@@ -82,6 +82,7 @@ class LeituraRobots:
     content_type: str | None = None
     sha256: str | None = None
     regras: tuple[str, ...] = ()  # linhas do arquivo; só com estado `regras`
+    marcador: str | None = None  # tipo do desafio, quando o motivo é `desafio_no_robots`
 
     def decidir(self, url: str) -> Decisao:
         """Decisão para `url` (do mesmo host do robots): seguir, vedado, sem restrições ou barreira."""
@@ -157,6 +158,19 @@ def interpretavel(texto: str) -> bool:
     return "user-agent" in nomes and all(nomes)
 
 
+def _desafio(corpo: bytes, content_type: str | None, cabecalhos: Mapping[str, str] | None) -> str | None:
+    """Tipo do desafio pelos marcadores do projeto (`connectors.challenge`, sem lista própria), ou None."""
+    try:
+        achado = detect_challenge(status=200, headers=cabecalhos, body=corpo, content_type=content_type)
+    except RespostaInvalida:
+        achado = detect_challenge(status=200, headers=cabecalhos, body=vista_bytes(corpo))
+    return (str(achado.args[0]) if achado.args else "desconhecido") if achado is not None else None
+
+
+def _desafio_no_robots(tipo: str, base: dict[str, Any]) -> LeituraRobots:
+    return _barreira("desafio_no_robots", f"200 com marcador de desafio ({tipo})", marcador=tipo, **base)
+
+
 def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[str, str] | None) -> LeituraRobots:
     base = {"status": 200, "content_type": content_type}
     if not corpo:
@@ -164,6 +178,11 @@ def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[
     sha = hashlib.sha256(corpo).hexdigest()
     base["sha256"] = sha
     texto = _texto(corpo, content_type)
+    mime = (content_type or "").split(";", 1)[0].strip().lower()
+    if mime != "text/plain":  # fora de text/plain o marcador de desafio vence, mesmo que haja linhas de regra
+        achado = _desafio(corpo, content_type, cabecalhos)
+        if achado:
+            return _desafio_no_robots(achado, base)
     if interpretavel(texto):
         return LeituraRobots(REGRAS, "regras_interpretaveis", "grupo User-agent e só diretivas conhecidas",
                              regras=tuple(texto.splitlines()), **base)
@@ -171,13 +190,9 @@ def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[
     if not _PARECE_HTML.search(texto[:2048]) and nomes & {"allow", "disallow"}:
         return _barreira("regras_ambiguas", "Allow/Disallow em arquivo não interpretável (sem User-agent ou com linhas "
                          "desconhecidas): barreira por conservadorismo (decisão 0071)", **base)
-    try:
-        achado = detect_challenge(status=200, headers=cabecalhos, body=corpo, content_type=content_type)
-    except RespostaInvalida:
-        achado = detect_challenge(status=200, headers=cabecalhos, body=vista_bytes(corpo))
-    if achado is not None:
-        tipo = str(achado.args[0]) if achado.args else "desconhecido"
-        return _barreira(f"desafio_{tipo}", f"200 com marcador de desafio ({tipo})", **base)
+    achado = _desafio(corpo, content_type, cabecalhos)  # text/plain sem regras: ainda pode ser página de desafio
+    if achado:
+        return _desafio_no_robots(achado, base)
     forma = "HTML" if _PARECE_HTML.search(texto[:2048]) else (content_type or "sem Content-Type")
     return _sem_restricoes("200_sem_regras_interpretaveis", f"200 sem regras interpretáveis ({forma}): sem restrições",
                            **base)
