@@ -36,6 +36,7 @@ C_LISTA = "c" * 40
 SHA_WHEEL = "1" * 64
 SHA_SDIST = "2" * 64
 SHA_SNAP = "3" * 64
+SHA_PACOTE = "4" * 64
 URL_RUN = f"{ma.REPO_URL}/actions/runs/123456"
 TAG = "v1.4.0a1"
 URL_REL = f"{ma.REPO_URL}/releases/tag/{TAG}"
@@ -43,6 +44,20 @@ ALERTA = "fonte_fora: TJAP sem resposta em 28/10"
 
 SPEC = "docs/spec.md"
 RELATORIO = "docs/relatorio.md"
+SAUDE = "docs/saude-fontes.json"
+JOBS_OK = [{"nome": n, "conclusao": "success"} for n in ma.JOBS_CI]
+AMBIENTE = {"so": "Windows 11", "python": "3.13.1", "pais_ip": "BR"}
+# Formato real de tests/live/conftest.py: completa e fontes[fonte].testes[].
+SAUDE_OK = {
+    "commit": C_TESTE, "run_id": None, "inicio": DATA, "fim": DATA, "completa": True,
+    "fontes": {
+        "stj": {"estado": "ok", "categoria": None, "motivo": None, "testes": [
+            {"nome": "tests/live/test_live_stj.py::test_a", "estado": "ok", "categoria": None, "motivo": None}]},
+        "tjap": {"estado": "unavailable", "categoria": "fonte_fora", "motivo": "fora", "testes": [
+            {"nome": "tests/live/test_live_tjap.py::test_b", "estado": "unavailable",
+             "categoria": "fonte_fora", "motivo": "fora"}]},
+    },
+}
 PARECER = "docs/auditoria/1.4.0/parecer-r2.md"
 REGISTRO = "docs/auditoria/1.4.0/pr10-reducao-escopo.md"
 
@@ -59,10 +74,16 @@ def _etapas_padrao():
     return {n: _etapa() for n in ETAPAS}
 
 
+def _itens(id_="I1", padrao="pendente", **estados):
+    """Itens do catálogo do plano para o incremento; `estados` troca o estado de itens (I1_2="adiado")."""
+    trocas = {k.replace("_", "."): v for k, v in estados.items()}
+    return [{"id": i, "estado": trocas.get(i, padrao), "nota": ""} for i in ma.CATALOGO_PLANO[id_]]
+
+
 def _inc(id_="I1", estado="aberto", rotulo=None, itens=None, reducoes=None, etapas=None):
     return {
         "id": id_, "versao": "1.4.0a1", "estado": estado, "rotulo": rotulo,
-        "itens": itens if itens is not None else [{"id": "I1.1", "estado": "pendente", "nota": ""}],
+        "itens": itens if itens is not None else _itens(id_),
         "etapas": etapas if etapas is not None else _etapas_padrao(),
         "reducoes_de_escopo": reducoes or [],
     }
@@ -80,12 +101,23 @@ def _sha_arquivo(raiz, rel):
     return hashlib.sha256((raiz / rel).read_bytes()).hexdigest()
 
 
+def _bateria(raiz, commit, **trocas):
+    campos = {
+        "relatorio": RELATORIO, "sha256": _sha_arquivo(raiz, RELATORIO), "commit": commit,
+        "aprovados": 5, "xfail": 1, "falhas": 0, "escopo": ["stj"], "ambiente": dict(AMBIENTE),
+        "saude_fontes": SAUDE, "saude_fontes_sha256": _sha_arquivo(raiz, SAUDE),
+        "falhas_fora_do_escopo": [],
+    }
+    campos.update(trocas)
+    return _ev("bateria_live", **campos)
+
+
 def _etapas_validas(raiz):
     return {
         "1_desenvolvimento": _etapa("concluida", [_ev("especificacao", especificacao=SPEC, ramo="feat/x")]),
         "2_teste": _etapa("concluida", [
-            _ev("run_ci", url=URL_RUN, commit=C_TESTE, conclusao="success"),
-            _ev("bateria_live", relatorio=RELATORIO, commit=C_TESTE),
+            _ev("run_ci", url=URL_RUN, commit=C_TESTE, conclusao="success", jobs=copy.deepcopy(JOBS_OK)),
+            _bateria(raiz, C_TESTE),
         ]),
         "3_commit": _etapa("concluida", [_ev("commit", commit=C_TESTE)]),
         "4_incorporacao": _etapa("concluida", [
@@ -98,19 +130,20 @@ def _etapas_validas(raiz):
             _ev("pypi", versao="1.4.0a1", sha256_wheel=SHA_WHEEL, sha256_sdist=SHA_SDIST),
         ]),
         "6_distribuicao": _etapa("concluida", [
-            _ev("snapshot", sha256=SHA_SNAP, bateria_s4="aprovada", lista_embutida_commit=C_LISTA)]),
+            _ev("snapshot", pacotes=[{"nome": "nucleo", "sha256": SHA_SNAP}, {"nome": "stj", "sha256": SHA_PACOTE}],
+                bateria_s4="aprovada", lista_embutida_commit=C_LISTA)]),
         "7_instalacao": _etapa("concluida", [
-            _ev("instalacao", concluida=True, commit=C_MERGE, attestation_verificada=True, digest_snapshot=SHA_SNAP)]),
+            _ev("instalacao", concluida=True, commit=C_MERGE, attestation_verificada=True,
+                digests=[SHA_SNAP, SHA_PACOTE])]),
         "8_execucao": _etapa("concluida", [
             _ev("doctor", ok=True, alertas=[ALERTA]),
-            _ev("bateria_live", relatorio=RELATORIO, commit=C_MERGE),
+            _bateria(raiz, C_MERGE),
         ]),
     }
 
 
 def _concluido(raiz, estado="aberto"):
-    itens = [{"id": "I1.1", "estado": "concluido", "nota": ""}]
-    return _inc(estado=estado, itens=itens, etapas=_etapas_validas(raiz))
+    return _inc(estado=estado, itens=_itens(padrao="concluido"), etapas=_etapas_validas(raiz))
 
 
 def _muda(raiz, etapa, tipo, campo, valor, estado="aberto"):
@@ -128,6 +161,8 @@ def _muda(raiz, etapa, tipo, campo, valor, estado="aberto"):
 class Repo:
     def __init__(self, raiz):
         self.raiz = raiz
+        (raiz / SAUDE).parent.mkdir(parents=True, exist_ok=True)
+        (raiz / SAUDE).write_text(json.dumps(SAUDE_OK, ensure_ascii=False, indent=2), encoding="utf-8")
         for rel, texto in ((SPEC, "especificação\n"), (RELATORIO, "relatório\n"),
                            (PARECER, "Achados: nenhum.\nSEM BLOQUEADOR\n"), (REGISTRO, "redução\n")):
             arq = raiz / rel
@@ -312,6 +347,7 @@ def test_b3_tipo_outro_nas_etapas_1_a_3_e_reprovado(repo):
         ("2_teste", "run_ci", "conclusao", "failure", "'success'"),
         ("2_teste", "bateria_live", "relatorio", "docs/nao-existe.md", "arquivo inexistente"),
         ("2_teste", "bateria_live", "commit", "d" * 40, "difere de 2_teste run_ci.commit"),
+        ("2_teste", "run_ci", "jobs", "success", "lista de {nome, conclusao}"),
         ("3_commit", "commit", "commit", "d" * 40, "3_commit commit"),
         ("4_incorporacao", "parecer", "commit_auditado", "d" * 40, "commit_auditado"),
         ("4_incorporacao", "parecer", "commit_auditado", "abc", "40 hex"),
@@ -326,14 +362,20 @@ def test_b3_tipo_outro_nas_etapas_1_a_3_e_reprovado(repo):
         ("5_publicacao", "pypi", "versao", "1.4.0a2", "difere da versão da tag"),
         ("5_publicacao", "pypi", "sha256_wheel", "9" * 64, "difere de release.sha256_wheel"),
         ("5_publicacao", "pypi", "sha256_sdist", "9" * 64, "difere de release.sha256_sdist"),
-        ("6_distribuicao", "snapshot", "sha256", "curto", "64 hex"),
+        ("6_distribuicao", "snapshot", "pacotes", [{"nome": "nucleo", "sha256": "curto"}], "64 hex"),
+        ("6_distribuicao", "snapshot", "pacotes", [], "ao menos um pacote"),
+        ("6_distribuicao", "snapshot", "pacotes", [{"nome": "a", "sha256": "1" * 64}, {"nome": "a", "sha256": "2" * 64}],
+         "nome de pacote repetido"),
         ("6_distribuicao", "snapshot", "bateria_s4", "reprovada", "'aprovada'"),
         ("6_distribuicao", "snapshot", "bateria_s4", "pendente", "'aprovada'"),
         ("6_distribuicao", "snapshot", "lista_embutida_commit", "", "40 hex"),
         ("7_instalacao", "instalacao", "concluida", False, "true"),
         ("7_instalacao", "instalacao", "commit", C_TESTE, "difere de 4_incorporacao merge.commit"),
         ("7_instalacao", "instalacao", "attestation_verificada", False, "true"),
-        ("7_instalacao", "instalacao", "digest_snapshot", "9" * 64, "difere de snapshot.sha256"),
+        ("7_instalacao", "instalacao", "digests", [SHA_SNAP], "difere dos sha256 dos pacotes"),
+        ("7_instalacao", "instalacao", "digests", [SHA_SNAP, SHA_PACOTE, "9" * 64], "difere dos sha256 dos pacotes"),
+        ("7_instalacao", "instalacao", "digests", ["9" * 64, SHA_PACOTE], "difere dos sha256 dos pacotes"),
+        ("7_instalacao", "instalacao", "digests", [], "ao menos um digest"),
         ("8_execucao", "doctor", "ok", False, "true"),
         ("8_execucao", "doctor", "alertas", ["TJAP fora do ar"], "sem categoria de indisponibilidade"),
         ("8_execucao", "doctor", "alertas", ["regressao: algo quebrou"], "sem categoria de indisponibilidade"),
@@ -378,11 +420,11 @@ def test_b3_fechar_exige_todos_os_recibos(repo, capsys):
     et["4_incorporacao"]["evidencias"] = [e for e in et["4_incorporacao"]["evidencias"] if e["tipo"] == "parecer"]
     et["4_incorporacao"]["evidencias"][0]["campos"]["commit_auditado"] = "e" * 40
     et["5_publicacao"]["evidencias"][2]["campos"]["sha256_wheel"] = "9" * 64
-    et["7_instalacao"]["evidencias"][0]["campos"]["digest_snapshot"] = "8" * 64
+    et["7_instalacao"]["evidencias"][0]["campos"]["digests"] = ["8" * 64]
     repo.cria(_manifesto([inc]))
     assert repo.run("fechar", "--incremento", "I1") == 1
     err = capsys.readouterr().err
-    for trecho in ("exige evidência 'merge'", "commit_auditado", "pypi.sha256_wheel", "instalacao.digest_snapshot"):
+    for trecho in ("exige evidência 'merge'", "commit_auditado", "pypi.sha256_wheel", "instalacao.digests"):
         assert trecho in err, trecho
 
     et["5_publicacao"]["evidencias"][1]["campos"]["attestation_verificada"] = False
@@ -559,7 +601,7 @@ def test_fechar_incremento_adiado_e_recusado(repo, capsys):
 
 def test_d_incremento_concluido_com_item_pendente_e_reprovado(repo):
     inc = _concluido(repo.raiz, "concluido")
-    inc["itens"].append({"id": "I1.2", "estado": "pendente", "nota": ""})
+    inc["itens"][1]["estado"] = "pendente"
     assert any("item I1.2 pendente" in e for e in repo.erros(_manifesto([inc])))
 
 
@@ -568,16 +610,15 @@ def _red(item="I1.2", registro=REGISTRO, **kw):
 
 
 def test_b5_reducao_valida_e_aceita(repo):
-    inc = _inc(rotulo="1.4.0a1 parcial", itens=[{"id": "I1.2", "estado": "reduzido", "nota": ""}],
-               reducoes=[_red()])
+    inc = _inc(rotulo="1.4.0a1 parcial", itens=_itens(I1_2="reduzido"), reducoes=[_red()])
     assert repo.erros(_manifesto([inc])) == []
-    inc["itens"][0]["estado"] = "adiado"
+    inc["itens"][1]["estado"] = "adiado"
     assert repo.erros(_manifesto([inc])) == []
 
 
 def test_b5_reducao_de_item_concluido_com_rotulo_nulo_e_reprovada(repo):
     """Cenário do parecer: redução registrada com item `concluido` e rótulo nulo era aceita."""
-    inc = _inc(rotulo=None, itens=[{"id": "I1.2", "estado": "concluido", "nota": ""}], reducoes=[_red()])
+    inc = _inc(rotulo=None, itens=_itens(I1_2="concluido"), reducoes=[_red()])
     erros = repo.erros(_manifesto([inc]))
     assert any("mas o item está 'concluido'" in e for e in erros)
     assert any("exige rotulo do incremento não nulo" in e for e in erros)
@@ -585,26 +626,25 @@ def test_b5_reducao_de_item_concluido_com_rotulo_nulo_e_reprovada(repo):
 
 @pytest.mark.parametrize("estado", ["pendente", "concluido"])
 def test_b5_reducao_exige_item_reduzido_ou_adiado(repo, estado):
-    inc = _inc(rotulo="r", itens=[{"id": "I1.2", "estado": estado, "nota": ""}], reducoes=[_red()])
+    inc = _inc(rotulo="r", itens=_itens(I1_2=estado), reducoes=[_red()])
     assert any("mas o item está" in e for e in repo.erros(_manifesto([inc])))
 
 
 def test_b5_registro_inexistente_e_reprovado(repo):
     """Cenário do parecer: registro inexistente passava."""
-    inc = _inc(rotulo="r", itens=[{"id": "I1.2", "estado": "reduzido", "nota": ""}],
+    inc = _inc(rotulo="r", itens=_itens(I1_2="reduzido"),
                reducoes=[_red(registro="docs/auditoria/1.4.0/nao-existe.md")])
     assert any("registro: arquivo inexistente" in e for e in repo.erros(_manifesto([inc])))
 
 
 @pytest.mark.parametrize("registro", ["/etc/passwd", "../fora.md", "https://x/y.md", "C:/x.md"])
 def test_b5_registro_fora_do_repositorio_e_reprovado(repo, registro):
-    inc = _inc(rotulo="r", itens=[{"id": "I1.2", "estado": "reduzido", "nota": ""}],
-               reducoes=[_red(registro=registro)])
+    inc = _inc(rotulo="r", itens=_itens(I1_2="reduzido"), reducoes=[_red(registro=registro)])
     assert any("registro:" in e for e in repo.erros(_manifesto([inc])))
 
 
 def test_b5_item_reduzido_exige_entrada_correspondente(repo):
-    inc = _inc(rotulo="r", itens=[{"id": "I1.2", "estado": "reduzido", "nota": ""}])
+    inc = _inc(rotulo="r", itens=_itens(I1_2="reduzido"))
     assert any("exige entrada em reducoes_de_escopo" in e for e in repo.erros(_manifesto([inc])))
 
 
@@ -614,7 +654,7 @@ def test_b5_reducao_de_item_inexistente_e_reprovada(repo):
 
 
 def test_b5_reducao_repetida_e_reprovada(repo):
-    inc = _inc(rotulo="r", itens=[{"id": "I1.2", "estado": "reduzido", "nota": ""}], reducoes=[_red(), _red()])
+    inc = _inc(rotulo="r", itens=_itens(I1_2="reduzido"), reducoes=[_red(), _red()])
     assert any("redução repetida" in e for e in repo.erros(_manifesto([inc])))
 
 
@@ -641,23 +681,23 @@ def test_b5_manifesto_inicial_adia_o_i1_2_e_o_i2_6_incorpora_o_escopo():
 
 
 def test_b5_comando_reducao_marca_item_registra_e_rotula_numa_escrita(repo):
-    repo.cria(_manifesto([_inc(itens=[{"id": "I1.2", "estado": "pendente", "nota": ""}])]))
+    repo.cria(_manifesto([_inc()]))
     assert repo.run("item", "--incremento", "I1", "--id", "I1.2", "--estado", "reduzido") == 1  # sem redução
     assert repo.run("reducao", "--incremento", "I1", "--item", "I1.2", "--rotulo", "STJ parcial",
                     "--registro", REGISTRO, "--decisao", "D5", "--motivo", "limite de auditoria") == 0
     inc = repo.dados()["incrementos"][0]
     assert inc["rotulo"] == "STJ parcial"
-    assert inc["itens"][0]["estado"] == "reduzido"
+    assert inc["itens"][1]["estado"] == "reduzido"
     assert inc["reducoes_de_escopo"][0]["data"] == dt.datetime.now(dt.timezone.utc).date().isoformat()
     # reenvio substitui a entrada do mesmo item
     assert repo.run("reducao", "--incremento", "I1", "--item", "I1.2", "--estado", "adiado", "--rotulo", "outro",
                     "--registro", REGISTRO, "--decisao", "D5", "--motivo", "m2") == 0
     inc = repo.dados()["incrementos"][0]
-    assert len(inc["reducoes_de_escopo"]) == 1 and inc["itens"][0]["estado"] == "adiado"
+    assert len(inc["reducoes_de_escopo"]) == 1 and inc["itens"][1]["estado"] == "adiado"
 
 
 def test_b5_comando_reducao_com_registro_inexistente_nao_grava(repo):
-    p = repo.cria(_manifesto([_inc(itens=[{"id": "I1.2", "estado": "pendente", "nota": ""}])]))
+    p = repo.cria(_manifesto([_inc()]))
     antes = p.read_bytes()
     assert repo.run("reducao", "--incremento", "I1", "--item", "I1.2", "--rotulo", "r",
                     "--registro", "docs/nao-existe.md", "--decisao", "D5", "--motivo", "m") == 1
@@ -665,7 +705,7 @@ def test_b5_comando_reducao_com_registro_inexistente_nao_grava(repo):
 
 
 def test_b5_voltar_item_a_pendente_com_reducao_registrada_e_recusado(repo):
-    repo.cria(_manifesto([_inc(itens=[{"id": "I1.2", "estado": "pendente", "nota": ""}])]))
+    repo.cria(_manifesto([_inc()]))
     assert repo.run("reducao", "--incremento", "I1", "--item", "I1.2", "--rotulo", "r",
                     "--registro", REGISTRO, "--decisao", "D5", "--motivo", "m") == 0
     assert repo.run("item", "--incremento", "I1", "--id", "I1.2", "--estado", "pendente") == 1
@@ -733,7 +773,7 @@ def test_e_revisar_em_invalido_e_aceito_null(repo):
 
 @pytest.mark.parametrize("sha", ["A" * 64, "a" * 63, "g" * 64, "a" * 65, None, 1])
 def test_e_sha256_fora_do_formato_e_reprovado(repo, sha):
-    inc = _muda(repo.raiz, "6_distribuicao", "snapshot", "sha256", sha)
+    inc = _muda(repo.raiz, "6_distribuicao", "snapshot", "pacotes", [{"nome": "nucleo", "sha256": sha}])
     assert any("sha256" in e for e in repo.erros(_manifesto([inc])))
 
 
@@ -830,14 +870,14 @@ def test_i2_o_cli_nao_expoe_a_raiz():
 def test_registrar_grava_o_recibo_com_campos_na_ordem_e_converte_booleanos(repo):
     repo.cria()
     assert repo.run("registrar", "--incremento", "I1", "--etapa", "7_instalacao", "--tipo", "instalacao",
-                    "--campo", f"digest_snapshot={SHA_SNAP}", "--campo", "concluida=true",
+                    "--campo", f"digests={SHA_SNAP}", "--campo", "concluida=true",
                     "--campo", f"commit={C_MERGE}", "--campo", "attestation_verificada=true",
                     "--estado", "concluida", "--nota", "feito") == 0
     etapa = repo.dados()["incrementos"][0]["etapas"]["7_instalacao"]
     assert etapa["estado"] == "concluida" and etapa["nota"] == "feito"
     ev = etapa["evidencias"][0]
     assert list(ev) == ["tipo", "campos", "data"]
-    assert list(ev["campos"]) == ["concluida", "commit", "attestation_verificada", "digest_snapshot"]
+    assert list(ev["campos"]) == ["concluida", "commit", "attestation_verificada", "digests"]
     assert ev["campos"]["concluida"] is True and ev["campos"]["attestation_verificada"] is True
     dt.datetime.fromisoformat(ev["data"])
 
@@ -847,7 +887,7 @@ def test_registrar_false_vira_booleano_e_e_reprovado(repo):
     antes = p.read_bytes()
     assert repo.run("registrar", "--incremento", "I1", "--etapa", "7_instalacao", "--tipo", "instalacao",
                     "--campo", "concluida=false", "--campo", f"commit={C_MERGE}",
-                    "--campo", "attestation_verificada=true", "--campo", f"digest_snapshot={SHA_SNAP}") == 1
+                    "--campo", "attestation_verificada=true", "--campo", f"digests={SHA_SNAP}") == 1
     assert p.read_bytes() == antes
 
 
@@ -894,12 +934,19 @@ def test_registrar_incremento_inexistente(repo, capsys):
     assert "incremento 'I9' não existe" in capsys.readouterr().err
 
 
+def _campos_bateria_cli(commit):
+    return [f"relatorio={RELATORIO}", f"commit={commit}", "aprovados=5", "xfail=1", "falhas=0", "escopo=stj",
+            "ambiente.so=Windows 11", "ambiente.python=3.13.1", "ambiente.pais_ip=BR", f"saude_fontes={SAUDE}",
+            "falhas_fora_do_escopo="]
+
+
 def test_fluxo_completo_pela_cli_fecha_o_incremento(repo):
-    repo.cria(_manifesto([_inc(itens=[{"id": "I1.1", "estado": "pendente", "nota": ""}])]))
+    repo.cria(_manifesto([_inc()]))
+    jobs = [f"jobs={n}=success" for n in ma.JOBS_CI]
     ev = [
         ("1_desenvolvimento", "especificacao", [f"especificacao={SPEC}", "ramo=feat/x"]),
-        ("2_teste", "run_ci", [f"url={URL_RUN}", f"commit={C_TESTE}", "conclusao=success"]),
-        ("2_teste", "bateria_live", [f"relatorio={RELATORIO}", f"commit={C_TESTE}"]),
+        ("2_teste", "run_ci", [f"url={URL_RUN}", f"commit={C_TESTE}", "conclusao=success", *jobs]),
+        ("2_teste", "bateria_live", _campos_bateria_cli(C_TESTE)),
         ("3_commit", "commit", [f"commit={C_TESTE}"]),
         ("4_incorporacao", "parecer", [f"parecer={PARECER}", f"commit_auditado={C_TESTE}"]),
         ("4_incorporacao", "merge", [f"commit={C_MERGE}"]),
@@ -907,42 +954,31 @@ def test_fluxo_completo_pela_cli_fecha_o_incremento(repo):
         ("5_publicacao", "release", [f"url={URL_REL}", "attestation_verificada=true",
                                      f"sha256_wheel={SHA_WHEEL}", f"sha256_sdist={SHA_SDIST}"]),
         ("5_publicacao", "pypi", ["versao=1.4.0a1", f"sha256_wheel={SHA_WHEEL}", f"sha256_sdist={SHA_SDIST}"]),
-        ("6_distribuicao", "snapshot", [f"sha256={SHA_SNAP}", "bateria_s4=aprovada",
-                                        f"lista_embutida_commit={C_LISTA}"]),
+        ("6_distribuicao", "snapshot", [f"pacotes=nucleo={SHA_SNAP}", f"pacotes=stj={SHA_PACOTE}",
+                                        "bateria_s4=aprovada", f"lista_embutida_commit={C_LISTA}"]),
         ("7_instalacao", "instalacao", ["concluida=true", f"commit={C_MERGE}", "attestation_verificada=true",
-                                        f"digest_snapshot={SHA_SNAP}"]),
+                                        f"digests={SHA_SNAP}", f"digests={SHA_PACOTE}"]),
         ("8_execucao", "doctor", ["ok=true", f"alertas={ALERTA}"]),
-        ("8_execucao", "bateria_live", [f"relatorio={RELATORIO}", f"commit={C_MERGE}"]),
+        ("8_execucao", "bateria_live", _campos_bateria_cli(C_MERGE)),
     ]
-    for etapa, tipo, campos in ev:
+    for n, (etapa, tipo, campos) in enumerate(ev):
         args = ["registrar", "--incremento", "I1", "--etapa", etapa, "--tipo", tipo]
         for c in campos:
             args += ["--campo", c]
+        ultimo = n + 1 == len(ev) or ev[n + 1][0] != etapa  # a etapa fecha no último recibo dela
+        if ultimo:
+            args += ["--estado", "concluida"]
+        if n + 1 == len(ev):
+            for it in ma.CATALOGO_PLANO["I1"]:
+                assert repo.run("item", "--incremento", "I1", "--id", it, "--estado", "concluido") == 0
+            assert repo.run("fechar", "--incremento", "I1") == 1  # etapa 8 ainda pendente
         assert repo.run(*args) == 0, (etapa, tipo)
-    assert repo.run("fechar", "--incremento", "I1") == 1  # etapas ainda pendentes
-    for etapa in ETAPAS:
-        assert repo.run("registrar", "--incremento", "I1", "--etapa", etapa, "--tipo",
-                        ma.TIPOS_DA_ETAPA[etapa][0], "--estado", "concluida",
-                        *[x for c in _campos_cli(repo, etapa) for x in ("--campo", c)]) == 0, etapa
-    assert repo.run("item", "--incremento", "I1", "--id", "I1.1", "--estado", "concluido") == 0
+    bat = repo.dados()["incrementos"][0]["etapas"]["2_teste"]["evidencias"][1]["campos"]
+    assert bat["sha256"] == _sha_arquivo(repo.raiz, RELATORIO)
+    assert bat["saude_fontes_sha256"] == _sha_arquivo(repo.raiz, SAUDE)
+    assert bat["aprovados"] == 5 and bat["escopo"] == ["stj"] and bat["ambiente"] == AMBIENTE
     assert repo.run("fechar", "--incremento", "I1") == 0
     assert repo.dados()["incrementos"][0]["estado"] == "concluido"
-
-
-def _campos_cli(repo, etapa):
-    """Reenvia o primeiro recibo da etapa (substitui o igual) só para marcar a etapa como concluída."""
-    ev = repo.dados()["incrementos"][0]["etapas"][etapa]["evidencias"][0]
-    out = []
-    for k, v in ev["campos"].items():
-        if k == "sha256" and ev["tipo"] == "parecer":
-            continue
-        if isinstance(v, bool):
-            out.append(f"{k}={'true' if v else 'false'}")
-        elif isinstance(v, list):
-            out.extend(f"{k}={x}" for x in v) if v else out.append(f"{k}=")
-        else:
-            out.append(f"{k}={v}")
-    return out
 
 
 def test_fluxo_item_e_rotulo(repo):
@@ -1072,3 +1108,444 @@ def test_documento_de_auditoria_nao_se_contradiz_sobre_o_ruff():
     texto = AUDITORIA.read_text(encoding="utf-8")
     assert "Ruff, matriz Windows" not in texto
     assert "nao_aplicavel" not in texto.replace("`nao_aplicavel` deixou de existir", "")
+
+
+# ---------------------------------------------------------------- r2 B1: recibo da bateria live
+
+
+def _inc_bateria(repo, etapa="2_teste", **trocas):
+    inc = _concluido(repo.raiz)
+    evs = inc["etapas"][etapa]["evidencias"]
+    novo = _bateria(repo.raiz, C_TESTE if etapa == "2_teste" else C_MERGE, **trocas)
+    evs[next(i for i, e in enumerate(evs) if e["tipo"] == "bateria_live")] = novo
+    return inc
+
+
+def _inc_ambas(repo, **trocas):
+    """Bateria das etapas 2 e 8 com as mesmas trocas (os dois recibos apontam para o mesmo saude-fontes)."""
+    inc = _inc_bateria(repo, "2_teste", **trocas)
+    evs = inc["etapas"]["8_execucao"]["evidencias"]
+    evs[next(i for i, e in enumerate(evs) if e["tipo"] == "bateria_live")] = _bateria(repo.raiz, C_MERGE, **trocas)
+    return inc
+
+
+def _salva_saude(repo, saude):
+    (repo.raiz / SAUDE).write_text(json.dumps(saude, ensure_ascii=False), encoding="utf-8")
+    return _sha_arquivo(repo.raiz, SAUDE)
+
+
+def test_r2_b1_recibo_so_com_caminho_e_commit_nao_vale_mais(repo):
+    """Cenário do parecer: `bateria_live` só com caminho e commit."""
+    inc = _concluido(repo.raiz)
+    for etapa in ("2_teste", "8_execucao"):
+        evs = inc["etapas"][etapa]["evidencias"]
+        c = next(e for e in evs if e["tipo"] == "bateria_live")["campos"]
+        c.clear()
+        c.update(relatorio=RELATORIO, commit=C_TESTE if etapa == "2_teste" else C_MERGE)
+    erros = repo.erros(_manifesto([inc]))
+    for campo in ("sha256", "aprovados", "xfail", "falhas", "escopo", "ambiente", "saude_fontes",
+                  "saude_fontes_sha256", "falhas_fora_do_escopo"):
+        assert any(f"falta o campo '{campo}'" in e for e in erros), campo
+
+
+@pytest.mark.parametrize("etapa", ["2_teste", "8_execucao"])
+def test_r2_b1_relatorio_bateria_nao_executada_reprova(repo, etapa):
+    """Cenário do parecer: relatório 'BATERIA NAO EXECUTADA' fechava o incremento."""
+    (repo.raiz / RELATORIO).write_text("BATERIA NAO EXECUTADA\n", encoding="utf-8")
+    inc = _inc_bateria(repo, etapa, aprovados=0, xfail=0, sha256=_sha_arquivo(repo.raiz, RELATORIO))
+    erros = repo.erros(_manifesto([inc]))
+    assert any("aprovados + xfail deve ser pelo menos 1" in e for e in erros), erros
+    repo.cria(_manifesto([inc]))
+    assert repo.run("fechar", "--incremento", "I1") == 1
+
+
+def test_r2_b1_aprovados_mais_xfail_basta_um_de_cada(repo):
+    assert repo.erros(_manifesto([_inc_bateria(repo, aprovados=0, xfail=1)])) == []
+    assert repo.erros(_manifesto([_inc_bateria(repo, aprovados=1, xfail=0)])) == []
+
+
+@pytest.mark.parametrize("campo", ["aprovados", "xfail", "falhas"])
+@pytest.mark.parametrize("valor", [-1, "3", 1.5, True, None])
+def test_r2_b1_contagens_sao_inteiros_nao_negativos(repo, campo, valor):
+    erros = repo.erros(_manifesto([_inc_bateria(repo, **{campo: valor})]))
+    assert any(f"campos.{campo}: deve ser inteiro maior ou igual a 0" in e for e in erros), erros
+
+
+def test_r2_b1_sha256_do_relatorio_e_reconferido(repo):
+    inc = _inc_bateria(repo)
+    (repo.raiz / RELATORIO).write_text("relatório alterado depois do registro\n", encoding="utf-8")
+    assert any("sha256 registrado difere do sha256 dos bytes de relatorio" in e for e in repo.erros(_manifesto([inc])))
+
+
+def test_r2_b1_sha256_da_saude_e_reconferido(repo):
+    inc = _inc_bateria(repo)
+    _salva_saude(repo, {**SAUDE_OK, "fim": "2030-01-01T00:00:00+00:00"})
+    erros = repo.erros(_manifesto([inc]))
+    assert any("saude_fontes_sha256 registrado difere" in e for e in erros)
+
+
+@pytest.mark.parametrize("campo", ["relatorio", "saude_fontes"])
+@pytest.mark.parametrize("ref", ["docs/nao-existe.md", "../fora.json", "/etc/passwd", "https://x/y.json"])
+def test_r2_b1_caminhos_da_bateria_sao_confinados_e_existem(repo, campo, ref):
+    erros = repo.erros(_manifesto([_inc_bateria(repo, **{campo: ref})]))
+    assert any(f"bateria_live: {campo}:" in e or f"bateria_live.campos.{campo}" in e or f"bateria_live.{campo}" in e
+               for e in erros), erros
+
+
+@pytest.mark.parametrize("escopo", [[], "stj", ["stj", "stj"], ["stj", ""], [1]])
+def test_r2_b1_escopo_e_lista_nao_vazia_de_fontes(repo, escopo):
+    assert any("campos.escopo:" in e for e in repo.erros(_manifesto([_inc_bateria(repo, escopo=escopo)])))
+
+
+@pytest.mark.parametrize(
+    "ambiente",
+    [{}, {"so": "Windows"}, {"so": "w", "python": "3.13", "pais_ip": ""}, {"so": "w", "python": "3", "pais_ip": "BR", "x": "y"},
+     "Windows 11", None],
+)
+def test_r2_b1_ambiente_exige_so_python_e_pais_ip(repo, ambiente):
+    assert any("campos.ambiente:" in e for e in repo.erros(_manifesto([_inc_bateria(repo, ambiente=ambiente)])))
+
+
+def test_r2_b1_falhas_igual_ao_tamanho_de_falhas_fora_do_escopo(repo):
+    fora = [{"teste": "tests/live/test_live_tjap.py::test_b", "motivo": "WAF", "registro": REGISTRO}]
+    assert repo.erros(_manifesto([_inc_bateria(repo, falhas=1, falhas_fora_do_escopo=fora)])) == []
+    erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=0, falhas_fora_do_escopo=fora)]))
+    assert any("falhas (0) difere de len(falhas_fora_do_escopo) (1)" in e for e in erros)
+    erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=2, falhas_fora_do_escopo=fora)]))
+    assert any("falhas (2) difere" in e for e in erros)
+
+
+def test_r2_b1_falha_de_fonte_do_escopo_nao_pode_estar_fora_do_escopo(repo):
+    fora = [{"teste": "tests/live/test_live_stj.py::test_a", "motivo": "ignorada", "registro": REGISTRO}]
+    erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=1, falhas_fora_do_escopo=fora)]))
+    assert any("falha de fonte do escopo em falhas_fora_do_escopo" in e for e in erros)
+
+
+def test_r2_b1_falha_fora_do_escopo_exige_registro_existente_e_confinado(repo):
+    for ref in ("docs/nao-existe.md", "../fora.md", "https://x/y"):
+        fora = [{"teste": "tests/live/test_live_tjap.py::test_b", "motivo": "WAF", "registro": ref}]
+        erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=1, falhas_fora_do_escopo=fora)]))
+        assert any("falhas_fora_do_escopo 'tests/live/test_live_tjap.py::test_b': registro:" in e for e in erros), ref
+
+
+@pytest.mark.parametrize(
+    "fora",
+    [[{"teste": "t", "motivo": "m"}], [{"teste": "t", "motivo": "m", "registro": REGISTRO, "x": 1}],
+     [{"teste": "", "motivo": "m", "registro": REGISTRO}], ["t"], "t",
+     [{"teste": "tests/live/test_live_a.py::t", "motivo": "m", "registro": REGISTRO},
+      {"teste": "tests/live/test_live_a.py::t", "motivo": "m", "registro": REGISTRO}]],
+)
+def test_r2_b1_forma_de_falhas_fora_do_escopo(repo, fora):
+    n = len(fora) if isinstance(fora, list) else 0
+    erros = repo.erros(_manifesto([_inc_bateria(repo, falhas=n, falhas_fora_do_escopo=fora)]))
+    assert any("campos.falhas_fora_do_escopo:" in e for e in erros), erros
+
+
+def test_r2_b1_saude_incompleta_reprova(repo):
+    for completa in (False, None, "true"):
+        sha = _salva_saude(repo, {**SAUDE_OK, "completa": completa})
+        erros = repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)]))
+        assert any("'completa' deve ser true" in e for e in erros), completa
+
+
+def test_r2_b1_regressao_precisa_estar_em_falhas_fora_do_escopo(repo):
+    nome = "tests/live/test_live_tjap.py::test_b"
+    saude = json.loads(json.dumps(SAUDE_OK))
+    saude["fontes"]["tjap"]["testes"][0].update(estado="regressao", categoria=None)
+    sha = _salva_saude(repo, saude)
+    erros = repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)]))
+    assert any(f"regressão fora de falhas_fora_do_escopo: {nome}" in e for e in erros)
+    fora = [{"teste": nome, "motivo": "regressão em fonte fora do escopo, registrada", "registro": REGISTRO}]
+    assert repo.erros(_manifesto([_inc_ambas(repo, saude_fontes_sha256=sha, falhas=1,
+                                             falhas_fora_do_escopo=fora)])) == []
+
+
+def test_r2_b1_regressao_em_fonte_do_escopo_nunca_passa(repo):
+    nome = "tests/live/test_live_stj.py::test_a"
+    saude = json.loads(json.dumps(SAUDE_OK))
+    saude["fontes"]["stj"]["testes"][0].update(estado="regressao")
+    sha = _salva_saude(repo, saude)
+    fora = [{"teste": nome, "motivo": "m", "registro": REGISTRO}]
+    erros = repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha, falhas=1, falhas_fora_do_escopo=fora)]))
+    assert any("falha de fonte do escopo" in e for e in erros)
+    assert any("regressão fora" in e for e in repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)])))
+
+
+@pytest.mark.parametrize("categoria", [None, ""])
+def test_r2_b1_unavailable_exige_categoria(repo, categoria):
+    saude = json.loads(json.dumps(SAUDE_OK))
+    saude["fontes"]["tjap"]["testes"][0]["categoria"] = categoria
+    sha = _salva_saude(repo, saude)
+    erros = repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)]))
+    assert any("indisponibilidade sem categoria" in e for e in erros)
+
+
+@pytest.mark.parametrize("bruto", [b"{", b"[]", b'{"completa": true}', b'{"completa": true, "fontes": []}', b"\xff"])
+def test_r2_b1_saude_malformada_reprova(repo, bruto):
+    (repo.raiz / SAUDE).write_bytes(bruto)
+    sha = _sha_arquivo(repo.raiz, SAUDE)
+    assert repo.erros(_manifesto([_inc_bateria(repo, saude_fontes_sha256=sha)])), bruto
+
+
+def test_r2_b1_a_etapa_8_tambem_confere_a_bateria(repo):
+    erros = repo.erros(_manifesto([_inc_bateria(repo, "8_execucao", aprovados=0, xfail=0)]))
+    assert any("8_execucao: bateria_live:" in e and "aprovados + xfail" in e for e in erros)
+
+
+def test_r2_b1_fonte_do_teste_usa_a_regra_do_conftest():
+    assert ma._fonte_do_teste("tests/live/test_live_stj.py::test_a[x]") == "stj"
+    assert ma._fonte_do_teste("tests\\live\\test_live_tjsp.py::t") == "tjsp"
+
+
+def test_r2_b1_registrar_bateria_calcula_os_dois_sha256(repo):
+    repo.cria()
+    args = ["registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "bateria_live",
+            *[x for c in _campos_bateria_cli(C_TESTE) for x in ("--campo", c)]]
+    assert repo.run(*args) == 0
+    campos = repo.dados()["incrementos"][0]["etapas"]["2_teste"]["evidencias"][0]["campos"]
+    assert list(campos) == list(ma.CAMPOS_POR_TIPO["bateria_live"])
+    assert campos["sha256"] == _sha_arquivo(repo.raiz, RELATORIO)
+    assert campos["saude_fontes_sha256"] == _sha_arquivo(repo.raiz, SAUDE)
+    assert campos["falhas_fora_do_escopo"] == [] and isinstance(campos["aprovados"], int)
+
+
+@pytest.mark.parametrize("hash_", ["sha256", "saude_fontes_sha256"])
+def test_r2_b1_registrar_bateria_recusa_sha256_informado(repo, capsys, hash_):
+    p = repo.cria()
+    antes = p.read_bytes()
+    args = ["registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "bateria_live",
+            *[x for c in (*_campos_bateria_cli(C_TESTE), f"{hash_}={'a' * 64}") for x in ("--campo", c)]]
+    assert repo.run(*args) == 1
+    assert "calculado pelo registrar" in capsys.readouterr().err
+    assert p.read_bytes() == antes
+
+
+def test_r2_b1_registrar_bateria_nao_executada_e_recusado(repo, capsys):
+    p = repo.cria()
+    antes = p.read_bytes()
+    campos = [c.replace("aprovados=5", "aprovados=0").replace("xfail=1", "xfail=0") for c in _campos_bateria_cli(C_TESTE)]
+    assert repo.run("registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "bateria_live",
+                    *[x for c in campos for x in ("--campo", c)]) == 1
+    assert "aprovados + xfail" in capsys.readouterr().err
+    assert p.read_bytes() == antes
+
+
+def test_r2_b1_registrar_falhas_fora_do_escopo_por_cli(repo):
+    repo.cria()
+    campos = [c for c in _campos_bateria_cli(C_TESTE) if not c.startswith("falhas_fora")]
+    campos = [c.replace("falhas=0", "falhas=1") for c in campos]
+    campos.append(f"falhas_fora_do_escopo=tests/live/test_live_tjap.py::test_b|WAF no TJAP|{REGISTRO}")
+    assert repo.run("registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "bateria_live",
+                    *[x for c in campos for x in ("--campo", c)]) == 0
+    c = repo.dados()["incrementos"][0]["etapas"]["2_teste"]["evidencias"][0]["campos"]
+    assert c["falhas_fora_do_escopo"] == [
+        {"teste": "tests/live/test_live_tjap.py::test_b", "motivo": "WAF no TJAP", "registro": REGISTRO}]
+
+
+# ---------------------------------------------------------------- r2 B1: jobs do CI e contrato MCP
+
+
+def test_r2_b1_jobs_exigidos_sao_lint_repositorio_e_oito_test():
+    assert len(ma.JOBS_CI) == 10 and len(set(ma.JOBS_CI)) == 10
+    assert ma.JOBS_CI[:2] == ("lint", "repositorio")
+    assert {j for j in ma.JOBS_CI[2:]} == {
+        f"test ({so}, {py})" for so in ("ubuntu-latest", "windows-latest") for py in ("3.11", "3.12", "3.13", "3.14")}
+
+
+def test_r2_b1_jobs_conferem_com_o_workflow_ci():
+    ci = (RAIZ / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "os: [ubuntu-latest, windows-latest]" in ci
+    assert 'python-version: ["3.11", "3.12", "3.13", "3.14"]' in ci
+    for job in ("  test:", "  repositorio:", "  lint:"):
+        assert job in ci
+
+
+def test_r2_b1_run_ci_sem_jobs_reprova(repo):
+    """Cenário do parecer: `run_ci` só com url, commit e conclusão."""
+    inc = _concluido(repo.raiz)
+    del inc["etapas"]["2_teste"]["evidencias"][0]["campos"]["jobs"]
+    assert any("falta o campo 'jobs'" in e for e in repo.erros(_manifesto([inc])))
+
+
+@pytest.mark.parametrize("faltante", list(ma.JOBS_CI))
+def test_r2_b1_cada_job_e_obrigatorio(repo, faltante):
+    jobs = [j for j in JOBS_OK if j["nome"] != faltante]
+    erros = repo.erros(_manifesto([_muda(repo.raiz, "2_teste", "run_ci", "jobs", jobs)]))
+    assert any("campos.jobs:" in e and faltante in e for e in erros), erros
+
+
+@pytest.mark.parametrize("conclusao", ["failure", "cancelled", "skipped", "success ", ""])
+def test_r2_b1_todo_job_precisa_de_success(repo, conclusao):
+    jobs = copy.deepcopy(JOBS_OK)
+    jobs[4]["conclusao"] = conclusao
+    erros = repo.erros(_manifesto([_muda(repo.raiz, "2_teste", "run_ci", "jobs", jobs)]))
+    assert any("campos.jobs:" in e for e in erros), erros
+
+
+def test_r2_b1_job_extra_ou_repetido_reprova(repo):
+    extra = [*JOBS_OK, {"nome": "test (macos-latest, 3.12)", "conclusao": "success"}]
+    assert any("fora do conjunto" in e for e in repo.erros(_manifesto([_muda(repo.raiz, "2_teste", "run_ci", "jobs", extra)])))
+    repetido = [*JOBS_OK, {"nome": "lint", "conclusao": "success"}]
+    assert any("repetidos" in e for e in repo.erros(_manifesto([_muda(repo.raiz, "2_teste", "run_ci", "jobs", repetido)])))
+
+
+@pytest.mark.parametrize("jobs", [[], "lint", [{"nome": "lint"}], [{"nome": "lint", "conclusao": "success", "x": 1}], ["lint"]])
+def test_r2_b1_forma_dos_jobs(repo, jobs):
+    assert any("campos.jobs:" in e for e in repo.erros(_manifesto([_muda(repo.raiz, "2_teste", "run_ci", "jobs", jobs)])))
+
+
+def test_r2_b1_registrar_run_ci_por_cli(repo):
+    repo.cria()
+    campos = [f"url={URL_RUN}", f"commit={C_TESTE}", "conclusao=success",
+              *[f"jobs={n}=success" for n in ma.JOBS_CI]]
+    assert repo.run("registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "run_ci",
+                    *[x for c in campos for x in ("--campo", c)]) == 0
+    jobs = repo.dados()["incrementos"][0]["etapas"]["2_teste"]["evidencias"][0]["campos"]["jobs"]
+    assert jobs == [{"nome": n, "conclusao": "success"} for n in ma.JOBS_CI]
+    assert repo.run("registrar", "--incremento", "I1", "--etapa", "2_teste", "--tipo", "run_ci",
+                    *[x for c in campos[:-1] for x in ("--campo", c)]) == 1  # falta um job
+
+
+# ---------------------------------------------------------------- r2 B2: catálogo fixo
+
+
+def test_r2_b2_catalogo_do_plano():
+    assert ma.CATALOGO_PLANO == {
+        "I1": ("I1.1", "I1.2", "I1.3", "I1.4", "I1.5", "I1.6", "S0"),
+        "I2": ("I2.1", "I2.2", "I2.3", "I2.4", "I2.5", "I2.6"),
+        "I3": ("I3.1", "I3.2", "I3.3", "I3.4", "I3.5", "I3.6", "I3.7", "I3.8"),
+        "I4": ("I4.1", "I4.2", "I4.3", "I4.4"),
+    }
+
+
+def test_r2_b2_todo_id_da_secao_6_do_plano_esta_no_catalogo():
+    plano = (RAIZ / "docs" / "PLANO-1.4.0.md").read_text(encoding="utf-8")
+    secao = plano.split("## 6. Incrementos", 1)[1].split("## 7.", 1)[0]
+    ids = {linha.split("|")[1].strip() for linha in secao.splitlines() if linha.startswith("| ")}
+    ids -= {"ID", "---"}
+    catalogo = {i for itens in ma.CATALOGO_PLANO.values() for i in itens}
+    assert ids and ids <= catalogo
+    assert catalogo - ids == {"I2.6"}  # item do adiamento do I1.2 (decisão do supervisor, 28/10/2026)
+
+
+def test_r2_b2_itens_removidos_reprovam(repo, capsys):
+    """Cenário do parecer: remover I1.4, I1.5 e S0 e fechar passava."""
+    inc = _concluido(repo.raiz)
+    inc["itens"] = [it for it in inc["itens"] if it["id"] not in ("I1.4", "I1.5", "S0")]
+    erros = repo.erros(_manifesto([inc]))
+    for item in ("I1.4", "I1.5", "S0"):
+        assert any(f"item {item} do catálogo do plano ausente" in e for e in erros), item
+    repo.cria(_manifesto([inc]))
+    assert repo.run("fechar", "--incremento", "I1") == 1
+    assert repo.dados()["incrementos"][0]["estado"] == "aberto"
+    assert "redução ou adiamento" in capsys.readouterr().err
+
+
+def test_r2_b2_itens_vazios_reprovam(repo, capsys):
+    """Cenário do parecer: `itens: []` fechava o incremento."""
+    inc = _concluido(repo.raiz)
+    inc["itens"] = []
+    erros = repo.erros(_manifesto([inc]))
+    assert len([e for e in erros if "do catálogo do plano ausente" in e]) == len(ma.CATALOGO_PLANO["I1"])
+    repo.cria(_manifesto([inc]))
+    assert repo.run("fechar", "--incremento", "I1") == 1
+    assert repo.dados()["incrementos"][0]["estado"] == "aberto"
+
+
+def test_r2_b2_item_fora_do_catalogo_reprova(repo):
+    inc = _concluido(repo.raiz)
+    inc["itens"].append({"id": "I1.7", "estado": "concluido", "nota": ""})
+    assert any("item I1.7 fora do catálogo do plano" in e for e in repo.erros(_manifesto([inc])))
+
+
+def test_r2_b2_incremento_fora_do_catalogo_reprova(repo):
+    inc = _inc(id_="I1")
+    inc["id"] = "I9"
+    assert any("incremento fora do catálogo do plano" in e for e in repo.erros(_manifesto([inc])))
+
+
+def test_r2_b2_catalogo_vale_para_cada_incremento(repo):
+    for iid, itens in ma.CATALOGO_PLANO.items():
+        inc = _inc(id_=iid)
+        assert repo.erros(_manifesto([inc])) == []
+        inc["itens"] = inc["itens"][:-1]
+        assert any(f"item {itens[-1]} do catálogo do plano ausente" in e for e in repo.erros(_manifesto([inc])))
+
+
+def test_r2_b2_retirada_so_pelo_procedimento_de_reducao(repo):
+    repo.cria(_manifesto([_inc()]))
+    assert repo.run("reducao", "--incremento", "I1", "--item", "I1.4", "--estado", "adiado", "--rotulo", "sem bench",
+                    "--registro", REGISTRO, "--decisao", "D5", "--motivo", "teto") == 0
+    inc = repo.dados()["incrementos"][0]
+    assert [it["id"] for it in inc["itens"]] == list(ma.CATALOGO_PLANO["I1"])
+    assert next(it for it in inc["itens"] if it["id"] == "I1.4")["estado"] == "adiado"
+    assert repo.erros(repo.dados()) == []
+
+
+def test_r2_b2_comando_item_nao_cria_item_fora_do_catalogo(repo):
+    repo.cria()
+    assert repo.run("item", "--incremento", "I1", "--id", "I1.7", "--estado", "concluido") == 1
+
+
+# ---------------------------------------------------------------- r2: snapshot em pacotes
+
+
+def test_r2_snapshot_aceita_um_ou_varios_pacotes(repo):
+    um = _muda(repo.raiz, "6_distribuicao", "snapshot", "pacotes", [{"nome": "nucleo", "sha256": SHA_SNAP}])
+    um["etapas"]["7_instalacao"]["evidencias"][0]["campos"]["digests"] = [SHA_SNAP]
+    assert repo.erros(_manifesto([um])) == []
+    assert repo.erros(_manifesto([_concluido(repo.raiz)])) == []
+
+
+def test_r2_snapshot_unico_antigo_nao_vale(repo):
+    inc = _concluido(repo.raiz)
+    campos = inc["etapas"]["6_distribuicao"]["evidencias"][0]["campos"]
+    del campos["pacotes"]
+    campos["sha256"] = SHA_SNAP
+    erros = repo.erros(_manifesto([inc]))
+    assert any("falta o campo 'pacotes'" in e for e in erros) and any("não previsto 'sha256'" in e for e in erros)
+
+
+def test_r2_instalacao_com_digest_snapshot_antigo_nao_vale(repo):
+    inc = _concluido(repo.raiz)
+    campos = inc["etapas"]["7_instalacao"]["evidencias"][0]["campos"]
+    del campos["digests"]
+    campos["digest_snapshot"] = SHA_SNAP
+    erros = repo.erros(_manifesto([inc]))
+    assert any("falta o campo 'digests'" in e for e in erros) and any("não previsto 'digest_snapshot'" in e for e in erros)
+
+
+def test_r2_digests_repetidos_reprovam(repo):
+    inc = _muda(repo.raiz, "7_instalacao", "instalacao", "digests", [SHA_SNAP, SHA_SNAP])
+    assert any("campos.digests:" in e for e in repo.erros(_manifesto([inc])))
+
+
+# ---------------------------------------------------------------- r2: regra 8, I2.6 e plano
+
+
+DECISAO = RAIZ / "docs" / "decisoes" / "0068-manifesto-de-aceite.md"
+
+
+def test_r2_decisao_0068_registra_a_mudanca_de_regra():
+    texto = DECISAO.read_text(encoding="utf-8")
+    assert texto.startswith("# 0068 — ")
+    for trecho in ("## Contexto", "## Decisão", "## Limites", "seção 5", "D5", "catálogo", "adiament", "SEM BLOQUEADOR",
+                   "sha256", "confinad", "não consulta o GitHub nem a PyPI", "conferência material é do auditor"):
+        assert trecho in texto, trecho
+
+
+def test_r2_nota_do_i2_6_e_linha_do_i1_2_no_plano():
+    m = json.loads(MANIFESTO_REPO.read_text(encoding="utf-8"))
+    nota = next(it for it in m["incrementos"][1]["itens"] if it["id"] == "I2.6")["nota"]
+    assert nota == ("segmentação tipada e ligação das íntegras do STJ ao acervo; "
+                    "I1.2 adiado inteiro para cá (docs/auditoria/1.4.0/pr10-adiamento.md)")
+    plano = (RAIZ / "docs" / "PLANO-1.4.0.md").read_text(encoding="utf-8")
+    linha = next(ln for ln in plano.splitlines() if ln.startswith("| I1.2 |"))
+    assert linha.endswith(" — adiado para I2.6 em 28/10/2026 (docs/auditoria/1.4.0/pr10-adiamento.md) |")
+
+
+def test_r2_documento_de_auditoria_registra_a_rodada_3():
+    texto = AUDITORIA.read_text(encoding="utf-8")
+    assert "## Rodada 3" in texto
+    for trecho in ("B1", "B2", "CATALOGO_PLANO", "jobs", "pacotes", "0068", "contrato MCP"):
+        assert trecho in texto, trecho

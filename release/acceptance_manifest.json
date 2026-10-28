@@ -1,6 +1,6 @@
 {
  "plano": "1.4.0",
- "atualizado_em": "2026-10-28T02:05:22+00:00",
+ "atualizado_em": "2026-10-28T02:31:13+00:00",
  "incrementos": [
   {
    "id": "I1",
@@ -130,7 +130,7 @@
     {
      "id": "I2.6",
      "estado": "pendente",
-     "nota": "segmentação tipada e ligação das íntegras do STJ ao acervo, vindas do I1.2 reduzido"
+     "nota": "segmentação tipada e ligação das íntegras do STJ ao acervo; I1.2 adiado inteiro para cá (docs/auditoria/1.4.0/pr10-adiamento.md)"
     }
    ],
    "etapas": {

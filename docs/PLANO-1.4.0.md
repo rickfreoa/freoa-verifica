@@ -88,7 +88,7 @@ Um incremento só está concluído com todas as etapas abaixo cumpridas e regist
 | ID | Item |
 |---|---|
 | I1.1 | Concluído em 27/10/2026: Trusted Publisher cadastrado pelo titular; `PYPI_PUBLICAR=true`; 1.3.0 publicada na PyPI pela reexecução do run 39676521181, com hashes de wheel e sdist iguais ao `SHA256SUMS` da release |
-| I1.2 | PR #5 (decisão 0044): fechar I2, I3 e M1; íntegras do STJ de todos os órgãos, segmentação tipada (D1) |
+| I1.2 | PR #5 (decisão 0044): fechar I2, I3 e M1; íntegras do STJ de todos os órgãos, segmentação tipada (D1) — adiado para I2.6 em 28/10/2026 (docs/auditoria/1.4.0/pr10-adiamento.md) |
 | I1.3 | Ressalvas da auditoria do delta: `noqa` por linha em `stj.py` e `derivados.py`; helper `_so_desta_thread` único |
 | I1.4 | Bench e bateria ao vivo completos, pela primeira vez |
 | I1.5 | `release/acceptance_manifest.json` e seu gerador |

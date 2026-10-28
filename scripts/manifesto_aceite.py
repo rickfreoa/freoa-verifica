@@ -23,9 +23,19 @@ Uso:
     python scripts/manifesto_aceite.py rotulo --incremento I1 --texto ...
     python scripts/manifesto_aceite.py fechar --incremento I1
 
-Cada `--campo chave=valor` é repetível; true e false viram booleano; `alertas` é lista (uma
-ocorrência por alerta, `alertas=` sozinho é lista vazia). No parecer o sha256 é calculado pelo
-`registrar`.
+Cada `--campo chave=valor` é repetível; true e false viram booleano; inteiros decimais viram número.
+Campos de lista acumulam uma ocorrência por elemento (`alertas`, `escopo`, `digests`; `jobs=nome=conclusao`;
+`pacotes=nome=sha256`; `falhas_fora_do_escopo=teste|motivo|registro`); a chave sozinha (`alertas=`) é lista
+vazia. `ambiente` vem em `ambiente.so`, `ambiente.python` e `ambiente.pais_ip`. O sha256 do parecer e os da
+bateria (`sha256` do relatório e `saude_fontes_sha256`) são calculados pelo `registrar` e reconferidos pelo
+`validar`.
+
+Catálogo: cada incremento contém exatamente os itens de `CATALOGO_PLANO` (seção 6 do plano); item fora do
+catálogo ou ausente reprova. A retirada de um item só vale pelo procedimento de redução ou adiamento
+(`reducao`), que mantém o item na lista com estado `reduzido` ou `adiado`.
+
+Teste de CI (etapa 2): `run_ci.jobs` lista os jobs do workflow `ci`; o contrato MCP (tests/contrato) roda
+dentro dos jobs `test`, e por isso não é job à parte.
 
 `--manifesto` (padrão release/acceptance_manifest.json) e todo caminho de evidência são relativos
 à raiz do repositório (pai de scripts/) e confinados nela: absoluto, `..` que escape, UNC e nomes
@@ -70,8 +80,14 @@ CATEGORIAS_ALERTA = ("ambiental_desafio", "fonte_fora", "recusa_identificado", "
 # Recibo por tipo de evidência: campos obrigatórios, nesta ordem, com o tipo de cada um.
 CAMPOS_POR_TIPO: dict[str, dict[str, str]] = {
     "especificacao": {"especificacao": "caminho", "ramo": "texto"},
-    "run_ci": {"url": "url_run", "commit": "commit", "conclusao": "sucesso"},
-    "bateria_live": {"relatorio": "caminho", "commit": "commit"},
+    "run_ci": {"url": "url_run", "commit": "commit", "conclusao": "sucesso", "jobs": "jobs"},
+    "bateria_live": {
+        "relatorio": "caminho", "sha256": "sha", "commit": "commit",
+        "aprovados": "inteiro", "xfail": "inteiro", "falhas": "inteiro",
+        "escopo": "escopo", "ambiente": "ambiente",
+        "saude_fontes": "caminho", "saude_fontes_sha256": "sha",
+        "falhas_fora_do_escopo": "falhas_fora",
+    },
     "commit": {"commit": "commit"},
     "parecer": {"parecer": "caminho", "sha256": "sha", "commit_auditado": "commit"},
     "merge": {"commit": "commit"},
@@ -79,9 +95,9 @@ CAMPOS_POR_TIPO: dict[str, dict[str, str]] = {
     "release": {"url": "url_release", "attestation_verificada": "verdadeiro",
                 "sha256_wheel": "sha", "sha256_sdist": "sha"},
     "pypi": {"versao": "versao", "sha256_wheel": "sha", "sha256_sdist": "sha"},
-    "snapshot": {"sha256": "sha", "bateria_s4": "aprovada", "lista_embutida_commit": "commit"},
+    "snapshot": {"pacotes": "pacotes", "bateria_s4": "aprovada", "lista_embutida_commit": "commit"},
     "instalacao": {"concluida": "verdadeiro", "commit": "commit", "attestation_verificada": "verdadeiro",
-                   "digest_snapshot": "sha"},
+                   "digests": "digests"},
     "doctor": {"ok": "verdadeiro", "alertas": "alertas"},
 }
 TIPOS_EVIDENCIA = tuple(CAMPOS_POR_TIPO)
@@ -98,6 +114,27 @@ TIPOS_DA_ETAPA = {
     "8_execucao": ("doctor", "bateria_live"),
 }
 SEM_BLOQUEADOR = "SEM BLOQUEADOR"
+AMBIENTE = ("so", "python", "pais_ip")
+# Campos de sha256 que o `registrar` calcula (caminho, campo do hash) e o `validar` reconfere.
+HASHES_CALCULADOS = {
+    "parecer": (("parecer", "sha256"),),
+    "bateria_live": (("relatorio", "sha256"), ("saude_fontes", "saude_fontes_sha256")),
+}
+
+# Baseline explícita da seção 6 do plano: os itens de cada incremento (o I2.6 vem do adiamento do I1.2).
+CATALOGO_PLANO: dict[str, tuple[str, ...]] = {
+    "I1": ("I1.1", "I1.2", "I1.3", "I1.4", "I1.5", "I1.6", "S0"),
+    "I2": ("I2.1", "I2.2", "I2.3", "I2.4", "I2.5", "I2.6"),
+    "I3": ("I3.1", "I3.2", "I3.3", "I3.4", "I3.5", "I3.6", "I3.7", "I3.8"),
+    "I4": ("I4.1", "I4.2", "I4.3", "I4.4"),
+}
+
+# Jobs do workflow ci (.github/workflows/ci.yml) exigidos em run_ci.jobs. O contrato MCP é parte da suíte
+# (tests/contrato) e fica coberto pelos jobs `test`.
+JOBS_CI = (
+    "lint", "repositorio",
+    *(f"test ({so}, {py})" for so in ("ubuntu-latest", "windows-latest") for py in ("3.11", "3.12", "3.13", "3.14")),
+)
 
 CHAVES_RAIZ = ("plano", "atualizado_em", "incrementos", "excecoes")
 CHAVES_INCREMENTO = ("id", "versao", "estado", "rotulo", "itens", "etapas", "reducoes_de_escopo")
@@ -275,6 +312,68 @@ def _erro_de_campo(tipo: str, valor: object) -> str | None:
             if erro:
                 return erro
         return None
+    if tipo == "inteiro":
+        return None if isinstance(valor, int) and not isinstance(valor, bool) and valor >= 0 else (
+            "deve ser inteiro maior ou igual a 0")
+    if tipo == "escopo":
+        if not isinstance(valor, list) or not valor:
+            return "deve ser lista não vazia de fontes"
+        if not all(isinstance(f, str) and f.strip() for f in valor) or len(set(valor)) != len(valor):
+            return "deve conter fontes (texto não vazio) sem repetição"
+        return None
+    if tipo == "ambiente":
+        if not isinstance(valor, dict) or set(valor) != set(AMBIENTE):
+            return f"deve ser objeto com exatamente {', '.join(AMBIENTE)}"
+        if not all(isinstance(v, str) and v.strip() for v in valor.values()):
+            return f"{', '.join(AMBIENTE)} devem ser texto não vazio"
+        return None
+    if tipo == "falhas_fora":
+        if not isinstance(valor, list):
+            return "deve ser lista de {teste, motivo, registro}"
+        for f in valor:
+            if not isinstance(f, dict) or set(f) != {"teste", "motivo", "registro"}:
+                return "cada falha deve ser objeto com exatamente teste, motivo e registro"
+            if not all(isinstance(v, str) and v.strip() for v in f.values()):
+                return "teste, motivo e registro de cada falha devem ser texto não vazio"
+        if len({f["teste"] for f in valor}) != len(valor):
+            return "teste repetido em falhas_fora_do_escopo"
+        return None
+    if tipo == "jobs":
+        if not isinstance(valor, list):
+            return "deve ser lista de {nome, conclusao}"
+        for j in valor:
+            if not isinstance(j, dict) or set(j) != {"nome", "conclusao"}:
+                return "cada job deve ser objeto com exatamente nome e conclusao"
+            if not all(isinstance(v, str) and v.strip() for v in j.values()):
+                return "nome e conclusao de cada job devem ser texto não vazio"
+        nomes = [j["nome"] for j in valor]
+        faltam = [n for n in JOBS_CI if n not in nomes]
+        sobram = sorted({n for n in nomes if n not in JOBS_CI})
+        repetidos = sorted({n for n in nomes if nomes.count(n) > 1})
+        if faltam or sobram or repetidos:
+            return ("jobs devem ser exatamente os do workflow ci"
+                    f" (faltam: {faltam}; fora do conjunto: {sobram}; repetidos: {repetidos})")
+        ruins = [j["nome"] for j in valor if j["conclusao"] != "success"]
+        return f"job sem conclusão 'success': {ruins}" if ruins else None
+    if tipo == "pacotes":
+        if not isinstance(valor, list) or not valor:
+            return "deve ser lista com ao menos um pacote {nome, sha256}"
+        for pct in valor:
+            if not isinstance(pct, dict) or set(pct) != {"nome", "sha256"}:
+                return "cada pacote deve ser objeto com exatamente nome e sha256"
+            if not isinstance(pct["nome"], str) or not pct["nome"].strip():
+                return "nome do pacote deve ser texto não vazio"
+            if not isinstance(pct["sha256"], str) or not SHA256.fullmatch(pct["sha256"]):
+                return "sha256 do pacote deve ter 64 hex minúsculos"
+        if len({p["nome"] for p in valor}) != len(valor):
+            return "nome de pacote repetido"
+        return None
+    if tipo == "digests":
+        if not isinstance(valor, list) or not valor:
+            return "deve ser lista com ao menos um digest de 64 hex minúsculos"
+        if not all(isinstance(d, str) and SHA256.fullmatch(d) for d in valor) or len(set(valor)) != len(valor):
+            return "digests devem ter 64 hex minúsculos, sem repetição"
+        return None
     raise AssertionError(tipo)
 
 
@@ -405,6 +504,73 @@ def _motivo_parecer_reprovado(campos: dict, raiz: Path) -> str | None:
     return None
 
 
+def _fonte_do_teste(nodeid: str) -> str:
+    """Fonte de um teste live: nome do arquivo sem `test_live_` (mesma regra de tests/live/conftest.py)."""
+    arquivo = nodeid.split("::", 1)[0].replace("\\", "/").rsplit("/", 1)[-1]
+    return arquivo.removesuffix(".py").removeprefix("test_live_")
+
+
+def _motivos_bateria(campos: dict, raiz: Path) -> list[str]:
+    """Conferência da bateria live: sha256 dos dois arquivos, contagens, escopo, falhas fora do escopo
+    e o saude-fontes.json lido do disco (completa, regressão listada, indisponibilidade classificada)."""
+    motivos: list[str] = []
+    dados: dict[str, bytes] = {}
+    for chave, sha in (("relatorio", "sha256"), ("saude_fontes", "saude_fontes_sha256")):
+        try:
+            bruto = arquivo_do_repositorio(campos[chave], raiz).read_bytes()
+        except ErroAceite as exc:
+            motivos.append(f"{chave}: {exc}")
+            continue
+        except OSError:
+            motivos.append(f"{chave}: não foi possível ler o arquivo")
+            continue
+        dados[chave] = bruto
+        if hashlib.sha256(bruto).hexdigest() != campos[sha]:
+            motivos.append(f"{sha} registrado difere do sha256 dos bytes de {chave}")
+    if campos["aprovados"] + campos["xfail"] < 1:
+        motivos.append("aprovados + xfail deve ser pelo menos 1 (bateria não executada não fecha a etapa)")
+    fora = campos["falhas_fora_do_escopo"]
+    if campos["falhas"] != len(fora):
+        motivos.append(f"falhas ({campos['falhas']}) difere de len(falhas_fora_do_escopo) ({len(fora)})")
+    for f in fora:
+        if _fonte_do_teste(f["teste"]) in campos["escopo"]:
+            motivos.append(f"falha de fonte do escopo em falhas_fora_do_escopo: {f['teste']}")
+        try:
+            arquivo_do_repositorio(f["registro"], raiz)
+        except ErroAceite as exc:
+            motivos.append(f"falhas_fora_do_escopo '{f['teste']}': registro: {exc}")
+    if "saude_fontes" in dados:
+        motivos.extend(_motivos_saude(dados["saude_fontes"], {f["teste"] for f in fora}))
+    return motivos
+
+
+def _motivos_saude(bruto: bytes, listados: set[str]) -> list[str]:
+    """Formato real de saude-fontes.json (tests/live/conftest.py): completa e fontes[f].testes[]."""
+    try:
+        saude = json.loads(bruto.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return ["saude_fontes: JSON inválido"]
+    if not isinstance(saude, dict) or not isinstance(saude.get("fontes"), dict):
+        return ["saude_fontes: sem o objeto 'fontes'"]
+    motivos: list[str] = []
+    if saude.get("completa") is not True:
+        motivos.append("saude_fontes: 'completa' deve ser true")
+    for fonte, info in saude["fontes"].items():
+        testes = info.get("testes") if isinstance(info, dict) else None
+        if not isinstance(testes, list):
+            motivos.append(f"saude_fontes: fonte '{fonte}' sem lista 'testes'")
+            continue
+        for t in testes:
+            if not isinstance(t, dict) or not isinstance(t.get("nome"), str):
+                motivos.append(f"saude_fontes: teste malformado na fonte '{fonte}'")
+                continue
+            if t.get("estado") == "regressao" and t["nome"] not in listados:
+                motivos.append(f"saude_fontes: regressão fora de falhas_fora_do_escopo: {t['nome']}")
+            if t.get("estado") == "unavailable" and not (isinstance(t.get("categoria"), str) and t["categoria"]):
+                motivos.append(f"saude_fontes: indisponibilidade sem categoria: {t['nome']}")
+    return motivos
+
+
 def _conferir_etapa(
     inc_id: str, nome: str, etapa: dict, raiz: Path, erros: list[str]
 ) -> dict[str, dict]:
@@ -432,6 +598,8 @@ def _conferir_etapa(
         motivo = _motivo_parecer_reprovado(por_tipo["parecer"], raiz)
         if motivo:
             erros.append(f"{cam}: parecer '{por_tipo['parecer']['parecer']}': {motivo}")
+    if "bateria_live" in por_tipo:
+        erros.extend(f"{cam}: bateria_live: {m}" for m in _motivos_bateria(por_tipo["bateria_live"], raiz))
     if etapa["estado"] == "concluida":
         for tipo in permitidos:
             if tipo not in por_tipo:
@@ -475,7 +643,11 @@ def _erros_de_coerencia(inc: dict, rec: dict[str, dict[str, dict]], erros: list[
     for chave in ("sha256_wheel", "sha256_sdist"):
         _igual(erros, cam, pyp, chave, f"pypi.{chave}", rel, chave, f"release.{chave}")
     _igual(erros, cam, ins, "commit", "7_instalacao instalacao.commit", mrg, "commit", "4_incorporacao merge.commit")
-    _igual(erros, cam, ins, "digest_snapshot", "instalacao.digest_snapshot", snap, "sha256", "snapshot.sha256")
+    if ins is not None and snap is not None:
+        esperados = {p["sha256"] for p in snap["pacotes"]}
+        if set(ins["digests"]) != esperados:
+            erros.append(f"{cam}: instalacao.digests ({sorted(ins['digests'])}) difere dos sha256 dos pacotes "
+                         f"do snapshot ({sorted(esperados)})")
     _igual(erros, cam, bat8, "commit", "8_execucao bateria_live.commit", mrg, "commit", "4_incorporacao merge.commit")
 
 
@@ -503,6 +675,21 @@ def _erros_de_reducao(inc: dict, raiz: Path, erros: list[str]) -> None:
             erros.append(f"{cam}: item {it['id']} {it['estado']} exige entrada em reducoes_de_escopo")
 
 
+def _erros_de_catalogo(inc: dict, erros: list[str]) -> None:
+    """O incremento contém exatamente os itens do catálogo do plano (nem menos, nem mais)."""
+    cam = f"incrementos[{inc['id']}]"
+    catalogo = CATALOGO_PLANO.get(inc["id"])
+    if catalogo is None:
+        erros.append(f"{cam}: incremento fora do catálogo do plano ({', '.join(CATALOGO_PLANO)})")
+        return
+    ids = {it["id"] for it in inc["itens"]}
+    for falta in (i for i in catalogo if i not in ids):
+        erros.append(f"{cam}: item {falta} do catálogo do plano ausente "
+                     "(retirada só pelo procedimento de redução ou adiamento)")
+    for sobra in sorted(ids - set(catalogo)):
+        erros.append(f"{cam}: item {sobra} fora do catálogo do plano (exige decisão registrada)")
+
+
 def erros_de_regra(m: dict, raiz: Path = RAIZ) -> list[str]:
     """Invariantes a a e, sobre um manifesto de estrutura válida."""
     erros: list[str] = []
@@ -514,6 +701,7 @@ def erros_de_regra(m: dict, raiz: Path = RAIZ) -> list[str]:
         cam = f"incrementos[{iid}]"
         if len({it["id"] for it in inc["itens"]}) != len(inc["itens"]):
             erros.append(f"{cam}: id de item repetido")
+        _erros_de_catalogo(inc, erros)
         _erros_de_reducao(inc, raiz, erros)
         rec = {nome: _conferir_etapa(iid, nome, inc["etapas"][nome], raiz, erros) for nome in ETAPAS}
         _erros_de_coerencia(inc, rec, erros)
@@ -594,19 +782,49 @@ def _item(inc: dict, item_id: str) -> dict:
     raise ErroAceite(f"item '{item_id}' não existe no incremento {inc['id']}")
 
 
+LISTAS = ("alertas", "escopo", "digests", "jobs", "pacotes", "falhas_fora_do_escopo")
+
+
+def _elemento_de_lista(chave: str, valor: str) -> object:
+    """Converte uma ocorrência de campo de lista no elemento tipado."""
+    if chave == "jobs":
+        nome, _, conclusao = valor.rpartition("=")
+        return {"nome": nome, "conclusao": conclusao}
+    if chave == "pacotes":
+        nome, _, sha = valor.rpartition("=")
+        return {"nome": nome, "sha256": sha}
+    if chave == "falhas_fora_do_escopo":
+        partes = valor.rsplit("|", 2)
+        if len(partes) != 3:
+            raise ErroAceite("falhas_fora_do_escopo espera teste|motivo|registro")
+        return dict(zip(("teste", "motivo", "registro"), partes, strict=True))
+    return valor
+
+
 def _campos_da_linha(pares: list[tuple[str, str]], tipo: str) -> dict:
-    """Converte os `--campo chave=valor`: true/false viram bool; `alertas` acumula numa lista."""
+    """Converte os `--campo chave=valor`: true/false viram bool, inteiros decimais viram número, campos de
+    lista acumulam e `ambiente.<chave>` monta o objeto `ambiente`."""
     campos: dict = {}
     for chave, valor in pares:
-        if chave == "alertas":
-            lista = campos.setdefault("alertas", [])
+        if chave in LISTAS:
+            lista = campos.setdefault(chave, [])
             if valor != "":
-                lista.append(valor)
+                lista.append(_elemento_de_lista(chave, valor))
+            continue
+        if chave.startswith("ambiente."):
+            sub = chave.removeprefix("ambiente.")
+            amb = campos.setdefault("ambiente", {})
+            if sub in amb:
+                raise ErroAceite(f"campo repetido: {chave}")
+            amb[sub] = valor
             continue
         if chave in campos:
             raise ErroAceite(f"campo repetido: {chave}")
-        campos[chave] = {"true": True, "false": False}.get(valor, valor)
-    return _ordenar(campos, tipo)
+        if re.fullmatch(r"[0-9]+", valor, _A) and CAMPOS_POR_TIPO[tipo].get(chave) == "inteiro":
+            campos[chave] = int(valor)
+        else:
+            campos[chave] = {"true": True, "false": False}.get(valor, valor)
+    return campos
 
 
 def _ordenar(campos: dict, tipo: str) -> dict:
@@ -629,12 +847,13 @@ def cmd_validar(args: argparse.Namespace, caminho: Path, raiz: Path) -> int:
 
 def cmd_registrar(args: argparse.Namespace, caminho: Path, raiz: Path) -> int:
     campos = _campos_da_linha(args.campo, args.tipo)
-    if args.tipo == "parecer":
-        if "sha256" in campos:
-            raise ErroAceite("o sha256 do parecer é calculado pelo registrar; não o informe")
-        if "parecer" not in campos:
-            raise ErroAceite("parecer exige --campo parecer=<caminho no repositório>")
-        campos = _ordenar({**campos, "sha256": sha256_de(arquivo_do_repositorio(campos["parecer"], raiz))}, "parecer")
+    for caminho_campo, sha_campo in HASHES_CALCULADOS.get(args.tipo, ()):
+        if sha_campo in campos:
+            raise ErroAceite(f"o {sha_campo} de {args.tipo} é calculado pelo registrar; não o informe")
+        if caminho_campo not in campos:
+            raise ErroAceite(f"{args.tipo} exige --campo {caminho_campo}=<caminho no repositório>")
+        campos[sha_campo] = sha256_de(arquivo_do_repositorio(campos[caminho_campo], raiz))
+    campos = _ordenar(campos, args.tipo)
 
     def mutar(m: dict) -> None:
         etapa = _incremento(m, args.incremento)["etapas"][args.etapa]

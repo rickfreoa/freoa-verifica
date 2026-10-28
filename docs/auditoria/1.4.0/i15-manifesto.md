@@ -56,3 +56,30 @@ registro `docs/auditoria/1.4.0/pr10-adiamento.md` (copiado byte a byte de `origi
 a9bcf88) e rótulo "1.4.0a1: sem íntegras do STJ; I1.2 adiado para 1.4.0a2 (I2.6) após passe final com
 bloqueador". Feito pelos subcomandos `reducao` e `item` do próprio gerador; os dois testes do estado inicial
 foram ajustados ao estado de fato.
+
+## Rodada 3 (correções do parecer r2, última pelo D5)
+
+Parecer r2: COM BLOQUEADOR (B1, B2, mais importantes e menores). Ambiente: o mesmo da rodada 2 (venv do worktree,
+sem `PYTHONPATH`, ruff 0.17.1 do `.venv` do worktree).
+
+| Achado | Correção |
+|---|---|
+| B1 | `bateria_live` (etapas 2 e 8) exige `relatorio` com `sha256` (calculado pelo `registrar`, reconferido no `validar`), `commit`, `aprovados`, `xfail`, `falhas` (inteiros >= 0), `escopo` (lista não vazia), `ambiente` (`so`, `python`, `pais_ip`), `saude_fontes` com `saude_fontes_sha256` e `falhas_fora_do_escopo` (`teste`, `motivo`, `registro` existente). Regras: `aprovados + xfail >= 1`; `falhas` igual a `len(falhas_fora_do_escopo)`; nenhuma fonte do `escopo` em `falhas_fora_do_escopo`. O `validar` lê o `saude-fontes.json` (formato de `tests/live/conftest.py`: `completa` e `fontes[f].testes[]`) e exige `completa: true`, toda `regressao` listada em `falhas_fora_do_escopo` e categoria não nula em `unavailable`. `run_ci` exige `jobs` com exatamente lint, repositorio e as oito combinações `test (SO, Python)`, todas `success`. O contrato MCP (`tests/contrato`) é parte da suíte e fica coberto pelos jobs `test`; não é job à parte. |
+| B2 | `CATALOGO_PLANO` (seção 6 do plano): cada incremento tem exatamente os itens do catálogo, nem menos nem mais; incremento fora do catálogo também reprova. A retirada só vale pelo procedimento de redução ou adiamento (item mantido com estado e entrada em `reducoes_de_escopo`). |
+| Snapshot | `snapshot.sha256` virou `pacotes` (lista de `{nome, sha256}`, ao menos um: núcleo e um por tribunal, seção 4 do plano); `instalacao.digest_snapshot` virou `digests`, igual ao conjunto dos sha256 dos pacotes. |
+| Regra 8 | `docs/decisoes/0068-manifesto-de-aceite.md`. |
+| Menores | Nota do I2.6 no manifesto: "segmentação tipada e ligação das íntegras do STJ ao acervo; I1.2 adiado inteiro para cá (docs/auditoria/1.4.0/pr10-adiamento.md)". No plano, a linha do I1.2 da tabela do I1 ganhou o sufixo de adiamento para o I2.6 em 28/10/2026; nada mais foi alterado no plano. |
+
+Decisões de implementação a ratificar:
+
+- O plano lista I2.1 a I2.5 na tabela do I2; o catálogo inclui o I2.6 porque o manifesto (e o adiamento do I1.2) já o traz. Um teste confere que todo ID da seção 6 está no catálogo e que a diferença é só o I2.6.
+- Nomes de job no formato do GitHub para matriz: `test (ubuntu-latest, 3.11)`.
+- Fonte de um teste live: nome do arquivo sem `test_live_` (mesma regra do `conftest.py`), para decidir se uma falha é do escopo.
+- Na CLI, listas acumulam por ocorrência (`jobs=nome=conclusao`, `pacotes=nome=sha256`, `falhas_fora_do_escopo=teste|motivo|registro`) e o ambiente vem em `ambiente.so`, `ambiente.python`, `ambiente.pais_ip`.
+
+Verificação (rodada 3):
+
+- Testes do módulo e das fixtures do manifesto: 352 passed. Os cenários do parecer (relatório "BATERIA NAO EXECUTADA"; itens removidos e `itens: []`; recibo só com caminho e commit; `run_ci` sem `jobs`) estão reproduzidos e falham no `validar` e no `fechar`; há um teste por regra nova.
+- Ruff (`scripts/ruff_catraca.py` e `ruff check` nos dois arquivos): sem achado. `git diff --check`: limpo. `validar` no manifesto do repositório: válido.
+- Suíte offline completa, `pytest tests -q -m "not live"`: 7314 passed, 9 skipped, 34 deselected, em 870 s (sem falhas).
+- Pendente de CI: matriz Windows e Python 3.11 a 3.14.
