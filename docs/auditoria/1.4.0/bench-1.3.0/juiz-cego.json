@@ -1,0 +1,10 @@
+{
+ "juiz": "Claude Haiku 5.5, sem ferramentas, sem identificação dos itens; só consulta e ementa truncada",
+ "data": "2026-10-27",
+ "pares": [
+  {"par": 1, "caso": "E5", "item": "0702839-77.2026.8.07.0000", "consulta": "exclusao de socio sociedade limitada TJDFT", "veredito": "parcial", "razao": "Conflito de competência entre varas do TJDFT em litígio societário, mas o trecho truncado não mostra se o objeto é exclusão de sócio de sociedade limitada."},
+  {"par": 2, "caso": "D8", "item": "AREsp 2932543", "consulta": "legitimidade de socio excluido apuracao de haveres", "veredito": "parcial", "razao": "Trata de apuração de haveres e de nulidade de sentença arbitral em dissolução parcial, tema próximo da exclusão, mas não discute a legitimidade do sócio excluído."},
+  {"par": 3, "caso": "E4", "item": "AREsp 2883122", "consulta": "dissolucao parcial de sociedade apuracao de haveres", "veredito": "sim", "razao": "Decisão do STJ sobre apuração de haveres em dissolução parcial de sociedade limitada, tratando diretamente do tema pedido."}
+ ],
+ "entrada": "as ementas são as do campo top5[].ementa de freoa_raw.jsonl (400 caracteres), passadas ao juiz na ordem E5, D8, E4"
+}
