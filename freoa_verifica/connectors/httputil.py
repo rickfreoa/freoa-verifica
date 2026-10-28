@@ -125,6 +125,7 @@ def _connector_fetch(
     ignore_challenge_kinds: frozenset[str] | None = None,
     expected_content: str | None = None,
     antes_do_salto: Any = None,
+    repeticao: int | None = None,
 ) -> Response:
     timeout = restante(timeout)
     if timeout <= 0:
@@ -148,6 +149,7 @@ def _connector_fetch(
             session=session,
             **({"sink": sink} if sink is not None else {}),
             **({"antes_do_salto": antes_do_salto} if antes_do_salto is not None else {}),
+            **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
         )
     except Unavailable:
         raise  # recusa de salto pela guarda: já classificada

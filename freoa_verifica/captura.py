@@ -1,8 +1,9 @@
 """Captura reproduzível de respostas oficiais para fixtures e sondas.
 
 A requisição é montada exclusivamente pelo `build_*` do conector (ou é um GET simples a uma URL da allowlist
-do conector) e enviada pelo transporte (mesma allowlist, limites e UA do conector). Nada de rede aqui fora de
-`freoa_verifica.transport`.
+do conector) e enviada pelo transporte (mesma allowlist, limites e UA do conector). Sondas a fontes ainda sem
+conector (`fonte_sonda`, catálogo `freoa_verifica.sondas`) seguem o mesmo caminho, só por GET e com UA identificado.
+Nada de rede aqui fora de `freoa_verifica.transport`.
 """
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ from freoa_verifica.connectors import tjdft, tjsp
 from freoa_verifica.connectors.base import Unavailable, registry, sob_guarda
 from freoa_verifica.connectors.challenge import map_transport_error
 from freoa_verifica.connectors.httputil import connector_fetch, form_body, ua_header
-from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
+from freoa_verifica.identidade_http import MODO_IDENTIFICADO, USER_AGENT_IDENTIFICADO
+from freoa_verifica.sondas import FONTES_BARRADAS, FONTES_SONDA, prefixos_por_host
 from freoa_verifica.transport import BlockedHost, HTTPStatusError, Session, validate_reference
 
 UA_IDENTIFICADO = USER_AGENT_IDENTIFICADO
@@ -44,7 +46,7 @@ _EXTENSOES = {
 
 @dataclass
 class RegistroCaptura:
-    conector: str
+    conector: str | None
     versao: str
     url: str
     metodo: str
@@ -52,6 +54,9 @@ class RegistroCaptura:
     user_agent: str
     capturado_em: str
     sonda: bool = False
+    fonte_sonda: str | None = None
+    confirmacao_host: str | None = None  # nível (A/B) do host da fonte-sonda; None fora de fonte-sonda
+    confirmado_por_titular: bool = False  # sonda em host B liberada por confirmação explícita do titular
     unavailable: bool = False
     motivo: str | None = None
     categoria: str | None = None
@@ -131,22 +136,47 @@ def _plano_tjsp(consulta: dict[str, Any]) -> dict[str, Any]:
 _CONSULTAS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {"tjdft": _plano_tjdft, "tjsp": _plano_tjsp}
 
 
-def _plano_get(classe, url: str) -> dict[str, Any]:
-    """GET simples; a URL tem de estar na allowlist do conector (recusa antes da rede)."""
-    prefixos, mimes = classe.path_prefixes, classe.mimes
+def _plano_get(
+    alvo_id: str, hosts, prefixos, mimes, url: str, *, rotulo: str = "do conector",
+    exatas: dict[str, tuple[str, ...]] | None = None, consultas: dict[str, tuple[str, ...]] | None = None,
+) -> dict[str, Any]:
+    """GET simples; a URL tem de estar na allowlist (conector ou fonte-sonda); recusa antes da rede.
+
+    `prefixos` é o mapa host -> prefixos do transporte (ou None sem escopo de caminho).
+
+    `exatas` (fonte-sonda): host -> caminhos exatos. Com ele, o caminho do pedido tem de ser IGUAL a uma rota do host
+    (sem prefixo, sem sufixo, sem segmento extra) e só leva consulta nas rotas de `consultas`; a recusa vem antes do
+    transporte, que fica como segunda barreira (`prefixos`), e a sonda não segue redirecionamento.
+
+    `/robots.txt` é exceção declarada ao escopo de caminhos, mas só ele: o percurso inteiro roda com o prefixo
+    exato `/robots.txt` em todos os hosts da allowlist, MIME só `text/plain` e NENHUM redirecionamento
+    (`max_redirects=0`). Um 302 de `/robots.txt` para outra rota do mesmo host não é seguido: vira
+    `unavailable` classificado (permissão indeterminada), sem pedido ao destino.
+    """
     try:
-        _, alvo = validate_reference(url, classe.hosts)  # host e sintaxe; o caminho vem a seguir
+        _, alvo = validate_reference(url, hosts)  # host e sintaxe; o caminho vem a seguir
         robots = alvo == "/robots.txt"
         if not robots:
-            validate_reference(url, classe.hosts, allowed_path_prefixes=prefixos)
+            if alvo.split("?", 1)[0].lower().startswith("/robots.txt"):  # variante (query, caixa, sufixo) não é a exceção
+                raise BlockedHost("robots.txt só na forma exata, sem parâmetros")
+            host, _ = validate_reference(url, hosts, allowed_path_prefixes=prefixos)
+            if exatas is not None:
+                caminho, tem_consulta, _ = alvo.partition("?")
+                if caminho not in exatas.get(host, ()) or (tem_consulta and caminho not in (consultas or {}).get(host, ())):
+                    raise BlockedHost("caminho fora das rotas exatas da fonte-sonda")
     except BlockedHost as exc:
-        raise ValueError(f"url fora da allowlist do conector {classe.id}: {exc}") from exc
+        raise ValueError(f"url fora da allowlist {rotulo} {alvo_id}: {exc}") from exc
     plano = {
         "url": url, "metodo": "GET", "parametros": None,
         "etapas": [{"url": url, "metodo": "GET", "body": None, "headers": {}}],
     }
-    if robots:  # robots.txt do host permitido é exceção declarada ao escopo de caminhos
-        plano.update(path_prefixes=None, mimes=mimes | {"text/plain"})
+    if exatas is not None:
+        plano["max_redirects"] = 0  # sonda: um pedido; o destino de um 3xx não é pedido
+    if robots:
+        plano.update(
+            path_prefixes={h: ("/robots.txt",) for h in sorted(hosts)}, mimes=frozenset({"text/plain"}),
+            max_redirects=0,
+        )
     return plano
 
 
@@ -158,7 +188,7 @@ def _planejar(conector: str, consulta: dict[str, Any] | None, url: str | None) -
         raise ValueError("informe exatamente uma de: consulta, url")
     classe = classes[conector]
     if url is not None:
-        plano = _plano_get(classe, url)
+        plano = _plano_get(classe.id, classe.hosts, classe.path_prefixes, classe.mimes, url)
     elif conector in _CONSULTAS:
         plano = _CONSULTAS[conector](consulta)
     else:
@@ -169,13 +199,49 @@ def _planejar(conector: str, consulta: dict[str, Any] | None, url: str | None) -
     return plano
 
 
+def _planejar_sonda(
+    fonte_sonda: str, consulta: dict[str, Any] | None, url: str | None, *, confirmado_por_titular: bool = False
+) -> dict[str, Any]:
+    """Plano de uma sonda a fonte sem conector: GET numa URL da allowlist da fonte-sonda, UA identificado.
+
+    Host de nível B (indexado, não lido em página oficial) só com `confirmado_por_titular`; sem ele, recusa
+    antes da rede, inclusive para o robots.txt.
+    """
+    if fonte_sonda in FONTES_BARRADAS:
+        raise ValueError(f"fonte-sonda {fonte_sonda} barrada, sem sonda: {FONTES_BARRADAS[fonte_sonda]}")
+    fonte = FONTES_SONDA.get(fonte_sonda)
+    if fonte is None:
+        raise ValueError(f"fonte-sonda desconhecida: {fonte_sonda}")
+    if consulta is not None or url is None:
+        raise ValueError("fonte-sonda só captura por url")
+    prefixos = prefixos_por_host(fonte)
+    plano = _plano_get(
+        fonte.id, fonte.hosts, prefixos, fonte.mimes, url, rotulo="da fonte-sonda",
+        exatas=dict(fonte.rotas), consultas=dict(fonte.consultas),
+    )
+    host, _ = validate_reference(url, fonte.hosts)  # host canônico, já validado acima
+    nivel = "B" if host in fonte.hosts_b else "A"
+    if nivel == "B" and not confirmado_por_titular:
+        raise ValueError(
+            f"host {host} da fonte-sonda {fonte.id} é nível B (confirmação documental pendente): sonda bloqueada; "
+            "só com --confirmado-por-titular"
+        )
+    plano.setdefault("path_prefixes", prefixos)
+    plano.setdefault("mimes", fonte.mimes)
+    plano.update(hosts=fonte.hosts, user_agent=MODO_IDENTIFICADO, confirmacao_host=nivel)
+    return plano
+
+
 @sob_guarda  # etapas da mesma captura: identidade efetiva e bloqueio por host (garantia estrutural 1, FIX18)
 def _buscar(plano: dict[str, Any], ua_modo: str):
     sessao = Session() if plano.get("sessao") else None
     kw: dict[str, Any] = {
         "hosts": plano["hosts"], "path_prefixes": plano["path_prefixes"], "mimes": plano["mimes"],
         "user_agent": plano["user_agent"], "timeout": 60.0,
+        "repeticao": 0,  # a captura faz exatamente um pedido por etapa: o transporte não repete 502/503/504
     }
+    if "max_redirects" in plano:
+        kw["max_redirects"] = plano["max_redirects"]
     if sessao is not None:
         kw["session"] = sessao
     resp = None
@@ -200,14 +266,32 @@ def _nome_tmp(path: Path) -> Path:
     return path.with_name(f"{path.name}.{uuid.uuid4().hex[:12]}.tmp")
 
 
-def _atomico(path: Path, data: bytes) -> None:
+def _atomico(path: Path, data: bytes, *, exclusivo: bool = False) -> None:
+    """Grava por arquivo temporário. `exclusivo`: nunca substitui arquivo existente (FileExistsError)."""
     tmp = _nome_tmp(path)
     try:
         tmp.write_bytes(data)
-        os.replace(tmp, path)
+        if exclusivo:
+            try:
+                os.link(tmp, path)  # falha se `path` existe; no Windows (NTFS) também
+            except FileExistsError:
+                raise
+            except OSError:  # sistema de arquivos sem link físico: criação exclusiva direta
+                with open(path, "xb") as f:
+                    f.write(data)
+            tmp.unlink(missing_ok=True)
+        else:
+            os.replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _recusar_sobrescrita(destino: Path, chave: str, corpo: Path | None = None) -> None:
+    """Evidência gravada não se sobrescreve: recusa se o registro (ou o corpo) já existe no destino."""
+    for alvo in (_confinado(destino, f"{chave}.captura.json"), corpo):
+        if alvo is not None and (alvo.exists() or alvo.is_symlink()):
+            raise ValueError(f"já existe {alvo.name} em {destino}: evidência não se sobrescreve; use outra --chave")
 
 
 def _confinado(destino: Path, nome: str) -> Path:
@@ -225,7 +309,7 @@ def _extensao(mime: str | None) -> str:
 
 
 def capturar(
-    conector: str,
+    conector: str | None,
     consulta: dict[str, Any] | None = None,
     *,
     url: str | None = None,
@@ -233,12 +317,30 @@ def capturar(
     sonda: bool,
     user_agent: str = "conector",
     chave: str | None = None,
+    fonte_sonda: str | None = None,
+    confirmado_por_titular: bool = False,
 ) -> RegistroCaptura:
     """Captura uma consulta (tjdft, tjsp) ou um GET na allowlist do conector e grava corpo + `<chave>.captura.json`.
 
-    Tudo é validado antes da rede: conector, modo de UA, `chave`, URL e destino. Com `sonda`, o destino não pode ser
-    o repositório nem ficar dentro dele.
+    Com `fonte_sonda` (em lugar de `conector`), o alvo é uma fonte do catálogo `freoa_verifica.sondas`, ainda sem
+    conector: só com `sonda`, só por `url`, pelo transporte comum e com UA identificado. O registro leva
+    `fonte_sonda: <id>` e `conector: null`.
+
+    Host de fonte-sonda em nível B (ver `freoa_verifica.sondas`) só com `confirmado_por_titular=True`, que fica
+    registrado no `.captura.json`.
+
+    Nunca sobrescreve evidência: se `<chave>.captura.json` (ou o corpo) já existe no destino, recusa; com `chave`
+    explícita a recusa vem antes da rede.
+
+    Tudo é validado antes da rede: conector ou fonte-sonda, modo de UA, `chave`, URL e destino. Com `sonda`, o
+    destino não pode ser o repositório nem ficar dentro dele.
     """
+    if (conector is None) == (fonte_sonda is None):
+        raise ValueError("informe exatamente um de: conector, fonte_sonda")
+    if fonte_sonda is not None and not sonda:
+        raise ValueError("fonte-sonda exige sonda")
+    if confirmado_por_titular and fonte_sonda is None:
+        raise ValueError("confirmado_por_titular só vale com fonte-sonda")
     if user_agent not in UA_MODOS:
         raise ValueError(f"user_agent inválido: {user_agent}")
     if chave is not None and not CHAVE.fullmatch(chave):
@@ -246,13 +348,23 @@ def capturar(
     destino = Path(destino)
     if sonda:
         recusar_destino_no_repositorio(destino)
-    plano = _planejar(conector, consulta, url)
-    classe = registry()[conector]
-    ua = UA_IDENTIFICADO if user_agent == "identificado" else ua_header(classe.user_agent)["User-Agent"]
+    if fonte_sonda is not None:
+        plano = _planejar_sonda(fonte_sonda, consulta, url, confirmado_por_titular=confirmado_por_titular)
+        ua = UA_IDENTIFICADO if user_agent == "identificado" else ua_header(plano["user_agent"])["User-Agent"]
+        rotulo = fonte_sonda
+    else:
+        plano = _planejar(conector, consulta, url)
+        classe = registry()[conector]
+        ua = UA_IDENTIFICADO if user_agent == "identificado" else ua_header(classe.user_agent)["User-Agent"]
+        rotulo = conector
+    if chave is not None:  # antes da rede: não gasta pedido à fonte para depois recusar a gravação
+        _recusar_sobrescrita(destino, chave)
     agora = datetime.now(timezone.utc)
     reg = RegistroCaptura(
         conector=conector, versao=__version__, url=plano["url"], metodo=plano["metodo"],
         parametros=plano["parametros"], user_agent=ua, capturado_em=agora.isoformat(), sonda=sonda,
+        fonte_sonda=fonte_sonda, confirmacao_host=plano.get("confirmacao_host"),
+        confirmado_por_titular=confirmado_por_titular,
     )
     try:
         resp = _buscar(plano, user_agent)
@@ -265,16 +377,17 @@ def capturar(
         if resp.status != 200:
             exc = map_transport_error(HTTPStatusError(resp.status), resp.final_url)
             reg.unavailable, reg.motivo, reg.categoria, reg.evidencia = True, exc.reason, exc.categoria, exc.evidencia
-    chave = chave or f"{conector}_{(reg.sha256 or agora.strftime('%Y%m%d%H%M%S%f'))[:12]}"
+    chave = chave or f"{rotulo}_{(reg.sha256 or agora.strftime('%Y%m%d%H%M%S%f'))[:12]}"
     registro = _confinado(destino, f"{chave}.captura.json")
     corpo = None
     if not reg.unavailable and reg.corpo is not None:
         reg.arquivo = f"{chave}{_extensao(reg.content_type)}"
         corpo = _confinado(destino, reg.arquivo)
+    _recusar_sobrescrita(destino, chave, corpo)  # chave derivada do hash só se conhece agora
     destino.mkdir(parents=True, exist_ok=True)
     if corpo is not None:
-        _atomico(corpo, reg.corpo)
-    _atomico(registro, json.dumps(reg.meta(), ensure_ascii=False, indent=1).encode("utf-8"))
+        _atomico(corpo, reg.corpo, exclusivo=True)
+    _atomico(registro, json.dumps(reg.meta(), ensure_ascii=False, indent=1).encode("utf-8"), exclusivo=True)
     return reg
 
 
