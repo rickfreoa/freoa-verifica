@@ -1,0 +1,6 @@
+{
+ "www10.trf2.jus.br": "rodada 1, 28/10/2026: robots.txt HTTP 503 (http_503, fonte_fora); registro trf2/trf2_robots_servicos.captura.json",
+ "web.trf3.jus.br": "rodada 1, 28/10/2026: robots.txt sem resposta no prazo (fonte_fora); registro trf3/trf3_robots.captura.json",
+ "jurisprudencia.trf2.jus.br": "rodada 1, 28/10/2026: robots.txt recusado pelo transporte (transporte_BlockedHost); registro trf2/trf2_robots_portal.captura.json",
+ "esaj.tjsp.jus.br": "27/10/2026: desafio_captcha (ambiental_desafio) no mesmo instrumento; registro tjsp/s0_tjsp_volume.captura.json"
+}
