@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://jurisprudencia.cjf.jus.br/sitemap.xml

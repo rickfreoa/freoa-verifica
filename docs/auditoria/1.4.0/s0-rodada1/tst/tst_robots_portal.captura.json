@@ -1,0 +1,29 @@
+{
+ "conector": null,
+ "versao": "1.3.0",
+ "url": "https://jurisprudencia.tst.jus.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.3.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-28T03:36:15.249051+00:00",
+ "sonda": true,
+ "fonte_sonda": "tst",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://jurisprudencia.tst.jus.br/robots.txt",
+ "status": 200,
+ "content_type": "text/plain",
+ "cabecalhos": {
+  "content-length": "26",
+  "content-type": "text/plain",
+  "date": "Wed, 28 Oct 2026 03:36:15 GMT",
+  "last-modified": "Tue, 27 Oct 2026 12:08:14 GMT"
+ },
+ "sha256": "133e4db054e73a10017a1f429c80c35cd5bfa9c3a1aba581b364ecc459c48a4b",
+ "bytes": 26,
+ "arquivo": "tst_robots_portal.txt"
+}

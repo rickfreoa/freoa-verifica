@@ -1,0 +1,27 @@
+{
+ "conector": null,
+ "versao": "1.3.0",
+ "url": "https://arquivo.trf1.jus.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.3.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-28T03:36:22.820825+00:00",
+ "sonda": true,
+ "fonte_sonda": "trf1",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": true,
+ "motivo": "http_404",
+ "categoria": null,
+ "evidencia": {
+  "status": 404,
+  "url": "https://arquivo.trf1.jus.br/robots.txt"
+ },
+ "url_final": null,
+ "status": null,
+ "content_type": null,
+ "cabecalhos": {},
+ "sha256": null,
+ "bytes": null,
+ "arquivo": null
+}

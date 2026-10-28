@@ -1,0 +1,29 @@
+{
+ "conector": null,
+ "versao": "1.3.0",
+ "url": "https://comunicaapi.pje.jus.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.3.0 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-10-28T03:36:20.889392+00:00",
+ "sonda": true,
+ "fonte_sonda": "djen",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://comunicaapi.pje.jus.br/robots.txt",
+ "status": 200,
+ "content_type": "text/plain",
+ "cabecalhos": {
+  "content-length": "24",
+  "content-type": "text/plain; charset=UTF-8",
+  "date": "Wed, 28 Oct 2026 03:36:21 GMT",
+  "last-modified": "Wed, 21 Oct 2026 23:07:22 GMT"
+ },
+ "sha256": "e5c4b84484ee4216e9373be99380320c25dd94805f99f0a805846f087636553f",
+ "bytes": 24,
+ "arquivo": "djen_robots_api.txt"
+}
