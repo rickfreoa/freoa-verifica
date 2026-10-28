@@ -7,6 +7,9 @@ Exemplo:
         --consulta '{"termo":"acordo de acionistas","pagina":1}'
     python scripts/capturar_fixture.py --conector stf --sonda --saida C:/tmp/sonda --chave s2 \\
         --url https://portal.stf.jus.br/robots.txt --user-agent identificado
+    python scripts/capturar_fixture.py --fonte-sonda tjac --sonda --saida C:/dev/fv14-sondas/tjac --chave r1 \\
+        --url https://esaj.tjac.jus.br/robots.txt
+(`--fonte-sonda`: fonte oficial ainda sem conector, do catálogo `freoa_verifica.sondas`; só com `--sonda` e `--url`.)
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from pathlib import Path
 
 from freoa_verifica.captura import UA_MODOS, capturar, registrar_fixture
 from freoa_verifica.connectors.base import registry
+from freoa_verifica.sondas import FONTES_SONDA
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "fixtures"
@@ -26,7 +30,10 @@ FIXTURES = REPO / "tests" / "fixtures"
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--conector", required=True, choices=sorted(registry()))
+    origem = ap.add_mutually_exclusive_group(required=True)
+    origem.add_argument("--conector", choices=sorted(registry()))
+    origem.add_argument("--fonte-sonda", dest="fonte_sonda", choices=sorted(FONTES_SONDA),
+                        help="fonte oficial sem conector (só com --sonda e --url)")
     alvo = ap.add_mutually_exclusive_group(required=True)
     alvo.add_argument("--consulta", help='JSON da consulta: tjdft {"query","pagina","tamanho","extras"}; tjsp {"termo","pagina"}')
     alvo.add_argument("--url", help="GET simples; a URL deve estar na allowlist do conector")
@@ -35,13 +42,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--saida", type=Path, help="diretório da sonda (obrigatório com --sonda)")
     ap.add_argument("--user-agent", dest="user_agent", choices=UA_MODOS, default="conector")
     args = ap.parse_args(argv)
+    if args.fonte_sonda is not None:
+        if not args.sonda:
+            ap.error("--fonte-sonda exige --sonda")
+        if args.url is None:
+            ap.error("--fonte-sonda exige --url")
     try:
         consulta = None
         if args.consulta is not None:
             consulta = json.loads(args.consulta)
             if not isinstance(consulta, dict):
                 raise ValueError("a consulta deve ser um objeto JSON")
-        comum = {"url": args.url, "user_agent": args.user_agent, "chave": args.chave}
+        comum = {"url": args.url, "user_agent": args.user_agent, "chave": args.chave, "fonte_sonda": args.fonte_sonda}
         if args.sonda:
             if args.saida is None:
                 ap.error("--sonda exige --saida")
