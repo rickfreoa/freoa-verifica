@@ -44,6 +44,16 @@ vivo: todos os testes são offline (servidor local sobre o transporte real, ou i
    caminho veda se o `robotparser` ou o avaliador RFC 9309 do módulo vedar (soma de restrições; nunca libera mais).
 6. Diretivas não padronizadas comuns (`Host`, `Request-rate`, `Clean-param`, `Noindex`...) contam como conhecidas.
 
+## Correção do supervisor (28/10/2026): desafio no robots
+
+Fora de `text/plain`, corpo 200 com marcador de desafio do projeto é barreira `desafio_no_robots` (antes de concluir
+"sem regras", e mesmo com linhas de regra); em `text/plain`, regras interpretáveis são obedecidas
+(`Disallow: /captcha/` veda `/captcha/`). A detecção do transporte continua desligada para o robots em todos os MIMEs:
+ligá-la só fora de `text/plain` não é possível, porque o Content-Type só se conhece depois do único pedido e o
+transporte decide a detecção antes dele. O efeito pedido é obtido por `robots_s0`, com a lista de marcadores de
+`connectors.challenge`, sem duplicá-la. Testes: HTML e outros MIMEs com página de CAPTCHA, `text/plain` com
+`Disallow: /captcha/`, HTML sem marcador.
+
 ## Testes
 
 - `tests/test_robots_s0.py` (103): tabela completa por status e MIME (404, 410, 401, 403, 429, 5xx, outros 4xx, 3xx,
