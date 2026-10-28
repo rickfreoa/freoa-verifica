@@ -2,22 +2,52 @@
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://github.com/rickfreoa/freoa-verifica/release/acceptance_manifest.schema.json",
  "title": "Manifesto de aceite do plano 1.4.0",
- "description": "Documental. A validação executável, com os invariantes a a e (etapas, parecer SEM BLOQUEADOR, incremento concluído, datas e sha256), é scripts/manifesto_aceite.py validar; este schema não substitui essas regras.",
+ "description": "Documental. A validação executável, com os invariantes a a e (recibos tipados por etapa, igualdades entre etapas, parecer SEM BLOQUEADOR conferido contra os bytes, incremento concluído, reduções, datas e caminhos confinados), é scripts/manifesto_aceite.py validar; este schema não substitui essas regras. O manifesto não consulta o GitHub nem a PyPI: a conferência material é do auditor.",
  "type": "object",
  "additionalProperties": false,
  "required": ["plano", "atualizado_em", "incrementos", "excecoes"],
  "properties": {
   "plano": {"type": "string", "minLength": 1},
-  "atualizado_em": {"type": "string", "format": "date-time"},
+  "atualizado_em": {"$ref": "#/$defs/instante"},
   "incrementos": {"type": "array", "items": {"$ref": "#/$defs/incremento"}},
   "excecoes": {"type": "array", "items": {"$ref": "#/$defs/excecao"}}
  },
  "$defs": {
-  "estado_etapa": {"enum": ["pendente", "concluida", "nao_aplicavel"]},
+  "estado_etapa": {"enum": ["pendente", "concluida"]},
   "tipo_evidencia": {
-   "enum": ["commit", "run_ci", "parecer", "tag", "release", "pypi", "snapshot", "instalacao", "doctor", "bateria_live", "bench", "outro"]
+   "enum": ["especificacao", "run_ci", "bateria_live", "commit", "parecer", "merge", "tag", "release", "pypi", "snapshot", "instalacao", "doctor"]
   },
-  "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+  "campos_por_tipo": {
+   "description": "Documental: campos obrigatórios (e só eles) do recibo de cada tipo de evidência; formatos e igualdades entre etapas são do validador.",
+   "const": {
+    "especificacao": ["especificacao", "ramo"],
+    "run_ci": ["url", "commit", "conclusao"],
+    "bateria_live": ["relatorio", "commit"],
+    "commit": ["commit"],
+    "parecer": ["parecer", "sha256", "commit_auditado"],
+    "merge": ["commit"],
+    "tag": ["tag", "commit"],
+    "release": ["url", "attestation_verificada", "sha256_wheel", "sha256_sdist"],
+    "pypi": ["versao", "sha256_wheel", "sha256_sdist"],
+    "snapshot": ["sha256", "bateria_s4", "lista_embutida_commit"],
+    "instalacao": ["concluida", "commit", "attestation_verificada", "digest_snapshot"],
+    "doctor": ["ok", "alertas"]
+   }
+  },
+  "tipos_da_etapa": {
+   "description": "Documental: a etapa concluída exige exatamente uma evidência de cada tipo listado.",
+   "const": {
+    "1_desenvolvimento": ["especificacao"],
+    "2_teste": ["run_ci", "bateria_live"],
+    "3_commit": ["commit"],
+    "4_incorporacao": ["parecer", "merge"],
+    "5_publicacao": ["tag", "release", "pypi"],
+    "6_distribuicao": ["snapshot"],
+    "7_instalacao": ["instalacao"],
+    "8_execucao": ["doctor", "bateria_live"]
+   }
+  },
+  "instante": {"type": "string", "format": "date-time", "description": "RFC 3339 completo, com segundos e fuso Z ou ±HH:MM"},
   "incremento": {
    "type": "object",
    "additionalProperties": false,
@@ -69,12 +99,11 @@
   "evidencia": {
    "type": "object",
    "additionalProperties": false,
-   "required": ["tipo", "ref", "sha256", "data"],
+   "required": ["tipo", "campos", "data"],
    "properties": {
     "tipo": {"$ref": "#/$defs/tipo_evidencia"},
-    "ref": {"type": "string", "minLength": 1},
-    "sha256": {"$ref": "#/$defs/sha256"},
-    "data": {"type": "string", "format": "date-time"}
+    "campos": {"type": "object"},
+    "data": {"$ref": "#/$defs/instante"}
    }
   },
   "reducao": {
@@ -85,20 +114,21 @@
     "item": {"type": "string", "minLength": 1},
     "data": {"type": "string", "format": "date"},
     "decisao": {"type": "string", "minLength": 1},
-    "registro": {"type": "string", "minLength": 1, "description": "caminho no repositório"},
+    "registro": {"type": "string", "minLength": 1, "description": "caminho relativo existente no repositório"},
     "motivo": {"type": "string", "minLength": 1}
    }
   },
   "excecao": {
    "type": "object",
    "additionalProperties": false,
-   "required": ["alvo", "tipo", "estado", "revisar_em", "registro"],
+   "required": ["alvo", "tipo", "estado", "revisar_em", "registro", "nota"],
    "properties": {
     "alvo": {"type": "string", "minLength": 1},
     "tipo": {"enum": ["tribunal", "funcao"]},
     "estado": {"enum": ["bloqueio_externo_documentado", "excluida_pelo_titular"]},
     "revisar_em": {"type": ["string", "null"], "format": "date"},
-    "registro": {"type": "string", "minLength": 1}
+    "registro": {"type": "string", "minLength": 1},
+    "nota": {"type": "string", "description": "obrigatória (fundamento) quando revisar_em não é null"}
    }
   }
  }

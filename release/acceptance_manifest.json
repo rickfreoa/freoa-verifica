@@ -1,12 +1,12 @@
 {
  "plano": "1.4.0",
- "atualizado_em": "2026-10-28T00:53:11+00:00",
+ "atualizado_em": "2026-10-28T01:29:33+00:00",
  "incrementos": [
   {
    "id": "I1",
    "versao": "1.4.0a1",
    "estado": "aberto",
-   "rotulo": null,
+   "rotulo": "1.4.0a1: íntegras do STJ com vínculo só por metadados e ZIP estrito; segmentação e ligação ao acervo adiadas para 1.4.0a2 (I2.6)",
    "itens": [
     {
      "id": "I1.1",
@@ -15,8 +15,8 @@
     },
     {
      "id": "I1.2",
-     "estado": "pendente",
-     "nota": "PR #10 em redução de escopo pelo D5; registro docs/auditoria/1.4.0/pr10-reducao-escopo.md no ramo feat/stj-integras-1.4"
+     "estado": "reduzido",
+     "nota": "PR #10 reduzido pelo D5; registro docs/auditoria/1.4.0/pr10-reducao-escopo.md"
     },
     {
      "id": "I1.3",
@@ -86,7 +86,15 @@
      "nota": ""
     }
    },
-   "reducoes_de_escopo": []
+   "reducoes_de_escopo": [
+    {
+     "item": "I1.2",
+     "data": "2026-10-28",
+     "decisao": "D5: vínculo só por metadados e ZIP estrito; segmentação e ligação ao acervo para I2.6",
+     "registro": "docs/auditoria/1.4.0/pr10-reducao-escopo.md",
+     "motivo": "teto de 3 rodadas do D5 atingido no PR #10 (rodada 3 do Codex COM BLOQUEADOR); o teto não equivale a aprovação"
+    }
+   ]
   },
   {
    "id": "I2",
@@ -338,14 +346,16 @@
    "tipo": "tribunal",
    "estado": "bloqueio_externo_documentado",
    "revisar_em": "2027-01-31",
-   "registro": "docs/PLANO-1.4.0.md D4"
+   "registro": "docs/PLANO-1.4.0.md D4",
+   "nota": "data fixada pelo supervisor em 28/10/2026; o D4 exige data de revisão e o plano não a fixa"
   },
   {
    "alvo": "pedidos de autos",
    "tipo": "funcao",
    "estado": "excluida_pelo_titular",
    "revisar_em": null,
-   "registro": "docs/PLANO-1.4.0.md seção 9 item 4"
+   "registro": "docs/PLANO-1.4.0.md seção 9 item 4",
+   "nota": ""
   }
  ]
 }
