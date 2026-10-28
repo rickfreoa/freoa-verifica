@@ -235,6 +235,31 @@ def test_conftest_skip_comum_e_sessao_interrompida_nao_sao_completas(pytester):
     assert int_["fontes"]["bcb"]["estado"] == "regressao"
 
 
+def test_inicio_preenchido_com_conftest_de_subdiretorio(pytester):
+    """`pytest_sessionstart` não roda em conftest de subdiretório (carregado na coleta): `inicio` saía `null`.
+
+    Reproduz o layout real (`tests/live/conftest.py` com a execução da raiz) com a cópia literal do conftest.
+    """
+    from datetime import datetime
+
+    live = pytester.mkdir("live")
+    (live / "conftest.py").write_text((RAIZ / "tests" / "live" / "conftest.py").read_text(encoding="utf-8"),
+                                      encoding="utf-8")
+    pytester.makeini("[pytest]\nmarkers =\n    live: x\n")
+    (live / "test_live_bcb.py").write_text(
+        "import time\nimport pytest\npytestmark = pytest.mark.live\n"
+        "def test_a():\n    time.sleep(0.05)\n",
+        encoding="utf-8",
+    )
+    r = pytester.runpytest("-p", "no:cacheprovider")
+    r.assert_outcomes(passed=1)
+    rel = json.loads((pytester.path / "saude-fontes.json").read_text(encoding="utf-8"))
+    assert rel["inicio"] is not None
+    inicio, fim = datetime.fromisoformat(rel["inicio"]), datetime.fromisoformat(rel["fim"])
+    assert inicio.tzinfo is not None and inicio < fim
+    assert rel["completa"] is True and rel["fontes"]["bcb"]["estado"] == "ok"
+
+
 # --- B2-08: serialização e estado antigo ----------------------------------------------------
 
 def test_workflow_serializa_as_execucoes_sem_cancelar():

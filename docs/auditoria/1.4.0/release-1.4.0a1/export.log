@@ -1,0 +1,12 @@
+Snapshot
+--------
+status: ok
+destino: <rel>\snapshot\freoa-verifica-snapshot-20261028-1.4.0a1.tar.gz
+manifest_sha256: ff52344255e3e4429bfb8991e0d11db0c35798a4394a968198825c6e688bf14e
+capturas: 2069
+db_sha256: 9ff914d741f7aaf6f423ba9138d7309fae4ed63c08cf146932a9de1c25a497b3
+db_arquivo: freoa-verifica-corpus-20261028.db
+db_compactado: freoa-verifica-corpus-20261028.db.gz
+blobs_completos: True
+autenticidade: Checksums demonstram integridade. `vinculado: true` significa que o sha256 do snapshot consta da lista embutida no pacote; a origem do pacote se prova pela attestation do wheel (`gh attestation verify`), conferida pelo instalador quando o GitHub CLI existe. N├úo h├í assinatura pr├│pria do snapshot.
+asset_sha256: ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa

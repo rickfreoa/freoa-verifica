@@ -62,4 +62,6 @@ jobs:
           # Rascunho: os bytes são auditados antes de publicar (gh release edit --draft=false);
           # a PyPI sai de pypi.yml, só depois da publicação.
           # Sem substituição de assets: se a release ou um asset já existir, o job falha.
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file CHANGELOG.md --verify-tag --draft
+          # Notas = só a seção da versão da tag (nunca o histórico inteiro); sem a seção, o job falha.
+          python scripts/notas_da_versao.py "$GITHUB_REF_NAME" CHANGELOG.md "$RUNNER_TEMP/notas.md"
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notas.md" --verify-tag --draft

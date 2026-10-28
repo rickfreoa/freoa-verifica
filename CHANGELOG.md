@@ -1,5 +1,59 @@
 # Histórico de versões
 
+## 1.4.0a1 — 28/10/2026
+
+Pré-release do incremento I1 do plano `docs/PLANO-1.4.0.md` (pipeline e preparação das fontes). Decisões 0067 a 0070. Registros em `docs/auditoria/1.4.0/`. O que a versão não entrega vem logo abaixo, e vale mais do que o resto desta seção.
+
+### O que NÃO entra na 1.4.0a1
+
+- **Íntegras do STJ (I1.2): adiadas para o I2.6.** O passe final independente sobre o PR #10 terminou com bloqueador (vínculo entre o texto e o espelho do acórdão não provado com candidato único; graus intermediários do campo `recurso`), e o item inteiro foi adiado, sem incorporar o código. A cobertura do STJ continua a da 1.3.0: espelhos (ementa) de quatro órgãos; sem íntegras. O que o I2.6 precisa resolver está em `docs/auditoria/1.4.0/pr10-adiamento.md`.
+- **Regra de robots alinhada ao RFC 9309 e modo POST/sessão no instrumento de sondas (S0b): não implementados.** O instrumento de sondas segue a regra conservadora (4xx no `robots.txt` = permissão indeterminada, e o host para). Sem o modo POST/sessão, nenhuma rota de resultado com contagem foi alcançada, e o volume da seção 4 do plano continua sem medição.
+- **Nenhuma ferramenta nem fonte nova no contrato público.** Esta versão não muda o contrato MCP, `service.py` nem `transport.py`. Os requisitos de paridade (abaixo) são documento, não código.
+- **A bateria ao vivo da linha de base tem quatro falhas e o p95 do bench viola o piso do D4** (abaixo). A 1.4.0a1 não as corrige.
+
+### Instrumento de sondas (S0) e rodada 1
+
+- Fonte-sonda no instrumento de captura (`freoa_verifica/sondas.py`, `captura.capturar(..., fonte_sonda=...)`, `scripts/capturar_fixture.py --fonte-sonda <id> --sonda`): catálogo imutável de 16 fontes e seus hosts, com nível de confirmação A (página oficial lida) ou B (bloqueado até confirmação documental ou `--confirmado-por-titular`); hosts recusados registrados com o motivo; pedido por transporte comum, com User-Agent identificado, sem repetição, sem redirecionamento e sem sobrescrever captura anterior. O registro leva `fonte_sonda`, e `conector` fica nulo. Só `captura.py` importa `sondas.py`, o que um teste estrutural por AST prova sobre o fecho de imports de `service`, `mcp_server` e `cli`. Roteiro em `docs/S0-SONDAS.md`.
+- Decisão 0069: restrição geográfica geral do DJEN (403 a origens fora do Brasil) não é recusa para a regra 3 quando o acesso parte do ambiente normal de operação do produto no Brasil, pelo transporte comum, sem repetição. Proxy, VPN ou qualquer rota que faça origem estrangeira parecer brasileira continua vedado. Vale só para o DJEN; barreira recebida do Brasil leva à sessão assistida (0067) ou a pedido formal de acesso.
+- Rodada 1 (28/10/2026, notebook do titular, pelo instrumento): dos hosts de nível A, o `robots.txt` do portal do TST veda tudo (`Disallow: /`); o do CJF veda `/api/`; o da API do DJEN respondeu 200 com regras abertas; o do TJPR permitiu a rota sondada. Seis robots responderam 200 e foram recusados pelo transporte (`transporte_RespostaInvalida`) sem que o registro traga o motivo detalhado, e três responderam 404 (parada pela regra conservadora). TRF2 (bloqueio de host e 503) e TRF3 (timeout) pararam; TJSP manteve a barreira anterior (`desafio_captcha`), sem nova tentativa. Nenhum volume foi medido. Relatório e capturas em `docs/auditoria/1.4.0/s0-rodada1/`, leitura em `s0-rodada1.md`.
+
+### Manifesto de aceite (I1.5, reduzido)
+
+- `release/acceptance_manifest.json`, seu esquema e `scripts/manifesto_aceite.py` (só biblioteca padrão): registram as oito etapas do critério de conclusão (plano, seção 5) por incremento, com recibos tipados (commit, sha256, URLs do repositório, tag, versão), igualdades entre etapas, catálogo fixo de itens do plano e pareceres locais com hash e última linha `SEM BLOQUEADOR`. O teto de rodadas não equivale a aprovação. Decisão 0068.
+- Escopo reduzido pelo D5 depois de três rodadas com bloqueador: o validador deixa de pretender conferir o conteúdo da bateria ao vivo e do ambiente (Windows e IP brasileiro), que passam ao auditor por recibo de parecer (`parecer_bateria`, `parecer_instalacao`). O manifesto só prova existência, hash e a linha final do parecer. A decisão 0068 diz o que o código impõe e o que fica a cargo do auditor.
+- Decisão 0070: depois do teto do D5, admite-se uma única correção restrita a registro (manifesto, rótulo, notas, histórico, referências), sem código de produção, critério ou escopo, com conferência curta do auditor que não conta como rodada.
+
+### Requisitos de paridade (I2.1)
+
+- `docs/PARIDADE-1.4.md` fixa, antes de qualquer implementação, os requisitos obrigatórios e desejáveis de seis funções (`informativo_juridico`, `timeline_decisoes`, `listar_overruling_por_tema`, `listar_tribunais`, `listar_ramos_direito` e partes em `obter_decisao`), com a prova de aceite de cada um: transporte único, proveniência por item, indisponibilidade tipada, cobertura em resultado vazio, ordenação determinística, sem modelo, mesma resposta pelos três adaptadores, ferramentas novas como `experimental`, p95 e atualização em 72 h. Pela decisão do D5, violação demonstrada de requisito obrigatório bloqueia o merge. Pedidos de autos ficam fora do escopo (plano, seção 9, item 4).
+- Redução de escopo pelo D5: o esquema de saída das partes (`parte_idx`, `parte_tamanho`) passa à decisão formal de contrato que precede o código do I2.4; o requisito conserva só a garantia material.
+
+### Linha de base de bench e bateria ao vivo (I1.4)
+
+Medida sobre a 1.3.0 instalada pelo instrumento oficial, no notebook do titular, em 27/10/2026 (`docs/auditoria/1.4.0/i14-bench-e-live.md`).
+
+- Bateria ao vivo: 27 aprovados, 3 xfail e 4 falhas em 128,09 s. Os xfail são o TJSP (`ambiental_desafio:desafio_captcha`). As falhas, classificadas pelo arnês como `regressao` e mantidas assim, são o Planalto (positivo, negativo e documento; `recusa_identificado_planalto`) e o TCU (negativo; `tcu_busca_incompleta_limite_de_varredura`). A execução não isola a causa e não afirma que não sejam regressões; Planalto e TCU ficam fora do escopo do I1, e a cascata do Planalto é o I3.6.
+- Bench (44 casos do conjunto-ouro da 1.2.0, sobrajuste declarado): 41 de 44 iguais à 1.2.0 numa projeção declarada, nenhum dos 36 casos não temáticos alterado, três temáticos com top-5 alterado (D8, E4, E5). Nenhum negativo plantado teve confirmação positiva.
+- **Tempo por consulta: p50 2,1 s; p95 21,1 s; máximo 31,4 s. O p95 está acima do piso do D4 (p95 de 20 s em consulta federada).** O piso vale para a Porta A, medida sobre a avaliação estratificada, e esta bateria não a substitui; sinaliza o risco. Consultas acima de 20 s: D7, E4 e E5.
+
+### Plano, regras e ressalvas
+
+- Plano `docs/PLANO-1.4.0.md` com a emenda da Porta A pelo uso real (societário, M&A, mercado de capitais) e TRF1 a TRF3 na 1.4 (PR #9 e emenda).
+- Decisão 0067: regra invariável 3 com a sessão assistida (captura pela porta única do transporte, `modalidade_acesso: sessao_assistida`, três denominadores de acesso na cobertura) e regra 7 reescrita (nenhum modelo generativo; ranqueamento local só no plano de descoberta e só pelo gate do plano). Sem código nesta versão.
+- I1.3: `noqa` por linha, no lugar de `ignore`, em `stj.py` e `derivados.py`, com a consulta paginada do STJ de valor idêntico ao da 1.3.0 (teste por AST e SHA-256 da SQL).
+- I1.1 concluído antes: Trusted Publisher cadastrado e a 1.3.0 publicada na PyPI com os hashes do `SHA256SUMS` da release.
+
+### Saúde das fontes
+
+- Correção do arnês live: `inicio` saía `null` no `saude-fontes.json`, porque `pytest_sessionstart` não é chamado em `conftest.py` de subdiretório. `tests/live/conftest.py` marca o início em `pytest_configure` (reenviado ao conftest carregado na coleta) e, por salvaguarda, em `pytest_collection_finish`. A semântica de `completa` e dos estados não muda. Teste de regressão com o conftest em subdiretório (`tests/test_saude_fontes.py`).
+
+### Distribuição
+
+- Versão 1.4.0a1 em `pyproject.toml`, `freoa_verifica/__init__.py` e no padrão de `-Versao` de `scripts/instalar-freoa-verifica.ps1`. Nenhuma outra mudança no instalador.
+- O digest do snapshot da 1.4.0a1 consta de `freoa_verifica/data/snapshots-oficiais.json` (acrescentado depois da exportação, pelo procedimento de `docs/RELEASE.md`) e a instalação vinculada foi feita (`docs/auditoria/1.4.0/release-1.4.0a1.md`). O README continua apontando para a última versão estável (1.3.0).
+- Vínculo do snapshot por igualdade de versão (decisão 0051, emenda 1.4.0a1): `_da_versao_instalada` compara a versão normalizada (PEP 440) inteira, não só os números iniciais; 1.4.0a2 e 1.4.0 recusam a entrada da 1.4.0a1 (`SNAPSHOT_OUTRA_VERSAO`).
+- Notas da release: o workflow publica só a seção da versão da tag (`scripts/notas_da_versao.py`), não o CHANGELOG inteiro; seção ausente falha o job.
+
 ## 1.3.0 — 20/10/2026
 
 Origem: plano `docs/PLANO-1.3.0.md` e comparativo com o juscraper (`docs/auditoria/2026-10-19-comparativo-juscraper.md`). Decisões 0045 a 0057.
@@ -77,7 +131,7 @@ Responde à avaliação externa de 18/10/2026 (achados A1–A12; plano em `docs/
 - Snapshot vinculado ao pacote (decisão 0042): `data/snapshots-oficiais.json`; fora da lista só com `--aceitar-nao-vinculado`, e o acervo fica `vinculado: false` de forma permanente (`fv snapshot info`, `fv doctor`); `latest` escolhe o snapshot vinculado. `fv snapshot install` sai com código 1 em recusa.
 - Reconhecimento de consultas (decisão 0043): número citado com UF acha registro sem UF (e declara `uf_citada_nao_conferida`); classe comparada sem acento ("Sumula" casa "Súmula"); número CNJ isolado devolve só o próprio processo, com dígito verificador conferido e consulta à API oficial do TJDFT; "<norma> art. N" sem vírgula, na citação avulsa, é exato; `verificar_citacao` de súmula, julgado ou CNJ usa a confirmação do acervo (antes, `not_found`).
 - Busca temática: sigla de tribunal solta na consulta vira filtro (fora de aspas); raridade do termo (IDF) ordena a complementação OR; termos na ementa pesam mais que termos espalhados no inteiro teor; TJDFT pedido explicitamente é consultado ao vivo, com locuções jurídicas entre aspas (`locucoes-1`); resultado sem ementa mostra `trecho_inteiro_teor` em torno do termo, nunca sob o rótulo `ementa`.
-- Comparativo com o JusRatio sobre conjunto-ouro independente de 42 casos (`docs/auditoria/comparativo-120/`): dentro do acervo, 34/35 contra 35/35; não temáticos 28/28 nos dois; resultados temáticos úteis 33/35 nos dois; nenhuma confirmação indevida.
+- Conjunto-ouro independente de 42 casos (`docs/auditoria/comparativo-120/`): dentro do acervo, 34/35; não temáticos 28/28; resultados temáticos úteis 33/35; nenhuma confirmação indevida. Comparações com outras ferramentas ficam só no artefato de bench, nunca neste histórico.
 - Cobertura do STJ declara só o que é adquirido (íntegras não implementadas). README e FONTES descrevem só o estado atual.
 - Instalador Windows interrompe na etapa que falhar e só declara sucesso após conferir versão, acervo vinculado e `fv doctor`; verifica a attestation do wheel e do lock com `gh` (workflow de release, tag e runners hospedados) e registra quando não pôde verificar. Release: permissões mínimas na suíte, escrita só no build, tag conferida contra a versão, lock e `SHA256SUMS` atestados.
 - Atualização sem limpar checkpoint (decisão 0039): recursos mensais do STJ são revalidados (dois meses mais recentes e capturas com mais de 30 dias; metadado CKAN alterado invalida o checkpoint), `fv doctor` informa `stj_atualizacao`; súmulas e SV do STF são recapturadas após 30 dias.

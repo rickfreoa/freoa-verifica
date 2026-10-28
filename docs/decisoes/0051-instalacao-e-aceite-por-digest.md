@@ -29,3 +29,11 @@ não verificada sem registro claro.
 
 1. `instalacao.json` registra `versao`, `sha256_wheel` (do arquivo baixado, ao qual a attestation se refere), `digest_snapshot`, `attestation_verificada` e `concluida`. O instalador grava `concluida: true` (com o `digest_snapshot` instalado) só depois do `doctor` offline; antes disso o registro é parcial (`concluida: false`, `digest_snapshot: null`).
 2. A verificação `attestation` do `doctor` só é `ok` se `concluida` for `true`, `versao` for a do pacote em execução, a attestation estiver verificada e, havendo snapshot instalado, `digest_snapshot` coincidir com o digest instalado. Qualquer outro caso é `alerta` com a lista de `motivos`; registro ausente ou ilegível também. O `doctor` não recalcula `sha256_wheel` (a wheel instalada não é retida); o valor é exibido para conferência manual.
+
+## Emenda (1.4.0a1)
+
+A revisão do PR #16 (rodada 1) achou que `_da_versao_instalada` comparava só os números iniciais da versão: 1.4.0a2 e 1.4.0 aceitariam o digest de 1.4.0a1, contra a igualdade exigida pelo item 2.
+
+1. O vínculo exige igualdade da versão normalizada (PEP 440) entre `versao_pacote_min` da entrada e `__version__`. `packaging` não é dependência de execução (só chega pelo pytest), então a normalização é própria e estrita (`snapshot._versao_normalizada`): zeros finais do release não contam, `alpha`/`beta`/`c`/`pre` viram `a`/`b`/`rc`, pré, pós e dev entram na comparação. Versão não interpretável como PEP 440, de qualquer dos lados, não é igual.
+2. Efeito: 1.4.0a1 aceita a entrada 1.4.0a1; 1.4.0a2 e 1.4.0 a recusam (`SNAPSHOT_OUTRA_VERSAO`); 1.3.0 continua aceitando a sua; entradas antigas seguem válidas nas suas versões.
+3. `_snapshots_oficiais` (filtro por número inicial `<=`) não muda: só limita o que a lista expõe; a igualdade é aplicada por `_da_versao_instalada` em `_vincular` e na busca da release.

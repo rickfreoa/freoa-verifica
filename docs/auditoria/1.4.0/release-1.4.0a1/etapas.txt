@@ -1,0 +1,11 @@
+inicio 2026-10-28T06:09:17.7186917-03:00
+commit c2cf3e2b222d3a6538582dfc23c7cc8d54697105
+versao freoa-verifica 1.4.0a1
+robocopy=1
+conferir=0
+export=0
+install_exp=0
+conferir_pos=0
+doctor_offline=0
+sha256 ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa
+fim 2026-10-28T06:14:53.0834936-03:00
