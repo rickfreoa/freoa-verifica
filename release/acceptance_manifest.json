@@ -1,12 +1,12 @@
 {
  "plano": "1.4.0",
- "atualizado_em": "2026-10-28T01:29:33+00:00",
+ "atualizado_em": "2026-10-28T02:05:22+00:00",
  "incrementos": [
   {
    "id": "I1",
    "versao": "1.4.0a1",
    "estado": "aberto",
-   "rotulo": "1.4.0a1: íntegras do STJ com vínculo só por metadados e ZIP estrito; segmentação e ligação ao acervo adiadas para 1.4.0a2 (I2.6)",
+   "rotulo": "1.4.0a1: sem íntegras do STJ; I1.2 adiado para 1.4.0a2 (I2.6) após passe final com bloqueador",
    "itens": [
     {
      "id": "I1.1",
@@ -15,8 +15,8 @@
     },
     {
      "id": "I1.2",
-     "estado": "reduzido",
-     "nota": "PR #10 reduzido pelo D5; registro docs/auditoria/1.4.0/pr10-reducao-escopo.md"
+     "estado": "adiado",
+     "nota": "PR #10: reduzido pelo D5 (docs/auditoria/1.4.0/pr10-reducao-escopo.md) e adiado após passe final com bloqueador (docs/auditoria/1.4.0/pr10-adiamento.md); não incorporado"
     },
     {
      "id": "I1.3",
@@ -90,9 +90,9 @@
     {
      "item": "I1.2",
      "data": "2026-10-28",
-     "decisao": "D5: vínculo só por metadados e ZIP estrito; segmentação e ligação ao acervo para I2.6",
-     "registro": "docs/auditoria/1.4.0/pr10-reducao-escopo.md",
-     "motivo": "teto de 3 rodadas do D5 atingido no PR #10 (rodada 3 do Codex COM BLOQUEADOR); o teto não equivale a aprovação"
+     "decisao": "D5: passe final independente COM BLOQUEADOR sobre o escopo reduzido; I1.2 adiado inteiro para I2.6",
+     "registro": "docs/auditoria/1.4.0/pr10-adiamento.md",
+     "motivo": "candidato único pelos metadados vincula outro julgamento quando a ementa é só citada; recurso omite graus intermediários"
     }
    ]
   },

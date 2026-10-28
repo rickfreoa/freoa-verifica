@@ -618,22 +618,26 @@ def test_b5_reducao_repetida_e_reprovada(repo):
     assert any("redução repetida" in e for e in repo.erros(_manifesto([inc])))
 
 
-def test_b5_manifesto_inicial_reduz_o_i1_2_e_o_i2_6_incorpora_o_escopo():
-    """Cenário do parecer: I1.2 pendente sem redução formal enquanto o I2.6 já incorpora o escopo."""
+def test_b5_manifesto_inicial_adia_o_i1_2_e_o_i2_6_incorpora_o_escopo():
+    """Cenário do parecer: I1.2 sem redução formal enquanto o I2.6 já incorpora o escopo.
+
+    Estado de fato em 28/10/2026: o PR #10 foi reduzido e, após o passe final com bloqueador, adiado.
+    """
     m = json.loads(MANIFESTO_REPO.read_text(encoding="utf-8"))
     i1, i2 = m["incrementos"][0], m["incrementos"][1]
-    assert {it["id"]: it["estado"] for it in i1["itens"]}["I1.2"] == "reduzido"
+    assert {it["id"]: it["estado"] for it in i1["itens"]}["I1.2"] == "adiado"
     assert i1["reducoes_de_escopo"] == [{
         "item": "I1.2",
         "data": "2026-10-28",
-        "decisao": "D5: vínculo só por metadados e ZIP estrito; segmentação e ligação ao acervo para I2.6",
-        "registro": "docs/auditoria/1.4.0/pr10-reducao-escopo.md",
+        "decisao": "D5: passe final independente COM BLOQUEADOR sobre o escopo reduzido; I1.2 adiado inteiro para I2.6",
+        "registro": "docs/auditoria/1.4.0/pr10-adiamento.md",
         "motivo": i1["reducoes_de_escopo"][0]["motivo"],
     }]
-    assert i1["rotulo"] == ("1.4.0a1: íntegras do STJ com vínculo só por metadados e ZIP estrito; "
-                            "segmentação e ligação ao acervo adiadas para 1.4.0a2 (I2.6)")
+    assert i1["rotulo"] == ("1.4.0a1: sem íntegras do STJ; I1.2 adiado para 1.4.0a2 (I2.6) "
+                            "após passe final com bloqueador")
     assert (RAIZ / i1["reducoes_de_escopo"][0]["registro"]).is_file()
-    assert "I1.2 reduzido" in next(it for it in i2["itens"] if it["id"] == "I2.6")["nota"]
+    assert (RAIZ / "docs/auditoria/1.4.0/pr10-reducao-escopo.md").is_file()
+    assert "I1.2" in next(it for it in i2["itens"] if it["id"] == "I2.6")["nota"]
 
 
 def test_b5_comando_reducao_marca_item_registra_e_rotula_numa_escrita(repo):
@@ -1022,7 +1026,7 @@ def test_estado_inicial_do_plano_1_4_0():
     assert all(i["estado"] == "aberto" for i in incs.values())
     assert [k for k, i in incs.items() if i["rotulo"] is not None] == ["I1"]
     estados = {it["id"]: it["estado"] for it in incs["I1"]["itens"]}
-    assert estados == {"I1.1": "concluido", "I1.2": "reduzido", "I1.3": "concluido", "I1.4": "pendente",
+    assert estados == {"I1.1": "concluido", "I1.2": "adiado", "I1.3": "concluido", "I1.4": "pendente",
                        "I1.5": "pendente", "I1.6": "concluido", "S0": "pendente"}
     assert "I2.6" in {it["id"] for it in incs["I2"]["itens"]}
     assert all(e["estado"] == "pendente" for i in incs.values() for e in i["etapas"].values())

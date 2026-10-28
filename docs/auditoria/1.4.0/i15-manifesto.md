@@ -48,3 +48,11 @@ Verificação (rodada 2):
 - Suíte offline completa, `pytest tests -q -m "not live"`: 7201 passed, 9 skipped, 34 deselected, em 865 s (sem falhas; uma primeira execução teve 1 falha, a asserção textual deste próprio documento, corrigida antes da reexecução).
 - Os testes de bloqueador reproduzem o cenário do parecer e foram executados também contra o código da rodada 1 (reescritos no formato antigo): todos passam o manifesto indevidamente lá e falham aqui (15 cenários reproduzidos no código da rodada 1, com script de cenário não versionado).
 - Pendente de CI: matriz Windows e Python 3.11 a 3.14.
+
+## Atualização do supervisor (28/10/2026)
+
+Depois do passe final independente do PR #10 (COM BLOQUEADOR), o I1.2 passou de `reduzido` a `adiado`, com
+registro `docs/auditoria/1.4.0/pr10-adiamento.md` (copiado byte a byte de `origin/feat/stj-integras-1.4`,
+a9bcf88) e rótulo "1.4.0a1: sem íntegras do STJ; I1.2 adiado para 1.4.0a2 (I2.6) após passe final com
+bloqueador". Feito pelos subcomandos `reducao` e `item` do próprio gerador; os dois testes do estado inicial
+foram ajustados ao estado de fato.
