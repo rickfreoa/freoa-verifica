@@ -55,12 +55,25 @@ def _registrar(item, estado, categoria=None, motivo=None):
     }
 
 
+def _marcar_inicio() -> None:
+    if _SAUDE["inicio"] is None:
+        _SAUDE["inicio"] = datetime.now(timezone.utc).isoformat()
+
+
+def pytest_configure(config):
+    # Conftest de subdiretório é carregado na coleta, depois de `pytest_sessionstart`; `pytest_configure` é
+    # reenviado a ele ao ser registrado, e marca o início no primeiro momento em que o arquivo existe.
+    _marcar_inicio()
+
+
 def pytest_sessionstart(session):
+    # Só roda quando este conftest é inicial (argumento de linha de comando apontando para tests/live).
     _SAUDE["inicio"] = datetime.now(timezone.utc).isoformat()
     _SAUDE["testes"] = {}
 
 
 def pytest_collection_finish(session):
+    _marcar_inicio()  # última salvaguarda: nunca gravar `inicio: null`
     # Todo teste live selecionado começa `not_run`; só deixa de sê-lo se de fato rodar.
     for item in session.items:
         if item.get_closest_marker("live") is not None:
