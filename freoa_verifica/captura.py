@@ -155,9 +155,11 @@ def _plano_get(
     Um 302 de `/robots.txt` para outra rota do mesmo host não é seguido: vira `unavailable` classificado
     (barreira, decisão 0071), sem pedido ao destino. O transporte só aceita MIMEs de uma lista: para o robots a lista
     é `robots_s0.MIMES_ROBOTS` (inclui text/plain, text/html e application/octet-stream), para poder gravar o corpo de
-    um 200 qualquer como evidência (nunca fixture nem dado do produto). O desafio no corpo não é detectado pelo
-    transporte comum, que confundiria `Disallow: /captcha` com desafio: quem decide é `robots_s0.ler_robots`,
-    depois de verificar se há regras interpretáveis (ver `capturar`).
+    um 200 qualquer como evidência (nunca fixture nem dado do produto). A detecção de desafio por corpo do
+    transporte não pode depender do Content-Type (só conhecido depois do único pedido) e confundiria
+    `Disallow: /captcha` em text/plain com desafio; por isso fica desligada nele e quem decide é
+    `robots_s0.ler_robots`: fora de text/plain o marcador de desafio do projeto vence (`desafio_no_robots`), em
+    text/plain só depois de verificar que não há regras interpretáveis (ver `capturar`).
     """
     try:
         _, alvo = validate_reference(url, hosts)  # host e sintaxe; o caminho vem a seguir
@@ -352,11 +354,11 @@ def _desafio_no_robots(reg: RegistroCaptura, resp) -> None:
     `Disallow` não é desafio (`ler_robots` só procura marcador depois de verificar que não há regras)."""
     ct = content_type_do_response(resp)
     leitura = ler_robots(resp.status, ct, resp.body, cabecalhos=resp.headers)
-    if not leitura.motivo.startswith("desafio_"):
+    if leitura.motivo != "desafio_no_robots":
         return
-    reg.evidencia = {"status": resp.status, "marcador": leitura.motivo.removeprefix("desafio_"), "sha256": resp.sha256,
+    reg.evidencia = {"status": resp.status, "marcador": leitura.marcador, "sha256": resp.sha256,
                      "url": reg.url, **({"content_type": ct} if ct else {})}
-    reg.unavailable, reg.motivo, reg.categoria = True, leitura.motivo, "ambiental_desafio"
+    reg.unavailable, reg.motivo, reg.categoria = True, f"desafio_{leitura.marcador}", "ambiental_desafio"
     reg.url_final = reg.status = reg.content_type = reg.sha256 = reg.bytes = reg.corpo = None
     reg.cabecalhos = {}
 

@@ -38,9 +38,13 @@ e do instrumento, não de barreira da fonte.
      transporte só aceita MIMEs de uma lista e recusa resposta sem Content-Type. O corpo é gravado como evidência de
      sonda, nunca como fixture nem dado do produto (o instrumento recusa o robots fora de `--sonda` e
      `registrar_fixture` o recusa);
-   - a detecção de desafio por corpo do transporte comum fica desligada para o robots, que confundiria
-     `Disallow: /captcha/` com desafio; quem decide é `robots_s0.ler_robots`, que só procura marcador de desafio
-     depois de verificar que não há regras interpretáveis;
+   - a detecção de desafio por corpo do transporte comum fica desligada para o robots (o Content-Type só é
+     conhecido depois do único pedido, e em `text/plain` ela confundiria `Disallow: /captcha/` com desafio); quem
+     decide é `robots_s0.ler_robots`, com os marcadores do próprio projeto (`connectors.challenge`). Fora de
+     `text/plain` (HTML, octet-stream, outro), corpo com marcador de desafio é barreira `desafio_no_robots`, antes de
+     qualquer conclusão de "sem regras" e mesmo que haja linhas de regra; em `text/plain`, regras interpretáveis são
+     obedecidas e só o texto sem regras é examinado em busca de marcador. Página de CAPTCHA/WAF servida como 200
+     HTML nunca libera rotas (correção do supervisor de 28/10/2026);
    - toda recusa de transporte, em qualquer captura, passa a registrar na evidência a subclasse e a mensagem curta da
      exceção, o Content-Type recebido (quando o recibo do transporte o reteve) e os saltos de redirecionamento.
      Nunca cabeçalhos sensíveis: o recibo retém só data, Content-Type, Content-Length e Retry-After, e a mensagem é

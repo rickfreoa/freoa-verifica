@@ -137,9 +137,29 @@ def test_200_vazio_sem_restricoes_com_sha_do_vazio():
 def test_200_html_com_marcador_de_desafio_e_barreira_e_robots_com_captcha_no_disallow_nao():
     html = b"<html><body><div class='g-recaptcha'></div>captcha</body></html>"
     r = ler_robots(200, "text/html", html)
-    assert r.estado == BARREIRA and r.motivo == "desafio_captcha" and r.sha256 == _sha(html)
+    assert r.estado == BARREIRA and r.motivo == "desafio_no_robots" and r.marcador == "captcha" and r.sha256 == _sha(html)
     legitimo = b"User-agent: *\nDisallow: /captcha/\n"
     assert ler_robots(200, "text/plain", legitimo).estado == robots_s0.REGRAS
+
+
+@pytest.mark.parametrize("mime", ["text/html", "application/octet-stream", "application/json"])
+def test_pagina_de_desafio_fora_de_text_plain_e_barreira_e_nao_libera_rotas(mime):
+    pagina = b"<html><head><title>Just a moment</title></head><body>Verifique que voce e humano: captcha</body></html>"
+    r = ler_robots(200, mime, pagina)
+    assert (r.estado, r.motivo) == (BARREIRA, "desafio_no_robots") and r.decidir(HOST + "/rota").acao == BARREIRA
+
+
+def test_fora_de_text_plain_marcador_vence_ate_linhas_de_regra():
+    corpo = b"User-agent: *\nDisallow: /captcha/\n"
+    assert ler_robots(200, "application/octet-stream", corpo).motivo == "desafio_no_robots"
+    r = ler_robots(200, "text/plain; charset=utf-8", corpo)
+    assert r.estado == robots_s0.REGRAS and r.decidir(HOST + "/captcha/x").acao == VEDADO
+    assert r.decidir(HOST + "/outra").acao == SEGUIR
+
+
+def test_html_sem_marcador_continua_sem_restricoes():
+    r = ler_robots(200, "text/html", b"<html><body>Portal do tribunal</body></html>")
+    assert (r.estado, r.motivo) == (SEM_RESTRICOES, "200_sem_regras_interpretaveis")
 
 
 @pytest.mark.parametrize("corpo", [
