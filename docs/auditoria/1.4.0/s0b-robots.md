@@ -85,3 +85,20 @@ específico de plataforma além de `PureWindowsPath` para o nome da pasta de sa�
 Depois da correção do supervisor e do rebase sobre `origin/main` (`624f8a9`): suíte completa em Python 3.13.18,
 7602 passed, 9 skipped, 34 deselected (983 s); arquivos tocados e vizinhos em 3.11.18, 417 passed; Ruff
 (`scripts/ruff_catraca.py`) e `git diff --check` sem achado.
+
+## Rodada 2 (parecer do Codex sobre o PR #17, rodada 1)
+
+Parecer com bloqueador. Cada achado tem regressão que reproduz o cenário do parecer, na decisão composta
+(`LeituraRobots.decidir`) e não só no avaliador isolado; as regressões falham no código anterior e passam no novo.
+
+| Achado | Correção | Regressão |
+|---|---|---|
+| B1 `%2F` apagado por `unquote` + `quote` | `_normalizar` decodifica só octetos não reservados (RFC 3986) e deixa os demais codificados em caixa alta; caminho e regra comparados na mesma forma (RFC 9309, 2.2.2). `Disallow: /private%2Fsecret` com `Allow: /private/secret` veda `https://x/private%2Fsecret` | `test_b1_*` |
+| B2 corpo inexaminável liberado como `sem_restricoes` | charset que não fecha, NUL no texto de MIME textual e UTF-16/32 sem BOM com diretivas são barreira `corpo_nao_interpretavel`; a busca de marcador nos bytes só acrescenta detecção (`desafio_no_robots`). Revoga a vista latin-1 do arquivo em charset legado | `test_charset_que_nao_fecha_*`, `test_utf16_sem_bom_*`, `test_corpo_inexaminavel_*` (text/plain e text/html) |
+| B3 extensão encerrava a sequência de agentes | só `Allow`/`Disallow` encerram a sequência; `Crawl-delay`, `Request-rate`, `Sitemap`, `Host` e demais extensões não interferem no agrupamento (RFC 9309, 2.2.4). O `robotparser` também erra; a composição segue vedando se qualquer avaliador vedar | `test_b3_*` |
+| I1 caminhos no relatório | `_limpo` troca a pasta de saída, o checkout, o interpretador e a casa do usuário por `<saida>`, `<repo>`, `<python>`, `<home>` e qualquer outro caminho absoluto (POSIX ou Windows) por `<caminho>`; tipo da exceção e mensagem curta ficam | `test_i1_*` |
+| M1 causa das seis recusas 200 | `docs/S0-SONDAS.md` diz que a causa não foi determinada na rodada 1; a rodada 2 a registra | revisão |
+
+Efeito prático a confirmar pelo titular: robots 200 em charset legado (por exemplo ISO-8859-1 com acento em
+comentário) passa a ser barreira, não regras lidas por vista latin-1. É a leitura conservadora do parecer; se o
+titular quiser aceitar charset legado ASCII-compatível, é decisão a registrar na 0071.

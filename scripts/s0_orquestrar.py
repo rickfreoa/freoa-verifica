@@ -17,7 +17,8 @@ Uso:
 `--barreiras`: JSON `{"<host>": "<descrição e onde está o registro>"}` com os hosts que já deram barreira ao produto:
 não recebem nenhum pedido. `--hosts`/`--hosts-arquivo`: restringe a rodada a esses hosts (a rodada 2 da S0b refaz só
 os hosts cuja parada da rodada 1 decorreu da regra antiga). `--somente-robots`: só o `robots.txt` de cada host.
-O relatório não contém caminhos de máquina (a pasta de saída aparece como `<saida>`).
+O relatório não contém caminhos de máquina: a pasta de saída aparece como `<saida>`, o checkout como `<repo>`, o
+interpretador como `<python>`, a casa do usuário como `<home>` e qualquer outro caminho absoluto como `<caminho>`.
 """
 
 from __future__ import annotations
@@ -78,8 +79,35 @@ def executar_instrumento(args: list[str]) -> subprocess.CompletedProcess:
                           encoding="utf-8")
 
 
+_RAIZ_DO_REPO = Path(__file__).resolve().parent.parent
+_WIN = re.compile(r"(?<![\w])[A-Za-z]:[\\/][^\s\"'<>|,;]*")
+_POSIX = re.compile(r"(?<![\w/.:<>~-])(?:/[^\s\"'<>|,;:()\[\]/]+){2,}/?|(?<![\w/.:<>~-])~(?:/[^\s\"'<>|,;:()\[\]/]+)+")
+
+
+def _raizes() -> list[tuple[str, str]]:
+    """(caminho, marcador) das raízes conhecidas, das mais longas às mais curtas."""
+    brutas = [(_RAIZ_DO_REPO, "<repo>"), (Path(sys.prefix), "<python>"), (Path(sys.base_prefix), "<python>"),
+              (Path(sys.executable).parent, "<python>"), (Path.home(), "<home>")]
+    vistos: dict[str, str] = {}
+    for caminho, marcador in brutas:
+        for forma in {str(caminho), str(caminho).replace("\\", "/")}:
+            if len(forma) > 1:
+                vistos.setdefault(forma, marcador)
+    return sorted(vistos.items(), key=lambda par: -len(par[0]))
+
+
 def _limpo(texto: str, base: Path) -> str:
-    return texto.strip().replace(str(base), "<saida>").replace(str(base).replace("\\", "/"), "<saida>")[-300:]
+    """Texto do instrumento sem caminho de máquina: a pasta de saída vira `<saida>`; o checkout, o interpretador e a
+    casa do usuário, `<repo>`, `<python>`, `<home>`; qualquer outro caminho absoluto (POSIX ou Windows), `<caminho>`.
+    O tipo da exceção e a mensagem curta ficam; um traceback inteiro perde só os caminhos."""
+    texto = texto.strip()
+    for forma in sorted({str(base), str(base).replace("\\", "/")}, key=len, reverse=True):
+        texto = texto.replace(forma, "<saida>")
+    for caminho, marcador in _raizes():
+        texto = texto.replace(caminho, marcador)
+    texto = _WIN.sub("<caminho>", texto)
+    texto = _POSIX.sub("<caminho>", texto)
+    return texto[-300:]
 
 
 def _resumo(leitura) -> dict[str, Any]:

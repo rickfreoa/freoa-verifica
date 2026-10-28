@@ -379,7 +379,7 @@ A rodada 1 (`docs/auditoria/1.4.0/s0-rodada1.md`) parou nove hosts por causa da 
 | `jurisprudencia-backend.tst.jus.br` | tst (backend) | robots 404 | regra antiga (4xx = indeterminado) |
 | `arquivo.trf1.jus.br` | trf1 (arquivo) | robots 404 | regra antiga |
 | `www5.tjmg.jus.br` | tjmg | robots 404 | regra antiga |
-| `jurisprudencia.stf.jus.br` | stf_acordaos | 200 recusado (`transporte_RespostaInvalida`) | MIME fora de `text/plain`, sem motivo registrado |
+| `jurisprudencia.stf.jus.br` | stf_acordaos | 200 recusado (`transporte_RespostaInvalida`) | causa não determinada na rodada 1 (a recusa não registrou Content-Type nem motivo); a rodada 2 registra a causa |
 | `pangeabnp.pdpj.jus.br` | bnp | 200 recusado | idem |
 | `bnp.pdpj.jus.br` | bnp | 200 recusado | idem |
 | `comunica.pje.jus.br` | djen (página) | 200 recusado | idem; origem brasileira, decisão 0069 |

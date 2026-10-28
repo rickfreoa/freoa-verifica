@@ -64,6 +64,16 @@ e do instrumento, não de barreira da fonte.
      soma o `robotparser` e um avaliador RFC 9309 do próprio módulo, e veda se qualquer um vedar. Diretivas não
      padronizadas comuns (`Host`, `Request-rate`, `Clean-param`, `Noindex`...) contam como conhecidas, para não
      esconder um `Disallow` ao lado delas.
+   - parecer do PR #17, rodada 1 (correções do item 5):
+     - corpo 200 que não pode ser examinado com segurança (charset que não fecha, NUL no texto de MIME textual, ou
+       diretivas `User-agent`/`Allow`/`Disallow` em UTF-16/UTF-32 sem BOM) é barreira `corpo_nao_interpretavel`; a
+       busca de marcador de desafio nos bytes só acrescenta detecção (`desafio_no_robots`), nunca libera. Isso
+       revoga a leitura por vista latin-1 de arquivo em charset legado: robots com acento fora de UTF-8 é barreira;
+     - a comparação de caminho e regra normaliza só octetos não reservados (RFC 3986), em caixa alta uniforme para
+       os demais: `%2F` continua distinto de `/` (RFC 9309, 2.2.2);
+     - agrupamento pelo RFC 9309, 2.2.4: linhas `User-agent` consecutivas formam um grupo; só `Allow` e `Disallow`
+       encerram a sequência de agentes; extensões (`Crawl-delay`, `Request-rate`, `Sitemap`...) não interferem. Como o
+       `urllib.robotparser` também erra esse caso, a composição segue vedando se qualquer avaliador vedar.
 6. A diferença entre redirecionamento para o mesmo host e para outro host não é recuperável pelo transporte
    (`Location` não é exposto); ambos são barreira, e a evidência registra a exceção e o status 3xx dos saltos.
 
