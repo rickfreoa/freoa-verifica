@@ -84,6 +84,12 @@ e do instrumento, não de barreira da fonte.
      - agrupamento pelo RFC 9309, 2.2.4: linhas `User-agent` consecutivas formam um grupo; só `Allow` e `Disallow`
        encerram a sequência de agentes; extensões (`Crawl-delay`, `Request-rate`, `Sitemap`...) não interferem. Como o
        `urllib.robotparser` também erra esse caso, a composição segue vedando se qualquer avaliador vedar.
+     - parecer PR #18 r2 (28/10/2026): fim de linha é só CR, LF ou CRLF (RFC 9309, 2.2). Os demais separadores
+       que `str.splitlines` reconhece (`0x0B`, `0x0C`, `0x1C` a `0x1E`, U+0085, U+2028, U+2029) nunca criam linha
+       nova, nem dentro de comentário: presentes no texto, o corpo é barreira `corpo_nao_interpretavel`. Byte nulo
+       é barreira em qualquer MIME, inclusive `application/octet-stream`; isso revoga a escolha anterior de ler
+       binário com NUL como `sem_restricoes`, porque não há critério sintático que o separe de UTF-16/32 sem BOM
+       e a ausência de marcador de desafio não pode liberar.
 6. A diferença entre redirecionamento para o mesmo host e para outro host não é recuperável pelo transporte
    (`Location` não é exposto); ambos são barreira, e a evidência registra a exceção e o status 3xx dos saltos.
 

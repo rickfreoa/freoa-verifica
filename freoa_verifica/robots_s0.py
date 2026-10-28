@@ -142,7 +142,10 @@ def _texto(corpo: bytes, content_type: str | None) -> str | None:
         return None
 
 
-_SEPARADOR_LINHA = re.compile(rb"[\n\r\x0b\x0c\x1c\x1d\x1e]")  # os separadores ASCII de `str.splitlines`
+_SEPARADOR_LINHA = re.compile(rb"\r\n|\r|\n")  # fim de linha do RFC 9309 (2.2): CR, LF ou CRLF
+# `str.splitlines` também parte nestes; o RFC não. Presentes no texto, o corpo não se examina com segurança
+# (parecer PR #18 r2, B1): nunca viram linha nova, nem dentro de comentário.
+_SEPARADOR_FORA_DO_RFC = re.compile("[\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]")
 _BOMS = (b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff")
 _CHARSET_LARGO = re.compile(r"charset\s*=\s*[\"']?\s*(utf-?(?:16|32)|ucs-?[24])", re.I)
 
@@ -183,10 +186,6 @@ def _diretiva_escondida(corpo: bytes) -> bool:
 
 def _tem_regras_no_texto(texto: str) -> bool:
     return any(_diretiva(ln) in ("user-agent", "allow", "disallow") for ln in _linhas_uteis(texto))
-
-
-def _mime_textual(mime: str) -> bool:
-    return not mime or mime.startswith("text/") or mime.endswith(("/json", "+json", "/xml", "+xml", "/javascript"))
 
 
 def _linhas_uteis(texto: str) -> list[str]:
@@ -235,14 +234,15 @@ def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[
         texto = _texto_legado_em_comentario(corpo, content_type)
         legado = texto is not None
     mime = (content_type or "").split(";", 1)[0].strip().lower()
-    inexaminavel = texto is None or ("\x00" in texto and _mime_textual(mime)) or (
+    inexaminavel = texto is None or "\x00" in texto or bool(_SEPARADOR_FORA_DO_RFC.search(texto)) or (
         not _tem_regras_no_texto(texto) and _diretiva_escondida(corpo))
     if inexaminavel:  # nunca libera: a busca de marcador nos bytes só acrescenta detecção
         achado = _desafio(corpo, content_type, cabecalhos)
         if achado:
             return _desafio_no_robots(achado, base)
         return _barreira("corpo_nao_interpretavel", "200 cujo corpo não pôde ser examinado com segurança (charset que "
-                         "não fecha, NUL no texto ou diretivas em UTF-16/32 sem BOM): barreira por conservadorismo "
+                         "não fecha, NUL em qualquer MIME, separador de linha fora do RFC 9309 ou diretivas em UTF-16/32 sem "
+                         "BOM): barreira por conservadorismo "
                          "(decisão 0071)", **base)
     if mime != "text/plain":  # fora de text/plain o marcador de desafio vence, mesmo que haja linhas de regra
         achado = _desafio(corpo, content_type, cabecalhos)

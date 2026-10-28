@@ -81,6 +81,8 @@ def executar_instrumento(args: list[str]) -> subprocess.CompletedProcess:
 
 _RAIZ_DO_REPO = Path(__file__).resolve().parent.parent
 _WIN = re.compile(r"(?<![\w])[A-Za-z]:[\\/][^\s\"'<>|,;]*")
+_UNC = re.compile(r"(?<![\w/\\:])(?:\\\\|//)[^\s\"'<>|,;\\/]+[\\/][^\s\"'<>|,;]*")
+_ENTRE_ASPAS = re.compile(r"(?<=[\"'])/[^\s\"'<>|]+(?=[\"'])")  # File "/x": absoluto entre aspas
 _POSIX = re.compile(r"(?<![\w/.:<>~-])(?:/[^\s\"'<>|,;:()\[\]/]+){2,}/?|(?<![\w/.:<>~-])~(?:/[^\s\"'<>|,;:()\[\]/]+)+")
 
 
@@ -105,8 +107,10 @@ def _limpo(texto: str, base: Path) -> str:
         texto = texto.replace(forma, "<saida>")
     for caminho, marcador in _raizes():
         texto = texto.replace(caminho, marcador)
+    texto = _UNC.sub("<caminho>", texto)
     texto = _WIN.sub("<caminho>", texto)
     texto = _POSIX.sub("<caminho>", texto)
+    texto = _ENTRE_ASPAS.sub("<caminho>", texto)
     return texto[-300:]
 
 
