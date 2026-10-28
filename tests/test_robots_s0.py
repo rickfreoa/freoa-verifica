@@ -177,11 +177,96 @@ def test_diretivas_nao_padrao_comuns_nao_escondem_o_disallow():
 
 
 @pytest.mark.parametrize("mime", ["text/plain", "text/html"])
-def test_charset_que_nao_fecha_e_barreira_e_nao_libera(mime):
-    corpo = "User-agent: *\n# não indexar\nDisallow: /admin/\n".encode("latin-1")
+def test_charset_que_nao_fecha_com_byte_na_regra_e_barreira_e_nao_libera(mime):
+    corpo = "User-agent: *\n# não indexar\nDisallow: /admin/ã\n".encode("latin-1")
     r = ler_robots(200, mime, corpo)
     assert (r.estado, r.motivo) == (BARREIRA, "corpo_nao_interpretavel") and r.sha256 == _sha(corpo)
     assert r.decidir(HOST + "/admin/").acao == BARREIRA
+
+
+# --- decisão do titular de 28/10/2026: charset legado aceito só em comentários (0071, item 5) ---------------------
+
+
+LEGADO = "User-agent: *\n# Área restrita\nDisallow: /privado\n".encode("iso-8859-1")
+
+
+@pytest.mark.parametrize("mime", ["text/plain", "text/plain; charset=utf-8"])
+def test_legado_so_em_comentario_le_as_regras_e_registra_a_flag(mime):
+    r = ler_robots(200, mime, LEGADO)
+    assert (r.estado, r.motivo) == ("regras", "regras_interpretaveis") and r.sha256 == _sha(LEGADO)
+    assert r.charset_legado_em_comentario is True
+    assert r.decidir(HOST + "/privado/x").acao == VEDADO
+    assert r.decidir(HOST + "/publico").acao == SEGUIR
+
+
+def test_charset_declarado_que_decodifica_continua_valendo_sem_a_flag():
+    r = ler_robots(200, "text/plain; charset=iso-8859-1", LEGADO)
+    assert r.estado == "regras" and r.charset_legado_em_comentario is False
+    assert r.decidir(HOST + "/privado").acao == VEDADO
+
+
+def test_legado_com_byte_na_regra_e_barreira():
+    corpo = "User-agent: *\n# Área restrita\nDisallow: /área\n".encode("iso-8859-1")
+    r = ler_robots(200, "text/plain", corpo)
+    assert (r.estado, r.motivo) == (BARREIRA, "corpo_nao_interpretavel")
+    assert r.charset_legado_em_comentario is False
+    assert r.decidir(HOST + "/outra").acao == BARREIRA
+
+
+def test_legado_com_byte_antes_do_comentario_na_mesma_linha_e_barreira():
+    corpo = "User-agent: *\nDisallow: /á # ok\n".encode("iso-8859-1")
+    assert ler_robots(200, "text/plain", corpo).motivo == "corpo_nao_interpretavel"
+
+
+def test_windows_1252_com_aspas_tipograficas_em_comentario_le_as_regras():
+    corpo = "User-agent: *\n# \u201cnão entrar\u201d \u2026\nDisallow: /privado\n".encode("cp1252")
+    r = ler_robots(200, "text/plain", corpo)
+    assert r.estado == "regras" and r.charset_legado_em_comentario is True
+    assert r.decidir(HOST + "/privado").acao == VEDADO and r.decidir(HOST + "/livre").acao == SEGUIR
+
+
+def test_legado_c1_0x85_em_comentario_nao_parte_linha_em_regra():
+    corpo = b"User-agent: *\n# fim\x85Disallow: /\nAllow: /x\n"
+    r = ler_robots(200, "text/plain", corpo)
+    assert r.estado == "regras" and r.decidir(HOST + "/y").acao == SEGUIR
+
+
+@pytest.mark.parametrize("codec", ["utf-16-le", "utf-16-be", "utf-32-le"])
+def test_utf16_sem_bom_continua_barreira_com_a_regra_do_legado(codec):
+    corpo = "User-agent: *\n# Área\nDisallow: /privado\n".encode(codec)
+    r = ler_robots(200, "text/plain", corpo)
+    assert (r.estado, r.motivo) == (BARREIRA, "corpo_nao_interpretavel")
+    assert r.decidir(HOST + "/privado").acao == BARREIRA and r.decidir(HOST + "/livre").acao == BARREIRA
+
+
+def test_legado_com_nul_e_barreira():
+    corpo = "User-agent: *\n# Área\x00\nDisallow: /privado\n".encode("iso-8859-1")
+    r = ler_robots(200, "text/plain", corpo)
+    assert (r.estado, r.motivo) == (BARREIRA, "corpo_nao_interpretavel")
+
+
+def test_legado_com_bom_ou_charset_largo_declarado_e_barreira():
+    assert ler_robots(200, "text/plain", b"\xff\xfe" + LEGADO).estado == BARREIRA
+    assert ler_robots(200, "text/plain; charset=utf-16", LEGADO).estado == BARREIRA
+
+
+def test_captcha_em_utf16_e_barreira():
+    corpo = "<html>Verifique que voce e humano: captcha</html>".encode("utf-16-le")
+    assert ler_robots(200, "text/html", corpo).estado == BARREIRA
+    corpo = "<html>captcha</html>".encode("utf-16")
+    assert ler_robots(200, "text/html", corpo).estado == BARREIRA
+
+
+def test_legado_em_comentario_marcador_de_desafio_continua_vencendo():
+    corpo = "<html><body>Verifique que voce e humano: captcha # Á</body></html>".encode("iso-8859-1")
+    assert ler_robots(200, "text/html", corpo).estado == BARREIRA
+
+
+def test_legado_na_decisao_composta_com_registro():
+    reg = {"status": 200, "sha256": _sha(LEGADO), "cabecalhos": {"content-type": "text/plain"}}
+    leitura = robots_s0.ler_do_registro(reg, LEGADO)
+    assert leitura.charset_legado_em_comentario is True
+    assert leitura.decidir(HOST + "/privado").acao == VEDADO
 
 
 @pytest.mark.parametrize("mime", ["text/plain", "text/html", "text/plain; charset=utf-8"])

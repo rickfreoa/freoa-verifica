@@ -111,8 +111,11 @@ def _limpo(texto: str, base: Path) -> str:
 
 
 def _resumo(leitura) -> dict[str, Any]:
-    return {"estado": leitura.estado, "motivo": leitura.motivo, "detalhe": leitura.detalhe,
-            "status": leitura.status, "content_type": leitura.content_type, "sha256": leitura.sha256}
+    resumo = {"estado": leitura.estado, "motivo": leitura.motivo, "detalhe": leitura.detalhe,
+              "status": leitura.status, "content_type": leitura.content_type, "sha256": leitura.sha256}
+    if leitura.charset_legado_em_comentario:
+        resumo["charset_legado_em_comentario"] = True
+    return resumo
 
 
 def orquestrar(

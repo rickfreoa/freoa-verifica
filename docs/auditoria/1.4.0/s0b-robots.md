@@ -99,6 +99,19 @@ Parecer com bloqueador. Cada achado tem regressão que reproduz o cenário do pa
 | I1 caminhos no relatório | `_limpo` troca a pasta de saída, o checkout, o interpretador e a casa do usuário por `<saida>`, `<repo>`, `<python>`, `<home>` e qualquer outro caminho absoluto (POSIX ou Windows) por `<caminho>`; tipo da exceção e mensagem curta ficam | `test_i1_*` |
 | M1 causa das seis recusas 200 | `docs/S0-SONDAS.md` diz que a causa não foi determinada na rodada 1; a rodada 2 a registra | revisão |
 
-Efeito prático a confirmar pelo titular: robots 200 em charset legado (por exemplo ISO-8859-1 com acento em
-comentário) passa a ser barreira, não regras lidas por vista latin-1. É a leitura conservadora do parecer; se o
-titular quiser aceitar charset legado ASCII-compatível, é decisão a registrar na 0071.
+Efeito prático decidido pelo titular em 28/10/2026 (ajuste da rodada 2, abaixo): a leitura conservadora do parecer
+(charset legado sempre barreira) foi substituída por regra intermediária.
+
+### Rodada 2, ajuste: charset legado aceito só em comentários (decisão do titular de 28/10/2026)
+
+Registrada na decisão 0071, item 5, em substituição à escolha "charset legado vira barreira". Em `robots_s0.py`, corpo
+200 que não decodifica em UTF-8 estrito nem no charset declarado é lido byte a byte como legado ASCII-compatível
+somente sem NUL, sem BOM, sem charset declarado UTF-16/32 e com todo byte >= 0x80 depois de `#` na mesma linha; a
+leitura traz `charset_legado_em_comentario: true` (também no resumo do orquestrador). Byte >= 0x80 em regra, NUL,
+UTF-16/32 sem BOM e demais casos seguem em barreira `corpo_nao_interpretavel`; marcador de desafio nos bytes só
+acrescenta detecção. Os bytes >= 0x80 viram U+FFFD no texto (evita que U+0085 em comentário parta a linha).
+Testes (na decisão composta `decidir` e na leitura): ISO-8859-1 com `# Área restrita` e `Disallow: /privado`
+(regras lidas, /privado vedado, outra rota liberada, flag); o mesmo com `Disallow: /área` (barreira); Windows-1252
+com aspas tipográficas em comentário; UTF-16LE/BE e UTF-32 sem BOM (barreira, regressão do B2); NUL; BOM e charset
+largo declarado; CAPTCHA em UTF-16; U+0085 em comentário; charset declarado que decodifica (sem a flag). O teste
+`test_charset_que_nao_fecha_*` passou a usar byte >= 0x80 na regra.
