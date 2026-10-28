@@ -7,15 +7,20 @@ Roteiro executável pelo supervisor, no notebook com IP brasileiro, depois da au
 - Só pelo instrumento: `scripts/capturar_fixture.py --fonte-sonda <id> --sonda`. Pedido único (GET) pelo transporte comum, UA identificado do pacote, allowlist de host, caminho EXATO e MIME da fonte (a rota é igualdade de caminho: `/config.json.bak` ou um segmento extra não são a rota; consulta `?` só na rota declarada com parâmetros), sem host de escopo livre e sem seguir redirecionamento. URL fora da allowlist é recusada antes da rede. O instrumento não faz POST em fonte-sonda.
 - Primeiro e único acesso: a sonda do instrumento no notebook é o primeiro e único acesso do produto a cada fonte. Se responder 403 ou outra recusa (desafio, WAF, 429, 5xx), a fonte fica registrada como barreira e não há nova tentativa por outra rede ou rota (regra 3). Vale para o BNP e qualquer outra fonte; o DJEN segue a decisão 0069. Leituras anteriores de páginas e `robots.txt` foram feitas pela ferramenta de pesquisa do agente, não pelo produto, e não substituem a sonda nem a repetem.
 - Barreira (desafio, WAF, recusa, 403/5xx) vira `unavailable(motivo)` (decisão 0045). A categoria vem quando a decisão a dá (`ambiental_desafio`, `recusa_identificado`, `fonte_fora`, `resposta_inesperada`); 429 e outros status sem regra própria saem sem categoria (`categoria: null`), só com motivo e evidência. Registre e siga: não repita em laço, não troque UA, IP ou rota, não resolva CAPTCHA.
-- Sequência por host: o `robots.txt` do próprio host é o primeiro comando dele. O instrumento o pede só na forma exata `/robots.txt`, aceita só `text/plain` e não segue redirecionamento. Leia o `.captura.json` do robots antes de qualquer outro comando do host:
+- Sequência por host: o `robots.txt` do próprio host é o primeiro comando dele, lido pelo RFC 9309 (decisão 0071). O instrumento o pede só na forma exata `/robots.txt`, um pedido, sem seguir redirecionamento, e aceita qualquer MIME da lista `robots_s0.MIMES_ROBOTS` (inclui `text/plain`, `text/html` e `application/octet-stream`) para poder gravar o corpo como evidência; o corpo nunca vira fixture nem dado do produto. Resposta sem Content-Type ou com MIME fora da lista é recusada pelo transporte e vira barreira, com o Content-Type recebido (quando houver) e a subclasse e a mensagem da exceção na evidência. A interpretação é de `freoa_verifica/robots_s0.py`, aplicada pelo orquestrador `scripts/s0_orquestrar.py`; a tabela vale para a leitura do `.captura.json` do robots antes de qualquer outro comando do host:
 
 | Resposta do robots.txt | Decisão |
 |---|---|
-| 200 `text/plain` interpretável, sem `Disallow` aplicável ao caminho do roteiro | seguir com os comandos daquele host |
-| 200 `text/plain` interpretável, com `Disallow` aplicável a um caminho | não sondar esse caminho; registrar o fato como achado |
-| desafio, erro (qualquer status diferente de 200, inclusive 404 e 429), redirecionamento, HTML ou conteúdo que não seja `text/plain` interpretável | PARAR: permissão indeterminada; nenhum outro comando daquele host; registrar como barreira |
+| 200 com regras interpretáveis (ao menos um grupo `User-agent` e só diretivas conhecidas ou comentários) | obedecer: `Disallow` aplicável ao caminho impede o caminho (registrar como achado); sem `Disallow` aplicável, seguir |
+| 200 sem regras interpretáveis (inclusive HTML ou outro MIME, vazio ou só comentários) | sem restrições; Content-Type e sha256 do corpo ficam registrados |
+| 404 e 410 | sem restrições (ausência de robots) |
+| 401, 403, 429, desafio, WAF, 5xx, timeout, erro de transporte, redirecionamento para outro host | PARAR: barreira; nenhum outro comando daquele host e nenhuma nova tentativa (regra 3) |
+| outros 4xx | PARAR: barreira por conservadorismo, registrada como tal |
+| redirecionamento para o mesmo host | continua não seguido; vira barreira com evidência (o transporte não expõe o destino, então a evidência registra a exceção e o status 3xx dos saltos) |
+| 200 com `Allow`/`Disallow` não interpretável, ou 200 recusado pelo transporte | PARAR: barreira por conservadorismo (`regras_ambiguas`, `content_type_ausente`, `resposta_200_recusada`); lacunas da tabela resolvidas na decisão 0071, item 5 |
 
-  A regra de erro é mais conservadora que o RFC 9309 (que trata 4xx como ausência de restrições) por decisão do supervisor de 28/10/2026.
+  Esta tabela substitui a regra conservadora de 28/10/2026 (qualquer status diferente de 200, HTML ou MIME diferente de `text/plain` = parada), que ia além do RFC 9309 por decisão do supervisor; a decisão do titular de 28/10/2026 está em `docs/decisoes/0071-robots-rfc-9309-na-s0.md`.
+- Orquestração: `python scripts/s0_orquestrar.py --roteiro docs/S0-SONDAS.md --saida <pasta fora do repositório> [--barreiras <json>] [--hosts-arquivo <json>] [--somente-robots]`. Só chama o instrumento, com os comandos dos blocos `powershell` liberados (a pasta `--saida` do roteiro é trocada por `<saida>/<última pasta>`); um pedido por URL; o `robots.txt` uma vez por host; hosts com barreira anterior vêm de arquivo de entrada (`--barreiras`), nunca do código, e não recebem pedido; evidência já gravada na saída é reaproveitada, nunca pedida de novo; nenhuma repetição. O relatório não contém caminhos de máquina.
 - Consulta neutra: `acordo de acionistas` (ou `sociedade anônima`). Nenhum dado de cliente, número de processo ou nome de parte.
 - Nível de cada linha: "P" = `robots.txt` (RFC 9309). "A" = URL lida em página oficial (ou publicada pelo próprio portal). "B" = host indexado por busca, não lido em página oficial: bloqueado. "T" = caminho lido em página oficial com parâmetros inferidos; a sonda confirma ou refuta, e, se refutar, o resultado vira pendência S0b: não se descobre endpoint por navegador nem fora do instrumento.
 - Bloqueio de host B: as sondas em host de nível B ficam bloqueadas até confirmação documental (página oficial lida ou confirmação do titular). O instrumento as recusa (saída 2, antes da rede, inclusive o `robots.txt`) sem `--confirmado-por-titular`; com a flag, o `.captura.json` registra `confirmado_por_titular: true` e `confirmacao_host: "B"`. Nenhum host de nível B foi confirmado.
@@ -364,6 +369,32 @@ python scripts/capturar_fixture.py --conector tjdft --sonda --saida C:/dev/fv14-
 
 Contagem total do TJSP: "Resultados 1 a N de M" no HTML do resultado; do TJDFT: `hits.value` no JSON (confira no corpo se o total é exato ou cota inferior).
 
+
+## Rodada 2 (S0b)
+
+A rodada 1 (`docs/auditoria/1.4.0/s0-rodada1.md`) parou nove hosts por causa da regra antiga do robots.txt e do defeito do instrumento (aceitar só `text/plain` e não registrar o motivo da recusa), não por barreira da fonte. A decisão 0071 troca a regra pelo RFC 9309. A rodada 2 refaz **só o robots.txt** desses hosts e, conforme a decisão do titular sobre o que cada leitura permite, as rotas do catálogo. **Não é nova tentativa após recusa**: nenhum deles recusou o produto (404 é ausência de robots; 200 é resposta).
+
+| Host | Fonte do roteiro | Rodada 1 | Motivo da parada |
+|---|---|---|---|
+| `jurisprudencia-backend.tst.jus.br` | tst (backend) | robots 404 | regra antiga (4xx = indeterminado) |
+| `arquivo.trf1.jus.br` | trf1 (arquivo) | robots 404 | regra antiga |
+| `www5.tjmg.jus.br` | tjmg | robots 404 | regra antiga |
+| `jurisprudencia.stf.jus.br` | stf_acordaos | 200 recusado (`transporte_RespostaInvalida`) | MIME fora de `text/plain`, sem motivo registrado |
+| `pangeabnp.pdpj.jus.br` | bnp | 200 recusado | idem |
+| `bnp.pdpj.jus.br` | bnp | 200 recusado | idem |
+| `comunica.pje.jus.br` | djen (página) | 200 recusado | idem; origem brasileira, decisão 0069 |
+| `esaj.tjac.jus.br` | tjac | 200 recusado | idem |
+| `jurisdf.tjdft.jus.br` | tjdft (conector) | 200 recusado | idem |
+
+Fora da rodada 2, sem nova tentativa (barreira registrada na rodada 1): `www10.trf2.jus.br` (TRF2 serviços, 503), `web.trf3.jus.br` (TRF3, timeout), `jurisprudencia.trf2.jus.br` (TRF2 portal, `BlockedHost`) e `esaj.tjsp.jus.br` (TJSP, CAPTCHA). Os demais hosts da rodada 1 já tinham leitura válida (TST portal `Disallow: /`, CJF, DJEN API, TJPR) e não são refeitos. Hosts de nível B continuam bloqueados.
+
+Execução (notebook do titular, IP brasileiro, pasta de saída nova fora do repositório; os arquivos de entrada estão em `docs/auditoria/1.4.0/s0b-rodada2/`):
+
+```
+python scripts/s0_orquestrar.py --roteiro docs/S0-SONDAS.md --saida <saida-rodada2> --barreiras docs/auditoria/1.4.0/s0b-rodada2/barreiras.json --hosts-arquivo docs/auditoria/1.4.0/s0b-rodada2/hosts.json --somente-robots
+```
+
+Com as leituras na mão, o titular decide se as rotas dos hosts liberados rodam; nesse caso repete-se o mesmo comando sem `--somente-robots` e com a mesma pasta de saída (o robots gravado é reaproveitado, nunca pedido de novo). Barreira em qualquer pedido encerra o host, sem nova tentativa por outra rede, rota ou identidade.
 
 ## Volume: estimativa pelas fontes estatísticas oficiais do CNJ
 
