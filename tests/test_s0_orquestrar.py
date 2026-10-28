@@ -333,6 +333,20 @@ def test_i1_r2_unc_e_absoluto_entre_aspas_saem_do_relatorio(tmp_path):
 
 
 def test_i1_r2_limite_documentado_um_componente_em_texto_corrido_fica():
-    """Sem aspas, `/x` é sintaticamente igual a caminho de URL (`/robots.txt`) e não identifica a máquina."""
+    """Limitação declarada: sem aspas, `/x` de um componente é sintaticamente igual a caminho de URL
+    (`/robots.txt`) e fica, ainda que possa conter nome identificador (`/PC-NOME`). O instrumento cita caminhos
+    de arquivo entre aspas nos tracebacks; esses saem inteiros."""
     mod = _carregar()
     assert mod._limpo("falhou em /robots.txt", Path("/nao/usada")) == "falhou em /robots.txt"
+
+
+def test_i1_r3_caminho_citado_com_espacos_sai_inteiro():
+    """Parecer PR #18 r3, I1: o trecho depois do espaço vazava (`<caminho> ClienteSegredo/contrato.py`)."""
+    mod = _carregar()
+    base = Path("/nao/usada")
+    for citado in ('"/srv/Equipe ClienteSegredo/contrato.py"', '"\\\\PC-RICK\\Equipe ClienteSegredo\\foo.py"',
+                   "'D:\\Dados Cliente\\x.py'"):
+        saida = mod._limpo(f"File {citado}, line 1", base)
+        assert "ClienteSegredo" not in saida and "Cliente" not in saida and "PC-RICK" not in saida, saida
+        assert saida.endswith(", line 1") and "<caminho>" in saida
+    assert mod._limpo('Disallow: "/admin"', base) == 'Disallow: "<caminho>"'  # custo aceito: perde o caminho citado
