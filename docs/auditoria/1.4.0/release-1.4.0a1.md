@@ -23,5 +23,9 @@ Conteúdo: o `conteudo` e a `origem` do manifesto congelado são idênticos aos 
 (`recorte-1.3.0.json`): 826 obras, 44.780 decisões, `derived_version` 5. A 1.4.0a1 não muda o acervo; muda o
 pacote (os bytes do snapshot diferem pelo manifesto de exportação, que registra a versão).
 
-Pendente nesta fase (passo 3 do RELEASE): repetir a instalação, agora vinculada, em home vazio, com o pacote que
-contém o digest; depois, auditoria independente do commit.
+Instalação vinculada (passo 3 do RELEASE), 06:26–06:29, pacote reinstalado de `62c0df7` (com o digest):
+`fv --home <vazio> snapshot install --arquivo ...` sem `--aceitar-nao-vinculado` → 0, `vinculado: true`,
+`snapshot_derived_version: 5`; S4 pós-instalação contra o mesmo manifesto → 0; `doctor --offline` → 0.
+
+Próximo: auditoria independente do commit (manifesto, instalador, digest, código), CI nas oito combinações, merge,
+tag `v1.4.0a1` e auditoria dos bytes da CI (passos 4 a 6).
