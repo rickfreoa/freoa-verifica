@@ -4,3 +4,4 @@ tests/fixtures/** -text
 *.pdf binary
 
 docs/auditoria/1.4.0/s0-rodada1/** -text
+docs/auditoria/1.4.0/release-1.4.0a1/** -text
