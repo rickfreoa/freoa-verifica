@@ -26,8 +26,10 @@ from freoa_verifica.connectors.base import Unavailable, registry, sob_guarda
 from freoa_verifica.connectors.challenge import map_transport_error
 from freoa_verifica.connectors.httputil import connector_fetch, form_body, ua_header
 from freoa_verifica.identidade_http import MODO_IDENTIFICADO, USER_AGENT_IDENTIFICADO
+from freoa_verifica.robots_s0 import MIMES_ROBOTS, ler_robots
 from freoa_verifica.sondas import FONTES_BARRADAS, FONTES_SONDA, prefixos_por_host
-from freoa_verifica.transport import BlockedHost, HTTPStatusError, Session, validate_reference
+from freoa_verifica.texto_resposta import content_type_do_response
+from freoa_verifica.transport import BlockedHost, HTTPStatusError, Session, TransportError, validate_reference
 
 UA_IDENTIFICADO = USER_AGENT_IDENTIFICADO
 UA_MODOS = ("identificado", "conector")
@@ -149,9 +151,13 @@ def _plano_get(
     transporte, que fica como segunda barreira (`prefixos`), e a sonda não segue redirecionamento.
 
     `/robots.txt` é exceção declarada ao escopo de caminhos, mas só ele: o percurso inteiro roda com o prefixo
-    exato `/robots.txt` em todos os hosts da allowlist, MIME só `text/plain` e NENHUM redirecionamento
-    (`max_redirects=0`). Um 302 de `/robots.txt` para outra rota do mesmo host não é seguido: vira
-    `unavailable` classificado (permissão indeterminada), sem pedido ao destino.
+    exato `/robots.txt` em todos os hosts da allowlist, um pedido e NENHUM redirecionamento (`max_redirects=0`).
+    Um 302 de `/robots.txt` para outra rota do mesmo host não é seguido: vira `unavailable` classificado
+    (barreira, decisão 0071), sem pedido ao destino. O transporte só aceita MIMEs de uma lista: para o robots a lista
+    é `robots_s0.MIMES_ROBOTS` (inclui text/plain, text/html e application/octet-stream), para poder gravar o corpo de
+    um 200 qualquer como evidência (nunca fixture nem dado do produto). O desafio no corpo não é detectado pelo
+    transporte comum, que confundiria `Disallow: /captcha` com desafio: quem decide é `robots_s0.ler_robots`,
+    depois de verificar se há regras interpretáveis (ver `capturar`).
     """
     try:
         _, alvo = validate_reference(url, hosts)  # host e sintaxe; o caminho vem a seguir
@@ -174,8 +180,8 @@ def _plano_get(
         plano["max_redirects"] = 0  # sonda: um pedido; o destino de um 3xx não é pedido
     if robots:
         plano.update(
-            path_prefixes={h: ("/robots.txt",) for h in sorted(hosts)}, mimes=frozenset({"text/plain"}),
-            max_redirects=0,
+            path_prefixes={h: ("/robots.txt",) for h in sorted(hosts)}, mimes=MIMES_ROBOTS,
+            max_redirects=0, check_challenge=False, robots=True,
         )
     return plano
 
@@ -242,6 +248,8 @@ def _buscar(plano: dict[str, Any], ua_modo: str):
     }
     if "max_redirects" in plano:
         kw["max_redirects"] = plano["max_redirects"]
+    if "check_challenge" in plano:
+        kw["check_challenge"] = plano["check_challenge"]
     if sessao is not None:
         kw["session"] = sessao
     resp = None
@@ -255,6 +263,40 @@ def _buscar(plano: dict[str, Any], ua_modo: str):
         if etapa.get("exige_cookie") and not sessao.has_cookie(etapa["exige_cookie"]):
             raise Unavailable("sessao_ausente")
     return resp
+
+
+# --- evidência da recusa ----------------------------------------------------------------------------
+
+_SENSIVEL = re.compile(r"(?i)set-cookie|authorization|cookie")
+
+
+def _mensagem_curta(texto: str, limite: int = 160) -> str:
+    """Mensagem da exceção do transporte, sem controles e sem nome de cabeçalho sensível, truncada."""
+    limpo = "".join(c if c.isprintable() else " " for c in texto).strip()
+    return _SENSIVEL.sub("[omitido]", limpo)[:limite]
+
+
+def _evidencia_da_recusa(exc: Unavailable) -> dict[str, Any]:
+    """Evidência da recusa acrescida do que o transporte sabia: subclasse e mensagem curta da exceção, Content-Type
+    recebido (quando o recibo o reteve) e saltos de redirecionamento. Nunca outros cabeçalhos (Set-Cookie,
+    Authorization, cookies): o recibo do transporte só retém data, Content-Type, Content-Length e Retry-After."""
+    ev = dict(exc.evidencia)
+    causa: BaseException | None = exc.__cause__
+    while causa is not None and not isinstance(causa, TransportError):
+        causa = causa.__cause__
+    if causa is None:
+        return ev
+    ev.setdefault("excecao", type(causa).__name__)
+    mensagem = _mensagem_curta(str(causa))
+    if mensagem:
+        ev.setdefault("mensagem", mensagem)
+    cabecalhos = dict(getattr(getattr(causa, "http", None), "headers", ()) or ())
+    if "content-type" in cabecalhos:
+        ev.setdefault("content_type", _mensagem_curta(cabecalhos["content-type"]))
+    saltos = [{"url": str(s.get("url")), "status": s.get("status")} for s in getattr(causa, "saltos", None) or []]
+    if saltos:
+        ev.setdefault("saltos", saltos)
+    return ev
 
 
 # --- escrita ----------------------------------------------------------------------------------------
@@ -302,6 +344,21 @@ def _confinado(destino: Path, nome: str) -> Path:
     if "/" in nome or "\\" in nome or final.parent.resolve() != base or final.resolve().parent != base or final.is_symlink():
         raise ValueError(f"caminho fora do destino: {nome}")
     return final
+
+
+def _desafio_no_robots(reg: RegistroCaptura, resp) -> None:
+    """200 do robots.txt que é desafio (e não robots interpretável) vira `unavailable` como qualquer desafio: sem corpo
+    gravado, com marcador, sha256 e Content-Type na evidência. Robots interpretável com a palavra "captcha" num
+    `Disallow` não é desafio (`ler_robots` só procura marcador depois de verificar que não há regras)."""
+    ct = content_type_do_response(resp)
+    leitura = ler_robots(resp.status, ct, resp.body, cabecalhos=resp.headers)
+    if not leitura.motivo.startswith("desafio_"):
+        return
+    reg.evidencia = {"status": resp.status, "marcador": leitura.motivo.removeprefix("desafio_"), "sha256": resp.sha256,
+                     "url": reg.url, **({"content_type": ct} if ct else {})}
+    reg.unavailable, reg.motivo, reg.categoria = True, leitura.motivo, "ambiental_desafio"
+    reg.url_final = reg.status = reg.content_type = reg.sha256 = reg.bytes = reg.corpo = None
+    reg.cabecalhos = {}
 
 
 def _extensao(mime: str | None) -> str:
@@ -357,6 +414,8 @@ def capturar(
         classe = registry()[conector]
         ua = UA_IDENTIFICADO if user_agent == "identificado" else ua_header(classe.user_agent)["User-Agent"]
         rotulo = conector
+    if plano.get("robots") and not sonda:  # o corpo do robots é evidência de sonda: nunca fixture nem dado do produto
+        raise ValueError("robots.txt só se captura como sonda (o corpo é evidência, nunca fixture)")
     if chave is not None:  # antes da rede: não gasta pedido à fonte para depois recusar a gravação
         _recusar_sobrescrita(destino, chave)
     agora = datetime.now(timezone.utc)
@@ -369,7 +428,8 @@ def capturar(
     try:
         resp = _buscar(plano, user_agent)
     except Unavailable as exc:
-        reg.unavailable, reg.motivo, reg.categoria, reg.evidencia = True, exc.reason, exc.categoria, exc.evidencia
+        reg.unavailable, reg.motivo, reg.categoria = True, exc.reason, exc.categoria
+        reg.evidencia = _evidencia_da_recusa(exc)
     else:
         reg.url_final, reg.status, reg.content_type = resp.final_url, resp.status, resp.mime
         reg.cabecalhos = dict(resp.headers)
@@ -377,6 +437,8 @@ def capturar(
         if resp.status != 200:
             exc = map_transport_error(HTTPStatusError(resp.status), resp.final_url)
             reg.unavailable, reg.motivo, reg.categoria, reg.evidencia = True, exc.reason, exc.categoria, exc.evidencia
+        elif plano.get("robots"):
+            _desafio_no_robots(reg, resp)
     chave = chave or f"{rotulo}_{(reg.sha256 or agora.strftime('%Y%m%d%H%M%S%f'))[:12]}"
     registro = _confinado(destino, f"{chave}.captura.json")
     corpo = None
@@ -464,6 +526,8 @@ def registrar_fixture(reg: RegistroCaptura, chave: str, fixtures: Path) -> None:
     """
     if reg.unavailable or reg.arquivo is None or reg.corpo is None:
         raise ValueError("captura indisponível não vira fixture")
+    if reg.url.split("?", 1)[0].lower().endswith("/robots.txt"):
+        raise ValueError("robots.txt é evidência de sonda, nunca fixture")
     if not CHAVE.fullmatch(chave):
         raise ValueError(f"chave inválida: {chave}")
     fixtures = Path(fixtures)
