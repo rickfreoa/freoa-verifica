@@ -10,10 +10,18 @@ Nível B = a página do próprio sistema, no domínio do tribunal, foi só index
 catálogo, mas o instrumento recusa a sonda neles (inclusive o `robots.txt`) sem `--confirmado-por-titular`, registrado
 no `.captura.json`. Hosts sem nenhuma indicação oficial ficam em `HOSTS_RECUSADOS`. Nunca host de agregador privado.
 
-Escopo de caminho: `rotas` dá, host a host, os prefixos de caminho que a sonda pode pedir, sempre estreitos e só de
-rotas documentadas em página oficial lida. A raiz `/` não entra: o transporte não admite `/` como prefixo (aceitaria
-tudo sob o host). Host sem rota documentada tem `()`: só o `robots.txt`, que é exceção de caminho exato, sem
-redirecionamento. Não há host de escopo livre. Rota de cadastro, login ou área institucional nunca entra.
+Escopo de caminho: `rotas` dá, host a host, os caminhos que a sonda pode pedir. Cada rota é um caminho EXATO (igualdade
+de string, sem prefixo: `/config.json.bak` ou `/rest/indicadores/admin` não são `/config.json` nem `/rest/indicadores`),
+sem consulta (`?`), exceto nas rotas também listadas em `consultas`. Não há família de diretório (prefixo) no catálogo:
+a raiz `/` não entra (o transporte não admite `/` como prefixo) e rota com segmento de login, admin, cadastro, auth,
+conta ou usuario é recusada na construção. Host sem rota documentada tem `()`: só o `robots.txt`, que é exceção de
+caminho exato, sem redirecionamento. A sonda também não segue redirecionamento (`max_redirects=0`): o destino de um
+3xx, mesmo dentro da allowlist, não é pedido. Não há host de escopo livre.
+
+Barreira registrada: fonte que já respondeu recusa (403, desafio) a qualquer leitura registrada sai do catálogo e entra
+em `FONTES_BARRADAS` (e seus hosts em `HOSTS_RECUSADOS`); o instrumento a recusa antes da rede, sem nova tentativa por
+outra rede ou rota. Acesso só por decisão do titular, por sessão assistida (decisão 0067) ou por documentação oficial.
+Exceção: o DJEN (decisão 0069, restrição geográfica geral) segue no catálogo, sondável só do notebook do titular.
 """
 
 from __future__ import annotations
@@ -26,17 +34,21 @@ _MIMES = frozenset({"text/html", "application/json", "text/plain"})
 _MIMES_PDF = _MIMES | {"application/pdf"}
 
 
+SEGMENTOS_PROIBIDOS = ("login", "admin", "cadastro", "auth", "conta", "usuario")
+
+
 @dataclass(frozen=True)
 class FonteSonda:
     id: str
     descricao: str
     hosts: frozenset[str]
-    rotas: Mapping[str, tuple[str, ...]]  # host -> prefixos de caminho permitidos; () = só robots.txt
+    rotas: Mapping[str, tuple[str, ...]]  # host -> caminhos EXATOS permitidos; () = só robots.txt
     mimes: frozenset[str]
     origem_hosts: str  # "host=URL oficial; host=URL oficial": onde cada host foi confirmado
     confirmacao: Literal["A", "B"]  # pior nível entre os hosts: "B" se algum host é B
     hosts_b: frozenset[str] = frozenset()  # hosts de nível B (indexados, não lidos): sonda bloqueada
     nota: str = ""
+    consultas: Mapping[str, tuple[str, ...]] = MappingProxyType({})  # host -> rotas (de `rotas`) que admitem consulta
 
     def __post_init__(self) -> None:
         if not self.hosts or set(self.rotas) != set(self.hosts):
@@ -45,27 +57,34 @@ class FonteSonda:
             raise ValueError(f"confirmacao inválida em {self.id}")
         if not self.hosts_b <= self.hosts or (self.confirmacao == "B") != bool(self.hosts_b):
             raise ValueError(f"confirmacao e hosts_b inconsistentes em {self.id}")
-        for host, prefixos in self.rotas.items():
-            if type(prefixos) is not tuple or any(
+        for host, caminhos in self.rotas.items():
+            if type(caminhos) is not tuple or any(
                 not isinstance(p, str) or not p.startswith("/") or p == "/" or p.lower().startswith("/robots.txt")
-                for p in prefixos
+                or any(c in p for c in "?#%\\") or any(w in p.lower() for w in SEGMENTOS_PROIBIDOS)
+                for p in caminhos
             ):
                 raise ValueError(f"rota inválida em {self.id}: {host}")
+        if not set(self.consultas) <= set(self.hosts) or any(
+            type(c) is not tuple or not set(c) <= set(self.rotas[h]) for h, c in self.consultas.items()
+        ):
+            raise ValueError(f"consultas inconsistentes em {self.id}")
         for host in self.hosts:
             if f"{host}=" not in self.origem_hosts:
                 raise ValueError(f"host sem origem registrada: {host}")
 
 
 def prefixos_por_host(fonte: FonteSonda) -> dict[str, tuple[str, ...]]:
-    """Mapa host -> prefixos no formato do transporte; host sem rota documentada admite só o robots.txt."""
+    """Mapa host -> caminhos no formato (prefixo) do transporte; é só a segunda barreira: a igualdade exata do caminho
+    é validada antes, em `captura._plano_get`. Host sem rota documentada admite só o robots.txt."""
     return {h: (fonte.rotas[h] or ("/robots.txt",)) for h in sorted(fonte.hosts)}
 
 
 def _f(id_: str, descricao: str, rotas: dict[str, tuple[str, ...]], origem: str, *, mimes=_MIMES,
-       b: set[str] = frozenset(), nota: str = "") -> tuple[str, FonteSonda]:
+       b: set[str] = frozenset(), nota: str = "",
+       consultas: dict[str, tuple[str, ...]] | None = None) -> tuple[str, FonteSonda]:
     return id_, FonteSonda(
         id_, descricao, frozenset(rotas), MappingProxyType(dict(rotas)), mimes, origem,
-        "B" if b else "A", frozenset(b), nota,
+        "B" if b else "A", frozenset(b), nota, MappingProxyType(dict(consultas or {})),
     )
 
 
@@ -78,7 +97,7 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
     _f("tst", "TST: pesquisa de jurisprudência (portal, backend REST e consulta de documento)",
        {"jurisprudencia.tst.jus.br": ("/config.json",),
         "jurisprudencia-backend.tst.jus.br": ("/rest/orgaos-judicantes", "/rest/indicadores"),
-        "consultadocumento.tst.jus.br": ("/consultaDocumento/",)},
+        "consultadocumento.tst.jus.br": ()},
        "jurisprudencia.tst.jus.br=https://jurisprudencia.tst.jus.br/ (portal oficial); "
        "jurisprudencia-backend.tst.jus.br=https://jurisprudencia.tst.jus.br/config.json (campo base_url do portal); "
        "consultadocumento.tst.jus.br=https://jurisprudencia.tst.jus.br/config.json (campos consulta_acordao_url e "
@@ -87,7 +106,8 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
        nota="nível A: o próprio portal publica seus endpoints (config.json e JavaScript do portal); www.tst.jus.br "
             "respondeu 202 sem corpo (desafio) à leitura de pesquisa da ferramenta do agente e não foi usado. A "
             "pesquisa textual é POST JSON: o instrumento só faz GET, pendência S0b. A raiz do portal fica fora "
-            "(o transporte não admite `/` como prefixo)."),
+            "(o transporte não admite `/` como prefixo). consultadocumento: o diretório /consultaDocumento/ é "
+            "prefixo (família), que o catálogo não admite; sem rota de caminho exato documentada, só robots.txt."),
     _f("stf_acordaos", "STF: pesquisa de jurisprudência (acórdãos)",
        {"jurisprudencia.stf.jus.br": ("/pages/search",)},
        "jurisprudencia.stf.jus.br=https://portal.stf.jus.br/jurisprudencia/ (links para /pages/search)",
@@ -103,7 +123,7 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
        {"comunica.pje.jus.br": ("/consulta",), "comunicaapi.pje.jus.br": ()},
        "comunica.pje.jus.br=https://www.cnj.jus.br/programas-e-acoes/processo-judicial-eletronico-pje/comunicacoes-processuais/; "
        "comunicaapi.pje.jus.br=https://www.cnj.jus.br/programas-e-acoes/processo-judicial-eletronico-pje/comunicacoes-processuais/orientacoes-aos-tribunais/",
-       nota="a página oficial documenta /api/v1 como API de envio dos tribunais, com autenticação: não é sondada. "
+       nota="sujeita à decisão 0069 (restrição geográfica geral): sondável só do ambiente normal do produto no Brasil (notebook do titular), pelo transporte comum, UA identificado, uma só requisição, sem nova tentativa; recusa a partir do Brasil vira barreira (0069, item 4); o 403 de 27/10/2026 foi de ferramenta de pesquisa em nuvem fora do Brasil, sem valor de evidência (0069, item 5). A página oficial documenta /api/v1 como API de envio dos tribunais, com autenticação: não é sondada. "
             "A consulta pública pela API não está documentada: " + _S0B.strip()),
     _f("cjf_unificada", "CJF: pesquisa unificada de jurisprudência da Justiça Federal",
        {"jurisprudencia.cjf.jus.br": (), "www.cjf.jus.br": ("/jurisprudencia/unificada/",)},
@@ -134,6 +154,7 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
        {"esaj.tjac.jus.br": ("/cjsg/consultaCompleta.do", "/cjsg/resultadoCompleta.do")},
        "esaj.tjac.jus.br=https://www.tjac.jus.br/ (links /cjsg/consultaCompleta.do e /cjsg/resultadoCompleta.do)",
        mimes=_MIMES_PDF,
+       consultas={"esaj.tjac.jus.br": ("/cjsg/resultadoCompleta.do",)},
        nota="nível A: caminhos lidos em página oficial; os parâmetros do resultado são inferência do e-SAJ"),
     _f("tjal", _ESAJ + " do TJAL", {"www2.tjal.jus.br": ("/cjsg/consultaCompleta.do",)},
        "www2.tjal.jus.br=https://www2.tjal.jus.br/cjsg/consultaCompleta.do (página do próprio tribunal)",
@@ -155,18 +176,22 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
        "www5.tjmg.jus.br=https://www.tjmg.jus.br/portal-tjmg/jurisprudencia/consulta-de-jurisprudencia/ "
        "(links /jurisprudencia/decisao.do, formEspelhoAcordao.do)",
        nota="nível A; os links oficiais usam http, a sonda exige https; " + _S0B.strip()),
-    _f("tjrs", "TJRS: pesquisa de jurisprudência", {"www.tjrs.jus.br": ("/novo/buscas-solr/",)},
-       "www.tjrs.jus.br=https://www.tjrs.jus.br/novo/buscas-solr/ (página do próprio tribunal)",
-       b={"www.tjrs.jus.br"},
-       nota=_B + "www.tjrs.jus.br; a leitura foi recusada pelo robots.txt do site à ferramenta de pesquisa do "
-            "agente e não foi contornada; www3.tjrs.jus.br/site_php/consulta ficou fora (legado, não confirmado); "
-            + _S0B.strip()),
     _f("tjpr", "TJPR: consulta de jurisprudência", {"portal.tjpr.jus.br": ("/jurisprudencia/",)},
        "portal.tjpr.jus.br=https://www.tjpr.jus.br/jurisprudencia (link https://portal.tjpr.jus.br/jurisprudencia/)",
        nota="nível A; " + _S0B.strip()),
 ]))
 
+_TJRS = (
+    "barreira registrada: o robots.txt do site recusou a leitura à ferramenta de pesquisa do agente; sem nova "
+    "tentativa por outra rede ou rota; acesso só por decisão do titular, por sessão assistida (0067) ou por "
+    "documentação oficial de acesso"
+)
+
+# fonte-sonda barrada: id -> motivo. Fora do catálogo; o instrumento a recusa antes da rede.
+FONTES_BARRADAS: Mapping[str, str] = MappingProxyType({"tjrs": _TJRS})
+
 HOSTS_RECUSADOS: Mapping[str, str] = MappingProxyType({
+    "www.tjrs.jus.br": "TJRS, " + _TJRS,
     "jurisprudencia.trf1.jus.br": "não consta de página oficial lida; o TRF1 publica a pesquisa no CJF",
     "jurisprudencia.trf3.jus.br": "não consta de página oficial lida; o TRF3 publica em web.trf3.jus.br",
     "juris.trf2.jus.br": "apenas resultado de busca, sem página oficial lida",

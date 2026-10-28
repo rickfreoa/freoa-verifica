@@ -4,8 +4,8 @@ Roteiro executável pelo supervisor, no notebook com IP brasileiro, depois da au
 
 ## Regras da sonda
 
-- Só pelo instrumento: `scripts/capturar_fixture.py --fonte-sonda <id> --sonda`. Pedido único (GET) pelo transporte comum, UA identificado do pacote, allowlist de host, caminho e MIME da fonte, sem host de escopo livre. URL fora da allowlist é recusada antes da rede. O instrumento não faz POST em fonte-sonda.
-- Primeiro e único acesso: a sonda do instrumento no notebook é o primeiro e único acesso do produto a cada fonte. Se responder 403 ou outra recusa (desafio, WAF, 429, 5xx), a fonte fica registrada como barreira e não há nova tentativa por outra rede ou rota (regra 3). Vale para o DJEN, o BNP e qualquer outra fonte. Leituras anteriores de páginas e `robots.txt` foram feitas pela ferramenta de pesquisa do agente, não pelo produto, e não substituem a sonda nem a repetem.
+- Só pelo instrumento: `scripts/capturar_fixture.py --fonte-sonda <id> --sonda`. Pedido único (GET) pelo transporte comum, UA identificado do pacote, allowlist de host, caminho EXATO e MIME da fonte (a rota é igualdade de caminho: `/config.json.bak` ou um segmento extra não são a rota; consulta `?` só na rota declarada com parâmetros), sem host de escopo livre e sem seguir redirecionamento. URL fora da allowlist é recusada antes da rede. O instrumento não faz POST em fonte-sonda.
+- Primeiro e único acesso: a sonda do instrumento no notebook é o primeiro e único acesso do produto a cada fonte. Se responder 403 ou outra recusa (desafio, WAF, 429, 5xx), a fonte fica registrada como barreira e não há nova tentativa por outra rede ou rota (regra 3). Vale para o BNP e qualquer outra fonte; o DJEN segue a decisão 0069. Leituras anteriores de páginas e `robots.txt` foram feitas pela ferramenta de pesquisa do agente, não pelo produto, e não substituem a sonda nem a repetem.
 - Barreira (desafio, WAF, recusa, 403/5xx) vira `unavailable(motivo)` (decisão 0045). A categoria vem quando a decisão a dá (`ambiental_desafio`, `recusa_identificado`, `fonte_fora`, `resposta_inesperada`); 429 e outros status sem regra própria saem sem categoria (`categoria: null`), só com motivo e evidência. Registre e siga: não repita em laço, não troque UA, IP ou rota, não resolva CAPTCHA.
 - Sequência por host: o `robots.txt` do próprio host é o primeiro comando dele. O instrumento o pede só na forma exata `/robots.txt`, aceita só `text/plain` e não segue redirecionamento. Leia o `.captura.json` do robots antes de qualquer outro comando do host:
 
@@ -32,13 +32,19 @@ Roteiro executável pelo supervisor, no notebook com IP brasileiro, depois da au
 | Campos pesquisados? | Ementa, metadados (órgão, relator, datas, classe) e inteiro teor: o que o resultado traz e se há link estável por documento (PDF/HTML) |
 | Quem serviu? | `fonte_sonda`, `user_agent`, `capturado_em`, `cabecalhos`, `confirmacao_host`, `confirmado_por_titular` |
 
+## Fontes com barreira registrada (fora do roteiro)
+
+Fonte que já respondeu recusa (403, desafio, robots) a uma leitura registrada sai (exceto o DJEN, decisão 0069: o 403 de nuvem fora do Brasil não é recusa ao produto) do catálogo e do roteiro, e o instrumento a recusa antes da rede (`FONTES_BARRADAS`). Não há comando, nova tentativa, outra rede nem outra rota. Acesso só por decisão do titular, por sessão assistida (decisão 0067) ou por documentação oficial de acesso.
+
+- TJRS (`www.tjrs.jus.br`): barreira registrada: o `robots.txt` do site recusou a leitura à ferramenta de pesquisa do agente; mesma regra.
+
 ## Comandos por fonte
 
 PowerShell, na raiz do repositório, com o venv ativado. As aspas duplas protegem o `&` das URLs. Blocos `powershell` são liberados; blocos `powershell-bloqueado` são de host nível B e o instrumento os recusa sem `--confirmado-por-titular`.
 
 ### tst: TST: pesquisa de jurisprudência (portal, backend REST e consulta de documento)
 
-Hosts e rotas do catálogo: `consultadocumento.tst.jus.br`: `/consultaDocumento/`; `jurisprudencia-backend.tst.jus.br`: `/rest/orgaos-judicantes`, `/rest/indicadores`; `jurisprudencia.tst.jus.br`: `/config.json`. Confirmação: A.
+Hosts e rotas do catálogo: `consultadocumento.tst.jus.br`: só `robots.txt`; `jurisprudencia-backend.tst.jus.br`: `/rest/orgaos-judicantes`, `/rest/indicadores`; `jurisprudencia.tst.jus.br`: `/config.json`. Confirmação: A.
 
 | # | O quê | Nível | Estado |
 |---|---|---|---|
@@ -114,7 +120,7 @@ python scripts/capturar_fixture.py --fonte-sonda djen --sonda --saida C:/dev/fv1
 
 Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
 
-Notas: A página oficial do CNJ documenta `/api/v1` como API de envio dos tribunais, com autenticação: não é sondada. A consulta pública pela API não está documentada em página oficial: fora da S0, pendência S0b. Leituras anteriores desse host foram feitas pela ferramenta de pesquisa do agente, não pelo produto (ver registro da auditoria); a sonda do instrumento no notebook é o primeiro e único acesso do produto. Se responder 403 ou outra recusa, o DJEN fica registrado como barreira, sem nova tentativa por outra rede ou rota (regra 3). Pergunta própria: o DJEN é publicação de comunicações, não acervo de acórdãos: verifique se o texto traz ementa/inteiro teor ou só o ato.
+Notas: Fonte sujeita à decisão 0069 (`docs/decisoes/0069-djen-restricao-geografica.md`): a API responde 403 a origem fora do Brasil; só o notebook do titular, no Brasil, pelo transporte comum, UA identificado, uma requisição por comando, sem repetição, sem proxy, VPN ou túnel. O 403 de 27/10/2026 foi da ferramenta de pesquisa em nuvem, fora do produto e fora do Brasil, sem valor de evidência (0069, item 5). Se a sonda do notebook receber recusa (403, desafio, bloqueio), a fonte vira barreira, sem nova tentativa por outra rede, rota ou identidade (0069, item 4); o caminho passa a ser a sessão assistida (0067) ou o pedido formal de acesso. A página oficial do CNJ documenta `/api/v1` como API de envio dos tribunais, com autenticação: não é sondada. A consulta pública pela API não está documentada em página oficial: fora da S0, pendência S0b. Leituras anteriores desse host foram feitas pela ferramenta de pesquisa do agente, não pelo produto (ver registro da auditoria); a sonda do instrumento no notebook é o primeiro e único acesso do produto. Pergunta própria: o DJEN é publicação de comunicações, não acervo de acórdãos: verifique se o texto traz ementa/inteiro teor ou só o ato.
 
 ### cjf_unificada: CJF: pesquisa unificada de jurisprudência da Justiça Federal
 
@@ -309,24 +315,6 @@ Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que ca
 
 Notas: Os links oficiais usam `http://`; a sonda exige `https://`, e a resposta diz se o host o serve. O caminho do resultado não consta de página oficial lida: pendência S0b.
 
-### tjrs: TJRS: pesquisa de jurisprudência
-
-Hosts e rotas do catálogo: `www.tjrs.jus.br`: `/novo/buscas-solr/`. Confirmação: B (hosts B: `www.tjrs.jus.br`).
-
-| # | O quê | Nível | Estado |
-|---|---|---|---|
-| 1 | robots.txt (host B) | P | bloqueada até confirmação documental (página oficial lida ou confirmação do titular) |
-| 2 | pesquisa de jurisprudência (host B) | B | bloqueada até confirmação documental (página oficial lida ou confirmação do titular) |
-
-```powershell-bloqueado
-python scripts/capturar_fixture.py --fonte-sonda tjrs --sonda --saida C:/dev/fv14-sondas/tjrs --chave tjrs_robots --url "https://www.tjrs.jus.br/robots.txt"
-python scripts/capturar_fixture.py --fonte-sonda tjrs --sonda --saida C:/dev/fv14-sondas/tjrs --chave tjrs_pesquisa --url "https://www.tjrs.jus.br/novo/buscas-solr/"
-```
-
-Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
-
-Notas: Host nível B: bloqueado. A ferramenta de pesquisa do agente teve a leitura de `/novo/` recusada pelo robots.txt do site: se, liberado o host, o robots tiver `Disallow` sobre `/novo/buscas-solr/`, NÃO sonde o caminho e registre a recusa como achado (Porta A do TJRS passa pela camada (b)). Resultado: pendência S0b.
-
 ### tjpr: TJPR: consulta de jurisprudência
 
 Hosts e rotas do catálogo: `portal.tjpr.jus.br`: `/jurisprudencia/`. Confirmação: A.
@@ -372,7 +360,7 @@ Contagem total do TJSP: "Resultados 1 a N de M" no HTML do resultado; do TJDFT: 
 | Painel de Estatísticas do Poder Judiciário (CNJ) | https://paineis.cnj.jus.br/QvAJAXZfc/opendoc.htm?document=qvw_l%2FPainelCNJ.qvw&host=QVS%40neodimio03&anonymous=true&sheet=shResumoDespFT | Série de casos novos, baixados e pendentes por tribunal e grau |
 | Relatório interativo | https://www.cnj.jus.br/relatorio_interativo | Consulta por tribunal |
 
-Como usar, por tribunal do lote 1 (TJSP, TJRJ, TJMG, TJRS, TJPR, TJDFT) e dos TRF1, TRF2 e TRF3: no relatório ou no painel, tomar o 2º grau do tribunal, o último ano fechado, e ler casos novos e baixados no 2º grau e as decisões colegiadas/terminativas quando o capítulo as separar. Multiplicar por 2 (janela de 24 meses do plano) e por um tamanho médio de texto medido na sonda, e registrar o resultado como "estimativa CNJ x tamanho amostral". Anotar edição do relatório, página ou aba do painel e filtros, para reprodução.
+Como usar, por tribunal do lote 1 (TJSP, TJRJ, TJMG, TJPR, TJDFT; o TJRS está barrado, ver acima) e dos TRF1, TRF2 e TRF3: no relatório ou no painel, tomar o 2º grau do tribunal, o último ano fechado, e ler casos novos e baixados no 2º grau e as decisões colegiadas/terminativas quando o capítulo as separar. Multiplicar por 2 (janela de 24 meses do plano) e por um tamanho médio de texto medido na sonda, e registrar o resultado como "estimativa CNJ x tamanho amostral". Anotar edição do relatório, página ou aba do painel e filtros, para reprodução.
 
 Comparar a estimativa do CNJ com a contagem total de cada sonda (quando houver): divergência grande indica que a ferramenta de pesquisa cobre só parte do acervo ou que o total é cota inferior.
 
@@ -380,5 +368,5 @@ Comparar a estimativa do CNJ com a contagem total de cada sonda (quando houver):
 ## Pendências conhecidas do instrumento (fora do escopo desta entrega)
 
 - Sem POST nem sessão para fonte-sonda: TST (pesquisa textual), TJRJ (`__VIEWSTATE`), e-SAJ (resultado) e talvez TJPR, STF e BNP só entregam a contagem por POST. Se as sondas confirmarem, abrir S0b: modo `--consulta` para fonte-sonda, reaproveitando `build_cjsg_request` nos quatro e-SAJ, com o mesmo registro e a mesma recusa antes da rede.
-- S0b, endpoints: o endpoint de resultado não documentado em página oficial fica fora da S0 (STF acórdãos, BNP, DJEN, CJF, TRF1, TRF2, TRF3, TJMG, TJPR, TJRS e e-SAJ de TJAL, TJAM e TJMS). Só entra por sessão assistida nos termos da decisão 0067 (o humano resolve a barreira em contexto dedicado, a ferramenta captura os bytes, rótulo `sessao_assistida`) ou por documentação oficial lida. Depois de documentado, entra no roteiro e, se fora das rotas, no catálogo com nova confirmação oficial.
-- Hosts de nível B (`www.cjf.jus.br`, TJAL, TJAM, TJMS, TJRJ, TJRS): bloqueados até leitura da página oficial ou confirmação do titular.
+- S0b, endpoints: o endpoint de resultado não documentado em página oficial fica fora da S0 (STF acórdãos, BNP, DJEN, CJF, TRF1, TRF2, TRF3, TJMG, TJPR e e-SAJ de TJAL, TJAM e TJMS). Só entra por sessão assistida nos termos da decisão 0067 (o humano resolve a barreira em contexto dedicado, a ferramenta captura os bytes, rótulo `sessao_assistida`) ou por documentação oficial lida. Depois de documentado, entra no roteiro e, se fora das rotas, no catálogo com nova confirmação oficial.
+- Hosts de nível B (`www.cjf.jus.br`, TJAL, TJAM, TJMS, TJRJ): bloqueados até leitura da página oficial ou confirmação do titular.

@@ -26,7 +26,7 @@ from freoa_verifica.connectors.base import Unavailable, registry, sob_guarda
 from freoa_verifica.connectors.challenge import map_transport_error
 from freoa_verifica.connectors.httputil import connector_fetch, form_body, ua_header
 from freoa_verifica.identidade_http import MODO_IDENTIFICADO, USER_AGENT_IDENTIFICADO
-from freoa_verifica.sondas import FONTES_SONDA, prefixos_por_host
+from freoa_verifica.sondas import FONTES_BARRADAS, FONTES_SONDA, prefixos_por_host
 from freoa_verifica.transport import BlockedHost, HTTPStatusError, Session, validate_reference
 
 UA_IDENTIFICADO = USER_AGENT_IDENTIFICADO
@@ -136,10 +136,17 @@ def _plano_tjsp(consulta: dict[str, Any]) -> dict[str, Any]:
 _CONSULTAS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {"tjdft": _plano_tjdft, "tjsp": _plano_tjsp}
 
 
-def _plano_get(alvo_id: str, hosts, prefixos, mimes, url: str, *, rotulo: str = "do conector") -> dict[str, Any]:
+def _plano_get(
+    alvo_id: str, hosts, prefixos, mimes, url: str, *, rotulo: str = "do conector",
+    exatas: dict[str, tuple[str, ...]] | None = None, consultas: dict[str, tuple[str, ...]] | None = None,
+) -> dict[str, Any]:
     """GET simples; a URL tem de estar na allowlist (conector ou fonte-sonda); recusa antes da rede.
 
     `prefixos` é o mapa host -> prefixos do transporte (ou None sem escopo de caminho).
+
+    `exatas` (fonte-sonda): host -> caminhos exatos. Com ele, o caminho do pedido tem de ser IGUAL a uma rota do host
+    (sem prefixo, sem sufixo, sem segmento extra) e só leva consulta nas rotas de `consultas`; a recusa vem antes do
+    transporte, que fica como segunda barreira (`prefixos`), e a sonda não segue redirecionamento.
 
     `/robots.txt` é exceção declarada ao escopo de caminhos, mas só ele: o percurso inteiro roda com o prefixo
     exato `/robots.txt` em todos os hosts da allowlist, MIME só `text/plain` e NENHUM redirecionamento
@@ -152,13 +159,19 @@ def _plano_get(alvo_id: str, hosts, prefixos, mimes, url: str, *, rotulo: str = 
         if not robots:
             if alvo.split("?", 1)[0].lower().startswith("/robots.txt"):  # variante (query, caixa, sufixo) não é a exceção
                 raise BlockedHost("robots.txt só na forma exata, sem parâmetros")
-            validate_reference(url, hosts, allowed_path_prefixes=prefixos)
+            host, _ = validate_reference(url, hosts, allowed_path_prefixes=prefixos)
+            if exatas is not None:
+                caminho, tem_consulta, _ = alvo.partition("?")
+                if caminho not in exatas.get(host, ()) or (tem_consulta and caminho not in (consultas or {}).get(host, ())):
+                    raise BlockedHost("caminho fora das rotas exatas da fonte-sonda")
     except BlockedHost as exc:
         raise ValueError(f"url fora da allowlist {rotulo} {alvo_id}: {exc}") from exc
     plano = {
         "url": url, "metodo": "GET", "parametros": None,
         "etapas": [{"url": url, "metodo": "GET", "body": None, "headers": {}}],
     }
+    if exatas is not None:
+        plano["max_redirects"] = 0  # sonda: um pedido; o destino de um 3xx não é pedido
     if robots:
         plano.update(
             path_prefixes={h: ("/robots.txt",) for h in sorted(hosts)}, mimes=frozenset({"text/plain"}),
@@ -194,13 +207,18 @@ def _planejar_sonda(
     Host de nível B (indexado, não lido em página oficial) só com `confirmado_por_titular`; sem ele, recusa
     antes da rede, inclusive para o robots.txt.
     """
+    if fonte_sonda in FONTES_BARRADAS:
+        raise ValueError(f"fonte-sonda {fonte_sonda} barrada, sem sonda: {FONTES_BARRADAS[fonte_sonda]}")
     fonte = FONTES_SONDA.get(fonte_sonda)
     if fonte is None:
         raise ValueError(f"fonte-sonda desconhecida: {fonte_sonda}")
     if consulta is not None or url is None:
         raise ValueError("fonte-sonda só captura por url")
     prefixos = prefixos_por_host(fonte)
-    plano = _plano_get(fonte.id, fonte.hosts, prefixos, fonte.mimes, url, rotulo="da fonte-sonda")
+    plano = _plano_get(
+        fonte.id, fonte.hosts, prefixos, fonte.mimes, url, rotulo="da fonte-sonda",
+        exatas=dict(fonte.rotas), consultas=dict(fonte.consultas),
+    )
     host, _ = validate_reference(url, fonte.hosts)  # host canônico, já validado acima
     nivel = "B" if host in fonte.hosts_b else "A"
     if nivel == "B" and not confirmado_por_titular:
@@ -220,6 +238,7 @@ def _buscar(plano: dict[str, Any], ua_modo: str):
     kw: dict[str, Any] = {
         "hosts": plano["hosts"], "path_prefixes": plano["path_prefixes"], "mimes": plano["mimes"],
         "user_agent": plano["user_agent"], "timeout": 60.0,
+        "repeticao": 0,  # a captura faz exatamente um pedido por etapa: o transporte não repete 502/503/504
     }
     if "max_redirects" in plano:
         kw["max_redirects"] = plano["max_redirects"]

@@ -17,13 +17,15 @@ from freoa_verifica import captura
 from freoa_verifica.connectors import httputil
 from freoa_verifica.connectors.base import CATEGORIAS_INDISPONIBILIDADE, Unavailable, registry
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
-from freoa_verifica.sondas import FONTES_SONDA, HOSTS_RECUSADOS, FonteSonda, prefixos_por_host
+from freoa_verifica.sondas import (
+    FONTES_BARRADAS, FONTES_SONDA, HOSTS_RECUSADOS, SEGMENTOS_PROIBIDOS, FonteSonda, prefixos_por_host,
+)
 from freoa_verifica.transport import Response
 from tests.test_transport import _fast_guards, _wire_local
 
 IDS = (
     "tst", "stf_acordaos", "bnp", "djen", "cjf_unificada", "trf1", "trf2", "trf3",
-    "tjac", "tjal", "tjam", "tjms", "tjrj", "tjmg", "tjrs", "tjpr",
+    "tjac", "tjal", "tjam", "tjms", "tjrj", "tjmg", "tjpr",
 )
 CORPO = b'{"ok":true}'
 
@@ -113,6 +115,7 @@ def test_escopo_de_caminho_consistente_sem_host_livre():
     so_robots = {(f.id, h) for f in FONTES_SONDA.values() for h, r in f.rotas.items() if not r}
     assert so_robots == {
         ("bnp", "bnp.pdpj.jus.br"), ("bnp", "pangeabnp.pdpj.jus.br"), ("djen", "comunicaapi.pje.jus.br"),
+        ("tst", "consultadocumento.tst.jus.br"),
         ("cjf_unificada", "jurisprudencia.cjf.jus.br"), ("trf1", "jurisprudencia.cjf.jus.br"),
         ("trf1", "arquivo.trf1.jus.br"), ("trf2", "jurisprudencia.trf2.jus.br"),
     }
@@ -332,8 +335,8 @@ def test_desafio_recusa_e_resposta_inesperada_viram_unavailable_classificado(mon
 def test_status_nao_200_vira_unavailable_com_categoria_valida(monkeypatch, tmp_path, status):
     monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
     monkeypatch.setattr(httputil, "transport_fetch", lambda u, **k: _resp(u, b"<html>x</html>", status, "text/html"))
-    url = next(_urls_validas(FONTES_SONDA["djen"]))
-    reg = captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="e", fonte_sonda="djen")
+    url = next(_urls_validas(FONTES_SONDA["trf3"]))
+    reg = captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="e", fonte_sonda="trf3")
     assert reg.unavailable and reg.motivo
     assert reg.categoria is None or reg.categoria in CATEGORIAS_INDISPONIBILIDADE
     assert (tmp_path / "e.captura.json").is_file() and not (tmp_path / "e.html").exists()
@@ -595,7 +598,7 @@ def test_roteiro_marca_bloqueio_de_host_b_e_nao_afirma_confirmacao_geral():
     bs = {(f.id, h) for f in FONTES_SONDA.values() for h in f.hosts_b}
     assert bs == {("cjf_unificada", "www.cjf.jus.br"), ("tjal", "www2.tjal.jus.br"),
                   ("tjam", "consultasaj.tjam.jus.br"), ("tjms", "esaj.tjms.jus.br"),
-                  ("tjrj", "www3.tjrj.jus.br"), ("tjrs", "www.tjrs.jus.br")}
+                  ("tjrj", "www3.tjrj.jus.br")}
     assert {f.id for f in FONTES_SONDA.values() if f.confirmacao == "B"} == {i for i, _ in bs}
     # todo comando de host B está em bloco bloqueado e vice-versa (também checado na allowlist, acima)
     for tipo, cid, _, _, url, bloqueado in _comandos_do_roteiro():
@@ -686,12 +689,12 @@ def test_robots_com_302_nao_e_seguido_e_vira_unavailable(monkeypatch, tmp_path, 
 
 def test_robots_redirecionando_para_outro_host_da_allowlist_nao_e_seguido(monkeypatch, tmp_path):
     monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
-    server = _servidor_robots("https://comunicaapi.pje.jus.br/api/v1/qualquer")
+    server = _servidor_robots("https://jurisprudencia-backend.tst.jus.br/rest/indicadores")
     _fast_guards(monkeypatch)
     _wire_local(monkeypatch, server.server_address[1])
     try:
-        reg = captura.capturar(None, url="https://comunica.pje.jus.br/robots.txt", destino=tmp_path, sonda=True,
-                               chave="r", fonte_sonda="djen")
+        reg = captura.capturar(None, url="https://jurisprudencia.tst.jus.br/robots.txt", destino=tmp_path, sonda=True,
+                               chave="r", fonte_sonda="tst")
     finally:
         server.shutdown()
         server.server_close()
@@ -858,11 +861,11 @@ def test_corpo_orfao_existente_tambem_impede_a_gravacao(envios, tmp_path):
 def test_unavailable_tambem_nao_sobrescreve_registro(monkeypatch, tmp_path):
     monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
     monkeypatch.setattr(httputil, "transport_fetch", lambda u, **k: _resp(u, b"<html>x</html>", 403, "text/html"))
-    url = next(_urls_validas(FONTES_SONDA["djen"]))
-    captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="u", fonte_sonda="djen")
+    url = next(_urls_validas(FONTES_SONDA["trf3"]))
+    captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="u", fonte_sonda="trf3")
     antes = (tmp_path / "u.captura.json").read_bytes()
     with pytest.raises(ValueError, match="já existe"):
-        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="u", fonte_sonda="djen")
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="u", fonte_sonda="trf3")
     assert (tmp_path / "u.captura.json").read_bytes() == antes
 
 
@@ -873,3 +876,298 @@ def test_cli_recusa_sobrescrita_com_erro(envios, tmp_path, capsys):
             "--url", next(_urls_validas(FONTES_SONDA["tjac"]))]
     assert cli.main(argv) == 0
     assert cli.main(argv) == 2 and len(envios) == 1 and "não se sobrescreve" in capsys.readouterr().err
+
+
+# --- parecer PR #14 r2 -------------------------------------------------------------------------------
+# B1: a sonda faz exatamente um pedido (o transporte real não repete 502/503/504); I1: rota é caminho exato;
+# B2: fonte com barreira registrada sai do catálogo e é recusada antes da rede.
+
+
+def _servidor_status(statuses):
+    """Servidor local: responde, em ordem, `statuses` (o último se repete); registra cada pedido."""
+    import socketserver
+    import threading
+
+    class H(socketserver.BaseRequestHandler):
+        def handle(self):
+            self.request.settimeout(2)
+            try:
+                dados = self.request.recv(65536)
+            except OSError:
+                return
+            caminho = dados.split(b"\r\n", 1)[0].decode("latin-1").split(" ")[1]
+            with self.server.trava:
+                i = len(self.server.percursos)
+                self.server.percursos.append(caminho)
+            status = statuses[min(i, len(statuses) - 1)]
+            if status == 200:
+                corpo = b'{"ok":true}'
+                self.request.sendall(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s"
+                    % (len(corpo), corpo)
+                )
+            else:
+                corpo = b"indisponivel"
+                self.request.sendall(
+                    b"HTTP/1.1 %d X\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s"
+                    % (status, len(corpo), corpo)
+                )
+
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), H)
+    server.daemon_threads = True
+    server.percursos = []
+    server.trava = threading.Lock()
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def _com_servidor(monkeypatch, statuses):
+    from freoa_verifica import transport as tr
+
+    monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
+    server = _servidor_status(statuses)
+    _fast_guards(monkeypatch)
+    _wire_local(monkeypatch, server.server_address[1])
+    monkeypatch.setattr(tr, "_dormir", lambda s: None)  # a repetição, se houvesse, não esperaria
+    return server
+
+
+def _parar(server):
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.mark.parametrize("statuses", [[503, 200], [503, 503, 503], [502, 200], [504, 504, 200]])
+@pytest.mark.parametrize("alvo", [
+    pytest.param(("fonte", "tst", "https://jurisprudencia.tst.jus.br/config.json"), id="sonda-rota"),
+    pytest.param(("fonte", "tst", "https://jurisprudencia.tst.jus.br/robots.txt"), id="sonda-robots"),
+    pytest.param(("conector", "tjsp", "https://esaj.tjsp.jus.br/robots.txt"), id="captura-conector"),
+])
+def test_captura_faz_exatamente_um_pedido_e_5xx_vira_unavailable(monkeypatch, tmp_path, alvo, statuses):
+    tipo, id_, url = alvo
+    server = _com_servidor(monkeypatch, statuses)
+    try:
+        kw = {"fonte_sonda": id_} if tipo == "fonte" else {}
+        reg = captura.capturar(None if tipo == "fonte" else id_, url=url, destino=tmp_path, sonda=True,
+                               chave="u", **kw)
+    finally:
+        _parar(server)
+    assert len(server.percursos) == 1  # um 503 seguido de 200 NÃO vira sucesso
+    assert reg.unavailable and reg.motivo == f"http_{statuses[0]}" and reg.corpo is None
+    assert reg.categoria is None or reg.categoria in CATEGORIAS_INDISPONIBILIDADE
+
+
+def test_captura_com_200_continua_um_pedido_e_sucesso(monkeypatch, tmp_path):
+    server = _com_servidor(monkeypatch, [200])
+    try:
+        reg = captura.capturar(None, url="https://jurisprudencia.tst.jus.br/config.json", destino=tmp_path,
+                               sonda=True, chave="u", fonte_sonda="tst")
+    finally:
+        _parar(server)
+    assert server.percursos == ["/config.json"] and not reg.unavailable and reg.status == 200
+
+
+def test_demais_consumidores_do_transporte_mantem_a_repeticao(monkeypatch):
+    """O `connector_fetch` sem `repeticao` (todo conector do produto) segue repetindo 502/503/504 duas vezes."""
+    server = _com_servidor(monkeypatch, [503, 200])
+    kw = dict(hosts=frozenset({"jurisprudencia.tst.jus.br"}),
+              path_prefixes={"jurisprudencia.tst.jus.br": ("/config.json",)},
+              mimes=frozenset({"application/json"}), user_agent="identified")
+    try:
+        resp = httputil.connector_fetch("https://jurisprudencia.tst.jus.br/config.json", **kw)
+        assert resp.status == 200 and server.percursos == ["/config.json"] * 2
+    finally:
+        _parar(server)
+    server = _com_servidor(monkeypatch, [503])
+    try:
+        with pytest.raises(Unavailable) as ei:
+            httputil.connector_fetch("https://jurisprudencia.tst.jus.br/config.json", **kw)
+    finally:
+        _parar(server)
+    assert ei.value.reason == "http_503" and len(server.percursos) == 3
+
+
+def test_connector_fetch_repeticao_zero_chega_ao_transporte(monkeypatch):
+    vistos = []
+
+    def fake(url, **kw):
+        vistos.append(kw)
+        return _resp(url)
+
+    monkeypatch.setattr(httputil, "transport_fetch", fake)
+    base = dict(hosts=frozenset({"a.jus.br"}), path_prefixes=None, mimes=frozenset({"application/json"}))
+    httputil._connector_fetch("https://a.jus.br/x", **base)
+    httputil._connector_fetch("https://a.jus.br/x", repeticao=0, **base)
+    assert "repeticao" not in vistos[0] and vistos[1]["repeticao"] == 0
+
+
+def test_captura_passa_repeticao_zero_em_todo_pedido(envios, tmp_path):
+    captura.capturar(None, url="https://jurisprudencia.tst.jus.br/config.json", destino=tmp_path, sonda=True,
+                     chave="s", fonte_sonda="tst")
+    assert envios[0]["repeticao"] == 0 and envios[0]["max_redirects"] == 0
+
+
+# --- I1: caminho exato ---------------------------------------------------------------------------------
+
+URLS_I1_DO_PARECER = [
+    ("tst", "https://jurisprudencia.tst.jus.br/config.json.bak"),
+    ("tst", "https://jurisprudencia-backend.tst.jus.br/rest/indicadores/admin/login"),
+    ("tac", "https://esaj.tjac.jus.br/cjsg/consultaCompleta.do.evil"),
+    ("tpr", "https://portal.tjpr.jus.br/jurisprudencia-admin/login"),
+    ("tpr", "https://portal.tjpr.jus.br/jurisprudencia/login"),
+]
+VARIANTES_I1 = [
+    ("tst", "https://jurisprudencia.tst.jus.br/config.json/"),
+    ("tst", "https://jurisprudencia.tst.jus.br/config.json.old"),
+    ("tst", "https://jurisprudencia.tst.jus.br/config.jsonx"),
+    ("tst", "https://jurisprudencia.tst.jus.br/Config.json"),
+    ("tst", "https://jurisprudencia.tst.jus.br/config.json?x=1"),
+    ("tst", "https://jurisprudencia.tst.jus.br/config.json/extra"),
+    ("tst", "https://jurisprudencia.tst.jus.br//config.json"),
+    ("tst", "https://jurisprudencia.tst.jus.br/config%2Ejson"),
+    ("tst", "https://jurisprudencia-backend.tst.jus.br/rest/indicadores/"),
+    ("tst", "https://jurisprudencia-backend.tst.jus.br/rest/indicadores2"),
+    ("tst", "https://jurisprudencia-backend.tst.jus.br/rest/indicadores?a=1"),
+    ("tst", "https://jurisprudencia-backend.tst.jus.br/rest/orgaos-judicantes/1"),
+    ("tac", "https://esaj.tjac.jus.br/cjsg/consultaCompleta.do/x"),
+    ("tac", "https://esaj.tjac.jus.br/cjsg/consultaCompleta.do?a=1"),
+    ("tac", "https://esaj.tjac.jus.br/cjsg/resultadoCompleta.do.bak?a=1"),
+    ("tpr", "https://portal.tjpr.jus.br/jurisprudencia"),
+    ("tpr", "https://portal.tjpr.jus.br/jurisprudencia/x"),
+    ("tpr", "https://portal.tjpr.jus.br/jurisprudencia/?q=1"),
+    ("trf3", "https://web.trf3.jus.br/jurisprudencia/login"),
+    ("trf3", "https://web.trf3.jus.br/acordaos/Acordao/x"),
+    ("stf_acordaos", "https://jurisprudencia.stf.jus.br/pages/search/admin"),
+]
+_FONTE_DO_APELIDO = {"tac": "tjac", "tpr": "tjpr"}
+
+
+@pytest.mark.parametrize("fid,url", URLS_I1_DO_PARECER + VARIANTES_I1)
+def test_rota_e_caminho_exato_prefixo_sufixo_e_segmento_extra_recusados_antes_da_rede(envios, tmp_path, fid, url):
+    fid = _FONTE_DO_APELIDO.get(fid, fid)
+    with pytest.raises(ValueError, match="fora da allowlist da fonte-sonda"):
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="s", fonte_sonda=fid)
+    assert envios == [] and not any(tmp_path.iterdir())
+
+
+def test_rota_exata_e_consulta_so_na_rota_declarada_com_parametros(envios, tmp_path):
+    for fid, url in [("tst", "https://jurisprudencia.tst.jus.br/config.json"),
+                     ("tjpr", "https://portal.tjpr.jus.br/jurisprudencia/"),
+                     ("tjac", "https://esaj.tjac.jus.br/cjsg/consultaCompleta.do"),
+                     ("tjac", "https://esaj.tjac.jus.br/cjsg/resultadoCompleta.do?dados.buscaInteiroTeor=a+b&x=1")]:
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave=f"k{len(envios)}", fonte_sonda=fid)
+    assert [e["url"] for e in envios][-1].startswith("https://esaj.tjac.jus.br/cjsg/resultadoCompleta.do?")
+    assert len(envios) == 4
+    assert FONTES_SONDA["tjac"].consultas == {"esaj.tjac.jus.br": ("/cjsg/resultadoCompleta.do",)}
+    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac"]
+
+
+def test_catalogo_so_tem_caminho_exato_sem_prefixo_nem_segmento_proibido():
+    for f in FONTES_SONDA.values():
+        for host, rotas in f.rotas.items():
+            for r in rotas:
+                assert not any(w in r.lower() for w in SEGMENTOS_PROIBIDOS), (f.id, r)
+                assert not any(c in r for c in "?#%\\"), (f.id, r)
+        for host, cs in f.consultas.items():
+            assert set(cs) <= set(f.rotas[host])
+
+
+def test_fonte_recusa_rota_com_segmento_proibido_ou_consulta_fora_das_rotas():
+    base = dict(id="x", descricao="d", mimes=frozenset({"text/html"}), confirmacao="A", hosts=frozenset({"a.jus.br"}),
+                origem_hosts="a.jus.br=https://a.jus.br/")
+    FonteSonda(rotas={"a.jus.br": ("/x/",)}, **base)
+    for ruim in ("/login", "/a/admin/b", "/jurisprudencia-admin/x", "/cadastro", "/auth/x", "/minha-conta", "/usuario",
+                 "/x?y=1", "/x#f", "/x%2e", "/x\\y"):
+        with pytest.raises(ValueError):
+            FonteSonda(rotas={"a.jus.br": (ruim,)}, **base)
+    with pytest.raises(ValueError):
+        FonteSonda(rotas={"a.jus.br": ("/x",)}, consultas={"a.jus.br": ("/y",)}, **base)
+    with pytest.raises(ValueError):
+        FonteSonda(rotas={"a.jus.br": ("/x",)}, consultas={"b.jus.br": ("/x",)}, **base)
+
+
+@pytest.mark.parametrize("destino", ["/config.json.bak", "/admin/login", "/config.json/../x"])
+def test_redirecionamento_de_rota_exata_nao_e_seguido(monkeypatch, tmp_path, destino):
+    monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
+    import socketserver
+    import threading
+
+    class H(socketserver.BaseRequestHandler):
+        def handle(self):
+            self.request.settimeout(2)
+            dados = self.request.recv(65536)
+            self.server.percursos.append(dados.split(b"\r\n", 1)[0].decode("latin-1").split(" ")[1])
+            self.request.sendall(f"HTTP/1.1 302 Found\r\nLocation: {destino}\r\nContent-Length: 0\r\n\r\n".encode())
+
+    srv = socketserver.ThreadingTCPServer(("127.0.0.1", 0), H)
+    srv.daemon_threads = True
+    srv.percursos = []
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    _fast_guards(monkeypatch)
+    _wire_local(monkeypatch, srv.server_address[1])
+    try:
+        reg = captura.capturar(None, url="https://jurisprudencia.tst.jus.br/config.json", destino=tmp_path,
+                               sonda=True, chave="r", fonte_sonda="tst")
+    finally:
+        _parar(srv)
+    assert srv.percursos == ["/config.json"] and reg.unavailable and reg.corpo is None
+
+
+# --- B2: barreira registrada --------------------------------------------------------------------------
+
+BARRADAS = {"tjrs": ("www.tjrs.jus.br",)}
+
+
+def test_fontes_barradas_fora_do_catalogo_com_motivo_registrado():
+    assert set(FONTES_BARRADAS) == set(BARRADAS) and not set(FONTES_BARRADAS) & set(FONTES_SONDA)
+    for fid, hosts in BARRADAS.items():
+        assert "sem nova tentativa por outra rede ou rota" in FONTES_BARRADAS[fid]
+        assert "sessão assistida (0067)" in FONTES_BARRADAS[fid] and "documentação oficial" in FONTES_BARRADAS[fid]
+        for h in hosts:
+            assert h in HOSTS_RECUSADOS and not any(h in f.hosts for f in FONTES_SONDA.values())
+
+
+@pytest.mark.parametrize("fid,host", [(f, h) for f, hs in BARRADAS.items() for h in hs])
+def test_instrumento_recusa_fonte_barrada_antes_da_rede(envios, tmp_path, fid, host):
+    for url in (f"https://{host}/robots.txt", f"https://{host}/consulta"):
+        with pytest.raises(ValueError, match="barrada, sem sonda"):
+            captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="b", fonte_sonda=fid,
+                             confirmado_por_titular=True)
+    assert envios == [] and not any(tmp_path.iterdir())
+
+
+def test_host_barrado_nao_vale_em_outra_fonte_sonda(envios, tmp_path):
+    for host in ("www.tjrs.jus.br",):
+        with pytest.raises(ValueError, match="fora da allowlist"):
+            captura.capturar(None, url=f"https://{host}/robots.txt", destino=tmp_path, sonda=True, chave="b",
+                             fonte_sonda="tst")
+    assert envios == []
+
+
+@pytest.mark.repositorio
+def test_djen_referencia_a_decisao_0069_e_roteiro_sem_proxy_nem_repeticao():
+    raiz = Path(__file__).resolve().parents[1]
+    assert "djen" in FONTES_SONDA and "djen" not in FONTES_BARRADAS
+    assert "0069" in FONTES_SONDA["djen"].nota and "Brasil" in FONTES_SONDA["djen"].nota
+    assert not {"comunica.pje.jus.br", "comunicaapi.pje.jus.br"} & set(HOSTS_RECUSADOS)
+    decisao = raiz / "docs/decisoes/0069-djen-restricao-geografica.md"
+    assert decisao.read_text(encoding="utf-8").startswith("# 0069")
+    roteiro = (raiz / "docs/S0-SONDAS.md").read_text(encoding="utf-8")
+    secao = roteiro[roteiro.index("### djen:"):roteiro.index("### cjf_unificada:")]
+    assert "0069" in secao and "27/10/2026" in secao and "sem valor de evidência" in secao
+    comandos = [l for l in secao.splitlines() if l.startswith("python scripts/capturar_fixture.py")]
+    assert comandos and all("--fonte-sonda djen" in c for c in comandos)
+    baixo = secao.lower()
+    for proibido in ("--proxy", "http_proxy", "https_proxy", "socks", "openvpn", "wireguard", "tor "):
+        assert proibido not in baixo.replace("sem proxy", ""), proibido
+    assert len(comandos) == len(set(re.findall(r"--chave (\w+)", "\n".join(comandos))))  # nenhuma repetição
+    assert len({re.search(r'--url "([^"]+)"', c).group(1) for c in comandos}) == len(comandos)
+
+
+@pytest.mark.repositorio
+def test_registro_da_barreira_no_roteiro_e_na_auditoria():
+    raiz = Path(__file__).resolve().parents[1]
+    for doc in ("docs/S0-SONDAS.md", "docs/auditoria/1.4.0/s0-instrumento.md"):
+        texto = (raiz / doc).read_text(encoding="utf-8")
+        assert "www.tjrs.jus.br" in texto and "--fonte-sonda tjrs" not in texto, doc
+    assert "--fonte-sonda tjrs" not in (raiz / "docs/S0-SONDAS.md").read_text(encoding="utf-8")
