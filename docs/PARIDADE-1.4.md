@@ -92,8 +92,8 @@ Uso coberto: saber se uma tese foi superada, cancelada ou revista, e por qual at
 | CH2 [O] | Cada parte traz `parte_idx`, `partes_total`, `intervalo` [início, fim) em pontos de código sobre o texto canônico extraído, `sha256_parte` e `sha256_texto` (SHA-256 em hexadecimal minúsculo dos bytes UTF-8 da parte e do texto inteiro) e `capture_id`, e repete os metadados da decisão. |
 | CH3 [O] | Reprodutibilidade: o mesmo `capture_id`, o mesmo `sha256_texto`, o mesmo `parte_idx` e o mesmo `parte_tamanho` devolvem os mesmos bytes; concatenar as partes sem a sobreposição reconstrói o texto com `sha256_texto` igual. Nova captura ou novo texto canônico da mesma decisão muda `capture_id` ou `sha256_texto`, e a resposta o declara; a reprodutibilidade não atravessa versões documentais. |
 | CH4 [O] | Corte nunca no meio de um caractere nem de um par substituto; preferência por fim de parágrafo dentro de uma janela de 200 caracteres, por regra determinística documentada. |
-| CH5 [O] | Quando houver segmentação tipada (D1; o item de I2 que a recebe consta do manifesto de aceite), cada parte informa os segmentos que intersecta; sem segmentação, `segmentos: ["nao_identificado"]`. |
-| CH6 [O] | `parte_idx` fora do intervalo não cria estado novo no campo fechado `status` de `obter_decisao` (CONTRATO, regras 1 e 2): `status` mantém um dos estados atuais e a resposta traz o campo novo `parte` (estágio `experimental`), com `{"existe": false, "partes_total": n}`; dentro do intervalo, `parte` traz `{"existe": true, ...}` com os campos de CH2. Nunca lista vazia nem texto vazio silencioso. |
+| CH5 [O] | Quando houver segmentação tipada (D1; atribuída a I1.2 no plano e realocada para I2 pelo adiamento do I1.2, ver nota ao fim), cada parte informa os segmentos que intersecta; sem segmentação, `segmentos: ["nao_identificado"]`. |
+| CH6 [O] | `parte_idx` fora do intervalo nunca produz lista vazia nem texto vazio silencioso, e não altera tipo, nulidade nem estados de campo existente do contrato 1 (`status`, `parte` e os demais de `obter_decisao`). A forma da resposta (nome e esquema de um campo novo, que não colida com nenhum campo do contrato 1 nem das respostas congeladas em `tests/contrato/esperado/`) fica para a decisão formal exigida por C7 antes do código de I2.4. Redução de escopo pelo D5 em 28/10/2026 (ver nota ao fim). |
 
 ## 3. Fora do escopo
 
@@ -108,3 +108,13 @@ movimentos e publicação; tema repetitivo cancelado e súmula com redação alt
 não mapeada (deve sair em `nao_classificadas`); tribunal com exceção; ramo do direito de processo com assunto
 TPU conhecido, contagem do balde `sem_assunto_oficial` e filtro `ramo` que exclui documento sem assunto;
 decisão longa paginada e reconstruída por hash.
+
+## 5. Notas de execução
+
+- Redução de escopo (D5), 28/10/2026: depois de três rodadas do Codex com bloqueador no PR #13, todas sobre a
+  forma de saída de CH6 (estado novo em campo fechado; depois colisão com o campo estável `parte`), o
+  esquema dessa saída sai deste documento e passa à decisão formal de C7, que precede o código de I2.4. CH6
+  conserva só a garantia material (nada de vazio silencioso, nenhum campo existente alterado).
+- Segmentação tipada: o plano a atribui a I1.2. O I1.2 foi adiado para I2 depois do passe final com
+  bloqueador do PR #10 (registro no ramo `feat/stj-integras-1.4`, `docs/auditoria/1.4.0/pr10-adiamento.md`,
+  a incorporar com o manifesto de aceite). Até essa incorporação, a referência de CH5 é ao D1.
