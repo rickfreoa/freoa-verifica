@@ -1,4 +1,5 @@
-"""ZIP escrito à mão para testar divergências entre cabeçalho local e diretório central (decisão 0044)."""
+"""ZIP escrito à mão para testar divergências entre cabeçalho local e diretório central e as recusas da
+disposição estrita (decisão 0044). Os geradores de ZIP64 só servem aos casos de recusa: o leitor não aceita ZIP64."""
 
 from __future__ import annotations
 
