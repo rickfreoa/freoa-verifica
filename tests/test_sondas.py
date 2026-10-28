@@ -17,6 +17,7 @@ from freoa_verifica import captura
 from freoa_verifica.connectors import httputil
 from freoa_verifica.connectors.base import CATEGORIAS_INDISPONIBILIDADE, Unavailable, registry
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
+from freoa_verifica.robots_s0 import MIMES_ROBOTS
 from freoa_verifica.sondas import (
     FONTES_BARRADAS, FONTES_SONDA, HOSTS_RECUSADOS, SEGMENTOS_PROIBIDOS, FonteSonda, prefixos_por_host,
 )
@@ -176,7 +177,7 @@ def test_get_na_allowlist_da_fonte_usa_transporte_comum_e_ua_identificado(envios
     assert visto["url"] == url and visto["method"] == "GET" and visto["body"] is None
     assert visto["allowed_hosts"] == fonte.hosts
     if url.endswith("/robots.txt"):  # host só-robots: política do robots.txt (ver teste próprio)
-        assert visto["allowed_mimes"] == frozenset({"text/plain"})
+        assert visto["allowed_mimes"] == MIMES_ROBOTS
     else:
         assert visto["allowed_mimes"] == fonte.mimes
         assert visto["allowed_path_prefixes"] == prefixos_por_host(fonte)
@@ -225,9 +226,9 @@ def test_robots_txt_de_cada_host_da_fonte(envios, tmp_path, fid):
         captura.capturar(None, url=f"https://{host}/robots.txt", destino=tmp_path, sonda=True, chave=f"r{i}",
                          fonte_sonda=fid, confirmado_por_titular=host in fonte.hosts_b)
         visto = envios[-1]
-        # exceção de caminho só para o robots.txt exato: prefixo exato em todos os hosts, só text/plain, sem salto
+        # exceção de caminho só para o robots.txt exato: prefixo exato em todos os hosts, MIME largo (0071), sem salto
         assert visto["allowed_path_prefixes"] == {h: ("/robots.txt",) for h in fonte.hosts}
-        assert visto["allowed_mimes"] == frozenset({"text/plain"}) and visto["max_redirects"] == 0
+        assert visto["allowed_mimes"] == MIMES_ROBOTS and visto["max_redirects"] == 0
         assert visto["allowed_hosts"] == fonte.hosts
 
 
@@ -728,8 +729,8 @@ def test_robots_200_text_plain_continua_capturado(monkeypatch, tmp_path):
     assert not reg.unavailable and reg.status == 200 and (tmp_path / "r.txt").read_bytes().startswith(b"User-agent")
 
 
-def test_robots_so_admite_text_plain(monkeypatch, tmp_path):
-    """A política entregue ao transporte para o robots.txt exclui HTML (casca de SPA não é robots interpretável)."""
+def test_robots_admite_qualquer_mime_da_lista_do_robots(monkeypatch, tmp_path):
+    """Decisão 0071: o corpo do robots é gravado como evidência em qualquer MIME da lista (inclui HTML e octet-stream)."""
     monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
     vistos = []
 
@@ -740,7 +741,8 @@ def test_robots_so_admite_text_plain(monkeypatch, tmp_path):
     monkeypatch.setattr(httputil, "transport_fetch", espia)
     captura.capturar(None, url="https://pangeabnp.pdpj.jus.br/robots.txt", destino=tmp_path, sonda=True, chave="h",
                      fonte_sonda="bnp")
-    assert vistos[0]["allowed_mimes"] == frozenset({"text/plain"})
+    assert vistos[0]["allowed_mimes"] == MIMES_ROBOTS
+    assert {"text/plain", "text/html", "application/octet-stream"} <= MIMES_ROBOTS
 
 
 # --- I2: proveniência (confirmacao A/B) e bloqueio de host B ------------------------------------------

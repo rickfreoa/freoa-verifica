@@ -1,0 +1,76 @@
+# 0071 — A leitura do robots.txt na S0 segue o RFC 9309
+
+Estado: aceita. Decisão do titular (Ricardo Peres Freoa) em 28/10/2026, registrada pelo supervisor. Substitui a regra
+conservadora de 28/10/2026 registrada em `docs/S0-SONDAS.md` (tabela de parada do robots.txt).
+
+## Contexto
+
+Na rodada 1 da S0 (`docs/auditoria/1.4.0/s0-rodada1.md`, instrumento em `c24a1a4`), o `robots.txt` de cada host era o
+primeiro comando dele e a tabela de parada era mais conservadora que o RFC 9309:
+
+- seis robots foram recusados pelo instrumento com `transporte_RespostaInvalida` e status 200, sem Content-Type
+  registrado (STF, BNP ×2, DJEN página, TJAC, TJDFT). O transporte aceitava só `text/plain`; o registro da recusa
+  não trazia o Content-Type recebido nem o motivo, e a causa não ficou determinada;
+- três robots responderam 404 (TST backend, TRF1 arquivo, TJMG) e pararam o host pela regra conservadora do
+  supervisor (qualquer status diferente de 200 = permissão indeterminada). O RFC 9309 trata 4xx como ausência de
+  restrições.
+
+Nenhum desses nove hosts recusou o produto: 404 é ausência de robots, e 200 é resposta. A parada decorreu da regra
+e do instrumento, não de barreira da fonte.
+
+## Decisão
+
+1. A leitura do `robots.txt` na S0 segue o RFC 9309, com as barreiras abaixo mantidas (regra invariável 3).
+2. Regra por resposta:
+
+| Resposta do `robots.txt` | Leitura |
+|---|---|
+| 200 com regras interpretáveis (ao menos um grupo `User-agent` e só diretivas conhecidas ou comentários) | obedecer; `Disallow` aplicável ao caminho impede o caminho |
+| 200 sem regras interpretáveis (inclusive HTML ou outro MIME) | sem restrições; Content-Type e sha256 do corpo ficam registrados |
+| 404 e 410 | sem restrições (ausência de robots) |
+| 401, 403, 429, desafio, WAF, 5xx, timeout, erro de transporte, redirecionamento para outro host | barreira: a fonte para e não há nova tentativa (regra 3) |
+| outros 4xx | barreira por conservadorismo, registrada como tal |
+| redirecionamento para o mesmo host | continua não seguido (política atual): barreira com evidência |
+
+3. Instrumento (sem tocar `freoa_verifica/transport.py`, congelado):
+   - o `robots.txt` (forma exata `/robots.txt`, prefixo exato, um pedido, `max_redirects=0`) é pedido com uma lista
+     larga de MIMEs (`robots_s0.MIMES_ROBOTS`: inclui `text/plain`, `text/html` e `application/octet-stream`), porque o
+     transporte só aceita MIMEs de uma lista e recusa resposta sem Content-Type. O corpo é gravado como evidência de
+     sonda, nunca como fixture nem dado do produto (o instrumento recusa o robots fora de `--sonda` e
+     `registrar_fixture` o recusa);
+   - a detecção de desafio por corpo do transporte comum fica desligada para o robots, que confundiria
+     `Disallow: /captcha/` com desafio; quem decide é `robots_s0.ler_robots`, que só procura marcador de desafio
+     depois de verificar que não há regras interpretáveis;
+   - toda recusa de transporte, em qualquer captura, passa a registrar na evidência a subclasse e a mensagem curta da
+     exceção, o Content-Type recebido (quando o recibo do transporte o reteve) e os saltos de redirecionamento.
+     Nunca cabeçalhos sensíveis: o recibo retém só data, Content-Type, Content-Length e Retry-After, e a mensagem é
+     aparada e sem os nomes `Set-Cookie`, `Authorization` e `Cookie`.
+4. A interpretação fica em módulo puro e testável (`freoa_verifica/robots_s0.py`), importado só pelo instrumento
+   (`freoa_verifica/captura.py`) e pelo orquestrador oficial (`scripts/s0_orquestrar.py`). O serviço, o MCP e a CLI
+   `fv` não o importam (teste estrutural). Usa `urllib.robotparser` só depois de validar que há regras
+   interpretáveis.
+5. Casos que a tabela não cobre, resolvidos por conservadorismo (regra invariável 2) e sujeitos à confirmação do
+   titular:
+   - 200 com `Allow`/`Disallow` que não é interpretável (sem grupo `User-agent`, ou misturado a linhas
+     desconhecidas) e que não é HTML: barreira `regras_ambiguas`, e não "sem restrições";
+   - 200 que o transporte recusa (sem Content-Type, ou MIME fora da lista): o corpo não é lido, logo não há como
+     afirmar que não há regras; barreira (`content_type_ausente`, `resposta_200_recusada`) com a evidência acima;
+   - 200 com corpo vazio: sem restrições, com o sha256 do corpo vazio;
+   - o `urllib.robotparser` varia entre versões do Python (curingas `*` e `$`, precedência): a decisão por caminho
+     soma o `robotparser` e um avaliador RFC 9309 do próprio módulo, e veda se qualquer um vedar. Diretivas não
+     padronizadas comuns (`Host`, `Request-rate`, `Clean-param`, `Noindex`...) contam como conhecidas, para não
+     esconder um `Disallow` ao lado delas.
+6. A diferença entre redirecionamento para o mesmo host e para outro host não é recuperável pelo transporte
+   (`Location` não é exposto); ambos são barreira, e a evidência registra a exceção e o status 3xx dos saltos.
+
+## Consequências
+
+- A tabela de parada de `docs/S0-SONDAS.md` é substituída por esta regra; a seção "Rodada 2 (S0b)" lista os hosts a
+  resondar. Não é nova tentativa após recusa: nenhum deles recusou o produto.
+- Os hosts com barreira na rodada 1 (TRF2 servicos 503, TRF3 timeout, TRF2 portal `BlockedHost`, TJSP CAPTCHA)
+  ficam fora, sem nova tentativa. O TJSP tem barreira anterior do produto; os demais, recusa registrada.
+- O orquestrador da rodada 1 (`s0_runner.py`, ramo `auditoria/s0-rodada1`) é substituído por
+  `scripts/s0_orquestrar.py`, que aplica esta regra, pede cada URL uma vez, lê o robots uma vez por host e recebe as
+  barreiras anteriores por arquivo de entrada.
+- A regra invariável 3 não muda: barreira registrada não se repete por outra rede, rota ou identidade.
+- Fora do escopo: POST/sessão para fonte-sonda e endpoints de resultado (S0b, parte 2).
