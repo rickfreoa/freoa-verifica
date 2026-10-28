@@ -3,3 +3,4 @@ tests/fixtures/** -text
 *.docx binary
 *.pdf binary
 
+docs/auditoria/1.4.0/s0-rodada1/** -text
