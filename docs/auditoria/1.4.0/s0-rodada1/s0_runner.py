@@ -1,7 +1,7 @@
 """Executa o roteiro docs/S0-SONDAS.md SÓ pelo instrumento, aplicando a tabela de parada por host.
 
 Não faz rede: cada pedido é um `python scripts/capturar_fixture.py ...` do roteiro, sem alteração.
-Uso (na raiz do checkout feat/sondas-s0): python s0_runner.py docs/S0-SONDAS.md C:/dev/fv14-sondas/relatorio.json
+Uso (na raiz do checkout feat/sondas-s0): python s0_runner.py docs/S0-SONDAS.md <saida>/relatorio.json
 """
 from __future__ import annotations
 
@@ -14,12 +14,22 @@ import urllib.robotparser
 from pathlib import Path
 from urllib.parse import urlsplit
 
-UA_TOKEN = "freoa-verifica"
+AGENTE_ROBOTS = "freoa-verifica"  # produto do User-Agent identificado, usado na leitura do robots.txt
 BARREIRA_ANTERIOR = {  # host: registro da barreira já recebida pelo produto (sem nova tentativa)
-    "esaj.tjsp.jus.br": "C:/dev/fv14-sondas/s0_tjsp_volume.captura.json (27/10/2026, ambiental_desafio:desafio_captcha)",
+    "esaj.tjsp.jus.br": "tjsp/s0_tjsp_volume.captura.json (27/10/2026, ambiental_desafio:desafio_captcha)",
 }
 URL_DA_CONSULTA = {"tjsp": "https://esaj.tjsp.jus.br/cjsg/resultadoCompleta.do",
                    "tjdft": "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"}
+
+
+_LINHA_ROBOTS = re.compile(r"^\s*(user-agent|allow|disallow|sitemap|crawl-delay)\s*:", re.I)
+
+
+def _interpretavel(texto: str) -> bool:
+    """Ao menos um grupo `User-agent` e toda linha não vazia é comentário ou diretiva conhecida."""
+    linhas = [ln.split("#", 1)[0].strip() for ln in texto.splitlines()]
+    linhas = [ln for ln in linhas if ln]
+    return any(ln.lower().startswith("user-agent") for ln in linhas) and all(_LINHA_ROBOTS.match(ln) for ln in linhas)
 
 
 def comandos(md: str):
@@ -67,10 +77,11 @@ def main(roteiro: str, saida_rel: str) -> int:
                 h["parada"] = "robots.txt não foi o primeiro comando do host"
                 h["comandos"].append({"chave": chave, "url": url, "executado": False, "razao": h["parada"]})
                 continue
-            if not eh_robots and not robots_ok.can_fetch(UA_TOKEN, url):
+            if not eh_robots and not robots_ok.can_fetch(AGENTE_ROBOTS, url):
                 h["comandos"].append({"chave": chave, "url": url, "executado": False, "razao": "Disallow aplicável"})
                 continue
-            p = subprocess.run([sys.executable, *a], capture_output=True, text=True, encoding="utf-8")
+            # Só o instrumento, com os argumentos literais do roteiro (blocos liberados); sem shell.
+            p = subprocess.run([sys.executable, *a], capture_output=True, text=True, encoding="utf-8")  # noqa: S603
             reg_path = saida / f"{chave}.captura.json"
             reg = json.loads(reg_path.read_text(encoding="utf-8")) if reg_path.exists() else {}
             item = {"chave": chave, "url": url, "executado": True, "rc": p.returncode,
@@ -88,8 +99,8 @@ def main(roteiro: str, saida_rel: str) -> int:
                     h["parada"] = f"robots indeterminado ({reg.get('status')}, {ct})"
                     continue
                 texto = corpo.read_text(encoding="utf-8", errors="strict")
-                if "<html" in texto[:500].lower():
-                    h["parada"] = "robots com HTML"
+                if "<html" in texto[:500].lower() or not _interpretavel(texto):
+                    h["parada"] = "robots sem regras interpretáveis (RFC 9309)"
                     continue
                 robots_ok = urllib.robotparser.RobotFileParser()
                 robots_ok.parse(texto.splitlines())
