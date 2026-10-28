@@ -685,14 +685,53 @@ def _snapshots_oficiais() -> list[dict[str, Any]]:
     return [e for e in entries if version(e["versao_pacote_min"]) <= version(__version__)]
 
 
+_PEP440 = re.compile(
+    r"v?(?P<rel>\d+(?:\.\d+)*)"
+    r"(?:[-_.]?(?P<pre_l>alpha|a|beta|b|preview|pre|c|rc)[-_.]?(?P<pre_n>\d*))?"
+    r"(?:-(?P<post_i>\d+)|[-_.]?(?P<post_l>post|rev|r)[-_.]?(?P<post_n>\d*))?"
+    r"(?:[-_.]?(?P<dev_l>dev)[-_.]?(?P<dev_n>\d*))?",
+    re.IGNORECASE,
+)
+
+
+def _versao_normalizada(v: str) -> tuple | None:
+    """Forma canônica PEP 440 (sem época nem versão local), para igualdade estrita; `None` se não for PEP 440.
+
+    `packaging` não é dependência de execução (só chega pelo pytest), então a normalização é própria e
+    estrita: zeros finais do release não contam (1.4 == 1.4.0), `alpha`/`beta`/`c`/`pre` viram `a`/`b`/`rc`,
+    pré, pós e dev entram na comparação. Assim 1.4.0a1, 1.4.0a2 e 1.4.0 são três versões distintas.
+    """
+    m = _PEP440.fullmatch(str(v).strip())
+    if m is None:
+        return None
+    release = [int(n) for n in m["rel"].split(".")]
+    while len(release) > 1 and release[-1] == 0:
+        release.pop()
+    pre = None
+    if m["pre_l"]:
+        letra = {"alpha": "a", "a": "a", "beta": "b", "b": "b"}.get(m["pre_l"].lower(), "rc")
+        pre = (letra, int(m["pre_n"] or 0))
+    post = None
+    if m["post_i"] is not None:
+        post = int(m["post_i"])
+    elif m["post_l"]:
+        post = int(m["post_n"] or 0)
+    dev = int(m["dev_n"] or 0) if m["dev_l"] else None
+    return (tuple(release), pre, post, dev)
+
+
 def _da_versao_instalada(entry: dict[str, Any]) -> bool:
-    """Entrada publicada para esta versão do pacote (sem `versao_pacote_min`, vale: lista sintética de teste)."""
+    """Entrada publicada para esta versão do pacote (sem `versao_pacote_min`, vale: lista sintética de teste).
+
+    Exige igualdade da versão normalizada (decisão 0051, emenda 1.4.0a1): 1.4.0a2 e 1.4.0 não aceitam a
+    entrada de 1.4.0a1. Versão não interpretável como PEP 440, em qualquer dos lados, não é igual.
+    """
     from freoa_verifica import __version__
     minimo = entry.get("versao_pacote_min")
     if minimo is None:
         return True
-    numeros = lambda v: tuple(int(n) for n in re.findall(r"\d+", re.match(r"[\d.]+", v).group(0).strip(".")))
-    return numeros(minimo) == numeros(__version__)
+    a, b = _versao_normalizada(minimo), _versao_normalizada(__version__)
+    return a is not None and a == b
 
 
 def _vincular(digest: str | None, aceitar: bool) -> dict[str, Any]:

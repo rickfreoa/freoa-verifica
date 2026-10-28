@@ -158,3 +158,35 @@ def test_doctor_inclui_as_verificacoes(tmp_path, monkeypatch):
     with Verifica(tmp_path / "home") as svc:
         nomes = {c["nome"] for c in svc.doctor(offline=True)["verificacoes"]}
     assert {"snapshot_digest", "attestation"} <= nomes
+
+
+@pytest.mark.parametrize("instalada, entrada, esperado", [
+    ("1.4.0a1", "1.4.0a1", True),
+    ("1.4.0a2", "1.4.0a1", False),
+    ("1.4.0", "1.4.0a1", False),
+    ("1.4.0rc1", "1.4.0a1", False),
+    ("1.4.0.dev0", "1.4.0a1", False),
+    ("1.3.0", "1.3.0", True),
+    ("1.3.0", "1.4.0a1", False),
+    ("1.4.0", "1.4.0", True),
+    ("1.4", "1.4.0", True),
+    ("1.2.0", "1.2.0", True),
+    ("1.3.0", "1.2.0", False),
+    ("1.4.0a1", "1.4.0alpha1", True),
+    ("1.4.0", "texto", False),
+])
+def test_entrada_so_vale_para_a_versao_exata(monkeypatch, instalada, entrada, esperado):
+    import freoa_verifica
+    monkeypatch.setattr(freoa_verifica, "__version__", instalada)
+    assert snapshot._da_versao_instalada({"versao_pacote_min": entrada}) is esperado
+
+
+@pytest.mark.parametrize("instalada, motivo", [("1.4.0a2", "SNAPSHOT_OUTRA_VERSAO"), ("1.4.0", "SNAPSHOT_OUTRA_VERSAO")])
+def test_vincular_recusa_digest_da_pre_release_anterior(monkeypatch, instalada, motivo):
+    import freoa_verifica
+    monkeypatch.setattr(freoa_verifica, "__version__", instalada)
+    monkeypatch.setattr(snapshot, "_snapshots_oficiais", lambda: [
+        {"arquivo": "a1.tar.gz", "sha256": D_ATUAL, "versao_pacote_min": "1.4.0a1", "derived_version": 5}])
+    with pytest.raises(ValueError, match=motivo):
+        snapshot._vincular(D_ATUAL, False)
+    assert snapshot._vincular(D_ATUAL, True)["vinculado"] is False
