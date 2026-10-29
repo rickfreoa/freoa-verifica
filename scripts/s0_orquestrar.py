@@ -9,8 +9,10 @@ argumentos, trocando só a pasta de saída (`--saida` do roteiro vira `<saida>/<
 Antes de cada pedido o orquestrador adquire a URL, com criação exclusiva, no registro de tentativas por URL
 (`FV_S0_TENTATIVAS` ou `~/.freoa-verifica/s0-tentativas`, fora de qualquer pasta de saída). URL já adquirida nunca
 recebe outro pedido: se a captura dela existe (nesta ou em outra saída), é reaproveitada; se não existe (falha de
-gravação, queda), o host para. Trocar a saída ou a chave não reabre a URL. O limite é o do registro: outro usuário,
-outra máquina ou outro `FV_S0_TENTATIVAS` não o enxergam.
+gravação, queda), o host para. Trocar a saída, a chave ou a grafia da URL (host em maiúsculas, porta padrão
+explícita, ponto final no host) não reabre o recurso: a chave é a identidade canônica do transporte. O limite é o do
+diretório de registro: a garantia vale enquanto as execuções usarem o mesmo diretório; outro usuário, outra máquina ou
+outro `FV_S0_TENTATIVAS` não o enxergam.
 
 Uso:
     python scripts/s0_orquestrar.py --roteiro docs/S0-SONDAS.md --saida <pasta fora do repositório> \\
@@ -22,8 +24,9 @@ não recebem nenhum pedido. `--hosts`/`--hosts-arquivo`: restringe a rodada a es
 os hosts cuja parada da rodada 1 decorreu da regra antiga). `--somente-robots`: só o `robots.txt` de cada host.
 Caminhos no relatório: a pasta de saída aparece como `<saida>`, o checkout como `<repo>`, o interpretador como
 `<python>`, a casa do usuário como `<home>`. Do traceback do instrumento entram só os quadros (caminho por
-marcador, linha, função) e a última linha (a exceção); código-fonte e texto intermediário não entram.
-Limitação declarada: na última linha e na saída sem traceback, a troca é por padrão textual; ficam caminho de um só componente
+marcador, linha, função; sob o checkout e a pasta de saída fica o caminho relativo, que pode conter nomes de
+pastas) e as linhas não indentadas (exceção, notas, encadeamento); código-fonte não entra.
+Limitação declarada: nas linhas da exceção e na saída sem traceback, a troca é por padrão textual; ficam caminho de um só componente
 (`/x`, igual a caminho de URL), caminho não citado que contenha espaço (o trecho depois do espaço) e caminho entre
 aspas simples com apóstrofo (o trecho depois do apóstrofo).
 """
@@ -45,6 +48,7 @@ from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
 
 from freoa_verifica.robots_s0 import BARREIRA, ler_do_registro
+from freoa_verifica.transport import identidade_requisicao  # função pura de canonicalização; sem rede
 
 CAPTURAR = Path(__file__).with_name("capturar_fixture.py")
 # Comandos `--consulta` do roteiro não levam `--url`: o host e a URL são os do conector.
@@ -136,6 +140,14 @@ def _dir_tentativas() -> Path:
     return Path(os.environ.get("FV_S0_TENTATIVAS") or Path.home() / ".freoa-verifica" / "s0-tentativas")
 
 
+def _chave_url(url: str) -> str:
+    """Chave do recurso, não da grafia (I2.7 r3, parecer PR #20 r2): a mesma canonicalização do transporte (esquema e
+    host em minúsculas, IDNA, sem ponto final, porta padrão removida, caminho com percent-encoding canônico, query como
+    enviada). Host em maiúsculas, `:443` explícito ou ponto final no host dão a mesma chave."""
+    metodo, esquema, host, caminho, query = identidade_requisicao("GET", url)[:5]
+    return hashlib.sha256(repr((metodo, esquema, host, caminho, query)).encode("utf-8")).hexdigest()
+
+
 def _adquirir_tentativa(registro: Path, url: str, caminho: Path) -> tuple[Path | None, str | None]:
     """(captura a reaproveitar, None) | (None, razão de parada) | (None, None) = tentativa adquirida, pode pedir.
 
@@ -144,7 +156,7 @@ def _adquirir_tentativa(registro: Path, url: str, caminho: Path) -> tuple[Path |
     """
     if caminho.exists():
         return caminho, None
-    entrada = registro / (hashlib.sha256(url.encode("utf-8")).hexdigest() + ".json")
+    entrada = registro / (_chave_url(url) + ".json")
     try:
         registro.mkdir(parents=True, exist_ok=True)
     except OSError as exc:  # inclusive FileExistsError de um arquivo no caminho do registro
@@ -192,13 +204,16 @@ def _relato(texto: str, base: Path) -> str:
     quadros = [(i, _QUADRO.match(ln)) for i, ln in enumerate(linhas)]
     if not any(m for _, m in quadros):
         return _limpo("\n".join(linhas[-3:]), base)[-600:]
-    saida = ["Traceback (most recent call last):"]
-    for _, m in quadros:
+    saida = []
+    for i, m in quadros:
         if m:
             funcao = f", in {m.group(4)}" if m.group(4) else ""
             saida.append(f'{m.group(1)}File "{_caminho_estrutural(m.group(2), base)}", line {m.group(3)}{funcao}')
-    saida.append(_limpo(linhas[-1], base))
-    return "\n".join(saida)[-600:]
+        elif not linhas[i].startswith((" ", "\t")):
+            # Cabeçalho, linha da exceção (tipo e mensagem), notas e frases de encadeamento: não indentadas.
+            # Código-fonte do quadro é indentado e não entra. I2.7 r3 (parecer PR #20 r2, menor).
+            saida.append(_limpo(linhas[i], base))
+    return "\n".join(saida)[-900:]
 
 
 def _resumo(leitura) -> dict[str, Any]:
@@ -219,7 +234,7 @@ def orquestrar(
     for args in comandos(roteiro):
         por_host.setdefault(urlsplit(_url(args)).hostname, []).append(args)
     relatorio: dict[str, Any] = {"hosts": {}, "fora_da_rodada": []}
-    pedidas: set[str] = set()  # um pedido por URL em toda a execução
+    pedidas: set[str] = set()  # um pedido por recurso (chave canônica) em toda a execução
     for host, cmds in por_host.items():
         if hosts is not None and host not in hosts:
             relatorio["fora_da_rodada"].append(host)
@@ -237,7 +252,7 @@ def orquestrar(
 
             if h["parada"]:
                 pular("host parado")
-            elif url in pedidas:
+            elif _chave_url(url) in pedidas:
                 pular("URL já pedida; um pedido por URL")
             elif eh_robots and leitura is not None:
                 pular("robots.txt já lido neste host; sem segundo pedido")
@@ -249,7 +264,7 @@ def orquestrar(
             elif not eh_robots and leitura.decidir(url).acao == "vedado":
                 pular("Disallow aplicável: " + leitura.decidir(url).detalhe)
             else:
-                pedidas.add(url)
+                pedidas.add(_chave_url(url))
                 novos, pasta = _com_saida(args, saida)
                 caminho = pasta / f"{chave}.captura.json"
                 # I2.7 r2 (parecer PR #20 r1, B2): a tentativa é adquirida por URL, com criação exclusiva, num registro

@@ -476,3 +476,48 @@ def test_i1_r2_relato_estrutural_do_traceback():
 def test_i1_r2_limitacao_declarada_inclui_caminho_nao_citado_com_espaco():
     mod = _carregar()
     assert "contenha espaço" in mod.__doc__ and "um só componente" in mod.__doc__
+
+
+# --- I2.7 r3 (parecer PR #20 r2) ------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("variante", [
+    "https://JURISPRUDENCIA.TST.JUS.BR/robots.txt",
+    "https://jurisprudencia.tst.jus.br:443/robots.txt",
+    "https://jurisprudencia.tst.jus.br./robots.txt",
+])
+def test_b2_r3_grafia_diferente_do_mesmo_recurso_nao_reabre(tmp_path, variante):
+    mod = _carregar()
+    reg = tmp_path / "_reg"
+    base = "https://jurisprudencia.tst.jus.br/robots.txt"
+    assert mod._chave_url(variante) == mod._chave_url(base)
+    assert mod._adquirir_tentativa(reg, base, tmp_path / "a" / "x.captura.json") == (None, None)
+    origem, razao = mod._adquirir_tentativa(reg, variante, tmp_path / "b" / "x.captura.json")
+    assert origem is None and razao == "tentativa anterior sem registro"
+
+
+def test_b2_r3_caminho_e_query_continuam_distinguindo_recursos():
+    mod = _carregar()
+    a = mod._chave_url("https://x.jus.br/robots.txt")
+    assert a != mod._chave_url("https://x.jus.br/Robots.txt")
+    assert a != mod._chave_url("https://x.jus.br/robots.txt?a=1")
+    assert mod._chave_url("https://x.jus.br/pesquisa?b=2&a=1") != mod._chave_url("https://x.jus.br/pesquisa?a=1&b=2")
+
+
+def test_i1_r3_relato_conserva_excecao_notas_e_encadeamento():
+    mod = _carregar()
+    tb = ("Traceback (most recent call last):\n"
+          '  File "C:\\Users\\ana\\x.py", line 1, in f\n'
+          "    raise ValueError('interna')\n"
+          "ValueError: interna\n"
+          "\n"
+          "During handling of the above exception, another exception occurred:\n"
+          "\n"
+          "Traceback (most recent call last):\n"
+          '  File "C:\\Users\\ana\\y.py", line 2, in g\n'
+          "    raise RuntimeError('causa util')\n"
+          "RuntimeError: causa util\n"
+          "nota operacional\n")
+    saida = mod._relato(tb, Path("/nao/usada"))
+    for esperado in ("ValueError: interna", "During handling", "RuntimeError: causa util", "nota operacional"):
+        assert esperado in saida, saida
+    assert "ana" not in saida and "raise" not in saida

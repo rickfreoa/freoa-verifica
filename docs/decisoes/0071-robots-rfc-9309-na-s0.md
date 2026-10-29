@@ -101,10 +101,12 @@ e do instrumento, não de barreira da fonte.
        nenhuma (4xx) ou `resposta_inesperada` (corpo vazio) e, em `corpo_vazio`, corpo de fato vazio. Tipo inválido
        (saltos, status, `unavailable`) é barreira `registro_malformado`. O corpo da página de recusa continua sendo
        evidência e não decide nada.
-     - I2.7 r2, regra invariável 3 entre execuções: antes de cada pedido o orquestrador adquire a URL com criação
-       exclusiva num registro de tentativas por URL, fora de qualquer pasta de saída (`FV_S0_TENTATIVAS` ou
-       `~/.freoa-verifica/s0-tentativas`). URL adquirida nunca recebe outro pedido: a captura dela é reaproveitada,
-       nesta ou em outra saída; sem captura, o host para. O alcance é o do registro (usuário e máquina).
+     - I2.7 r2 e r3, regra invariável 3 entre execuções: antes de cada pedido o orquestrador adquire o recurso com
+       criação exclusiva num registro de tentativas fora de qualquer pasta de saída (`FV_S0_TENTATIVAS` ou
+       `~/.freoa-verifica/s0-tentativas`). A chave é a identidade canônica do transporte (`identidade_requisicao`:
+       esquema, host IDNA em minúsculas sem ponto final, porta padrão removida, caminho canônico, query como
+       enviada), não a grafia da URL. Recurso adquirido nunca recebe outro pedido: a captura é reaproveitada, nesta
+       ou em outra saída; sem captura, o host para. A garantia vale para o mesmo diretório de registro.
 6. A diferença entre redirecionamento para o mesmo host e para outro host não é recuperável pelo transporte
    (`Location` não é exposto); ambos são barreira, e a evidência registra a exceção e o status 3xx dos saltos.
 
