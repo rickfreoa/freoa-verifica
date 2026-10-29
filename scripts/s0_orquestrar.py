@@ -148,6 +148,30 @@ def _chave_url(url: str) -> str:
     return hashlib.sha256(repr((metodo, esquema, host, caminho, query)).encode("utf-8")).hexdigest()
 
 
+def _registro_incompativel(registro: Path) -> str | None:
+    """Razão para não pedir nada nesta execução, ou None. Decisão 0074: toda entrada do registro de tentativas precisa
+    estar no formato atual (nome igual à chave canônica da URL registrada; `url`, `captura`, `inicio`, `identidade`).
+    Entrada de formato anterior, ilegível ou vazia não é interpretada: nenhuma URL recebe pedido, e a limpeza do
+    registro é decisão humana."""
+    if not registro.exists():
+        return None
+    if not registro.is_dir():
+        return "registro de tentativas não é diretório"
+    for entrada in sorted(registro.iterdir()):
+        if entrada.suffix == ".tmp":
+            continue
+        try:
+            dados = json.loads(entrada.read_text(encoding="utf-8"))
+            ok = (isinstance(dados, dict) and {"url", "captura", "inicio", "identidade"} <= set(dados)
+                  and entrada.name == _chave_url(str(dados["url"])) + ".json"
+                  and dados["identidade"] == list(identidade_requisicao("GET", str(dados["url"]))[:5]))
+        except (OSError, ValueError, TypeError):
+            ok = False
+        if not ok:
+            return f"registro de tentativas com entrada de formato anterior, ilegível ou vazia ({entrada.name})"
+    return None
+
+
 def _adquirir_tentativa(registro: Path, url: str, caminho: Path) -> tuple[Path | None, str | None]:
     """(captura a reaproveitar, None) | (None, razão de parada) | (None, None) = tentativa adquirida, pode pedir.
 
@@ -174,7 +198,8 @@ def _adquirir_tentativa(registro: Path, url: str, caminho: Path) -> tuple[Path |
     except OSError as exc:
         return None, f"tentativa não adquirida ({type(exc).__name__})"
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump({"url": url, "captura": str(caminho), "inicio": datetime.now(timezone.utc).isoformat()}, f)
+        json.dump({"url": url, "captura": str(caminho), "inicio": datetime.now(timezone.utc).isoformat(),
+                   "identidade": list(identidade_requisicao("GET", url)[:5])}, f)
     return None, None
 
 
@@ -205,13 +230,19 @@ def _relato(texto: str, base: Path) -> str:
     if not any(m for _, m in quadros):
         return _limpo("\n".join(linhas[-3:]), base)[-600:]
     saida = []
+    depois_de_quadro = False
     for i, m in quadros:
         if m:
             funcao = f", in {m.group(4)}" if m.group(4) else ""
             saida.append(f'{m.group(1)}File "{_caminho_estrutural(m.group(2), base)}", line {m.group(3)}{funcao}')
+            depois_de_quadro = True
         elif not linhas[i].startswith((" ", "\t")):
             # Cabeçalho, linha da exceção (tipo e mensagem), notas e frases de encadeamento: não indentadas.
-            # Código-fonte do quadro é indentado e não entra. I2.7 r3 (parecer PR #20 r2, menor).
+            saida.append(_limpo(linhas[i], base))
+            depois_de_quadro = False
+        elif not depois_de_quadro:
+            # Indentada depois de exceção ou nota: continuação dela (parecer PR #20 r3, menor). Indentada logo depois
+            # de quadro é código-fonte e não entra.
             saida.append(_limpo(linhas[i], base))
     return "\n".join(saida)[-900:]
 
@@ -229,6 +260,7 @@ def orquestrar(
     somente_robots: bool = False, executor: Executor = executar_instrumento, tentativas: Path | None = None,
 ) -> dict[str, Any]:
     registro_tentativas = tentativas or _dir_tentativas()
+    incompativel = _registro_incompativel(registro_tentativas)
     barreiras = dict(barreiras or {})
     por_host: dict[str, list[list[str]]] = {}
     for args in comandos(roteiro):
@@ -240,7 +272,9 @@ def orquestrar(
             relatorio["fora_da_rodada"].append(host)
             continue
         h = relatorio["hosts"][host] = {"comandos": [], "parada": None, "robots": None}
-        if host in barreiras:
+        if incompativel:
+            h["parada"] = f"{incompativel}: nenhum pedido nesta execução (decisão 0074)"
+        elif host in barreiras:
             h["parada"] = f"barreira anterior registrada: {barreiras[host]}"
         leitura = None
         for args in cmds:

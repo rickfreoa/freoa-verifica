@@ -521,3 +521,53 @@ def test_i1_r3_relato_conserva_excecao_notas_e_encadeamento():
     for esperado in ("ValueError: interna", "During handling", "RuntimeError: causa util", "nota operacional"):
         assert esperado in saida, saida
     assert "ana" not in saida and "raise" not in saida
+
+
+# --- decisão 0074 (parecer PR #20 r3) -----------------------------------------------------------------------------
+
+def _entrada_r2(reg, url, captura):
+    import hashlib as _h
+    reg.mkdir(parents=True, exist_ok=True)
+    (reg / (_h.sha256(url.encode("utf-8")).hexdigest() + ".json")).write_text(
+        json.dumps({"url": url, "captura": str(captura), "inicio": "2026-10-29T00:00:00+00:00"}), encoding="utf-8")
+
+
+def test_0074_entrada_no_formato_da_r2_impede_todo_pedido(tmp_path):
+    reg = tmp_path / "_reg"
+    _entrada_r2(reg, "https://c.jus.br/robots.txt", tmp_path / "s1" / "c" / "c_robots.captura.json")
+    falso = Falso(HOSTS)
+    rel = orq.orquestrar(ROTEIRO, tmp_path / "s2", executor=falso, hosts={"a.jus.br", "c.jus.br"}, tentativas=reg)
+    assert falso.chamadas == []
+    for h in ("a.jus.br", "c.jus.br"):
+        assert "formato anterior" in rel["hosts"][h]["parada"] and "0074" in rel["hosts"][h]["parada"]
+
+
+@pytest.mark.parametrize("conteudo", ["", "{", "[]", '{"url": "https://c.jus.br/robots.txt"}'])
+def test_0074_entrada_ilegivel_ou_vazia_impede_todo_pedido(tmp_path, conteudo):
+    reg = tmp_path / "_reg"
+    reg.mkdir()
+    mod = _carregar()
+    (reg / (mod._chave_url("https://c.jus.br/robots.txt") + ".json")).write_text(conteudo, encoding="utf-8")
+    falso = Falso(HOSTS)
+    orq.orquestrar(ROTEIRO, tmp_path / "s", executor=falso, hosts={"a.jus.br"}, tentativas=reg)
+    assert falso.chamadas == []
+
+
+def test_0074_entradas_do_formato_atual_sao_aceitas(tmp_path):
+    reg = tmp_path / "_reg"
+    _, primeiro = _rodar(tmp_path / "s1", HOSTS, hosts={"a.jus.br"}, tentativas=reg)
+    _, segundo = _rodar(tmp_path / "s2", HOSTS, hosts={"a.jus.br", "b.jus.br"}, tentativas=reg)
+    assert len(primeiro.chamadas) == 2
+    assert _urls(segundo) == ["https://b.jus.br/robots.txt", "https://b.jus.br/rota"]  # a.jus.br reaproveitado
+
+
+def test_0074_continuacao_indentada_de_nota_entra_e_codigo_nao():
+    mod = _carregar()
+    tb = ("Traceback (most recent call last):\n"
+          '  File "C:\\Users\\ana\\x.py", line 1, in f\n'
+          "    raise RuntimeError('causa')\n"
+          "RuntimeError: causa\n"
+          "nota operacional\n"
+          "  detalhe da nota\n")
+    saida = mod._relato(tb, Path("/nao/usada"))
+    assert "detalhe da nota" in saida and "raise" not in saida and "ana" not in saida

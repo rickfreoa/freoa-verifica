@@ -106,7 +106,11 @@ e do instrumento, não de barreira da fonte.
        `~/.freoa-verifica/s0-tentativas`). A chave é a identidade canônica do transporte (`identidade_requisicao`:
        esquema, host IDNA em minúsculas sem ponto final, porta padrão removida, caminho canônico, query como
        enviada), não a grafia da URL. Recurso adquirido nunca recebe outro pedido: a captura é reaproveitada, nesta
-       ou em outra saída; sem captura, o host para. A garantia vale para o mesmo diretório de registro.
+       ou em outra saída; sem captura, o host para. A garantia vale para o mesmo diretório de registro. Antes de
+       qualquer pedido, o registro inteiro é conferido; entrada de formato anterior, ilegível ou vazia impede todo
+       pedido da execução (decisão 0074).
+     - Relatório: do traceback entram os quadros (caminho por marcador; sob o checkout e a saída, o caminho relativo,
+       que pode conter nomes de pastas) e as linhas da exceção, notas e encadeamento; código-fonte não entra.
 6. A diferença entre redirecionamento para o mesmo host e para outro host não é recuperável pelo transporte
    (`Location` não é exposto); ambos são barreira, e a evidência registra a exceção e o status 3xx dos saltos.
 
