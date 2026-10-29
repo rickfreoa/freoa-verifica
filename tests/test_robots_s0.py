@@ -129,7 +129,8 @@ def test_200_sem_regras_interpretaveis_nao_restringe_e_registra_content_type_e_s
 
 
 def test_200_vazio_sem_restricoes_com_sha_do_vazio():
-    for vazio in (b"", None):
+    # Só o corpo vazio de fato; `None` (corpo ausente) é barreira desde o passe final do PR #18 (I2.7, B1).
+    for vazio in (b"",):
         r = ler_robots(200, "text/plain", vazio)
         assert (r.estado, r.motivo, r.sha256) == (SEM_RESTRICOES, "200_corpo_vazio", SHA256_VAZIO)
 
@@ -726,3 +727,45 @@ def test_b2_captcha_largo_sem_bom_em_octet_stream_e_barreira(codec):
     assert r.estado == BARREIRA and r.decidir(HOST + "/secret").acao == BARREIRA
     reg = {"status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "application/octet-stream"}}
     assert ler_do_registro(reg, corpo).decidir(HOST + "/secret").acao == BARREIRA
+
+
+# --- passe final do PR #18 (I2.7): B1, registro contraditório e corpo ausente ------------------------------------
+
+@pytest.mark.parametrize("motivo, ev", [
+    ("http_403", {"status": 200}),               # reprodução do auditor
+    ("http_403", {"status": 404}),
+    ("http_404", {"status": 403}),
+    ("http_404", {}),                            # sem status: contradição por omissão
+    ("http_200", {"status": 200}),               # 200 registrado como indisponível
+    ("http_xyz", {"status": 404}),
+])
+def test_b1_final_registro_contraditorio_e_barreira(motivo, ev):
+    leitura = ler_do_registro({"unavailable": True, "motivo": motivo, "evidencia": ev})
+    assert leitura.estado == BARREIRA
+    assert leitura.decidir(HOST + "/config.json").acao == BARREIRA
+
+
+def test_b1_final_redirecionamento_e_checado_antes_do_status():
+    reg = {"unavailable": True, "motivo": "http_404", "evidencia": {"status": 404, "saltos": [{"status": 302}]}}
+    leitura = ler_do_registro(reg)
+    assert (leitura.estado, leitura.motivo) == (BARREIRA, "redirecionamento")
+
+
+def test_b1_final_registro_coerente_continua_valendo():
+    assert ler_do_registro({"unavailable": True, "motivo": "http_404", "evidencia": {"status": 404}}).estado == SEM_RESTRICOES
+    assert ler_do_registro({"unavailable": True, "motivo": "http_403", "evidencia": {"status": 403}}).estado == BARREIRA
+
+
+def test_b1_final_corpo_ausente_nunca_vira_corpo_vazio():
+    r = ler_robots(200, "text/plain", None)
+    assert (r.estado, r.motivo) == (BARREIRA, "corpo_ausente")
+    assert ler_robots(200, "text/plain", b"").estado == SEM_RESTRICOES  # corpo vazio de fato continua sem restrições
+
+
+def test_b1_final_corpo_vazio_com_hash_de_outro_corpo_e_barreira():
+    reg = {"unavailable": True, "motivo": "corpo_vazio", "evidencia": {"status": 200, "sha256": _sha(b"x")}}
+    assert ler_do_registro(reg).motivo == "registro_contraditorio"
+    reg = {"unavailable": True, "motivo": "corpo_vazio", "evidencia": {"status": 200, "sha256": SHA256_VAZIO}}
+    assert ler_do_registro(reg).estado == SEM_RESTRICOES
+    reg = {"unavailable": True, "motivo": "corpo_vazio", "evidencia": {"status": 404}}
+    assert ler_do_registro(reg).estado == BARREIRA

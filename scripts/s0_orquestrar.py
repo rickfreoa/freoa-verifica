@@ -7,7 +7,9 @@ instrumento. O orquestrador não faz rede: cada pedido é um `scripts/capturar_f
 argumentos, trocando só a pasta de saída (`--saida` do roteiro vira `<saida>/<última pasta>`).
 
 Se `<saida>/<fonte>/<chave>.captura.json` já existe, o orquestrador o lê e não pede de novo: duas execuções sobre a
-mesma saída nunca repetem um pedido (a primeira pode ser só `--somente-robots`; a segunda segue com as rotas).
+mesma saída nunca repetem um pedido (a primeira pode ser só `--somente-robots`; a segunda segue com as rotas). Antes de
+cada pedido grava `<chave>.tentativa.json`; se numa execução seguinte houver marcador sem `.captura.json` (falha de
+gravação ou queda depois do pedido), o host para sem novo pedido.
 
 Uso:
     python scripts/s0_orquestrar.py --roteiro docs/S0-SONDAS.md --saida <pasta fora do repositório> \\
@@ -17,17 +19,22 @@ Uso:
 `--barreiras`: JSON `{"<host>": "<descrição e onde está o registro>"}` com os hosts que já deram barreira ao produto:
 não recebem nenhum pedido. `--hosts`/`--hosts-arquivo`: restringe a rodada a esses hosts (a rodada 2 da S0b refaz só
 os hosts cuja parada da rodada 1 decorreu da regra antiga). `--somente-robots`: só o `robots.txt` de cada host.
-O relatório não contém caminhos de máquina: a pasta de saída aparece como `<saida>`, o checkout como `<repo>`, o
-interpretador como `<python>`, a casa do usuário como `<home>` e qualquer outro caminho absoluto como `<caminho>`.
+Caminhos no relatório: a pasta de saída aparece como `<saida>`, o checkout como `<repo>`, o interpretador como
+`<python>`, a casa do usuário como `<home>`, e caminho absoluto citado entre aspas ou com mais de um componente como
+`<caminho>`. Limitação declarada: caminho de um só componente em texto corrido (`/x`) fica, porque é sintaticamente
+igual a caminho de URL (`/robots.txt`), ainda que possa conter nome identificador; e caminho entre aspas simples que
+contenha apóstrofo pode sair truncado no apóstrofo.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
 import subprocess
+from datetime import datetime, timezone
 import sys
 from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
@@ -83,7 +90,8 @@ _RAIZ_DO_REPO = Path(__file__).resolve().parent.parent
 _WIN = re.compile(r"(?<![\w])[A-Za-z]:[\\/][^\s\"'<>|,;]*")
 _UNC = re.compile(r"(?<![\w/\\:])(?:\\\\|//)[^\s\"'<>|,;\\/]+[\\/][^\s\"'<>|,;]*")
 # Caminho absoluto citado entre aspas, inteiro, com espaços (File "/srv/Equipe X/a.py", "\\srv\a b" e unidade com espaços).
-_ENTRE_ASPAS = re.compile(r"(?<=[\"'])(?:/|\\\\|[A-Za-z]:[\\/])[^\"'\r\n]*(?=[\"'])")
+_ENTRE_ASPAS_D = re.compile(r'(?<=")(?:/|\\\\|[A-Za-z]:[\\/])[^"\r\n]*(?=")')  # apóstrofo interno não fecha
+_ENTRE_ASPAS_S = re.compile(r"(?<=')(?:/|\\\\|[A-Za-z]:[\\/])[^'\r\n]*(?=')")
 _POSIX = re.compile(r"(?<![\w/.:<>~-])(?:/[^\s\"'<>|,;:()\[\]/]+){2,}/?|(?<![\w/.:<>~-])~(?:/[^\s\"'<>|,;:()\[\]/]+)+")
 
 
@@ -100,19 +108,31 @@ def _raizes() -> list[tuple[str, str]]:
 
 
 def _limpo(texto: str, base: Path) -> str:
-    """Texto do instrumento sem caminho de máquina: a pasta de saída vira `<saida>`; o checkout, o interpretador e a
-    casa do usuário, `<repo>`, `<python>`, `<home>`; qualquer outro caminho absoluto (POSIX ou Windows), `<caminho>`.
+    """Texto do instrumento com os caminhos de máquina trocados por marcadores (limitação no docstring do módulo):
+    citado entre aspas sai inteiro como `<caminho>`; a pasta de saída vira `<saida>`; o checkout, o interpretador e a
+    casa do usuário, `<repo>`, `<python>`, `<home>`; outro caminho absoluto (POSIX ou Windows), `<caminho>`.
     O tipo da exceção e a mensagem curta ficam; um traceback inteiro perde só os caminhos."""
     texto = texto.strip()
+    # Primeiro o caminho citado, inteiro e com espaços (File "..." dos tracebacks), antes de qualquer raiz conhecida:
+    # trocar a raiz antes deixava o resto ("<repo>/Equipe X/a.py"). Passe final PR #18, I1.
+    texto = _ENTRE_ASPAS_D.sub("<caminho>", texto)
+    texto = _ENTRE_ASPAS_S.sub("<caminho>", texto)
     for forma in sorted({str(base), str(base).replace("\\", "/")}, key=len, reverse=True):
         texto = texto.replace(forma, "<saida>")
     for caminho, marcador in _raizes():
         texto = texto.replace(caminho, marcador)
-    texto = _ENTRE_ASPAS.sub("<caminho>", texto)  # antes dos demais: o citado sai inteiro, com espaços
     texto = _UNC.sub("<caminho>", texto)
     texto = _WIN.sub("<caminho>", texto)
     texto = _POSIX.sub("<caminho>", texto)
     return texto[-300:]
+
+
+def _gravar_marcador(marcador: Path, url: str) -> None:
+    """Grava, ANTES do pedido, que ele vai ocorrer; escrita completa ou nada (arquivo temporário e troca)."""
+    marcador.parent.mkdir(parents=True, exist_ok=True)
+    tmp = marcador.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"url": url, "inicio": datetime.now(timezone.utc).isoformat()}), encoding="utf-8")
+    os.replace(tmp, marcador)
 
 
 def _resumo(leitura) -> dict[str, Any]:
@@ -165,7 +185,21 @@ def orquestrar(
                 pedidas.add(url)
                 novos, pasta = _com_saida(args, saida)
                 caminho = pasta / f"{chave}.captura.json"
+                marcador = pasta / f"{chave}.tentativa.json"
                 reaproveitado = caminho.exists()  # evidência já gravada (rodada anterior): nunca um segundo pedido
+                if not reaproveitado and marcador.exists():
+                    # Passe final PR #18, B2: houve tentativa cujo resultado não foi gravado (falha de escrita, queda);
+                    # nunca um segundo pedido automático. O host para.
+                    h["parada"] = f"tentativa anterior sem registro em {chave}: sem novo pedido (regra invariável 3)"
+                    h["comandos"].append({"chave": chave, "url": url, "executado": False, "razao": h["parada"]})
+                    continue
+                if not reaproveitado:
+                    try:
+                        _gravar_marcador(marcador, url)
+                    except OSError as exc:
+                        h["parada"] = f"marcador de tentativa não gravado em {chave} ({type(exc).__name__}): sem pedido"
+                        h["comandos"].append({"chave": chave, "url": url, "executado": False, "razao": h["parada"]})
+                        continue
                 p = SimpleNamespace(returncode=None, stdout="", stderr="") if reaproveitado else executor(novos)
                 reg = json.loads(caminho.read_text(encoding="utf-8")) if caminho.exists() else {}
                 item = {"chave": chave, "url": url, "executado": not reaproveitado, "reaproveitado": reaproveitado,

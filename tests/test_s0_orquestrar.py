@@ -350,3 +350,61 @@ def test_i1_r3_caminho_citado_com_espacos_sai_inteiro():
         assert "ClienteSegredo" not in saida and "Cliente" not in saida and "PC-RICK" not in saida, saida
         assert saida.endswith(", line 1") and "<caminho>" in saida
     assert mod._limpo('Disallow: "/admin"', base) == 'Disallow: "<caminho>"'  # custo aceito: perde o caminho citado
+
+
+# --- passe final do PR #18 (I2.7) ---------------------------------------------------------------------------------
+
+def test_b1_final_registro_contraditorio_no_robots_para_o_host_sem_pedir_rotas(tmp_path):
+    respostas = {**HOSTS, "c.jus.br": {"robots": (403, "http_403", {"status": 200}),
+                                       "rota": (200, b"{}", "application/json")}}
+    rel, falso = _rodar(tmp_path, respostas, hosts={"c.jus.br"})
+    assert _urls(falso) == ["https://c.jus.br/robots.txt"]
+    assert rel["hosts"]["c.jus.br"]["robots"]["motivo"] == "registro_contraditorio"
+    assert rel["hosts"]["c.jus.br"]["parada"].startswith("barreira no robots.txt")
+
+
+def test_b2_final_falha_de_gravacao_apos_o_pedido_nao_permite_repetir(tmp_path):
+    chamadas = []
+
+    def pede_e_nao_grava(args):  # o pedido acontece; o registro não é gravado (PermissionError, queda)
+        chamadas.append(args[args.index("--url") + 1])
+        return SimpleNamespace(returncode=1, stdout="", stderr="PermissionError")
+
+    for _ in range(2):
+        rel = orq.orquestrar(ROTEIRO, tmp_path, executor=pede_e_nao_grava, hosts={"c.jus.br"})
+    assert chamadas == ["https://c.jus.br/robots.txt"]  # uma só vez, nas duas execuções
+    parada = rel["hosts"]["c.jus.br"]["parada"]
+    assert parada.startswith("tentativa anterior sem registro") and "regra invariável 3" in parada
+
+
+def test_b2_final_marcador_nao_gravado_impede_o_pedido(tmp_path, monkeypatch):
+    def falha(*a, **k):
+        raise PermissionError("somente leitura")
+
+    monkeypatch.setattr(_carregar(), "_gravar_marcador", falha)
+    falso = Falso(HOSTS)
+    rel = orq.orquestrar(ROTEIRO, tmp_path, executor=falso, hosts={"a.jus.br"})
+    assert falso.chamadas == []
+    assert rel["hosts"]["a.jus.br"]["parada"].startswith("marcador de tentativa não gravado")
+
+
+def test_b2_final_marcador_com_registro_reaproveita_sem_novo_pedido(tmp_path):
+    _, primeiro = _rodar(tmp_path, HOSTS, hosts={"a.jus.br"})
+    _, segundo = _rodar(tmp_path, HOSTS, hosts={"a.jus.br"})
+    assert len(primeiro.chamadas) == 2 and segundo.chamadas == []  # robots e /pesquisa/; /admin/ vedado
+
+
+def test_i1_final_apostrofo_interno_e_raiz_antes_do_citado():
+    mod = _carregar()
+    base = Path("/nao/usada")
+    saida = mod._limpo('File "/srv/Equipe d\'Ana/contrato.py", line 1', base)
+    assert saida == 'File "<caminho>", line 1', saida
+    saida = mod._limpo(f'File "{mod._RAIZ_DO_REPO}/Equipe ClienteSegredo/contrato.py", line 1', base)
+    assert "ClienteSegredo" not in saida and saida == 'File "<caminho>", line 1', saida
+
+
+def test_i1_final_docstrings_declaram_a_limitacao_e_nao_prometem_relatorio_sem_caminho():
+    mod = _carregar()
+    assert "não contém caminhos de máquina" not in (mod.__doc__ or "")
+    assert "Limitação declarada" in (mod.__doc__ or "")
+    assert "sem caminho de máquina" not in (mod._limpo.__doc__ or "")

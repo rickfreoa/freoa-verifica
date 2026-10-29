@@ -90,6 +90,13 @@ e do instrumento, não de barreira da fonte.
        é barreira em qualquer MIME, inclusive `application/octet-stream`; isso revoga a escolha anterior de ler
        binário com NUL como `sem_restricoes`, porque não há critério sintático que o separe de UTF-16/32 sem BOM
        e a ausência de marcador de desafio não pode liberar.
+     - I2.7, passe final do PR #18 (29/10/2026): o registro da sonda só decide se for coerente. Motivo `http_NNN`
+       exige status igual na evidência (e diferente de 200); `corpo_vazio` exige status 200 e, havendo sha256, o
+       do corpo vazio; salto 3xx é verificado antes de tudo. Contradição é barreira `registro_contraditorio`. Corpo
+       ausente nunca é lido como corpo vazio: 200 sem corpo é barreira `corpo_ausente`.
+     - I2.7, regra invariável 3 entre execuções: antes de cada pedido o orquestrador grava `<chave>.tentativa.json`;
+       marcador sem `.captura.json` numa execução seguinte para o host sem novo pedido, e falha ao gravar o
+       marcador impede o pedido.
 6. A diferença entre redirecionamento para o mesmo host e para outro host não é recuperável pelo transporte
    (`Location` não é exposto); ambos são barreira, e a evidência registra a exceção e o status 3xx dos saltos.
 

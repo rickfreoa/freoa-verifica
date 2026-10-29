@@ -224,6 +224,8 @@ def _desafio_no_robots(tipo: str, base: dict[str, Any]) -> LeituraRobots:
 
 def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[str, str] | None) -> LeituraRobots:
     base = {"status": 200, "content_type": content_type}
+    if corpo is None:  # passe final PR #18, B1: ausência de corpo não é corpo vazio
+        return _barreira("corpo_ausente", "200 sem corpo examinado: barreira por conservadorismo (decisão 0071)", **base)
     if not corpo:
         return _sem_restricoes("200_corpo_vazio", "arquivo vazio: sem restrições", sha256=SHA256_VAZIO, **base)
     sha = hashlib.sha256(corpo).hexdigest()
@@ -275,17 +277,26 @@ def ler_do_registro(registro: Mapping[str, Any], corpo: bytes | None = None) -> 
         if registro.get("sha256") != hashlib.sha256(corpo).hexdigest():
             return _barreira("corpo_nao_confere", "sha256 do corpo difere do registro")
         return ler_robots(200, ct, corpo, cabecalhos=cab)
+    saltos = ev.get("saltos") or []
+    if any(isinstance(s, Mapping) and 300 <= int(s.get("status") or 0) <= 399 for s in saltos):
+        return _barreira("redirecionamento", f"redirecionamento não seguido: {list(saltos)}")
     if motivo.startswith("desafio_") or registro.get("categoria") == "ambiental_desafio":
         return _barreira(motivo or "desafio", "desafio ou WAF", status=ev.get("status"), content_type=ct,
                          sha256=ev.get("sha256"))
     status = ev.get("status")
-    if motivo.startswith("http_") and isinstance(status, int):
+    if motivo.startswith("http_"):
+        # Passe final PR #18, B1: o motivo e o status da evidência têm de dizer a mesma coisa; contradição é
+        # barreira, e um 200 registrado como indisponível não vira leitura de robots.
+        numero = motivo.removeprefix("http_")
+        if not (numero.isdigit() and isinstance(status, int) and int(numero) == status and status != 200):
+            return _barreira("registro_contraditorio", f"motivo {motivo} com status {status!r} na evidência",
+                             status=status if isinstance(status, int) else None)
         return ler_robots(status, ct, None)
-    if motivo == "corpo_vazio" and status == 200:
+    if motivo == "corpo_vazio":
+        if status != 200 or ev.get("sha256") not in (None, SHA256_VAZIO):
+            return _barreira("registro_contraditorio", f"corpo_vazio com status {status!r} ou sha256 de corpo não vazio",
+                             status=status if isinstance(status, int) else None)
         return ler_robots(200, ct, b"")
-    saltos = ev.get("saltos") or []
-    if any(isinstance(s, Mapping) and 300 <= int(s.get("status") or 0) <= 399 for s in saltos):
-        return _barreira("redirecionamento", f"redirecionamento não seguido: {list(saltos)}")
     excecao = ev.get("excecao") or motivo.removeprefix("transporte_")
     mensagem = ev.get("mensagem") or ""
     if excecao == "BlockedHost" or motivo == "transporte_BlockedHost":
