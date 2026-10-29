@@ -1,8 +1,8 @@
 # 0073 - Esquema de saída das ferramentas de paridade (C7) e das partes de `obter_decisao` (CH6)
 
 Estado: aceita. Decisão do supervisor em 29/10/2026, sob o D5 (mudança de contrato público exige decisão formal) e
-o requisito C7 de `docs/PARIDADE-1.4.md`, antes de qualquer código do I2.4. Revisão 2, depois do parecer do Codex
-sobre o PR #21 (r1).
+o requisito C7 de `docs/PARIDADE-1.4.md`, antes de qualquer código do I2.4. Revisão 3, depois dos pareceres do Codex
+sobre o PR #21 (r1 e r2).
 
 ## Contexto
 
@@ -54,18 +54,31 @@ têm `resultados` sinônimo de `itens`.
 
 ### 3. Estados fechados das ferramentas novas (`status`)
 
-O estado se calcula, nesta ordem, sobre as **fontes necessárias** à consulta (as que a ferramenta precisaria
-consultar para responder no recorte pedido) e sobre o resultado:
+**Fontes necessárias** são fixadas pela ferramenta, pelo modo e pelos filtros da chamada, **antes** de qualquer
+consulta, pela tabela abaixo; uma fonte nunca deixa de ser necessária porque falhou. Para o estado, cada fonte
+necessária está **lida** (consultada com sucesso: `resultado` `lida` ou `nao_confirmado_na_fonte` na `cobertura`) ou
+**não lida** (falha, recusa ou `nao_consultada`, inclusive por modo offline), e toda fonte necessária não lida
+aparece em `fontes_indisponiveis` com o motivo (`offline`, quando for o caso).
+
+| Ferramenta e modo | Fontes necessárias |
+|---|---|
+| `informativo_juridico` | a coleção de informativos de cada tribunal no filtro (STF, STJ e TST sem filtro), no acervo local |
+| `timeline_decisoes`, `processo` | DataJud, DJEN e acervo local |
+| `timeline_decisoes`, `recentes` | as coleções de precedentes qualificados dos tipos e tribunais no filtro, no acervo local (temas de repercussão geral do STF, repetitivos do STJ, súmulas de STF, STJ e TST, IRDR e IAC do BNP); com `incluir_informativos`, também as de `informativo_juridico` |
+| `listar_overruling_por_tema` | as coleções de situação de tema e súmula dos tribunais e tipos no filtro, no acervo local (STF RG, STJ repetitivos, BNP, súmulas por tribunal) |
+| `listar_tribunais` | o acervo local e a configuração de fontes e da matriz de aceite; nenhum portal |
+| `listar_ramos_direito` | o acervo local e a tabela TPU versionada; nenhum portal |
 
 | Literal | Condição |
 |---|---|
 | `formato_invalido` | entrada reconhecida e inválida no conteúdo (número CNJ com dígito verificador errado em `timeline_decisoes`); `motivo` |
-| `indisponivel` | resultado vazio e ao menos uma fonte necessária falhou (C3; regra invariável 2): a ausência de itens não é afirmada, porque parte do recorte não foi lida |
-| `parcial` | resultado não vazio e ao menos uma fonte necessária falhou; `fontes_indisponiveis` diz qual |
-| `nenhum_no_recorte` | toda fonte necessária respondeu e o resultado é vazio; `cobertura` diz o que foi lido; nunca afirma inexistência fora do recorte (C4) |
-| `ok` | toda fonte necessária respondeu e o resultado não é vazio |
+| `indisponivel` | resultado vazio e ao menos uma fonte necessária não lida (C3; regra invariável 2): a ausência de itens não é afirmada, porque parte do recorte não foi lida |
+| `parcial` | resultado não vazio e ao menos uma fonte necessária não lida; `fontes_indisponiveis` diz qual |
+| `nenhum_no_recorte` | toda fonte necessária lida e resultado vazio; `cobertura` diz o que foi lido; nunca afirma inexistência fora do recorte (C4) |
+| `ok` | toda fonte necessária lida e resultado não vazio |
 
-As cinco condições são exaustivas e mutuamente exclusivas. `itens` pode estar vazio em `ok` ou `parcial` quando o
+Toda fonte necessária está lida ou não lida, e todo resultado é vazio ou não: as cinco condições são exaustivas e
+mutuamente exclusivas. `itens` pode estar vazio em `ok` ou `parcial` quando o
 resultado está todo nas listas auxiliares (por exemplo, só temas `nao_classificada` em
 `listar_overruling_por_tema`). `total` conta só `itens`.
 
@@ -100,8 +113,10 @@ Item com `proveniencia: "metadado_de_fonte"` nunca é apresentado como `verified
   teor (TD1). A situação do processo em cada fonte vai na `cobertura` (seção 5, campo `resultado`), não no estado:
   processo em segredo ou ausente no DataJud é `resultado: "nao_confirmado_na_fonte"`, com `escopo`, nessa entrada
   (TD4); falha ou recusa do DataJud é `resultado: "indisponivel"`, nunca ausência. O estado agregado segue a
-  seção 3 sobre todos os eventos disponíveis: DJEN ou acervo com eventos e DataJud sem o processo dão `ok`.
-  Nenhuma resposta diz "processo inexistente".
+  seção 3: DataJud com `nao_confirmado_na_fonte` conta como fonte lida, mas não dispensa as outras duas. Exemplos:
+  DataJud sem o processo, DJEN e acervo lidos e com eventos dão `ok`; os mesmos, com o DJEN não lido, dão `parcial`
+  (há eventos) ou `indisponivel` (não há eventos); as três lidas e nenhum evento dão `nenhum_no_recorte`. Nenhuma
+  resposta diz "processo inexistente".
   Modo `recentes` (TD2, TD2a, TD5): topo com `modo: "recentes"`. `itens` são precedentes: bloco de prova;
   `tribunal`; `tipo` (lista fechada de TD2); `numero` string; `tese` string|null (conteúdo oficial); `evento`
   string (`julgamento_merito`, `publicacao_tese`, `aprovacao_sumula`); `data_evento` string; `autoridade` object
@@ -170,8 +185,12 @@ estado, e com o mesmo significado de navegação:
 
 - `texto`: o texto da parte; `offset`: início da parte (pontos de código); `max_chars`: `parte_tamanho`;
   `truncado`: `true` se a parte não termina no fim do texto; `cursor`: com `truncado: true`, o **fim** da parte
-  (`intervalo[1]`, em string), isto é, onde o texto entregue acaba, exatamente como no contrato 1; `null` na última
-  parte. Quem segue por `cursor` no modo de `offset` lê o restante sem perda nem repetição; quem segue por partes
+  (`intervalo[1]`, em string), isto é, onde o texto entregue acaba; `null` na última parte. Preserva-se o
+  significado de continuação do contrato 1 (seguir por `cursor` no modo `offset` lê o restante); não se preserva a
+  igualdade aritmética `cursor = offset + max_chars` do serviço atual, porque a parte pode terminar antes do limite
+  pelo fim de parágrafo (CH4): `max_chars` é o limite máximo, e o tamanho entregue é `intervalo[1] - intervalo[0]`.
+  Quem calcula a continuação por `offset + max_chars` em vez de ler o `cursor` pode saltar texto: a regra de
+  navegação é ler o `cursor`, e a implementação a cobre em teste. Quem segue por `cursor` no modo de `offset` lê o restante sem perda nem repetição; quem segue por partes
   usa `parte_idx + 1`, cujo início é `intervalo[1] - sobreposicao`.
 - Campo novo **`particao`** (experimental), objeto: `parte_idx` number, `partes_total` number, `parte_tamanho`
   number, `sobreposicao` number (200), `intervalo` [number, number] (início inclusivo, fim exclusivo, pontos de
