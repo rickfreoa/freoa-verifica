@@ -21,6 +21,7 @@ except ModuleNotFoundError:
     # mcp>=2 renomeou FastMCP → MCPServer
     from mcp.server.mcpserver import MCPServer as FastMCP
 
+from freoa_verifica import particao as _particao
 from freoa_verifica.fronteira import origens_permitidas, token_ok, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP
@@ -79,6 +80,10 @@ Cursor = Annotated[str, Field(max_length=20)]
 Limite = Annotated[int, Field(ge=1, le=50)]
 MaxChars = Annotated[int, Field(ge=1, le=50_000)]
 Offset = Annotated[int, Field(ge=0, le=10_000_000)]
+# Estritos (sem coerção de bool, string numérica ou float integral pelo SDK) e com a faixa do serviço; o limite
+# superior de `parte_idx` é só o do esquema, e o serviço recusa o índice além de partes_total (decisão 0073).
+ParteIdx = Annotated[int, Field(strict=True, ge=0, le=10_000_000)]
+ParteTamanho = Annotated[int, Field(strict=True, ge=_particao.PARTE_TAMANHO_MIN, le=_particao.PARTE_TAMANHO_MAX)]
 Modo = Annotated[Modo, Field(max_length=32)]
 Parte = Annotated[Parte, Field(max_length=32)]
 Fonte = Annotated[Fonte, Field(max_length=32)]
@@ -273,21 +278,28 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
     def obter_decisao(
         id: Identificador,
         parte: Parte = "ementa",
-        max_chars: MaxChars = 8000,
+        max_chars: MaxChars | None = None,
         offset: Offset = 0,
         tribunal: Identificador | None = None,
+        parte_idx: ParteIdx | None = None,
+        parte_tamanho: ParteTamanho | None = None,
     ) -> dict[str, Any]:
         """Obtém a parte disponível de uma decisão do acervo (texto entre delimitadores de documento oficial).
 
         parte: ementa|inteiro_teor|voto|certidao. Muitas fontes trazem só a ementa (STJ espelhos, acórdãos do TJDFT):
         a parte não capturada devolve parte_indisponivel, nunca outro documento no lugar. status: encontrada |
         parte_indisponivel | ambiguous (identificador repetido em tribunais distintos: informe `tribunal`) |
-        nao_encontrado_no_acervo (só o acervo local; não é inexistência). Texto paginado por offset; max_chars máximo: 50.000.
+        nao_encontrado_no_acervo (só o acervo local; não é inexistência). Texto paginado por offset; max_chars padrão 8000,
+        máximo: 50.000. Alternativa (experimental): parte_idx (>= 0) devolve a parte de ordem parte_idx do texto, em partes
+        de parte_tamanho (500 a 10.000; padrão 2.000) pontos de código com sobreposição de 200, e o campo `particao`
+        (partes_total, intervalo, sha256_parte, sha256_texto); não combina com offset diferente de 0 nem com max_chars.
         Use depois de pesquisar_jurisprudencia, para ler e citar com url oficial e fetched_at.
         """
-        max_chars = max(1, min(int(max_chars), 50_000))
+        if max_chars is not None:
+            max_chars = max(1, min(int(max_chars), 50_000))
         data_out = svc_().obter_decisao(
-            id, parte=parte, max_chars=max_chars, offset=offset, tribunal=tribunal
+            id, parte=parte, max_chars=max_chars, offset=offset, tribunal=tribunal,
+            parte_idx=parte_idx, parte_tamanho=parte_tamanho,
         )
         return _wrap_result_text(data_out, ("texto",))
 

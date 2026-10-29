@@ -73,6 +73,7 @@ from freoa_verifica import acervo as _acervo
 from freoa_verifica.limites import CANCELADO, PRAZO, EntradaInvalida, cancelado, Sobrecarga, validar as _validar
 from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica import derivados as _derivados
+from freoa_verifica import particao as _particao
 from freoa_verifica.registro import politica_atual as _politica_atual
 
 _log = logging.getLogger("freoa_verifica.service")
@@ -2817,14 +2818,45 @@ class Verifica:
         self,
         id: str,
         parte: str = "ementa",
-        max_chars: int = 8000,
+        max_chars: int | None = None,
         offset: int = 0,
         tribunal: str | None = None,
+        parte_idx: int | None = None,
+        parte_tamanho: int | None = None,
     ) -> dict[str, Any]:
+        """Obtém a parte pedida de uma decisão do acervo (decisão 0038).
+
+        Paginação por `offset` e `max_chars` (padrão 8000, máximo 50.000), com `cursor` para continuar.
+
+        Partição determinística (experimental; decisão 0073, seção 7; PARIDADE-1.4, CH1–CH6): com `parte_idx`
+        (inteiro >= 0) a resposta traz a parte `parte_idx` do texto canônico, em partes de até `parte_tamanho`
+        pontos de código (500 a 10.000; padrão 2.000), com sobreposição fixa de 200 pontos de código, e o campo
+        novo `particao`. O corte é sempre entre pontos de código (nunca no meio de um caractere nem de um par
+        substituto) e prefere o fim de parágrafo (`\\n\\n`, depois `\\n`) nos últimos 200 pontos de código da
+        janela; sem ele, corta no limite da janela. A regra completa está em `freoa_verifica.particao`.
+        `parte_idx` junto com `offset` diferente de 0, com `max_chars` informado, ou fora de 0..partes_total-1,
+        é `EntradaInvalida` (a mensagem traz `partes_total` quando conhecido); `parte_tamanho` sem `parte_idx`
+        também. Sem `parte_idx`, a resposta é a de sempre e `particao` não aparece.
+        """
         if parte not in {"ementa", "inteiro_teor", "voto", "certidao"}:
             raise EntradaInvalida(f"parte inválida: {parte!r} (ementa|inteiro_teor|voto|certidao)")
-        max_chars = max(1, min(int(max_chars), 50_000))
-        offset = max(0, int(offset))
+        particionado = parte_idx is not None
+        if particionado:
+            if isinstance(parte_idx, bool) or not isinstance(parte_idx, int) or parte_idx < 0:
+                raise EntradaInvalida(f"parte_idx inválido: {parte_idx!r} (inteiro >= 0)")
+            if offset not in (0, None) or max_chars is not None:
+                raise EntradaInvalida("parte_idx não se combina com offset diferente de 0 nem com max_chars: "
+                                      "use parte_idx e parte_tamanho, ou offset e max_chars")
+            if parte_tamanho is None:
+                parte_tamanho = _particao.PARTE_TAMANHO_PADRAO
+            if (isinstance(parte_tamanho, bool) or not isinstance(parte_tamanho, int)
+                    or not _particao.PARTE_TAMANHO_MIN <= parte_tamanho <= _particao.PARTE_TAMANHO_MAX):
+                raise EntradaInvalida(f"parte_tamanho inválido: {parte_tamanho!r} "
+                                      f"({_particao.PARTE_TAMANHO_MIN} a {_particao.PARTE_TAMANHO_MAX})")
+        elif parte_tamanho is not None:
+            raise EntradaInvalida("parte_tamanho só vale junto com parte_idx")
+        max_chars = max(1, min(int(8000 if max_chars is None else max_chars), 50_000))
+        offset = max(0, int(offset or 0))
         court = normalize_court(tribunal).upper() if tribunal else None
         rows = self.conn.execute("SELECT * FROM decision WHERE id=?", (id,)).fetchall()
         if court:
@@ -2877,6 +2909,24 @@ class Verifica:
                     "parte_entregue": None, "texto": None, "capture_id": None}
         text = doc["text"]
         self._authenticate_capture(doc["capture_id"])
+        if particionado:
+            try:
+                p = _particao.particionar(text, parte_idx, parte_tamanho)
+            except IndexError as exc:
+                raise EntradaInvalida(str(exc)) from None
+            truncado = p.intervalo[1] < len(text)
+            return {
+                **base,
+                "status": "encontrada",
+                "parte_entregue": doc["kind"],
+                "texto": p.texto_parte,
+                "truncado": truncado,
+                "offset": p.intervalo[0],
+                "max_chars": parte_tamanho,
+                "cursor": str(p.intervalo[1]) if truncado else None,
+                "capture_id": doc["capture_id"],
+                "particao": p.como_dict(),
+            }
         slice_ = text[offset : offset + max_chars]
         truncado = offset + max_chars < len(text)
         return {

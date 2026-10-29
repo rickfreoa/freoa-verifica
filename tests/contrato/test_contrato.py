@@ -227,3 +227,35 @@ def test_cobertura_experimental_nao_isenta_o_objeto_estavel_do_acervo():
     congelada = {"cobertura": {"desde": "2020-01-01", "tribunais": ["STJ"]}}
     sem_objeto = {"cobertura": []}
     assert h.incompatibilidades("pesquisar_jurisprudencia", congelada, sem_objeto, EXPERIMENTAL)
+
+
+# ----------------------------------------------------------------------------------------------
+# Decisão 0073, seção 1, item 2: entrada `"<ferramenta>:"` isenta a ferramenta inteira
+# ----------------------------------------------------------------------------------------------
+
+def test_prefixo_de_ferramenta_isenta_todo_campo_dela():
+    c = {"a": {"b": 1}, "itens": [{"x": "s"}], "status": "ok"}
+    sumiu = {"itens": [{"x": 5}], "status": "erro"}
+    assert h.incompatibilidades("ferramenta_x", c, sumiu)
+    assert h.incompatibilidades("ferramenta_x", c, sumiu, frozenset({"ferramenta_x:"})) == []
+
+
+def test_prefixo_de_ferramenta_nao_isenta_outra_ferramenta_nem_nome_parecido():
+    c = {"campo": "s", "status": "ok"}
+    adulterada = {"campo": 1, "status": "erro"}
+    isentos = frozenset({"obter_decisao:"})
+    for outra in ("obter_decisao_x", "obter_decisao_", "obter_decisa", "x_obter_decisao", "pesquisar_jurisprudencia"):
+        erros = h.incompatibilidades(outra, c, adulterada, isentos)
+        assert any("tipo mudou em campo" in e for e in erros), (outra, erros)
+        assert any("estados mudaram em status" in e for e in erros), (outra, erros)
+    assert h.incompatibilidades("obter_decisao", c, adulterada, isentos) == []
+
+
+def test_isencoes_por_caminho_continuam_iguais():
+    c = {"particao": {"x": 1}, "texto": "s"}
+    isentos = frozenset({"obter_decisao:particao"})
+    assert h.incompatibilidades("obter_decisao", c, {"texto": "s"}, isentos) == []
+    assert h.incompatibilidades("obter_decisao", c, {"particao": 1, "texto": "s"}, isentos) == []
+    assert h.incompatibilidades("obter_decisao", c, {"particao": {"x": 1}}, isentos)  # `texto` segue exigido
+    assert h.incompatibilidades("obter_decisao", {"particaox": 1}, {}, isentos)  # nome parecido não é descendente
+    assert h.incompatibilidades("obter_decisao_x", c, {"texto": "s"}, isentos)

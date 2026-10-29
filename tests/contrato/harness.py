@@ -250,8 +250,11 @@ def estados(obj: Any) -> dict[str, list[str]]:
 
 
 def _isento(ferramenta: str, caminho: str, isentos: frozenset[str]) -> bool:
+    """Caminho isento: igual a uma entrada ou descendente dela (`.`/`[]`); entrada `"<ferramenta>:"` isenta a ferramenta
+    inteira (decisão 0073, seção 1). O `:` final casa só a ferramenta de nome idêntico, nunca um prefixo de nome."""
     chave = f"{ferramenta}:{caminho}"
-    return any(chave == i or chave.startswith((i + ".", i + "[]")) for i in isentos)
+    return any(chave == i or chave.startswith((i + ".", i + "[]")) or (i.endswith(":") and chave.startswith(i))
+               for i in isentos)
 
 
 def _por_elemento(ferramenta: str, c: Any, a: Any, caminho: str, isentos: frozenset[str], em_lista: bool) -> list[str]:
