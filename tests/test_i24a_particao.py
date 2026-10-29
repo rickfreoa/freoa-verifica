@@ -271,6 +271,7 @@ TIPOS_INVALIDOS = {
     "parte_idx_float": ({"parte_idx": 1.0}, "parte_idx"),
     "parte_tamanho_float": ({"parte_idx": 0, "parte_tamanho": 500.0}, "parte_tamanho"),
     "parte_tamanho_true": ({"parte_idx": 0, "parte_tamanho": True}, "parte_tamanho"),
+    "parte_tamanho_false": ({"parte_idx": 0, "parte_tamanho": False}, "parte_tamanho"),
     "parte_tamanho_string": ({"parte_idx": 0, "parte_tamanho": "600"}, "parte_tamanho"),
 }
 
@@ -283,9 +284,38 @@ def test_r1_pr23_tipos_invalidos_recusados_no_mcp_e_no_servico(ambiente, caso, m
     with pytest.raises(EntradaInvalida) as exc:
         svc.obter_decisao(**args)
     assert nome in str(exc.value)
+    chamadas = _espiar(monkeypatch, svc)
     msg = _erro_mcp(ambiente["mcp"], args)
     assert nome in msg, msg
-    assert "encontrada" not in msg and "particao" not in msg.replace(nome, "")
+    assert chamadas == []  # o esquema estrito recusa antes do serviço
+
+
+# REST: a query é texto. O FastAPI recusa o que não é inteiro na forma textual e converte "1.0" e "500.0" em inteiro,
+# como em qualquer parâmetro inteiro de query do REST; a expectativa fica explícita (achado da r2 do PR #23).
+REST_TEXTUAL = {
+    "parte_idx_true": ({"parte_idx": "true"}, 422),
+    "parte_idx_false": ({"parte_idx": "false"}, 422),
+    "parte_idx_fracao": ({"parte_idx": "1.5"}, 422),
+    "parte_idx_texto": ({"parte_idx": "um"}, 422),
+    "parte_tamanho_true": ({"parte_idx": "0", "parte_tamanho": "true"}, 422),
+    "parte_tamanho_fracao": ({"parte_idx": "0", "parte_tamanho": "500.5"}, 422),
+    "parte_idx_float_integral": ({"parte_idx": "1.0"}, 200),
+    "parte_tamanho_float_integral": ({"parte_idx": "0", "parte_tamanho": "500.0"}, 200),
+}
+
+
+@pytest.mark.parametrize("caso", sorted(REST_TEXTUAL))
+def test_r2_pr23_rest_matriz_textual(ambiente, caso):
+    params, esperado = REST_TEXTUAL[caso]
+    did = ambiente["ctx"]["stj_inteiro"]
+    r = ambiente["rest"].get(f"/v1/decisoes/{did}", params={"parte": "inteiro_teor", **params})
+    assert r.status_code == esperado, (r.status_code, r.text[:300])
+    if esperado == 200:
+        corpo = r.json()
+        idx = int(float(params["parte_idx"]))
+        tam = int(float(params.get("parte_tamanho", pt.PARTE_TAMANHO_PADRAO)))
+        ref = ambiente["python"].obter_decisao(did, parte="inteiro_teor", parte_idx=idx, parte_tamanho=tam)
+        assert corpo["particao"] == ref["particao"] and corpo["texto"] == ref["texto"]
 
 
 def test_r1_pr23_esquema_mcp_estrito_com_faixa_do_servico(ambiente):
@@ -301,6 +331,23 @@ def test_r1_pr23_esquema_mcp_estrito_com_faixa_do_servico(ambiente):
     assert (idx["minimum"], tam["minimum"], tam["maximum"]) == (0, pt.PARTE_TAMANHO_MIN, pt.PARTE_TAMANHO_MAX)
 
 
+def _espiar(monkeypatch, svc) -> list:
+    """Delega ao `obter_decisao` real do serviço e registra a exceção de cada chamada (None quando não houve)."""
+    real, chamadas = svc.obter_decisao, []
+
+    def spy(*a, **k):
+        try:
+            r = real(*a, **k)
+        except Exception as exc:  # noqa: BLE001 - registra e repropaga
+            chamadas.append(exc)
+            raise
+        chamadas.append(None)
+        return r
+
+    monkeypatch.setattr(svc, "obter_decisao", spy)
+    return chamadas
+
+
 def _erro_mcp(mcp, args) -> str:
     from mcp import Client
 
@@ -314,7 +361,7 @@ def _erro_mcp(mcp, args) -> str:
 
 
 @pytest.mark.parametrize("caso", sorted(ENTRADAS_INVALIDAS))
-def test_ch1_ch6_entrada_invalida_nos_tres_adaptadores(ambiente, caso):
+def test_ch1_ch6_entrada_invalida_nos_tres_adaptadores(ambiente, caso, monkeypatch):
     did = ambiente["ctx"]["stj_inteiro"]
     args = {"id": did, "parte": "inteiro_teor", **ENTRADAS_INVALIDAS[caso]}
     with pytest.raises(EntradaInvalida) as exc:
@@ -322,10 +369,15 @@ def test_ch1_ch6_entrada_invalida_nos_tres_adaptadores(ambiente, caso):
     msg_python = str(exc.value)
     if caso == "parte_idx_alem_do_total":
         assert "partes_total=" in msg_python
+    chamadas = _espiar(monkeypatch, ambiente["python"])
     msg_mcp = _erro_mcp(ambiente["mcp"], args)
     if caso in REJEITADOS_PELO_ESQUEMA_MCP:
         assert REJEITADOS_PELO_ESQUEMA_MCP[caso] in msg_mcp, msg_mcp
+        assert chamadas == []  # o esquema recusa antes do serviço
     else:
+        # a causa do erro mascarado é a EntradaInvalida do serviço, e só ela
+        assert len(chamadas) == 1 and isinstance(chamadas[0], EntradaInvalida), chamadas
+        assert str(chamadas[0]) == msg_python
         # O SDK do MCP mascara a mensagem de exceção do serviço (comportamento de todas as ferramentas, não deste PR):
         # confere-se o erro de ferramenta com o texto exato do SDK; a causa é a EntradaInvalida acima, mesmos argumentos.
         assert msg_mcp == MSG_MCP_MASCARADA, msg_mcp
