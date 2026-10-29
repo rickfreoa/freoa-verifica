@@ -20,4 +20,6 @@ EXPERIMENTAL: frozenset[str] = frozenset({
     # Texto de captura lida sem Content-Type (decisão 0065); também em `evidence[]` de `verificar_citacao`.
     "obter_dispositivo:proveniencia",
     "obter_evidencia:proveniencia",
+    # Partição de `obter_decisao` com `parte_idx` (decisão 0073, seção 7; PARIDADE-1.4, CH1–CH6).
+    "obter_decisao:particao",
 })
