@@ -1,103 +1,154 @@
 # 0073 - Esquema de saída das ferramentas de paridade (C7) e das partes de `obter_decisao` (CH6)
 
 Estado: aceita. Decisão do supervisor em 29/10/2026, sob o D5 (mudança de contrato público exige decisão formal) e
-o requisito C7 de `docs/PARIDADE-1.4.md`, antes de qualquer código do I2.4.
+o requisito C7 de `docs/PARIDADE-1.4.md`, antes de qualquer código do I2.4. Revisão 2, depois do parecer do Codex
+sobre o PR #21 (r1).
 
 ## Contexto
 
 `docs/PARIDADE-1.4.md` fixou o que cada ferramenta de paridade entrega (I2.1). Dois pontos ficaram para decisão
 formal: (a) a forma da resposta das cinco ferramentas novas, que entram no contrato 1 como `experimental` (C7);
 (b) a forma da resposta de `obter_decisao` com `parte_idx` (CH6), que não pode alterar tipo, nulidade nem estados
-de campo existente do contrato 1. O PR #13 tentou fixar (b) no próprio documento de paridade e foi reduzido pelo D5
-depois de três rodadas: primeiro com estado novo em campo fechado, depois com colisão com o campo estável `parte`.
+de campo existente do contrato 1. No PR #13, a primeira rodada do Codex apontou LO2–LO4 e IJ6; a segunda e a
+terceira, a forma de saída de CH6 (estado novo em campo fechado, depois colisão com o campo estável `parte`). Pelo
+D5, o esquema de CH6 saiu daquele documento e veio para esta decisão (PARIDADE-1.4, seção 5).
 
 ## Decisão
 
 ### 1. Estágio e regra de promoção
 
 1. `informativo_juridico`, `timeline_decisoes`, `listar_overruling_por_tema`, `listar_tribunais` e
-   `listar_ramos_direito` entram no contrato 1 como **experimentais**, inteiras, na 1.4.0a2: cada uma por prefixo
-   `"<ferramenta>:"` em `EXPERIMENTAL` de `freoa_verifica/contrato.py`. O campo novo `particao` de `obter_decisao`
-   (abaixo) entra do mesmo modo (`"obter_decisao:particao"`).
-2. Promoção a `stable`: respostas congeladas em `tests/contrato/esperado/` para os três adaptadores, casos de cada
+   `listar_ramos_direito` entram no contrato 1 como **experimentais**, inteiras, na 1.4.0a2. São também
+   experimentais os campos novos em ferramentas estáveis: `obter_decisao:particao`, `obter_decisao:alerta_situacao`,
+   `pesquisar_jurisprudencia:itens[].alerta_situacao`, `pesquisar_jurisprudencia:resultados[].alerta_situacao` e
+   `pesquisar_jurisprudencia:cobertura[].nao_filtraveis_por_ramo`.
+2. Representação: ferramenta inteira por `"<ferramenta>:"` em `EXPERIMENTAL` de `freoa_verifica/contrato.py`. O
+   comparador do teste de contrato (`tests/contrato/harness.py`) hoje só isenta caminho igual ou descendente por
+   `.` ou `[]`; a implementação do I2.4 estende-o para que `"<ferramenta>:"` isente todo caminho da ferramenta, com
+   teste negativo que prove (a) que todo campo das ferramentas novas fica isento e (b) que nenhum campo estável de
+   outra ferramenta passa a ser isento.
+3. Promoção a `stable`: respostas congeladas em `tests/contrato/esperado/` para os três adaptadores, casos de cada
    estado fechado, e nova decisão formal. Nenhuma promoção na 1.4.0a2.
-3. São mudanças aditivas (regra 1 do contrato): `CONTRATO_VERSAO` continua "1".
+4. Mudanças aditivas (regra 1 do contrato): `CONTRATO_VERSAO` continua "1". A seção 7 enfrenta a única com efeito
+   sobre a navegação de uma ferramenta estável.
 
 ### 2. Envelope comum das cinco ferramentas novas
-
-Campos sempre presentes, salvo indicação:
 
 | Campo | Tipo | Nulo | Significado |
 |---|---|---|---|
 | `status` | string | não | estado fechado, seção 3 |
-| `itens` | array | não | itens da ferramenta (seção 4); nunca vazio quando `status` é `ok` ou `parcial` |
+| `itens` | array | não | itens principais (seção 4) |
 | `total` | number | não | quantidade de `itens` desta página |
 | `truncado` | bool | não | o `limite` cortou resultados |
 | `cursor` | string | sim | próxima página; `null` sem mais páginas |
-| `cobertura` | array | não | uma entrada por coleção ou tribunal lido (seção 5) |
+| `cobertura` | array | não | uma entrada por fonte, coleção ou tribunal considerado (seção 5) |
 | `fontes_indisponiveis` | object | condicional | `{<fonte>: {motivo, categoria}}`, só em `parcial` e `indisponivel` |
 | `motivo` | string | condicional | só em `indisponivel` e `formato_invalido` |
 
+Listas auxiliares, quando a ferramenta as tem: `nao_classificadas` (`listar_overruling_por_tema`) e `informativos`
+(`timeline_decisoes`, modo `recentes`). Chama-se **resultado** o conjunto de `itens` e das listas auxiliares.
+
 Grafia: só português nos estados das ferramentas novas (`indisponivel`, nunca `unavailable`), para não ampliar a
-inconsistência 1 do contrato. Não há `resultados` sinônimo de `itens` nas ferramentas novas.
+inconsistência 1 do contrato. Exceção registrada à convenção das buscas do contrato 1: as ferramentas novas não
+têm `resultados` sinônimo de `itens`.
 
 ### 3. Estados fechados das ferramentas novas (`status`)
 
-| Literal | Significado |
+O estado se calcula, nesta ordem, sobre as **fontes necessárias** à consulta (as que a ferramenta precisaria
+consultar para responder no recorte pedido) e sobre o resultado:
+
+| Literal | Condição |
 |---|---|
-| `ok` | consulta concluída, toda fonte consultada respondeu, há itens |
-| `parcial` | há itens, mas alguma fonte falhou; `fontes_indisponiveis` diz qual (C3) |
-| `nenhum_no_recorte` | fontes consultadas com sucesso e nada no recorte lido; `cobertura` diz o que foi lido; nunca afirma inexistência fora dele (C4) |
-| `indisponivel` | nenhuma fonte necessária respondeu; `motivo` e `fontes_indisponiveis` (C3) |
 | `formato_invalido` | entrada reconhecida e inválida no conteúdo (número CNJ com dígito verificador errado em `timeline_decisoes`); `motivo` |
+| `indisponivel` | resultado vazio e ao menos uma fonte necessária falhou (C3; regra invariável 2): a ausência de itens não é afirmada, porque parte do recorte não foi lida |
+| `parcial` | resultado não vazio e ao menos uma fonte necessária falhou; `fontes_indisponiveis` diz qual |
+| `nenhum_no_recorte` | toda fonte necessária respondeu e o resultado é vazio; `cobertura` diz o que foi lido; nunca afirma inexistência fora do recorte (C4) |
+| `ok` | toda fonte necessária respondeu e o resultado não é vazio |
+
+As cinco condições são exaustivas e mutuamente exclusivas. `itens` pode estar vazio em `ok` ou `parcial` quando o
+resultado está todo nas listas auxiliares (por exemplo, só temas `nao_classificada` em
+`listar_overruling_por_tema`). `total` conta só `itens`.
 
 Entrada fora do domínio (parâmetro inexistente, `limite` fora da faixa, janela acima do máximo) não é estado: é
 `EntradaInvalida`, como nas ferramentas atuais (MCP: erro de ferramenta; REST: `problem+json` 4xx).
 
 ### 4. Itens por ferramenta
 
-Os campos e enumerações são os de `docs/PARIDADE-1.4.md`; aqui se fixam nomes, tipos e nulidade.
+Os campos e enumerações são os de `docs/PARIDADE-1.4.md`; aqui se fixam nomes, tipos, nulidade e presença.
 
-- **`informativo_juridico`** (IJ1–IJ5): `tribunal` string; `numero_informativo` string; `data_divulgacao`
-  string (data); `orgao` string|null; `processo` string|null; `tema` string|null; `ramo` string|null; `destaque`
-  string (conteúdo oficial); `posicao` number; `decisao_id` string|null (IJ5: só com identidade tribunal + classe +
-  número); `url` string; `capture_id` string; `sha256` string; `fetched_at` string.
-- **`timeline_decisoes`**, modo `processo` (TD1, TD3, TD4): resposta com `modo: "processo"`, `numero_cnj` string,
-  `atribuicao` array|null (C10: obrigatória quando houver evento do DataJud) e `itens` de eventos: `data` string;
-  `fonte` string (`datajud`, `djen`, `acervo`); `descricao` string (conteúdo oficial); `tipo_documental` string
-  (`movimento`, `texto_publicado`, `ementa`, `inteiro_teor`, aberto); `proveniencia` string
-  (`metadado_de_fonte` ou `captura`); `decisao_id` string|null; `capture_id` string|null; `url` string|null. Processo
-  em segredo ou ausente no DataJud: `status: "nenhum_no_recorte"` com `escopo` e `motivo_ausencia:
-  "nao_confirmado_na_fonte"` (TD4); a resposta nunca diz "processo inexistente".
-  Modo `recentes` (TD2, TD2a): `modo: "recentes"`; `itens` de precedentes: `tribunal`, `tipo` (lista fechada de
-  TD2), `numero` string, `tese` string|null (conteúdo oficial), `evento` string (`julgamento_merito`,
-  `publicacao_tese`, `aprovacao_sumula`), `data_evento` string, `autoridade` object (o bloco do contrato), `url`,
-  `capture_id` string|null; `informativos` array (só com `incluir_informativos`; itens de `informativo_juridico`).
-- **`listar_overruling_por_tema`** (LO1–LO6): itens com `tribunal`, `tipo`, `numero` string, `tese` string
-  (conteúdo oficial), `situacao_oficial` string, `situacao` string (enumeração fechada de LO2), `data_situacao`
-  string|null, `ato` string|null, `superada_por` string|null, `url`, `capture_id` string|null, `pertinencia`
-  number|null; lista separada `nao_classificadas` (mesmos campos, `situacao: "nao_classificada"`), sempre presente.
-  Anotação de LO6 em `obter_decisao` e `pesquisar_jurisprudencia`: campo aditivo `alerta_situacao`
-  object|ausente `{tipo, numero, situacao, url}`, experimental (`"<ferramenta>:alerta_situacao"`).
+**Bloco de prova (C2), comum a todo item e a todo evento derivado de documento ou de metadado de fonte**:
+
+| Campo | Tipo | Nulo | Regra |
+|---|---|---|---|
+| `proveniencia` | string | não | `captura` (derivado de documento oficial capturado) ou `metadado_de_fonte` (sem captura própria) |
+| `url` | string | não | URL oficial do documento ou da fonte do metadado |
+| `capture_id` | string | sim | não nulo se e só se `proveniencia` é `captura` |
+| `sha256` | string | sim | hash dos bytes capturados; não nulo se e só se `proveniencia` é `captura` |
+| `fetched_at` | string | sim | instante da captura; não nulo se e só se `proveniencia` é `captura` |
+
+Item com `proveniencia: "metadado_de_fonte"` nunca é apresentado como `verified` nem como inteiro teor.
+
+- **`informativo_juridico`** (IJ1–IJ5): bloco de prova; `tribunal` string; `numero_informativo` string;
+  `data_divulgacao` string (data); `orgao` string|null; `processo` string|null; `tema` string|null; `ramo`
+  string|null; `destaque` string (conteúdo oficial); `posicao` number; `decisao_id` string|null (IJ5: só com
+  identidade tribunal + classe + número).
+- **`timeline_decisoes`**, modo `processo` (TD1, TD3, TD4): topo com `modo: "processo"`, `numero_cnj` string e
+  `atribuicao` array|null (C10, TD3: não nula quando há evento do DataJud). `itens` são eventos: bloco de prova;
+  `data` string; `fonte` string (`datajud`, `djen`, `acervo`); `descricao` string (conteúdo oficial);
+  `tipo_documental` string (`movimento`, `texto_publicado`, `ementa`, `inteiro_teor`; aberto); `decisao_id`
+  string|null. Eventos do DataJud têm `proveniencia: "metadado_de_fonte"` e nunca `tipo_documental` de inteiro
+  teor (TD1). A situação do processo em cada fonte vai na `cobertura` (seção 5, campo `resultado`), não no estado:
+  processo em segredo ou ausente no DataJud é `resultado: "nao_confirmado_na_fonte"`, com `escopo`, nessa entrada
+  (TD4); falha ou recusa do DataJud é `resultado: "indisponivel"`, nunca ausência. O estado agregado segue a
+  seção 3 sobre todos os eventos disponíveis: DJEN ou acervo com eventos e DataJud sem o processo dão `ok`.
+  Nenhuma resposta diz "processo inexistente".
+  Modo `recentes` (TD2, TD2a, TD5): topo com `modo: "recentes"`. `itens` são precedentes: bloco de prova;
+  `tribunal`; `tipo` (lista fechada de TD2); `numero` string; `tese` string|null (conteúdo oficial); `evento`
+  string (`julgamento_merito`, `publicacao_tese`, `aprovacao_sumula`); `data_evento` string; `autoridade` object
+  (o bloco do contrato 1). Lista auxiliar `informativos`, sempre presente (vazia sem `incluir_informativos`):
+  itens de `informativo_juridico` acrescidos de `autoridade` object, a que a tabela `autoridade-1` lhes atribui
+  (TD2a); nunca entram em `itens`.
+- **`listar_overruling_por_tema`** (LO1–LO6): itens com bloco de prova; `tribunal`; `tipo`; `numero` string;
+  `tese` string (conteúdo oficial); `situacao_oficial` string; `situacao` string (enumeração fechada de LO2);
+  `data_situacao` string|null; `pertinencia` number|null. **Condicionais** (presentes só quando a fonte os declara;
+  nunca preenchidos por inferência): `ato` string e `superada_por` string. Lista auxiliar `nao_classificadas`,
+  sempre presente: mesmos campos, `situacao: "nao_classificada"`.
+  LO6: campo `alerta_situacao` object `{tipo, numero, situacao, url}`, **condicional** (só quando o tema ou súmula
+  está em estado alterado), em cada elemento de `itens[]` e de `resultados[]` de `pesquisar_jurisprudencia` (o
+  mesmo objeto nas duas listas, que continuam idênticas) e no topo da resposta `encontrada` de `obter_decisao`.
+  Não filtra nem reordena itens; não altera campo nem estado existente.
 - **`listar_tribunais`** (LT1–LT4): sem sigla, itens com `tribunal`, `capacidade`, `tipos_documento`,
   `decisoes_no_acervo` number, `recorte_acervo` object|null, `porta_a` string (`aprovado`, `em_avaliacao`,
   `nao_avaliado`), `excecao` object|null `{estado, revisar_em, registro}`. Com sigla, um item com `matriz` array de
   `{colecao, orgao, desde, ate, modalidade, documentos, denominador, cobertura}` (`denominador` number|null;
   `cobertura` number ou `"desconhecida"`). Tribunal fora do escopo: item com `capacidade: "nenhuma"` e `status:
-  "ok"` (LT4).
-- **`listar_ramos_direito`** (LR1–LR4): itens com `ramo` string (nome do nó de 1º nível da TPU), `codigo_tpu`
-  string|null (null só no balde), `tpu_versao` string, `documentos` number, `por_tribunal` object `{<sigla>:
+  "ok"` (LT4). Os itens de `listar_tribunais` descrevem o serviço, não documentos: não levam bloco de prova.
+- **`listar_ramos_direito`** (LR1–LR4): itens com `ramo` string (nó de 1º nível da TPU), `codigo_tpu`
+  string|null (nulo só no balde), `tpu_versao` string, `documentos` number, `por_tribunal` object `{<sigla>:
   number}`, `subramos` array (LR4, desejável; vazio sem implementação); o balde `ramo: "sem_assunto_oficial"` é
-  sempre um item, com sua contagem.
+  sempre um item, com sua contagem. Itens de contagem não levam bloco de prova.
+  LR3: `pesquisar_jurisprudencia` aceita `ramo` só na busca textual; cada elemento da `cobertura` (lista,
+  experimental) ganha `nao_filtraveis_por_ramo` number|null (documentos do tribunal no recorte sem assunto oficial,
+  que o filtro não pode alcançar; `null` sem filtro `ramo`). A variante estável em objeto da busca por classe e
+  número não muda.
 
 Campos de conteúdo oficial delimitados em MCP (Convenções do contrato): `destaque`, `descricao`, `tese`.
 
 ### 5. `cobertura` das ferramentas novas
 
-Lista; cada entrada: `colecao` string; `tribunal` string|null; `recorte` object|null `{desde, ate}`;
-`ultima_atualizacao` string|null (C11); `lacunas` array (IJ4: números faltantes na sequência; vazia quando a
-coleção não é numerada); `consulta` string (`acervo`, `ao_vivo`, `ambos`, `nenhuma`); `indisponivel`
-object|null.
+Lista; cada entrada:
+
+| Campo | Tipo | Nulo | Significado |
+|---|---|---|---|
+| `fonte` | string | não | fonte ou coleção (`informativos_stj`, `datajud`, `djen`, `acervo`, `bnp`…) |
+| `tribunal` | string | sim | sigla, quando a entrada é de um tribunal |
+| `resultado` | string | não | `lida` (consultada com sucesso), `nao_confirmado_na_fonte` (consultada com sucesso; o processo não consta ou está em segredo, TD4), `indisponivel` (falhou), `nao_consultada` (fora do recorte ou offline) |
+| `escopo` | string | sim | o que a consulta alcança (por exemplo, "processos públicos indexados pelo DataJud") |
+| `recorte` | object | sim | `{desde, ate}` das datas lidas |
+| `primeiro_numero`, `ultimo_numero` | string | sim | IJ4: primeiro e último número ingeridos nas coleções numeradas (informativos); `null` nas demais |
+| `lacunas` | array | não | IJ4: números faltantes na sequência; vazia quando a coleção não é numerada |
+| `ultima_atualizacao` | string | sim | C11 |
+| `indisponivel` | object | sim | `{motivo, categoria}` quando `resultado` é `indisponivel` |
 
 ### 6. Adaptadores
 
@@ -115,11 +166,13 @@ REST).
 ### 7. Partes de `obter_decisao` (CH1–CH6)
 
 Com `parte_idx`, a resposta é a forma `encontrada` do contrato 1, sem campo removido nem mudado de tipo, nulidade ou
-estado:
+estado, e com o mesmo significado de navegação:
 
-- `texto`: o texto da parte; `truncado`: `true` se houver parte seguinte; `offset`: início da parte em pontos de
-  código; `max_chars`: `parte_tamanho`; `cursor`: `null` (a navegação por partes é por `parte_idx`, não por
-  `cursor`; o campo já é anulável no contrato 1).
+- `texto`: o texto da parte; `offset`: início da parte (pontos de código); `max_chars`: `parte_tamanho`;
+  `truncado`: `true` se a parte não termina no fim do texto; `cursor`: com `truncado: true`, o **fim** da parte
+  (`intervalo[1]`, em string), isto é, onde o texto entregue acaba, exatamente como no contrato 1; `null` na última
+  parte. Quem segue por `cursor` no modo de `offset` lê o restante sem perda nem repetição; quem segue por partes
+  usa `parte_idx + 1`, cujo início é `intervalo[1] - sobreposicao`.
 - Campo novo **`particao`** (experimental), objeto: `parte_idx` number, `partes_total` number, `parte_tamanho`
   number, `sobreposicao` number (200), `intervalo` [number, number] (início inclusivo, fim exclusivo, pontos de
   código sobre o texto canônico extraído), `sha256_parte` string, `sha256_texto` string (CH2: hexadecimal minúsculo
@@ -136,6 +189,6 @@ estado:
 - O I2.4 pode começar pelas partes de `obter_decisao`, por `listar_tribunais` e por `listar_ramos_direito`, que não
   dependem de fonte nova; `informativo_juridico`, o modo `recentes` de `timeline_decisoes` e
   `listar_overruling_por_tema` dependem dos dados do I2.3.
-- O teste de contrato passa a listar os prefixos experimentais desta decisão; o teste de paridade de adaptadores
-  (C8) cobre cada ferramenta nova.
+- O primeiro PR do I2.4 estende o comparador do teste de contrato para os prefixos de ferramenta inteira (seção 1,
+  item 2), antes de qualquer ferramenta nova.
 - Desvio desta forma no código é violação de requisito obrigatório fixado antes da implementação (D5).
