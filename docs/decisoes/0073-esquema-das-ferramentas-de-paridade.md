@@ -2,7 +2,7 @@
 
 Estado: aceita. Decisão do supervisor em 29/10/2026, sob o D5 (mudança de contrato público exige decisão formal) e
 o requisito C7 de `docs/PARIDADE-1.4.md`, antes de qualquer código do I2.4. Revisão 3, depois dos pareceres do Codex
-sobre o PR #21 (r1 e r2).
+sobre o PR #21 (r1 e r2); revisão 4, redução de escopo pelo D5 depois do passe final com bloqueador (seção 8).
 
 ## Contexto
 
@@ -17,8 +17,8 @@ D5, o esquema de CH6 saiu daquele documento e veio para esta decisão (PARIDADE-
 
 ### 1. Estágio e regra de promoção
 
-1. `informativo_juridico`, `timeline_decisoes`, `listar_overruling_por_tema`, `listar_tribunais` e
-   `listar_ramos_direito` entram no contrato 1 como **experimentais**, inteiras, na 1.4.0a2. São também
+1. `informativo_juridico`, `timeline_decisoes`, `listar_overruling_por_tema` e `listar_ramos_direito` entram no
+   contrato 1 como **experimentais**, inteiras, na 1.4.0a2 (`listar_tribunais`: seção 8). São também
    experimentais os campos novos em ferramentas estáveis: `obter_decisao:particao`, `obter_decisao:alerta_situacao`,
    `pesquisar_jurisprudencia:itens[].alerta_situacao`, `pesquisar_jurisprudencia:resultados[].alerta_situacao` e
    `pesquisar_jurisprudencia:cobertura[].nao_filtraveis_por_ramo`.
@@ -32,7 +32,7 @@ D5, o esquema de CH6 saiu daquele documento e veio para esta decisão (PARIDADE-
 4. Mudanças aditivas (regra 1 do contrato): `CONTRATO_VERSAO` continua "1". A seção 7 enfrenta a única com efeito
    sobre a navegação de uma ferramenta estável.
 
-### 2. Envelope comum das cinco ferramentas novas
+### 2. Envelope comum das ferramentas novas
 
 | Campo | Tipo | Nulo | Significado |
 |---|---|---|---|
@@ -42,8 +42,8 @@ D5, o esquema de CH6 saiu daquele documento e veio para esta decisão (PARIDADE-
 | `truncado` | bool | não | o `limite` cortou resultados |
 | `cursor` | string | sim | próxima página; `null` sem mais páginas |
 | `cobertura` | array | não | uma entrada por fonte, coleção ou tribunal considerado (seção 5) |
-| `fontes_indisponiveis` | object | condicional | `{<fonte>: {motivo, categoria}}`, só em `parcial` e `indisponivel` |
-| `motivo` | string | condicional | só em `indisponivel` e `formato_invalido` |
+| `fontes_indisponiveis` | object | condicional | `{<fonte>: {motivo, categoria, evidencia_indisponibilidade?}}`, só em `parcial` e `indisponivel`; `categoria` segue a decisão 0045 (só com prova positiva; `null` sem prova) e `evidencia_indisponibilidade` aparece quando provada |
+| `motivo` | string | condicional | só em `indisponivel` |
 
 Listas auxiliares, quando a ferramenta as tem: `nao_classificadas` (`listar_overruling_por_tema`) e `informativos`
 (`timeline_decisoes`, modo `recentes`). Chama-se **resultado** o conjunto de `itens` e das listas auxiliares.
@@ -53,6 +53,10 @@ inconsistência 1 do contrato. Exceção registrada à convenção das buscas do
 têm `resultados` sinônimo de `itens`.
 
 ### 3. Estados fechados das ferramentas novas (`status`)
+
+A validação da entrada precede o estado: entrada fora do domínio, inclusive número CNJ com dígito verificador
+inválido em `timeline_decisoes`, é `EntradaInvalida` (MCP: erro de ferramenta; REST: `problem+json` 4xx) e não produz
+resposta com `status`. Os estados abaixo valem só para entrada válida.
 
 **Fontes necessárias** são fixadas pela ferramenta, pelo modo e pelos filtros da chamada, **antes** de qualquer
 consulta, pela tabela abaixo; uma fonte nunca deixa de ser necessária porque falhou. Para o estado, cada fonte
@@ -66,24 +70,22 @@ aparece em `fontes_indisponiveis` com o motivo (`offline`, quando for o caso).
 | `timeline_decisoes`, `processo` | DataJud, DJEN e acervo local |
 | `timeline_decisoes`, `recentes` | as coleções de precedentes qualificados dos tipos e tribunais no filtro, no acervo local (temas de repercussão geral do STF, repetitivos do STJ, súmulas de STF, STJ e TST, IRDR e IAC do BNP); com `incluir_informativos`, também as de `informativo_juridico` |
 | `listar_overruling_por_tema` | as coleções de situação de tema e súmula dos tribunais e tipos no filtro, no acervo local (STF RG, STJ repetitivos, BNP, súmulas por tribunal) |
-| `listar_tribunais` | o acervo local e a configuração de fontes e da matriz de aceite; nenhum portal |
 | `listar_ramos_direito` | o acervo local e a tabela TPU versionada; nenhum portal |
 
 | Literal | Condição |
 |---|---|
-| `formato_invalido` | entrada reconhecida e inválida no conteúdo (número CNJ com dígito verificador errado em `timeline_decisoes`); `motivo` |
 | `indisponivel` | resultado vazio e ao menos uma fonte necessária não lida (C3; regra invariável 2): a ausência de itens não é afirmada, porque parte do recorte não foi lida |
 | `parcial` | resultado não vazio e ao menos uma fonte necessária não lida; `fontes_indisponiveis` diz qual |
 | `nenhum_no_recorte` | toda fonte necessária lida e resultado vazio; `cobertura` diz o que foi lido; nunca afirma inexistência fora do recorte (C4) |
 | `ok` | toda fonte necessária lida e resultado não vazio |
 
-Toda fonte necessária está lida ou não lida, e todo resultado é vazio ou não: as cinco condições são exaustivas e
-mutuamente exclusivas. `itens` pode estar vazio em `ok` ou `parcial` quando o
+Para entrada válida, toda fonte necessária está lida ou não lida, e todo resultado é vazio ou não: as quatro
+condições são exaustivas e mutuamente exclusivas. `itens` pode estar vazio em `ok` ou `parcial` quando o
 resultado está todo nas listas auxiliares (por exemplo, só temas `nao_classificada` em
 `listar_overruling_por_tema`). `total` conta só `itens`.
 
-Entrada fora do domínio (parâmetro inexistente, `limite` fora da faixa, janela acima do máximo) não é estado: é
-`EntradaInvalida`, como nas ferramentas atuais (MCP: erro de ferramenta; REST: `problem+json` 4xx).
+Entrada fora do domínio (parâmetro inexistente, `limite` fora da faixa, janela acima do máximo, CNJ com dígito
+verificador inválido) não é estado: é `EntradaInvalida`, como nas ferramentas atuais.
 
 ### 4. Itens por ferramenta
 
@@ -132,12 +134,6 @@ Item com `proveniencia: "metadado_de_fonte"` nunca é apresentado como `verified
   está em estado alterado), em cada elemento de `itens[]` e de `resultados[]` de `pesquisar_jurisprudencia` (o
   mesmo objeto nas duas listas, que continuam idênticas) e no topo da resposta `encontrada` de `obter_decisao`.
   Não filtra nem reordena itens; não altera campo nem estado existente.
-- **`listar_tribunais`** (LT1–LT4): sem sigla, itens com `tribunal`, `capacidade`, `tipos_documento`,
-  `decisoes_no_acervo` number, `recorte_acervo` object|null, `porta_a` string (`aprovado`, `em_avaliacao`,
-  `nao_avaliado`), `excecao` object|null `{estado, revisar_em, registro}`. Com sigla, um item com `matriz` array de
-  `{colecao, orgao, desde, ate, modalidade, documentos, denominador, cobertura}` (`denominador` number|null;
-  `cobertura` number ou `"desconhecida"`). Tribunal fora do escopo: item com `capacidade: "nenhuma"` e `status:
-  "ok"` (LT4). Os itens de `listar_tribunais` descrevem o serviço, não documentos: não levam bloco de prova.
 - **`listar_ramos_direito`** (LR1–LR4): itens com `ramo` string (nó de 1º nível da TPU), `codigo_tpu`
   string|null (nulo só no balde), `tpu_versao` string, `documentos` number, `por_tribunal` object `{<sigla>:
   number}`, `subramos` array (LR4, desejável; vazio sem implementação); o balde `ramo: "sem_assunto_oficial"` é
@@ -163,7 +159,7 @@ Lista; cada entrada:
 | `primeiro_numero`, `ultimo_numero` | string | sim | IJ4: primeiro e último número ingeridos nas coleções numeradas (informativos); `null` nas demais |
 | `lacunas` | array | não | IJ4: números faltantes na sequência; vazia quando a coleção não é numerada |
 | `ultima_atualizacao` | string | sim | C11 |
-| `indisponivel` | object | sim | `{motivo, categoria}` quando `resultado` é `indisponivel` |
+| `indisponivel` | object | sim | `{motivo, categoria, evidencia_indisponibilidade?}` quando `resultado` é `indisponivel`; `categoria` pela decisão 0045 |
 
 ### 6. Adaptadores
 
@@ -172,7 +168,6 @@ Lista; cada entrada:
 | Informativos | `informativo_juridico` | `GET /v1/informativos` |
 | Linha do tempo | `timeline_decisoes` | `GET /v1/timeline` (`modo` obrigatório) |
 | Overruling | `listar_overruling_por_tema` | `GET /v1/overruling` |
-| Tribunais | `listar_tribunais` | `GET /v1/tribunais` e `GET /v1/tribunais/{sigla}` |
 | Ramos | `listar_ramos_direito` | `GET /v1/ramos` |
 
 Paridade de adaptadores pelo C8, com a lista explícita de normalizações (delimitadores em MCP; envelopes de erro
@@ -203,11 +198,27 @@ estado, e com o mesmo significado de navegação:
 - Estados de `parte_entregue` e de `status` não mudam: `parte_indisponivel` continua valendo quando a parte pedida
   não foi capturada, com ou sem `parte_idx`.
 
+### 8. Fora desta decisão (redução pelo D5, 29/10/2026)
+
+O passe final independente do PR #21 (`C:\dev\fv14-auditoria\parecer-pr21-final.md`, no computador do titular)
+terminou COM BLOQUEADOR: conflito entre a seção 3 e LT4 em `listar_tribunais`, esquema incompleto de LT2/LT3, e
+precedência não declarada de `formato_invalido`. Pelo D5, sem nova rodada, o escopo desta decisão foi reduzido:
+
+1. `listar_tribunais` sai desta decisão. Seu esquema (itens com e sem sigla, matriz, `recorte_acervo`, estado de
+   tribunal fora do escopo diante de fonte necessária não lida) será fixado em decisão própria, junto com a matriz
+   de aceite do I3.7, que o LT1 exige como fonte única de verdade. Nenhum código de `listar_tribunais` antes dela.
+2. `formato_invalido` deixa de ser estado das ferramentas novas: CNJ com dígito verificador inválido é
+   `EntradaInvalida` (seção 3).
+3. Fica para decisão anterior ao código de `timeline_decisoes` (modo `recentes`) e de `listar_overruling_por_tema`,
+   que dependem do I2.3: como `limite` e `cursor` se aplicam às listas auxiliares (`informativos`,
+   `nao_classificadas`), sem omissão nem repetição entre páginas.
+4. Esclarecimento sem mudança de regra: os objetos de indisponibilidade seguem a decisão 0045 (seções 2 e 5).
+
 ## Consequências
 
-- O I2.4 pode começar pelas partes de `obter_decisao`, por `listar_tribunais` e por `listar_ramos_direito`, que não
-  dependem de fonte nova; `informativo_juridico`, o modo `recentes` de `timeline_decisoes` e
-  `listar_overruling_por_tema` dependem dos dados do I2.3.
+- O I2.4 pode começar pelas partes de `obter_decisao` e por `listar_ramos_direito`, que não dependem de fonte nova;
+  `informativo_juridico` e `timeline_decisoes` (modo `processo`) dependem das fontes já existentes ou do I2.3; o modo
+  `recentes` e `listar_overruling_por_tema` esperam, além do I2.3, a decisão do item 3 da seção 8.
 - O primeiro PR do I2.4 estende o comparador do teste de contrato para os prefixos de ferramenta inteira (seção 1,
   item 2), antes de qualquer ferramenta nova.
 - Desvio desta forma no código é violação de requisito obrigatório fixado antes da implementação (D5).
