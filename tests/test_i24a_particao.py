@@ -249,7 +249,56 @@ ENTRADAS_INVALIDAS = {
     "parte_tamanho_grande": {"parte_idx": 0, "parte_tamanho": 10_001},
     "parte_tamanho_sem_parte_idx": {"parte_tamanho": 600},
     "parte_idx_alem_do_total": {"parte_idx": 9999},
+    "parte_tamanho_zero": {"parte_idx": 0, "parte_tamanho": 0},
+    "parte_tamanho_negativo": {"parte_idx": 0, "parte_tamanho": -500},
 }
+MSG_MCP_MASCARADA = "Error executing tool obter_decisao"
+# No MCP, o esquema estrito recusa antes do serviço; a mensagem é do SDK e nomeia o parâmetro.
+REJEITADOS_PELO_ESQUEMA_MCP = {
+    "parte_idx_negativo": "parte_idx",
+    "parte_tamanho_pequeno": "parte_tamanho",
+    "parte_tamanho_grande": "parte_tamanho",
+    "parte_tamanho_zero": "parte_tamanho",
+    "parte_tamanho_negativo": "parte_tamanho",
+}
+
+# Tipos que o SDK coagiria sem o esquema estrito (achado da r1 do PR #23): o MCP recusa, o serviço recusa, e nenhum
+# chega ao acervo.
+TIPOS_INVALIDOS = {
+    "parte_idx_true": ({"parte_idx": True}, "parte_idx"),
+    "parte_idx_false": ({"parte_idx": False}, "parte_idx"),
+    "parte_idx_string": ({"parte_idx": "1"}, "parte_idx"),
+    "parte_idx_float": ({"parte_idx": 1.0}, "parte_idx"),
+    "parte_tamanho_float": ({"parte_idx": 0, "parte_tamanho": 500.0}, "parte_tamanho"),
+    "parte_tamanho_true": ({"parte_idx": 0, "parte_tamanho": True}, "parte_tamanho"),
+    "parte_tamanho_string": ({"parte_idx": 0, "parte_tamanho": "600"}, "parte_tamanho"),
+}
+
+
+@pytest.mark.parametrize("caso", sorted(TIPOS_INVALIDOS))
+def test_r1_pr23_tipos_invalidos_recusados_no_mcp_e_no_servico(ambiente, caso, monkeypatch):
+    extra, nome = TIPOS_INVALIDOS[caso]
+    svc, did = ambiente["python"], ambiente["ctx"]["stj_inteiro"]
+    args = {"id": did, "parte": "inteiro_teor", **extra}
+    with pytest.raises(EntradaInvalida) as exc:
+        svc.obter_decisao(**args)
+    assert nome in str(exc.value)
+    msg = _erro_mcp(ambiente["mcp"], args)
+    assert nome in msg, msg
+    assert "encontrada" not in msg and "particao" not in msg.replace(nome, "")
+
+
+def test_r1_pr23_esquema_mcp_estrito_com_faixa_do_servico(ambiente):
+    async def _esquema():
+        return {t.name: t.input_schema for t in await ambiente["mcp"].list_tools()}["obter_decisao"]
+
+    props = asyncio.run(_esquema())["properties"]
+
+    def _inteiro(p):
+        return next(s for s in p.get("anyOf", [p]) if s.get("type") == "integer")
+
+    idx, tam = _inteiro(props["parte_idx"]), _inteiro(props["parte_tamanho"])
+    assert (idx["minimum"], tam["minimum"], tam["maximum"]) == (0, pt.PARTE_TAMANHO_MIN, pt.PARTE_TAMANHO_MAX)
 
 
 def _erro_mcp(mcp, args) -> str:
@@ -257,10 +306,7 @@ def _erro_mcp(mcp, args) -> str:
 
     async def _run():
         async with Client(mcp) as client:
-            try:
-                r = await client.call_tool("obter_decisao", args)
-            except Exception as exc:  # noqa: BLE001 - o cliente pode levantar em vez de marcar `is_error`
-                return str(exc)
+            r = await client.call_tool("obter_decisao", args)
             assert r.is_error, f"esperava erro de ferramenta, veio {r}"
             return "\n".join(getattr(b, "text", "") or "" for b in r.content or [])
 
@@ -276,7 +322,13 @@ def test_ch1_ch6_entrada_invalida_nos_tres_adaptadores(ambiente, caso):
     msg_python = str(exc.value)
     if caso == "parte_idx_alem_do_total":
         assert "partes_total=" in msg_python
-    assert _erro_mcp(ambiente["mcp"], args)
+    msg_mcp = _erro_mcp(ambiente["mcp"], args)
+    if caso in REJEITADOS_PELO_ESQUEMA_MCP:
+        assert REJEITADOS_PELO_ESQUEMA_MCP[caso] in msg_mcp, msg_mcp
+    else:
+        # O SDK do MCP mascara a mensagem de exceção do serviço (comportamento de todas as ferramentas, não deste PR):
+        # confere-se o erro de ferramenta com o texto exato do SDK; a causa é a EntradaInvalida acima, mesmos argumentos.
+        assert msg_mcp == MSG_MCP_MASCARADA, msg_mcp
     rest_args = dict(args)
     r = ambiente["rest"].get(f"/v1/decisoes/{rest_args.pop('id')}", params=rest_args)
     assert r.status_code == 422 and r.headers["content-type"].startswith("application/problem+json")
@@ -390,6 +442,7 @@ def test_c8_hash_e_do_texto_canonico_nao_do_texto_envolvido(ambiente):
 # Contrato
 # ----------------------------------------------------------------------------------------------
 
+@pytest.mark.repositorio
 def test_particao_e_experimental_e_documentada():
     from freoa_verifica.contrato import EXPERIMENTAL
 
@@ -411,6 +464,7 @@ RUNTIMES_DE_MODELO = ("onnxruntime", "torch", "transformers", "sqlite_vec", "ten
                       "llama_cpp", "openai", "anthropic")
 
 
+@pytest.mark.repositorio
 def test_c1_c5_estrutural_modulo_novo_so_importa_hashlib_e_dataclasses():
     arvore = ast.parse((RAIZ / "freoa_verifica" / "particao.py").read_text(encoding="utf-8"))
     importados = set()
@@ -423,6 +477,7 @@ def test_c1_c5_estrutural_modulo_novo_so_importa_hashlib_e_dataclasses():
     assert not importados & PROIBIDOS_NO_MODULO
 
 
+@pytest.mark.repositorio
 def test_c1_c5_estrutural_obter_decisao_nao_chama_rede_nem_subprocesso():
     fonte = (RAIZ / "freoa_verifica" / "service.py").read_text(encoding="utf-8")
     arvore = ast.parse(fonte)

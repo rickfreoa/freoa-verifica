@@ -21,6 +21,7 @@ except ModuleNotFoundError:
     # mcp>=2 renomeou FastMCP → MCPServer
     from mcp.server.mcpserver import MCPServer as FastMCP
 
+from freoa_verifica import particao as _particao
 from freoa_verifica.fronteira import origens_permitidas, token_ok, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP
@@ -79,9 +80,10 @@ Cursor = Annotated[str, Field(max_length=20)]
 Limite = Annotated[int, Field(ge=1, le=50)]
 MaxChars = Annotated[int, Field(ge=1, le=50_000)]
 Offset = Annotated[int, Field(ge=0, le=10_000_000)]
-# Sem limites no esquema: a faixa de `parte_idx` e `parte_tamanho` é validada pelo serviço (EntradaInvalida, 0073).
-ParteIdx = int
-ParteTamanho = int
+# Estritos (sem coerção de bool, string numérica ou float integral pelo SDK) e com a faixa do serviço; o limite
+# superior de `parte_idx` é só o do esquema, e o serviço recusa o índice além de partes_total (decisão 0073).
+ParteIdx = Annotated[int, Field(strict=True, ge=0, le=10_000_000)]
+ParteTamanho = Annotated[int, Field(strict=True, ge=_particao.PARTE_TAMANHO_MIN, le=_particao.PARTE_TAMANHO_MAX)]
 Modo = Annotated[Modo, Field(max_length=32)]
 Parte = Annotated[Parte, Field(max_length=32)]
 Fonte = Annotated[Fonte, Field(max_length=32)]
