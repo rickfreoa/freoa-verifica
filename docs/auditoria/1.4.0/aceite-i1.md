@@ -44,15 +44,16 @@ levantado sem categoria nem evidência (`connectors/tcu.py`), que prova limite d
 indisponibilidade externa. As demais fontes (BCB, CVM colegiado e normas, Senado, STF, STJ, TJDFT e as
 verificações de versão, home, banco e migrações) em `ok`.
 
-Consequência: o critério da etapa 8 ("alertas só de indisponibilidade classificada") **não está cumprido**
-nesta execução. A saída 0 não o prova, porque o `doctor` trata qualquer alerta como compatível com `ok`
+Consequência: o critério da etapa 8 ("alertas só de indisponibilidade classificada") **não foi cumprido**
+nesta execução de 28/10; foi cumprido na de 29/10, com a ressalva do TCU (ver adiante). A saída 0 não o prova, porque o `doctor` trata qualquer alerta como compatível com `ok`
 (`service.py`). Defeito registrado para o I2: o `doctor` não distingue alerta classificado de não
 classificado, e a busca do TCU sinaliza o limite de varredura como indisponibilidade sem categoria.
 
 Bateria: `pytest -q -m live` no checkout da tag (`6ac49ee`, árvore limpa salvo a wheel não versionada ao
 lado do instalador), Python 3.14.6, pacote importado do checkout. Evidências: `aceite-i1/live.txt`,
-`aceite-i1/live.xml` e `aceite-i1/saude-fontes.json` (sha256
-`c9cfd8b61ae6c68cd3fa87c30f2ef91483602799ab9bdcee109b63245894439d`).
+`aceite-i1/live.xml` e `aceite-i1/saude-fontes.json` (sha256 do arquivo versionado
+`f2c64a5719bc1cccaf6ca05e97e8e6ef4d2bb8bc8cebf036190928f147437717`; o original gerado pelo arnês,
+`c9cfd8b6…439d`, difere só por fim de linha e indentação, normalizados para o repositório).
 Resultado: 25 aprovados, 5 xfail, 4 falhas, em 228,72 s. `saude-fontes.json`: `completa: true`, `commit`
 igual ao da tag, `inicio` e `fim` preenchidos (o defeito do arnês registrado no I1.4 está corrigido).
 
@@ -70,3 +71,42 @@ taxa. O conector do DataJud e `transport.py` não mudaram entre `68e743a` (1.3.0
 ganhou um parâmetro opcional (`repeticao`) que o DataJud não usa. Não foi demonstrada regressão; a causa da
 indisponibilidade não foi isolada. O arnês não foi
 alargado: as quatro falhas continuam `regressao` e entram no manifesto como falhas fora do escopo.
+
+## 29/10/2026: doctor que cumpre a etapa 8 e bateria da etapa 2
+
+Por decisão do titular, as execuções foram repetidas no dia seguinte, depois do limite de taxa do DataJud
+(`http_429` de cerca de 12:00 a pelo menos 14:03 de 28/10). Decisão 0072: o alerta do TCU não impede a etapa 8 no
+I1; nenhum outro alerta foi ressalvado.
+
+**Doctor** (`fv doctor --json` da instalação, 07:31 a 07:36, UTC-3; `aceite-i1/doctor-20261029.json`):
+`status: ok`, saída 0. DataJud `ok`. Alertas, todos com categoria provada salvo o do TCU:
+
+| Fonte | Alerta | Categoria |
+|---|---|---|
+| CVM colegiado (positivo, negativo, documento) e CVM normas (negativo) | `transporte_Timeout` | `fonte_fora` (`connectors/challenge.py`: só `Timeout` e `TransportError` produzem esse motivo) |
+| Planalto | `recusa_identificado_planalto` | `recusa_identificado` (decisão 0048) |
+| TJSP | `desafio_captcha` | `ambiental_desafio` |
+| TCU (negativo) | `tcu_busca_incompleta_limite_de_varredura` | sem categoria; ressalvado pela decisão 0072 |
+
+Esta execução cumpre a etapa 8 com a ressalva da 0072. A bateria da etapa 8 é a de 28/10 em `6ac49ee`
+(acima), cujas indisponibilidades no escopo são todas classificadas (DataJud `fonte_fora` 504, TJSP desafio).
+
+**Bateria da etapa 2** (exige o commit do CI e do parecer de incorporação, `5c86054`, de árvore idêntica a
+`6ac49ee`). Três tentativas, todas guardadas:
+
+| Tentativa | Hora (UTC-3) | Resultado | DataJud |
+|---|---|---|---|
+| 1 (`live-5c86054-tentativa1.*`) | 28/10 12:20 | 25 aprovados, 3 xfail, 6 falhas | positivo e negativo `http_429`, sem categoria (`regressao` no arnês) |
+| 2 (`live-5c86054-tentativa2.*`) | 29/10 07:37 | 24 aprovados, 5 xfail, 5 falhas | positivo `http_429`, nove minutos depois do doctor |
+| 3 (`live-5c86054.*`, `saude-fontes-5c86054.json`) | 29/10 08:33 | 22 aprovados, 8 xfail, 4 falhas | `ok` |
+
+A tentativa 3 foi a única feita depois de 40 minutos sem chamada ao DataJud, por decisão do titular, para testar
+a hipótese de limite por janela curta esgotado pelo próprio doctor. A decisão e seus limites foram fixados antes
+do resultado, logo depois da tentativa 2 (29/10, por volta das 07:50): uma única repetição espaçada; se desse
+429 de novo, a ressalva da 0072 seria estendida ao DataJud, sem nova escolha. A tentativa foi disparada às 07:52
+com espera embutida de 40 minutos (início às 08:33). Que não houve outra chamada ao DataJud no intervalo é
+declaração do executor: nenhum outro processo do projeto rodou nesse período, mas os anexos não o provam. O resultado é compatível com a hipótese, sem
+prová-la. Ela é o recibo da etapa 2: `saude-fontes-5c86054.json` com `completa: true`, `commit` `5c86054`; as
+quatro falhas são as de sempre, fora do escopo do I1 (Planalto ×3, TCU negativo); os xfail são classificados
+(CVM colegiado `fonte_fora` por timeout; TJDFT `fonte_fora` `http_503` em três testes; TJSP `ambiental_desafio`).
+O TJDFT, `ok` em 28/10, respondeu 503 nesta janela, como já ocorrera no doctor das 14:03 de 28/10.

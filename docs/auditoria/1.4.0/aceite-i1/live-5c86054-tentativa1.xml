@@ -58,7 +58,7 @@ repeticao = None
                 **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
             )
 
-freoa_verifica\connectors\httputil.py:137: 
+freoa_verifica\connectors\httputil.py:137:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\transport.py:1451: in fetch
     raise error
@@ -106,7 +106,7 @@ antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_ver
         current_method = method
         current_body = body
         req_extra = dict(caller_headers)
-    
+
         for _ in range(max_redirects + 1):
             estado.novo_salto()
             remaining = deadline - time.monotonic()
@@ -130,7 +130,7 @@ antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_ver
             finished = threading.Event()
             rate_timer = None
             network_state: dict = {"socket": None}
-    
+
             def expire(expired=timed_out, conn=connection, state=network_state) -&gt; None:
                 expired.set()
                 estado.expirou = True
@@ -143,7 +143,7 @@ antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_ver
                             active_socket.shutdown(socket.SHUT_RDWR)
                     except OSError:
                         pass
-    
+
             timer = threading.Timer(remaining, expire)
             timer.daemon = True
             timer.start()
@@ -249,7 +249,7 @@ The above exception was the direct cause of the following exception:
             limite=1,
         )
 
-tests\live\test_live_datajud.py:13: 
+tests\live\test_live_datajud.py:13:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\connectors\base.py:130: in interno
     return fn(*args, **kwargs)
@@ -400,7 +400,7 @@ repeticao = None
                 **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
             )
 
-freoa_verifica\connectors\httputil.py:137: 
+freoa_verifica\connectors\httputil.py:137:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\transport.py:1451: in fetch
     raise error
@@ -448,7 +448,7 @@ antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_ver
         current_method = method
         current_body = body
         req_extra = dict(caller_headers)
-    
+
         for _ in range(max_redirects + 1):
             estado.novo_salto()
             remaining = deadline - time.monotonic()
@@ -472,7 +472,7 @@ antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_ver
             finished = threading.Event()
             rate_timer = None
             network_state: dict = {"socket": None}
-    
+
             def expire(expired=timed_out, conn=connection, state=network_state) -&gt; None:
                 expired.set()
                 estado.expirou = True
@@ -485,7 +485,7 @@ antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_ver
                             active_socket.shutdown(socket.SHUT_RDWR)
                     except OSError:
                         pass
-    
+
             timer = threading.Timer(remaining, expire)
             timer.daemon = True
             timer.start()
@@ -587,7 +587,7 @@ The above exception was the direct cause of the following exception:
             "", tribunal="tjsp", numero="00000000000000000000", limite=1
         )
 
-tests\live\test_live_datajud.py:26: 
+tests\live\test_live_datajud.py:26:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\connectors\base.py:130: in interno
     return fn(*args, **kwargs)
@@ -684,11 +684,11 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
 
     def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -&gt; Response:
         """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
-    
+
         Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
         `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
         recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
-    
+
         | exceção                                    | status recebido? | categoria            | repetível |
         |--------------------------------------------|------------------|----------------------|-----------|
         | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
@@ -708,7 +708,7 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
         | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
         | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
         | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
-    
+
         Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
         validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
         """
@@ -717,7 +717,7 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
 &gt;           return _percorrer(url, estado=estado, **kw)
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-freoa_verifica\transport.py:1027: 
+freoa_verifica\transport.py:1027:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\transport.py:1119: in _percorrer
     response = connection.getresponse()
@@ -747,7 +747,7 @@ buffer = &lt;memory at 0x00000257C5722740&gt;
     def read(self, len=1024, buffer=None):
         """Read up to LEN bytes and return them.
         Return zero-length string on EOF."""
-    
+
         self._checkClosed()
         if self._sslobj is None:
             raise ValueError("Read on closed or unwrapped SSL socket.")
@@ -819,7 +819,7 @@ repeticao = None
                 **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
             )
 
-freoa_verifica\connectors\httputil.py:137: 
+freoa_verifica\connectors\httputil.py:137:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\transport.py:1451: in fetch
     raise error
@@ -833,11 +833,11 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
 
     def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -&gt; Response:
         """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
-    
+
         Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
         `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
         recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
-    
+
         | exceção                                    | status recebido? | categoria            | repetível |
         |--------------------------------------------|------------------|----------------------|-----------|
         | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
@@ -857,7 +857,7 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
         | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
         | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
         | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
-    
+
         Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
         validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
         """
@@ -882,7 +882,7 @@ extra = {'antes_do_salto': &lt;bound method GuardaExecucao.antes_do_salto of &lt
 &gt;           return _connector_fetch(url, **extra, **kw)
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-freoa_verifica\connectors\httputil.py:48: 
+freoa_verifica\connectors\httputil.py:48:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
@@ -959,7 +959,7 @@ The above exception was the direct cause of the following exception:
 &gt;       resp = c.fetch(cand)
                ^^^^^^^^^^^^^
 
-tests\live\test_live_planalto.py:15: 
+tests\live\test_live_planalto.py:15:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\connectors\base.py:130: in interno
     return fn(*args, **kwargs)
@@ -1014,11 +1014,11 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
 
     def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -&gt; Response:
         """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
-    
+
         Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
         `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
         recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
-    
+
         | exceção                                    | status recebido? | categoria            | repetível |
         |--------------------------------------------|------------------|----------------------|-----------|
         | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
@@ -1038,7 +1038,7 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
         | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
         | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
         | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
-    
+
         Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
         validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
         """
@@ -1047,7 +1047,7 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
 &gt;           return _percorrer(url, estado=estado, **kw)
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-freoa_verifica\transport.py:1027: 
+freoa_verifica\transport.py:1027:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\transport.py:1119: in _percorrer
     response = connection.getresponse()
@@ -1077,7 +1077,7 @@ buffer = &lt;memory at 0x00000257C633C940&gt;
     def read(self, len=1024, buffer=None):
         """Read up to LEN bytes and return them.
         Return zero-length string on EOF."""
-    
+
         self._checkClosed()
         if self._sslobj is None:
             raise ValueError("Read on closed or unwrapped SSL socket.")
@@ -1149,7 +1149,7 @@ repeticao = None
                 **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
             )
 
-freoa_verifica\connectors\httputil.py:137: 
+freoa_verifica\connectors\httputil.py:137:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\transport.py:1451: in fetch
     raise error
@@ -1163,11 +1163,11 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
 
     def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -&gt; Response:
         """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
-    
+
         Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
         `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
         recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
-    
+
         | exceção                                    | status recebido? | categoria            | repetível |
         |--------------------------------------------|------------------|----------------------|-----------|
         | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
@@ -1187,7 +1187,7 @@ kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-ver
         | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
         | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
         | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
-    
+
         Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
         validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
         """
@@ -1212,7 +1212,7 @@ extra = {'antes_do_salto': &lt;bound method GuardaExecucao.antes_do_salto of &lt
 &gt;           return _connector_fetch(url, **extra, **kw)
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-freoa_verifica\connectors\httputil.py:48: 
+freoa_verifica\connectors\httputil.py:48:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
@@ -1289,7 +1289,7 @@ The above exception was the direct cause of the following exception:
 &gt;       resp = c.fetch(cand)
                ^^^^^^^^^^^^^
 
-tests\live\test_live_planalto.py:42: 
+tests\live\test_live_planalto.py:42:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\connectors\base.py:130: in interno
     return fn(*args, **kwargs)
@@ -1322,7 +1322,7 @@ freoa_verifica\connectors\httputil.py:53: Unavailable</failure></testcase><testc
 &gt;       found = TcuConnector().search("FV_TERM_INEXISTENTE_TCU_XYZ_999991", quantidade=5)
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests\live\test_live_tcu.py:16: 
+tests\live\test_live_tcu.py:16:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 freoa_verifica\connectors\base.py:130: in interno
     return fn(*args, **kwargs)

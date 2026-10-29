@@ -1,0 +1,694 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="5" tests="34" time="228.261" timestamp="2026-10-28T12:07:11.345032-03:00" hostname="&lt;host&gt;"><testcase classname="tests.live.test_live_bcb" name="test_live_bcb_positivo" time="2.354" /><testcase classname="tests.live.test_live_bcb" name="test_live_bcb_negativo" time="3.769" /><testcase classname="tests.live.test_live_bcb" name="test_live_bcb_documento" time="10.811" /><testcase classname="tests.live.test_live_cvm_colegiado" name="test_live_cvm_colegiado_positivo" time="3.051" /><testcase classname="tests.live.test_live_cvm_colegiado" name="test_live_cvm_colegiado_negativo" time="1.487" /><testcase classname="tests.live.test_live_cvm_colegiado" name="test_live_cvm_colegiado_documento" time="2.219" /><testcase classname="tests.live.test_live_cvm_normas" name="test_live_cvm_normas_positivo" time="0.001" /><testcase classname="tests.live.test_live_cvm_normas" name="test_live_cvm_normas_negativo" time="3.883" /><testcase classname="tests.live.test_live_cvm_normas" name="test_live_cvm_normas_documento" time="4.461" /><testcase classname="tests.live.test_live_datajud" name="test_live_datajud_positivo" time="60.296"><skipped type="pytest.xfail" message="fonte_fora:http_504" /></testcase><testcase classname="tests.live.test_live_datajud" name="test_live_datajud_negativo" time="60.354"><skipped type="pytest.xfail" message="fonte_fora:http_504" /></testcase><testcase classname="tests.live.test_live_datajud" name="test_live_datajud_documento_stf_ausente" time="0.002" /><testcase classname="tests.live.test_live_planalto" name="test_live_planalto_positivo" time="3.850"><failure message="freoa_verifica.connectors.base.Unavailable: recusa_identificado_planalto">url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
+estado = _EstadoChamada(prazo=3898.5588668, resposta_iniciada=False, saltos=[], bytes_recebidos=0, ultimo_status=None, http=None, lendo_status=True, lento=False, expirou=False, cru=bytearray(b''))
+kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-verifica/1.4.0a1 (+https://github.com/rickfreoa/freoa-verifica)'}, 'allowed_hosts': frozenset({'planalto.gov.br', 'www.planalto.gov.br'}), ...}
+
+    def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -&gt; Response:
+        """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
+
+        Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
+        `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
+        recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
+
+        | exceção                                    | status recebido? | categoria            | repetível |
+        |--------------------------------------------|------------------|----------------------|-----------|
+        | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
+        | HTTPStatusError com desafio / demais status| sim              | desafio / conforme   | não       |
+        | RespostaInvalida (MIME, framing, encoding) | sim              | resposta_inesperada  | não       |
+        | TooLarge (declarado ou baixado)            | sim              | resposta_inesperada  | não       |
+        | TransporteLento (taxa mínima)              | sim              | resposta_inesperada  | não       |
+        | EmptyBody                                  | sim              | resposta_inesperada  | não       |
+        | OSError/SSL/HTTP com resposta iniciada     | sim              | resposta_inesperada  | não       |
+        | HTTPException ao ler status/cabeçalhos     | sim (bytes)      | resposta_inesperada  | não       |
+        | (LineTooLong, BadStatusLine, protocolo     |                  |                      |           |
+        |  desconhecido, cabeçalhos em excesso)      |                  |                      |           |
+        | prazo/reset com cabeçalho incompleto       | sim (qualquer    | resposta_inesperada  | não       |
+        |  (≥1 byte lido do soquete)                 |  byte)           |                      |           |
+        | RemoteDisconnected (fechou sem nenhum byte)| não              | fonte_fora           | sim       |
+        | prazo esgotado no corpo (aqui ou em fetch) | sim              | resposta_inesperada  | não       |
+        | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
+        | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
+        | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
+
+        Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
+        validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
+        """
+        estado = estado if estado is not None else _EstadoChamada(prazo=kw["deadline"])
+        try:
+&gt;           return _percorrer(url, estado=estado, **kw)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+freoa_verifica\transport.py:1027:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+freoa_verifica\transport.py:1119: in _percorrer
+    response = connection.getresponse()
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\http\client.py:1459: in getresponse
+    response.begin()
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\http\client.py:336: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\http\client.py:297: in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+freoa_verifica\transport.py:740: in readinto
+    n = self._cru.readinto(b)
+        ^^^^^^^^^^^^^^^^^^^^^
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\socket.py:729: in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\ssl.py:1304: in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;ssl.SSLSocket [closed] fd=-1, family=2, type=1, proto=0&gt;, len = 131072
+buffer = &lt;memory at 0x000002E0A18C3B80&gt;
+
+    def read(self, len=1024, buffer=None):
+        """Read up to LEN bytes and return them.
+        Return zero-length string on EOF."""
+
+        self._checkClosed()
+        if self._sslobj is None:
+            raise ValueError("Read on closed or unwrapped SSL socket.")
+        try:
+            if buffer is not None:
+&gt;               return self._sslobj.read(len, buffer)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               ConnectionResetError: [WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\ssl.py:1138: ConnectionResetError
+
+The above exception was the direct cause of the following exception:
+
+url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
+hosts = frozenset({'planalto.gov.br', 'www.planalto.gov.br'})
+path_prefixes = {'www.planalto.gov.br': ('/ccivil_03/',), 'planalto.gov.br': ('/ccivil_03/',)}
+mimes = frozenset({'application/xhtml+xml', 'text/html', 'text/plain'})
+user_agent = 'identified', method = 'GET', body = None, headers = None
+timeout = 180.0, min_bytes_per_second = 256, max_bytes = 31457280
+max_redirects = 3, session = None, sink = None, check_challenge = True
+ignore_challenge_kinds = None, expected_content = None
+antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_verifica.connectors.guarda.GuardaExecucao object at 0x000002E0A0FC1650&gt;&gt;
+repeticao = None
+
+    def _connector_fetch(
+        url: str,
+        *,
+        hosts: frozenset[str],
+        path_prefixes: dict[str, tuple[str, ...]] | None,
+        mimes: frozenset[str],
+        user_agent: str = "identified",
+        method: str = "GET",
+        body: bytes | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 30.0,
+        min_bytes_per_second: float | None = None,
+        max_bytes: int = _MAX_BYTES,
+        max_redirects: int = _MAX_REDIRECTS,
+        session: Session | None = None,
+        sink: str | Path | None = None,
+        check_challenge: bool = True,
+        ignore_challenge_kinds: frozenset[str] | None = None,
+        expected_content: str | None = None,
+        antes_do_salto: Any = None,
+        repeticao: int | None = None,
+    ) -&gt; Response:
+        timeout = restante(timeout)
+        if timeout &lt;= 0:
+            raise Unavailable("orcamento")
+        hdrs = dict(ua_header(user_agent))
+        if headers:
+            hdrs.update(headers)
+        try:
+&gt;           resp = transport_fetch(
+                url,
+                method=method,
+                body=body,
+                headers=hdrs,
+                allowed_hosts=hosts,
+                allowed_path_prefixes=path_prefixes,
+                allowed_mimes=mimes,
+                timeout=timeout,
+                **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
+                max_bytes=max_bytes,
+                max_redirects=max_redirects,
+                session=session,
+                **({"sink": sink} if sink is not None else {}),
+                **({"antes_do_salto": antes_do_salto} if antes_do_salto is not None else {}),
+                **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
+            )
+
+freoa_verifica\connectors\httputil.py:137:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+freoa_verifica\transport.py:1451: in fetch
+    raise error
+freoa_verifica\transport.py:1381: in worker
+    result = _fetch_once(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
+estado = _EstadoChamada(prazo=3898.5588668, resposta_iniciada=False, saltos=[], bytes_recebidos=0, ultimo_status=None, http=None, lendo_status=True, lento=False, expirou=False, cru=bytearray(b''))
+kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-verifica/1.4.0a1 (+https://github.com/rickfreoa/freoa-verifica)'}, 'allowed_hosts': frozenset({'planalto.gov.br', 'www.planalto.gov.br'}), ...}
+
+    def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -&gt; Response:
+        """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
+
+        Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
+        `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
+        recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
+
+        | exceção                                    | status recebido? | categoria            | repetível |
+        |--------------------------------------------|------------------|----------------------|-----------|
+        | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
+        | HTTPStatusError com desafio / demais status| sim              | desafio / conforme   | não       |
+        | RespostaInvalida (MIME, framing, encoding) | sim              | resposta_inesperada  | não       |
+        | TooLarge (declarado ou baixado)            | sim              | resposta_inesperada  | não       |
+        | TransporteLento (taxa mínima)              | sim              | resposta_inesperada  | não       |
+        | EmptyBody                                  | sim              | resposta_inesperada  | não       |
+        | OSError/SSL/HTTP com resposta iniciada     | sim              | resposta_inesperada  | não       |
+        | HTTPException ao ler status/cabeçalhos     | sim (bytes)      | resposta_inesperada  | não       |
+        | (LineTooLong, BadStatusLine, protocolo     |                  |                      |           |
+        |  desconhecido, cabeçalhos em excesso)      |                  |                      |           |
+        | prazo/reset com cabeçalho incompleto       | sim (qualquer    | resposta_inesperada  | não       |
+        |  (≥1 byte lido do soquete)                 |  byte)           |                      |           |
+        | RemoteDisconnected (fechou sem nenhum byte)| não              | fonte_fora           | sim       |
+        | prazo esgotado no corpo (aqui ou em fetch) | sim              | resposta_inesperada  | não       |
+        | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
+        | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
+        | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
+
+        Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
+        validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
+        """
+        estado = estado if estado is not None else _EstadoChamada(prazo=kw["deadline"])
+        try:
+            return _percorrer(url, estado=estado, **kw)
+        except Exception as exc:
+            falha, _ = _classificar(exc, estado)
+            if falha is exc:
+                raise
+&gt;           raise falha from exc
+E           freoa_verifica.transport.TransportError: [WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+
+freoa_verifica\transport.py:1032: TransportError
+
+The above exception was the direct cause of the following exception:
+
+extra = {'antes_do_salto': &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_verifica.connectors.guarda.GuardaExecucao object at 0x000002E0A0FC1650&gt;&gt;}
+
+    def baixar(**extra: Any) -&gt; Response:
+        try:
+&gt;           return _connector_fetch(url, **extra, **kw)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+freoa_verifica\connectors\httputil.py:48:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
+hosts = frozenset({'planalto.gov.br', 'www.planalto.gov.br'})
+path_prefixes = {'www.planalto.gov.br': ('/ccivil_03/',), 'planalto.gov.br': ('/ccivil_03/',)}
+mimes = frozenset({'application/xhtml+xml', 'text/html', 'text/plain'})
+user_agent = 'identified', method = 'GET', body = None, headers = None
+timeout = 180.0, min_bytes_per_second = 256, max_bytes = 31457280
+max_redirects = 3, session = None, sink = None, check_challenge = True
+ignore_challenge_kinds = None, expected_content = None
+antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_verifica.connectors.guarda.GuardaExecucao object at 0x000002E0A0FC1650&gt;&gt;
+repeticao = None
+
+    def _connector_fetch(
+        url: str,
+        *,
+        hosts: frozenset[str],
+        path_prefixes: dict[str, tuple[str, ...]] | None,
+        mimes: frozenset[str],
+        user_agent: str = "identified",
+        method: str = "GET",
+        body: bytes | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 30.0,
+        min_bytes_per_second: float | None = None,
+        max_bytes: int = _MAX_BYTES,
+        max_redirects: int = _MAX_REDIRECTS,
+        session: Session | None = None,
+        sink: str | Path | None = None,
+        check_challenge: bool = True,
+        ignore_challenge_kinds: frozenset[str] | None = None,
+        expected_content: str | None = None,
+        antes_do_salto: Any = None,
+        repeticao: int | None = None,
+    ) -&gt; Response:
+        timeout = restante(timeout)
+        if timeout &lt;= 0:
+            raise Unavailable("orcamento")
+        hdrs = dict(ua_header(user_agent))
+        if headers:
+            hdrs.update(headers)
+        try:
+            resp = transport_fetch(
+                url,
+                method=method,
+                body=body,
+                headers=hdrs,
+                allowed_hosts=hosts,
+                allowed_path_prefixes=path_prefixes,
+                allowed_mimes=mimes,
+                timeout=timeout,
+                **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
+                max_bytes=max_bytes,
+                max_redirects=max_redirects,
+                session=session,
+                **({"sink": sink} if sink is not None else {}),
+                **({"antes_do_salto": antes_do_salto} if antes_do_salto is not None else {}),
+                **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
+            )
+        except Unavailable:
+            raise  # recusa de salto pela guarda: já classificada
+        except Exception as exc:
+&gt;           raise _mapear_erro(exc, url) from exc
+E           freoa_verifica.connectors.base.Unavailable: transporte_TransportError
+
+freoa_verifica\connectors\httputil.py:157: Unavailable
+
+The above exception was the direct cause of the following exception:
+
+    def test_live_planalto_positivo():
+        c = PlanaltoConnector()
+        cand = c.resolve({"tipo": "LEI", "numero": 6404, "ano": 1976})
+        assert cand is not None
+&gt;       resp = c.fetch(cand)
+               ^^^^^^^^^^^^^
+
+tests\live\test_live_planalto.py:15:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+freoa_verifica\connectors\base.py:130: in interno
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+freoa_verifica\connectors\planalto.py:274: in fetch
+    return connector_fetch(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
+freoa_verifica\connectors\httputil.py:58: in connector_fetch
+    return guarda.executar(
+freoa_verifica\connectors\guarda.py:143: in executar
+    resp = baixar()
+           ^^^^^^^^
+freoa_verifica\connectors\httputil.py:63: in &lt;lambda&gt;
+    baixar=lambda: baixar(antes_do_salto=guarda.antes_do_salto),
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+extra = {'antes_do_salto': &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_verifica.connectors.guarda.GuardaExecucao object at 0x000002E0A0FC1650&gt;&gt;}
+
+    def baixar(**extra: Any) -&gt; Response:
+        try:
+            return _connector_fetch(url, **extra, **kw)
+        except Unavailable as exc:
+            final = reclassificar(exc) if reclassificar is not None else exc
+            if final is exc:
+                raise
+&gt;           raise final from exc
+E           freoa_verifica.connectors.base.Unavailable: recusa_identificado_planalto
+
+freoa_verifica\connectors\httputil.py:53: Unavailable</failure></testcase><testcase classname="tests.live.test_live_planalto" name="test_live_planalto_negativo" time="4.394"><failure message="AssertionError: assert '404' in 'recusa_identificado_planalto'&#10; +  where 'recusa_identificado_planalto' = Unavailable('recusa_identificado_planalto').reason&#10; +    where Unavailable('recusa_identificado_planalto') = &lt;ExceptionInfo Unavailable('recusa_identificado_planalto') tblen=7&gt;.value">def test_live_planalto_negativo():
+        c = PlanaltoConnector()
+        cand = Candidate(
+            source_id="planalto",
+            key="LEI:999999:2099",
+            title="LEI 999999/2099",
+            url="https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2099/lei/l999999.htm",
+            metadata={
+                "urls": [
+                    "https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2099/lei/l999999.htm"
+                ]
+            },
+        )
+        with pytest.raises(Unavailable) as ei:
+            c.fetch(cand)
+&gt;       assert "404" in ei.value.reason
+E       AssertionError: assert '404' in 'recusa_identificado_planalto'
+E        +  where 'recusa_identificado_planalto' = Unavailable('recusa_identificado_planalto').reason
+E        +    where Unavailable('recusa_identificado_planalto') = &lt;ExceptionInfo Unavailable('recusa_identificado_planalto') tblen=7&gt;.value
+
+tests\live\test_live_planalto.py:35: AssertionError</failure></testcase><testcase classname="tests.live.test_live_planalto" name="test_live_planalto_documento" time="4.827"><failure message="freoa_verifica.connectors.base.Unavailable: recusa_identificado_planalto">url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
+estado = _EstadoChamada(prazo=3907.1040302, resposta_iniciada=False, saltos=[], bytes_recebidos=0, ultimo_status=None, http=None, lendo_status=True, lento=False, expirou=False, cru=bytearray(b''))
+kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-verifica/1.4.0a1 (+https://github.com/rickfreoa/freoa-verifica)'}, 'allowed_hosts': frozenset({'planalto.gov.br', 'www.planalto.gov.br'}), ...}
+
+    def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -&gt; Response:
+        """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
+
+        Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
+        `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
+        recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
+
+        | exceção                                    | status recebido? | categoria            | repetível |
+        |--------------------------------------------|------------------|----------------------|-----------|
+        | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
+        | HTTPStatusError com desafio / demais status| sim              | desafio / conforme   | não       |
+        | RespostaInvalida (MIME, framing, encoding) | sim              | resposta_inesperada  | não       |
+        | TooLarge (declarado ou baixado)            | sim              | resposta_inesperada  | não       |
+        | TransporteLento (taxa mínima)              | sim              | resposta_inesperada  | não       |
+        | EmptyBody                                  | sim              | resposta_inesperada  | não       |
+        | OSError/SSL/HTTP com resposta iniciada     | sim              | resposta_inesperada  | não       |
+        | HTTPException ao ler status/cabeçalhos     | sim (bytes)      | resposta_inesperada  | não       |
+        | (LineTooLong, BadStatusLine, protocolo     |                  |                      |           |
+        |  desconhecido, cabeçalhos em excesso)      |                  |                      |           |
+        | prazo/reset com cabeçalho incompleto       | sim (qualquer    | resposta_inesperada  | não       |
+        |  (≥1 byte lido do soquete)                 |  byte)           |                      |           |
+        | RemoteDisconnected (fechou sem nenhum byte)| não              | fonte_fora           | sim       |
+        | prazo esgotado no corpo (aqui ou em fetch) | sim              | resposta_inesperada  | não       |
+        | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
+        | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
+        | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
+
+        Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
+        validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
+        """
+        estado = estado if estado is not None else _EstadoChamada(prazo=kw["deadline"])
+        try:
+&gt;           return _percorrer(url, estado=estado, **kw)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+freoa_verifica\transport.py:1027:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+freoa_verifica\transport.py:1119: in _percorrer
+    response = connection.getresponse()
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\http\client.py:1459: in getresponse
+    response.begin()
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\http\client.py:336: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\http\client.py:297: in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+freoa_verifica\transport.py:740: in readinto
+    n = self._cru.readinto(b)
+        ^^^^^^^^^^^^^^^^^^^^^
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\socket.py:729: in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\ssl.py:1304: in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;ssl.SSLSocket [closed] fd=-1, family=2, type=1, proto=0&gt;, len = 131072
+buffer = &lt;memory at 0x000002E0A178D0C0&gt;
+
+    def read(self, len=1024, buffer=None):
+        """Read up to LEN bytes and return them.
+        Return zero-length string on EOF."""
+
+        self._checkClosed()
+        if self._sslobj is None:
+            raise ValueError("Read on closed or unwrapped SSL socket.")
+        try:
+            if buffer is not None:
+&gt;               return self._sslobj.read(len, buffer)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               ConnectionResetError: [WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+
+&lt;localappdata&gt;\Python\pythoncore-3.14-64\Lib\ssl.py:1138: ConnectionResetError
+
+The above exception was the direct cause of the following exception:
+
+url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
+hosts = frozenset({'planalto.gov.br', 'www.planalto.gov.br'})
+path_prefixes = {'www.planalto.gov.br': ('/ccivil_03/',), 'planalto.gov.br': ('/ccivil_03/',)}
+mimes = frozenset({'application/xhtml+xml', 'text/html', 'text/plain'})
+user_agent = 'identified', method = 'GET', body = None, headers = None
+timeout = 180.0, min_bytes_per_second = 256, max_bytes = 31457280
+max_redirects = 3, session = None, sink = None, check_challenge = True
+ignore_challenge_kinds = None, expected_content = None
+antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_verifica.connectors.guarda.GuardaExecucao object at 0x000002E0A14DF7F0&gt;&gt;
+repeticao = None
+
+    def _connector_fetch(
+        url: str,
+        *,
+        hosts: frozenset[str],
+        path_prefixes: dict[str, tuple[str, ...]] | None,
+        mimes: frozenset[str],
+        user_agent: str = "identified",
+        method: str = "GET",
+        body: bytes | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 30.0,
+        min_bytes_per_second: float | None = None,
+        max_bytes: int = _MAX_BYTES,
+        max_redirects: int = _MAX_REDIRECTS,
+        session: Session | None = None,
+        sink: str | Path | None = None,
+        check_challenge: bool = True,
+        ignore_challenge_kinds: frozenset[str] | None = None,
+        expected_content: str | None = None,
+        antes_do_salto: Any = None,
+        repeticao: int | None = None,
+    ) -&gt; Response:
+        timeout = restante(timeout)
+        if timeout &lt;= 0:
+            raise Unavailable("orcamento")
+        hdrs = dict(ua_header(user_agent))
+        if headers:
+            hdrs.update(headers)
+        try:
+&gt;           resp = transport_fetch(
+                url,
+                method=method,
+                body=body,
+                headers=hdrs,
+                allowed_hosts=hosts,
+                allowed_path_prefixes=path_prefixes,
+                allowed_mimes=mimes,
+                timeout=timeout,
+                **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
+                max_bytes=max_bytes,
+                max_redirects=max_redirects,
+                session=session,
+                **({"sink": sink} if sink is not None else {}),
+                **({"antes_do_salto": antes_do_salto} if antes_do_salto is not None else {}),
+                **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
+            )
+
+freoa_verifica\connectors\httputil.py:137:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+freoa_verifica\transport.py:1451: in fetch
+    raise error
+freoa_verifica\transport.py:1381: in worker
+    result = _fetch_once(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
+estado = _EstadoChamada(prazo=3907.1040302, resposta_iniciada=False, saltos=[], bytes_recebidos=0, ultimo_status=None, http=None, lendo_status=True, lento=False, expirou=False, cru=bytearray(b''))
+kw = {'method': 'GET', 'body': None, 'caller_headers': {'User-Agent': 'freoa-verifica/1.4.0a1 (+https://github.com/rickfreoa/freoa-verifica)'}, 'allowed_hosts': frozenset({'planalto.gov.br', 'www.planalto.gov.br'}), ...}
+
+    def _fetch_once(url: str, *, estado: _EstadoChamada | None = None, **kw) -&gt; Response:
+        """Uma tentativa de captura (com redirecionamentos); toda falha passa por `_classificar` (FIX9).
+
+        Regra: interrupção por taxa, tamanho ou prazo depois de recebido o status/cabeçalho é
+        `RespostaInvalida` (categoria `resposta_inesperada`) e nunca se repete; só falha sem status
+        recebido é `fonte_fora` e repetível (e só dentro de `fetch`, único lugar que repete).
+
+        | exceção                                    | status recebido? | categoria            | repetível |
+        |--------------------------------------------|------------------|----------------------|-----------|
+        | HTTPStatusError 502/503/504, sem desafio   | sim              | fonte_fora           | sim       |
+        | HTTPStatusError com desafio / demais status| sim              | desafio / conforme   | não       |
+        | RespostaInvalida (MIME, framing, encoding) | sim              | resposta_inesperada  | não       |
+        | TooLarge (declarado ou baixado)            | sim              | resposta_inesperada  | não       |
+        | TransporteLento (taxa mínima)              | sim              | resposta_inesperada  | não       |
+        | EmptyBody                                  | sim              | resposta_inesperada  | não       |
+        | OSError/SSL/HTTP com resposta iniciada     | sim              | resposta_inesperada  | não       |
+        | HTTPException ao ler status/cabeçalhos     | sim (bytes)      | resposta_inesperada  | não       |
+        | (LineTooLong, BadStatusLine, protocolo     |                  |                      |           |
+        |  desconhecido, cabeçalhos em excesso)      |                  |                      |           |
+        | prazo/reset com cabeçalho incompleto       | sim (qualquer    | resposta_inesperada  | não       |
+        |  (≥1 byte lido do soquete)                 |  byte)           |                      |           |
+        | RemoteDisconnected (fechou sem nenhum byte)| não              | fonte_fora           | sim       |
+        | prazo esgotado no corpo (aqui ou em fetch) | sim              | resposta_inesperada  | não       |
+        | BlockedHost (política, redirecionamento)   | n/a              | recusa de política   | não       |
+        | Timeout (prazo/DNS/soquete antes do status)| não              | fonte_fora           | sim       |
+        | TransportError (conexão, TLS, reset)       | não              | fonte_fora           | sim       |
+
+        Qualquer status ou byte recebido em QUALQUER salto da chamada (inclusive em falha de DNS,
+        validação, prazo ou fechamento de um salto posterior) torna a falha `resposta_inesperada`.
+        """
+        estado = estado if estado is not None else _EstadoChamada(prazo=kw["deadline"])
+        try:
+            return _percorrer(url, estado=estado, **kw)
+        except Exception as exc:
+            falha, _ = _classificar(exc, estado)
+            if falha is exc:
+                raise
+&gt;           raise falha from exc
+E           freoa_verifica.transport.TransportError: [WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+
+freoa_verifica\transport.py:1032: TransportError
+
+The above exception was the direct cause of the following exception:
+
+extra = {'antes_do_salto': &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_verifica.connectors.guarda.GuardaExecucao object at 0x000002E0A14DF7F0&gt;&gt;}
+
+    def baixar(**extra: Any) -&gt; Response:
+        try:
+&gt;           return _connector_fetch(url, **extra, **kw)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+freoa_verifica\connectors\httputil.py:48:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+url = 'https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm'
+hosts = frozenset({'planalto.gov.br', 'www.planalto.gov.br'})
+path_prefixes = {'www.planalto.gov.br': ('/ccivil_03/',), 'planalto.gov.br': ('/ccivil_03/',)}
+mimes = frozenset({'application/xhtml+xml', 'text/html', 'text/plain'})
+user_agent = 'identified', method = 'GET', body = None, headers = None
+timeout = 180.0, min_bytes_per_second = 256, max_bytes = 31457280
+max_redirects = 3, session = None, sink = None, check_challenge = True
+ignore_challenge_kinds = None, expected_content = None
+antes_do_salto = &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_verifica.connectors.guarda.GuardaExecucao object at 0x000002E0A14DF7F0&gt;&gt;
+repeticao = None
+
+    def _connector_fetch(
+        url: str,
+        *,
+        hosts: frozenset[str],
+        path_prefixes: dict[str, tuple[str, ...]] | None,
+        mimes: frozenset[str],
+        user_agent: str = "identified",
+        method: str = "GET",
+        body: bytes | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 30.0,
+        min_bytes_per_second: float | None = None,
+        max_bytes: int = _MAX_BYTES,
+        max_redirects: int = _MAX_REDIRECTS,
+        session: Session | None = None,
+        sink: str | Path | None = None,
+        check_challenge: bool = True,
+        ignore_challenge_kinds: frozenset[str] | None = None,
+        expected_content: str | None = None,
+        antes_do_salto: Any = None,
+        repeticao: int | None = None,
+    ) -&gt; Response:
+        timeout = restante(timeout)
+        if timeout &lt;= 0:
+            raise Unavailable("orcamento")
+        hdrs = dict(ua_header(user_agent))
+        if headers:
+            hdrs.update(headers)
+        try:
+            resp = transport_fetch(
+                url,
+                method=method,
+                body=body,
+                headers=hdrs,
+                allowed_hosts=hosts,
+                allowed_path_prefixes=path_prefixes,
+                allowed_mimes=mimes,
+                timeout=timeout,
+                **({"min_bytes_per_second": min_bytes_per_second} if min_bytes_per_second is not None else {}),
+                max_bytes=max_bytes,
+                max_redirects=max_redirects,
+                session=session,
+                **({"sink": sink} if sink is not None else {}),
+                **({"antes_do_salto": antes_do_salto} if antes_do_salto is not None else {}),
+                **({"repeticao": repeticao} if repeticao is not None else {}),  # None = padrão do transporte
+            )
+        except Unavailable:
+            raise  # recusa de salto pela guarda: já classificada
+        except Exception as exc:
+&gt;           raise _mapear_erro(exc, url) from exc
+E           freoa_verifica.connectors.base.Unavailable: transporte_TransportError
+
+freoa_verifica\connectors\httputil.py:157: Unavailable
+
+The above exception was the direct cause of the following exception:
+
+    def test_live_planalto_documento():
+        c = PlanaltoConnector()
+        cand = c.resolve({"tipo": "LEI", "numero": 6404, "ano": 1976})
+        assert cand is not None
+&gt;       resp = c.fetch(cand)
+               ^^^^^^^^^^^^^
+
+tests\live\test_live_planalto.py:42:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+freoa_verifica\connectors\base.py:130: in interno
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+freoa_verifica\connectors\planalto.py:274: in fetch
+    return connector_fetch(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
+freoa_verifica\connectors\httputil.py:58: in connector_fetch
+    return guarda.executar(
+freoa_verifica\connectors\guarda.py:143: in executar
+    resp = baixar()
+           ^^^^^^^^
+freoa_verifica\connectors\httputil.py:63: in &lt;lambda&gt;
+    baixar=lambda: baixar(antes_do_salto=guarda.antes_do_salto),
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+extra = {'antes_do_salto': &lt;bound method GuardaExecucao.antes_do_salto of &lt;freoa_verifica.connectors.guarda.GuardaExecucao object at 0x000002E0A14DF7F0&gt;&gt;}
+
+    def baixar(**extra: Any) -&gt; Response:
+        try:
+            return _connector_fetch(url, **extra, **kw)
+        except Unavailable as exc:
+            final = reclassificar(exc) if reclassificar is not None else exc
+            if final is exc:
+                raise
+&gt;           raise final from exc
+E           freoa_verifica.connectors.base.Unavailable: recusa_identificado_planalto
+
+freoa_verifica\connectors\httputil.py:53: Unavailable</failure></testcase><testcase classname="tests.live.test_live_senado" name="test_live_senado_positivo" time="0.258" /><testcase classname="tests.live.test_live_senado" name="test_live_senado_negativo" time="1.047" /><testcase classname="tests.live.test_live_senado" name="test_live_senado_documento" time="1.936" /><testcase classname="tests.live.test_live_stf" name="test_live_stf_positivo" time="0.874" /><testcase classname="tests.live.test_live_stf" name="test_live_stf_negativo_busca_waf" time="0.002" /><testcase classname="tests.live.test_live_stf" name="test_live_stf_documento" time="1.713" /><testcase classname="tests.live.test_live_stj" name="test_live_stj_positivo" time="0.378" /><testcase classname="tests.live.test_live_stj" name="test_live_stj_negativo" time="1.855" /><testcase classname="tests.live.test_live_stj" name="test_live_stj_documento" time="6.742" /><testcase classname="tests.live.test_live_tcu" name="test_live_tcu_positivo" time="0.327" /><testcase classname="tests.live.test_live_tcu" name="test_live_tcu_negativo" time="14.520"><failure message="freoa_verifica.connectors.base.Unavailable: tcu_busca_incompleta_limite_de_varredura">def test_live_tcu_negativo():
+&gt;       found = TcuConnector().search("FV_TERM_INEXISTENTE_TCU_XYZ_999991", quantidade=5)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\live\test_live_tcu.py:16:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+freoa_verifica\connectors\base.py:130: in interno
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;freoa_verifica.connectors.tcu.TcuConnector object at 0x000002E0A0FAE210&gt;
+q = 'FV_TERM_INEXISTENTE_TCU_XYZ_999991', filtros = {'quantidade': 5}
+
+    def search(self, q: str, **filtros: Any) -&gt; list[Candidate]:
+        inicio = int(filtros.get("inicio") or 0)
+        quantidade = min(
+            MAX_QUANTIDADE,
+            max(1, int(filtros.get("quantidade") or filtros.get("limite") or 20)),
+        )
+        items = self._page(inicio=inicio, quantidade=quantidade)
+        q_lower = (q or "").lower().strip()
+        if not q_lower:
+            return [_cand(self.id, it) for it in items]
+        out = []
+        cursor = inicio
+        scanned = 0
+        pages = 0
+        while scanned &lt; MAX_SCAN and pages &lt; MAX_PAGES:
+            batch = (
+                items
+                if cursor == inicio
+                else self._page(inicio=cursor, quantidade=min(MAX_QUANTIDADE, quantidade))
+            )
+            pages += 1
+            if not batch:
+                return out
+            for it in batch:
+                blob = " ".join(
+                    str(it.get(k) or "")
+                    for k in ("titulo", "sumario", "relator", "colegiado", "numeroAcordao")
+                ).lower()
+                if q_lower in blob:
+                    out.append(_cand(self.id, it))
+                    if len(out) &gt;= quantidade:
+                        return out
+            scanned += len(batch)
+            cursor += len(batch)
+            if len(batch) &lt; 1:
+                break
+&gt;       raise Unavailable("tcu_busca_incompleta_limite_de_varredura")
+E       freoa_verifica.connectors.base.Unavailable: tcu_busca_incompleta_limite_de_varredura
+
+freoa_verifica\connectors\tcu.py:147: Unavailable</failure></testcase><testcase classname="tests.live.test_live_tcu" name="test_live_tcu_documento" time="0.422" /><testcase classname="tests.live.test_live_tjdft" name="test_live_tjdft_positivo" time="0.836" /><testcase classname="tests.live.test_live_tjdft" name="test_live_tjdft_negativo_estrutural" time="0.416" /><testcase classname="tests.live.test_live_tjdft" name="test_live_tjdft_documento_captura_e_parse" time="1.614" /><testcase classname="tests.live.test_live_tjdft" name="test_live_tjdft_acordao_sem_integra_fica_so_com_ementa" time="2.131" /><testcase classname="tests.live.test_live_tjsp" name="test_live_tjsp_positivo" time="0.429"><skipped type="pytest.xfail" message="ambiental_desafio:desafio_captcha" /></testcase><testcase classname="tests.live.test_live_tjsp" name="test_live_tjsp_negativo" time="0.898"><skipped type="pytest.xfail" message="ambiental_desafio:desafio_captcha" /></testcase><testcase classname="tests.live.test_live_tjsp" name="test_live_tjsp_documento" time="0.968"><skipped type="pytest.xfail" message="ambiental_desafio:desafio_captcha" /></testcase></testsuite></testsuites>

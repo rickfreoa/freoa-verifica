@@ -1,0 +1,296 @@
+{
+ "status": "ok",
+ "verificacoes": [
+  {
+   "detalhe": "1.4.0a1",
+   "nome": "versao",
+   "status": "ok"
+  },
+  {
+   "detalhe": "<home-fv>",
+   "nome": "home",
+   "status": "ok"
+  },
+  {
+   "detalhe": "<home-fv>\\verifica.sqlite3",
+   "nome": "banco",
+   "status": "ok"
+  },
+  {
+   "detalhe": "16 vers├Áes",
+   "nome": "migracoes",
+   "status": "ok"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": null,
+     "nome": "positivo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "n=0",
+     "nome": "negativo",
+     "status": "zero"
+    },
+    {
+     "detalhe": "Resolu├º├úo CMN N┬░ 4.966",
+     "nome": "documento",
+     "status": "ok"
+    }
+   ],
+   "nome": "fonte:bcb",
+   "status": "ok"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": "transporte_Timeout",
+     "nome": "positivo",
+     "status": "unavailable"
+    },
+    {
+     "detalhe": "transporte_Timeout",
+     "nome": "negativo",
+     "status": "unavailable"
+    },
+    {
+     "detalhe": "transporte_Timeout",
+     "nome": "documento",
+     "status": "unavailable"
+    }
+   ],
+   "nome": "fonte:cvm_colegiado",
+   "status": "alerta"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": null,
+     "nome": "positivo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "transporte_Timeout",
+     "nome": "negativo",
+     "status": "unavailable"
+    },
+    {
+     "detalhe": "Resolu├º├úo CVM no 80, de 29 de mar├ºo de 2022, COM AS ALTERA├ç├òES INTRODUZIDAS PELA",
+     "nome": "documento",
+     "status": "ok"
+    }
+   ],
+   "nome": "fonte:cvm_normas",
+   "status": "alerta"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": null,
+     "nome": "positivo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "n=0",
+     "nome": "negativo",
+     "status": "zero"
+    },
+    {
+     "detalhe": "datajud_stf_inexistente",
+     "nome": "documento",
+     "status": "ok"
+    }
+   ],
+   "nome": "fonte:datajud",
+   "status": "ok"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": "recusa_identificado_planalto",
+     "nome": "positivo",
+     "status": "unavailable"
+    },
+    {
+     "detalhe": "recusa_identificado_planalto",
+     "nome": "negativo",
+     "status": "unavailable"
+    },
+    {
+     "detalhe": "recusa_identificado_planalto",
+     "nome": "documento",
+     "status": "unavailable"
+    }
+   ],
+   "nome": "fonte:planalto",
+   "status": "alerta"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": "senado:552179",
+     "nome": "positivo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "n=0",
+     "nome": "negativo",
+     "status": "zero"
+    },
+    {
+     "detalhe": "LEI-10303-2001-10-31",
+     "nome": "documento",
+     "status": "ok"
+    }
+   ],
+   "nome": "fonte:senado",
+   "status": "ok"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": "6255858",
+     "nome": "positivo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "stf_busca_textual_sob_waf",
+     "nome": "negativo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "n=3",
+     "nome": "documento",
+     "status": "ok"
+    }
+   ],
+   "nome": "fonte:stf",
+   "status": "ok"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": "espelhos-de-acordaos-corte-especial",
+     "nome": "positivo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "http_404",
+     "nome": "negativo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "n=676",
+     "nome": "documento",
+     "status": "ok"
+    }
+   ],
+   "nome": "fonte:stj",
+   "status": "ok"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": null,
+     "nome": "positivo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "tcu_busca_incompleta_limite_de_varredura",
+     "nome": "negativo",
+     "status": "unavailable"
+    },
+    {
+     "detalhe": "ACORDAO-COMPLETO-2783507",
+     "nome": "documento",
+     "status": "ok"
+    }
+   ],
+   "nome": "fonte:tcu",
+   "status": "alerta"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": "n=3",
+     "nome": "positivo",
+     "status": "ok"
+    },
+    {
+     "detalhe": "n=0",
+     "nome": "negativo",
+     "status": "zero"
+    },
+    {
+     "detalhe": "2185013",
+     "nome": "documento",
+     "status": "ok"
+    }
+   ],
+   "nome": "fonte:tjdft",
+   "status": "ok"
+  },
+  {
+   "detalhe": [
+    {
+     "detalhe": "desafio_captcha",
+     "nome": "positivo",
+     "status": "unavailable"
+    },
+    {
+     "detalhe": "desafio_captcha",
+     "nome": "negativo",
+     "status": "unavailable"
+    },
+    {
+     "detalhe": "desafio_captcha",
+     "nome": "documento",
+     "status": "unavailable"
+    }
+   ],
+   "nome": "fonte:tjsp",
+   "status": "alerta"
+  },
+  {
+   "detalhe": {
+    "snapshot_derived_version": 5,
+    "snapshot_sha256": "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa",
+    "vinculado": true,
+    "vinculo_motivo": null
+   },
+   "nome": "snapshot_proveniencia",
+   "status": "ok"
+  },
+  {
+   "detalhe": {
+    "confere": true,
+    "esperados": [
+     "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa"
+    ],
+    "instalado": "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa",
+    "versao": "1.4.0a1"
+   },
+   "nome": "snapshot_digest",
+   "status": "ok"
+  },
+  {
+   "detalhe": {
+    "attestation_verificada": true,
+    "concluida": true,
+    "digest_snapshot": "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa",
+    "motivos": [],
+    "sha256_wheel": "66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f",
+    "versao": "1.4.0a1",
+    "versao_instalada": "1.4.0a1"
+   },
+   "nome": "attestation",
+   "status": "ok"
+  },
+  {
+   "detalhe": "atende ao manifesto/m├¡nimo",
+   "nome": "acervo",
+   "status": "ok"
+  }
+ ]
+}

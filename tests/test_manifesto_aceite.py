@@ -1081,7 +1081,9 @@ def test_estado_inicial_do_plano_1_4_0():
     incs = {i["id"]: i for i in m["incrementos"]}
     assert list(incs) == ["I1", "I2", "I3", "I4"]
     assert [incs[k]["versao"] for k in incs] == ["1.4.0a1", "1.4.0a2", "1.4.0a3", "1.4.0"]
-    assert all(i["estado"] == "aberto" for i in incs.values())
+    # I1 concluído em 29/10/2026 (docs/auditoria/1.4.0/aceite-i1.md); os demais seguem abertos.
+    assert [i["estado"] for i in incs.values()] == ["concluido", "aberto", "aberto", "aberto"]
+    assert all(e["estado"] == "concluida" for e in incs["I1"]["etapas"].values())
     assert [k for k, i in incs.items() if i["rotulo"] is not None] == ["I1"]
     estados = {it["id"]: it["estado"] for it in incs["I1"]["itens"]}
     assert estados == {"I1.1": "concluido", "I1.2": "adiado", "I1.3": "concluido", "I1.4": "concluido",

@@ -1,11 +1,11 @@
 {
  "plano": "1.4.0",
- "atualizado_em": "2026-10-28T16:07:19+00:00",
+ "atualizado_em": "2026-10-29T11:49:56+00:00",
  "incrementos": [
   {
    "id": "I1",
    "versao": "1.4.0a1",
-   "estado": "aberto",
+   "estado": "concluido",
    "rotulo": "1.4.0a1: sem íntegras do STJ (I1.2 adiado para I2.6); manifesto de aceite com conferência material da bateria e da instalação por parecer do auditor (I1.5 reduzido); S0 reduzida à rodada 1 (S0b parte 1 adiada para I2.7); doctor com ressalva do TCU (decisão 0072)",
    "itens": [
     {
@@ -60,9 +60,74 @@
      "nota": "especificação: seção 6 (I1) do plano, com as reduções registradas (I1.2 adiado, I1.5 e S0 reduzidos)"
     },
     "2_teste": {
-     "estado": "pendente",
-     "evidencias": [],
-     "nota": ""
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "run_ci",
+       "campos": {
+        "url": "https://github.com/rickfreoa/freoa-verifica/actions/runs/40671237979",
+        "commit": "5c860546acf6338ae1774eaeec9a9bb8a7de7983",
+        "conclusao": "success",
+        "jobs": [
+         {
+          "nome": "lint",
+          "conclusao": "success"
+         },
+         {
+          "nome": "repositorio",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (ubuntu-latest, 3.11)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (ubuntu-latest, 3.12)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (ubuntu-latest, 3.13)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (ubuntu-latest, 3.14)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (windows-latest, 3.11)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (windows-latest, 3.12)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (windows-latest, 3.13)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (windows-latest, 3.14)",
+          "conclusao": "success"
+         }
+        ]
+       },
+       "data": "2026-10-29T11:49:07+00:00"
+      },
+      {
+       "tipo": "bateria_live",
+       "campos": {
+        "relatorio": "docs/auditoria/1.4.0/aceite-i1/live-5c86054.txt",
+        "sha256": "b7e3b3dc45a274577aaced02d070e870b05f00cf1e3c123a81ddfd485a8f3a0d",
+        "saude_fontes": "docs/auditoria/1.4.0/aceite-i1/saude-fontes-5c86054.json",
+        "saude_fontes_sha256": "84a85dcca564e7e7ea27d9b5e9884a10714946cce374a0ba7e654907a489e502",
+        "commit": "5c860546acf6338ae1774eaeec9a9bb8a7de7983",
+        "parecer_bateria": "docs/auditoria/1.4.0/pareceres/i1-bateria-r2.md",
+        "parecer_bateria_sha256": "3439ed35e89a024634b5ed94e5adfa005178a9ea25ff99d168f0a938eadbdbbe"
+       },
+       "data": "2026-10-29T11:49:08+00:00"
+      }
+     ],
+     "nota": "tentativa 3 de 29/10 (DataJud ok após 40 min sem chamadas); tentativas 1 e 2 com DataJud http_429 guardadas em aceite-i1/; falhas fora do escopo: Planalto x3, TCU negativo"
     },
     "3_commit": {
      "estado": "concluida",
@@ -173,9 +238,35 @@
      "nota": "instalador oficial no notebook Windows em 28/10/2026; evidências em docs/auditoria/1.4.0/aceite-i1.md"
     },
     "8_execucao": {
-     "estado": "pendente",
-     "evidencias": [],
-     "nota": ""
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "doctor",
+       "campos": {
+        "ok": true,
+        "alertas": [
+         "fonte_fora: CVM colegiado e CVM normas transporte_Timeout (29/10)",
+         "recusa_identificado: Planalto recusa_identificado_planalto (decisão 0048)",
+         "ambiental_desafio: TJSP desafio_captcha"
+        ]
+       },
+       "data": "2026-10-29T11:49:08+00:00"
+      },
+      {
+       "tipo": "bateria_live",
+       "campos": {
+        "relatorio": "docs/auditoria/1.4.0/aceite-i1/live.txt",
+        "sha256": "05ab1617b1dcf510f3d19953e36ff711bf98b4e08b51d577bfc42e80bbcf780c",
+        "saude_fontes": "docs/auditoria/1.4.0/aceite-i1/saude-fontes.json",
+        "saude_fontes_sha256": "f2c64a5719bc1cccaf6ca05e97e8e6ef4d2bb8bc8cebf036190928f147437717",
+        "commit": "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
+        "parecer_bateria": "docs/auditoria/1.4.0/pareceres/i1-bateria-r2.md",
+        "parecer_bateria_sha256": "3439ed35e89a024634b5ed94e5adfa005178a9ea25ff99d168f0a938eadbdbbe"
+       },
+       "data": "2026-10-29T11:49:08+00:00"
+      }
+     ],
+     "nota": "doctor de 29/10 07:31 (aceite-i1/doctor-20261029.json); alerta do TCU sem categoria ressalvado pela decisão 0072; bateria de 28/10 em 6ac49ee; falhas fora do escopo: Planalto x3, TCU negativo"
     }
    },
    "reducoes_de_escopo": [

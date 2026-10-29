@@ -1,9 +1,9 @@
-﻿{
-    "commit":  "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
-    "digest_snapshot":  "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa",
-    "versao":  "1.4.0a1",
-    "concluida":  true,
-    "proveniencia":  "VERIFICADA: gh attestation verify",
-    "sha256_wheel":  "66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f",
-    "attestation_verificada":  true
+{
+ "commit": "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
+ "digest_snapshot": "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa",
+ "versao": "1.4.0a1",
+ "concluida": true,
+ "proveniencia": "VERIFICADA: gh attestation verify",
+ "sha256_wheel": "66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f",
+ "attestation_verificada": true
 }
