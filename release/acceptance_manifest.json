@@ -1,6 +1,6 @@
 {
  "plano": "1.4.0",
- "atualizado_em": "2026-10-29T11:49:56+00:00",
+ "atualizado_em": "2026-10-29T18:10:43+00:00",
  "incrementos": [
   {
    "id": "I1",
@@ -297,7 +297,7 @@
    "id": "I2",
    "versao": "1.4.0a2",
    "estado": "aberto",
-   "rotulo": null,
+   "rotulo": "1.4.0a2: sem S0b, conectores TST e STF acórdãos, BNP e informativos (I2.7, I2.2 e I2.3 passam ao I3 como I3.9, I3.10 e I3.11)",
    "itens": [
     {
      "id": "I2.1",
@@ -306,12 +306,12 @@
     },
     {
      "id": "I2.2",
-     "estado": "pendente",
+     "estado": "adiado",
      "nota": ""
     },
     {
      "id": "I2.3",
-     "estado": "pendente",
+     "estado": "adiado",
      "nota": ""
     },
     {
@@ -331,7 +331,7 @@
     },
     {
      "id": "I2.7",
-     "estado": "pendente",
+     "estado": "adiado",
      "nota": "S0b parte 1 (robots pelo RFC 9309, decisão 0071), adiada do I1: docs/auditoria/1.4.0/pr18-adiamento.md"
     }
    ],
@@ -377,7 +377,29 @@
      "nota": ""
     }
    },
-   "reducoes_de_escopo": []
+   "reducoes_de_escopo": [
+    {
+     "item": "I2.7",
+     "data": "2026-10-29",
+     "decisao": "D5 e decisão 0074, item 3: passe final independente COM BLOQUEADOR sobre o PR #20; S0b passa ao I3 (I3.9)",
+     "registro": "docs/auditoria/1.4.0/pr20-adiamento.md",
+     "motivo": "query sem normalização na comparação do robots permite ignorar Disallow"
+    },
+    {
+     "item": "I2.2",
+     "data": "2026-10-29",
+     "decisao": "decisão do titular de 29/10/2026: depende da S0b para sondar os hosts; passa ao I3 (I3.10)",
+     "registro": "docs/auditoria/1.4.0/pr20-adiamento.md",
+     "motivo": "TST veda o portal e o robots do STF não foi lido; a regra da S0b decide antes de qualquer sonda"
+    },
+    {
+     "item": "I2.3",
+     "data": "2026-10-29",
+     "decisao": "decisão do titular de 29/10/2026: depende da S0b para sondar os hosts; passa ao I3 (I3.11)",
+     "registro": "docs/auditoria/1.4.0/pr20-adiamento.md",
+     "motivo": "robots do BNP não foi lido; a regra da S0b decide antes de qualquer sonda"
+    }
+   ]
   },
   {
    "id": "I3",
@@ -424,6 +446,21 @@
      "id": "I3.8",
      "estado": "pendente",
      "nota": ""
+    },
+    {
+     "id": "I3.9",
+     "estado": "pendente",
+     "nota": "S0b (robots pelo RFC 9309), ex-I2.7: docs/auditoria/1.4.0/pr20-adiamento.md"
+    },
+    {
+     "id": "I3.10",
+     "estado": "pendente",
+     "nota": "conectores TST e STF acórdãos, ex-I2.2: docs/auditoria/1.4.0/pr20-adiamento.md"
+    },
+    {
+     "id": "I3.11",
+     "estado": "pendente",
+     "nota": "BNP/Pangea integral e informativos de STF, STJ e TST, ex-I2.3: docs/auditoria/1.4.0/pr20-adiamento.md"
     }
    ],
    "etapas": {
