@@ -100,11 +100,11 @@ Um incremento só está concluído com todas as etapas abaixo cumpridas e regist
 | ID | Item |
 |---|---|
 | I2.1 | Tabela de requisitos por ferramenta de paridade, fixada antes da implementação |
-| I2.2 | Conectores TST e STF acórdãos (STF com indisponibilidade classificada sob WAF) |
-| I2.3 | BNP/Pangea integral e informativos de STF, STJ e TST |
+| I2.2 | Conectores TST e STF acórdãos (STF com indisponibilidade classificada sob WAF) - passa ao I3 como I3.10 em 29/10/2026 (`docs/auditoria/1.4.0/pr20-adiamento.md`) |
+| I2.3 | BNP/Pangea integral e informativos de STF, STJ e TST - passa ao I3 como I3.11 em 29/10/2026 (`docs/auditoria/1.4.0/pr20-adiamento.md`) |
 | I2.4 | Tools `informativo_juridico`, `timeline_decisoes` (DataJud), `listar_overruling_por_tema`, `listar_tribunais`, `listar_ramos_direito`, chunks em `obter_decisao` |
 | I2.5 | Conjunto de desenvolvimento e reserva da Porta A congelados por hash (Luna), revisão de método (terra) |
-| I2.7 | S0b parte 1: robots pelo RFC 9309 (decisão 0071), adiada do I1 em 28/10/2026 (`docs/auditoria/1.4.0/pr18-adiamento.md`); ramo `feat/s0b-robots-r2` como base |
+| I2.7 | S0b parte 1: robots pelo RFC 9309 (decisão 0071), adiada do I1 em 28/10/2026 (`docs/auditoria/1.4.0/pr18-adiamento.md`); ramo `feat/s0b-robots-r2` como base - adiado pelo D5 em 29/10/2026 e passa ao I3 como I3.9 (`docs/auditoria/1.4.0/pr20-adiamento.md`) |
 
 ### I3 (1.4.0a3): tribunais estaduais e federais, DJEN, sessão assistida, Planalto
 
@@ -118,6 +118,9 @@ Um incremento só está concluído com todas as etapas abaixo cumpridas e regist
 | I3.6 | Cascata Planalto com teste de equivalência por capacidade; pedido formal à Presidência |
 | I3.7 | Matriz de aceite dos 33 tribunais em `listar_fontes` |
 | I3.8 | Conectores TRF3, TRF2 e TRF1, nessa ordem, pelos portais próprios, com o CJF como candidato sujeito a teste de equivalência; compatibilidade demonstrada por fixtures por portal |
+| I3.9 | S0b, robots pelo RFC 9309 (ex-I2.7), primeiro item do I3; ramo `feat/s0b-robots-r3` como base (`docs/auditoria/1.4.0/pr20-adiamento.md`) |
+| I3.10 | Conectores TST e STF acórdãos (ex-I2.2), depois do I3.9 |
+| I3.11 | BNP/Pangea integral e informativos de STF, STJ e TST (ex-I2.3), depois do I3.9 |
 
 ### I4 (1.4.0): busca híbrida, avaliação reservada e Porta A
 

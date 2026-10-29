@@ -1084,11 +1084,17 @@ def test_estado_inicial_do_plano_1_4_0():
     # I1 concluído em 29/10/2026 (docs/auditoria/1.4.0/aceite-i1.md); os demais seguem abertos.
     assert [i["estado"] for i in incs.values()] == ["concluido", "aberto", "aberto", "aberto"]
     assert all(e["estado"] == "concluida" for e in incs["I1"]["etapas"].values())
-    assert [k for k, i in incs.items() if i["rotulo"] is not None] == ["I1"]
+    # I2 com rótulo de redução desde a passagem da S0b, do I2.2 e do I2.3 ao I3 (pr20-adiamento.md).
+    assert [k for k, i in incs.items() if i["rotulo"] is not None] == ["I1", "I2"]
     estados = {it["id"]: it["estado"] for it in incs["I1"]["itens"]}
     assert estados == {"I1.1": "concluido", "I1.2": "adiado", "I1.3": "concluido", "I1.4": "concluido",
                        "I1.5": "reduzido", "I1.6": "concluido", "S0": "reduzido"}
-    assert {"I2.6", "I2.7"} <= {it["id"] for it in incs["I2"]["itens"]}
+    estados_i2 = {it["id"]: it["estado"] for it in incs["I2"]["itens"]}
+    assert {k: estados_i2[k] for k in ("I2.2", "I2.3", "I2.7")} == {"I2.2": "adiado", "I2.3": "adiado",
+                                                                    "I2.7": "adiado"}
+    estados_i3 = {it["id"]: it["estado"] for it in incs["I3"]["itens"]}
+    assert {k: estados_i3.get(k) for k in ("I3.9", "I3.10", "I3.11")} == {"I3.9": "pendente", "I3.10": "pendente",
+                                                                       "I3.11": "pendente"}
     # O I1 está em fechamento (docs/auditoria/1.4.0/aceite-i1.md); os demais incrementos seguem sem evidências.
     seguintes = [i for k, i in incs.items() if k != "I1"]
     assert all(e["estado"] == "pendente" for i in seguintes for e in i["etapas"].values())
@@ -1422,7 +1428,7 @@ def test_r2_b2_catalogo_do_plano():
     assert ma.CATALOGO_PLANO == {
         "I1": ("I1.1", "I1.2", "I1.3", "I1.4", "I1.5", "I1.6", "S0"),
         "I2": ("I2.1", "I2.2", "I2.3", "I2.4", "I2.5", "I2.6", "I2.7"),
-        "I3": ("I3.1", "I3.2", "I3.3", "I3.4", "I3.5", "I3.6", "I3.7", "I3.8"),
+        "I3": ("I3.1", "I3.2", "I3.3", "I3.4", "I3.5", "I3.6", "I3.7", "I3.8", "I3.9", "I3.10", "I3.11"),
         "I4": ("I4.1", "I4.2", "I4.3", "I4.4"),
     }
 

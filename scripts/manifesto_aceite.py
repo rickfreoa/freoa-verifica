@@ -131,11 +131,12 @@ HASHES_CALCULADOS = {
 }
 
 # Baseline explícita da seção 6 do plano: os itens de cada incremento (o I2.6 vem do adiamento do I1.2;
-# o I2.7, do adiamento da S0b parte 1, docs/auditoria/1.4.0/pr18-adiamento.md).
+# o I2.7, do adiamento da S0b parte 1, docs/auditoria/1.4.0/pr18-adiamento.md; I3.9 a I3.11, da passagem da
+# S0b, do I2.2 e do I2.3 ao I3, docs/auditoria/1.4.0/pr20-adiamento.md).
 CATALOGO_PLANO: dict[str, tuple[str, ...]] = {
     "I1": ("I1.1", "I1.2", "I1.3", "I1.4", "I1.5", "I1.6", "S0"),
     "I2": ("I2.1", "I2.2", "I2.3", "I2.4", "I2.5", "I2.6", "I2.7"),
-    "I3": ("I3.1", "I3.2", "I3.3", "I3.4", "I3.5", "I3.6", "I3.7", "I3.8"),
+    "I3": ("I3.1", "I3.2", "I3.3", "I3.4", "I3.5", "I3.6", "I3.7", "I3.8", "I3.9", "I3.10", "I3.11"),
     "I4": ("I4.1", "I4.2", "I4.3", "I4.4"),
 }
 
