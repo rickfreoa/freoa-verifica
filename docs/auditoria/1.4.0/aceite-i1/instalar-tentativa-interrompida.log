@@ -1,0 +1,28 @@
+[saneado: 34 linhas 'Requirement already satisfied' do pip omitidas; caminhos por marcadores]
+inicio 2026-10-28T09:29:18.4348230-03:00
+checkout 6ac49ee520afcd37c26e2f9e640952dd7ea2da8a
+instalacao.json antes:
+{
+    "commit":  "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
+    "digest_snapshot":  null,
+    "versao":  "1.4.0a1",
+    "concluida":  false,
+    "proveniencia":  "VERIFICADA: gh attestation verify",
+    "sha256_wheel":  "66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f",
+    "attestation_verificada":  true
+}
+powershell :
+No <aud>\instalar-a1.ps1:5 caractere:1
++ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\instalar- ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+[notice] A new release of pip is available: 26.2.1 -> 26.2.2
+[notice] To update, run: <instalacao>\.venv\Scripts\python.exe -m pip install --upgrade pip
+Processing <instalacao>\freoa_verifica-1.4.0a1-py3-none-any.whl (from freoa-verifica[server] @ file:///<instalacao>/freoa_verifica-1.4.0a1-py3-none-any.whl->-r <instalacao>\requirements-wheel.txt (line 1))
+freoa-verifica is already installed with the same version as the provided wheel. Use --force-reinstall to force an installation of the wheel.
+<repo>\scripts\instalar-freoa-verifica.ps1 : FALHOU na etapa: instalar snapshot - FALHOU na etapa: instalar
+snapshot (exit=1073807364)
+    + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+    + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,instalar-freoa-verifica.ps1

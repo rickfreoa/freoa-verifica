@@ -1,0 +1,290 @@
+{
+ "commit": "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
+ "run_id": null,
+ "inicio": "2026-10-28T15:07:23.842291+00:00",
+ "fim": "2026-10-28T15:10:59.587256+00:00",
+ "completa": true,
+ "fontes": {
+  "bcb": {
+   "estado": "ok",
+   "categoria": null,
+   "motivo": null,
+   "testes": [
+    {
+     "nome": "tests/live/test_live_bcb.py::test_live_bcb_positivo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_bcb.py::test_live_bcb_negativo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_bcb.py::test_live_bcb_documento",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "cvm_colegiado": {
+   "estado": "ok",
+   "categoria": null,
+   "motivo": null,
+   "testes": [
+    {
+     "nome": "tests/live/test_live_cvm_colegiado.py::test_live_cvm_colegiado_positivo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_cvm_colegiado.py::test_live_cvm_colegiado_negativo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_cvm_colegiado.py::test_live_cvm_colegiado_documento",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "cvm_normas": {
+   "estado": "ok",
+   "categoria": null,
+   "motivo": null,
+   "testes": [
+    {
+     "nome": "tests/live/test_live_cvm_normas.py::test_live_cvm_normas_positivo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_cvm_normas.py::test_live_cvm_normas_negativo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_cvm_normas.py::test_live_cvm_normas_documento",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "datajud": {
+   "estado": "unavailable",
+   "categoria": "fonte_fora",
+   "motivo": "http_504",
+   "testes": [
+    {
+     "nome": "tests/live/test_live_datajud.py::test_live_datajud_positivo",
+     "estado": "unavailable",
+     "categoria": "fonte_fora",
+     "motivo": "http_504"
+    },
+    {
+     "nome": "tests/live/test_live_datajud.py::test_live_datajud_negativo",
+     "estado": "unavailable",
+     "categoria": "fonte_fora",
+     "motivo": "http_504"
+    },
+    {
+     "nome": "tests/live/test_live_datajud.py::test_live_datajud_documento_stf_ausente",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "planalto": {
+   "estado": "regressao",
+   "categoria": "recusa_identificado",
+   "motivo": "recusa_identificado_planalto",
+   "testes": [
+    {
+     "nome": "tests/live/test_live_planalto.py::test_live_planalto_positivo",
+     "estado": "regressao",
+     "categoria": "recusa_identificado",
+     "motivo": "recusa_identificado_planalto"
+    },
+    {
+     "nome": "tests/live/test_live_planalto.py::test_live_planalto_negativo",
+     "estado": "regressao",
+     "categoria": "regressao",
+     "motivo": "assert '404' in 'recusa_identificado_planalto'\n +  where 'recusa_identificado_planalto' = Unavailable('recusa_identificado_planalto').reason\n +    where Unavailable('recusa_identificado_planalto') = <"
+    },
+    {
+     "nome": "tests/live/test_live_planalto.py::test_live_planalto_documento",
+     "estado": "regressao",
+     "categoria": "recusa_identificado",
+     "motivo": "recusa_identificado_planalto"
+    }
+   ]
+  },
+  "senado": {
+   "estado": "ok",
+   "categoria": null,
+   "motivo": null,
+   "testes": [
+    {
+     "nome": "tests/live/test_live_senado.py::test_live_senado_positivo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_senado.py::test_live_senado_negativo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_senado.py::test_live_senado_documento",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "stf": {
+   "estado": "ok",
+   "categoria": null,
+   "motivo": null,
+   "testes": [
+    {
+     "nome": "tests/live/test_live_stf.py::test_live_stf_positivo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_stf.py::test_live_stf_negativo_busca_waf",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_stf.py::test_live_stf_documento",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "stj": {
+   "estado": "ok",
+   "categoria": null,
+   "motivo": null,
+   "testes": [
+    {
+     "nome": "tests/live/test_live_stj.py::test_live_stj_positivo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_stj.py::test_live_stj_negativo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_stj.py::test_live_stj_documento",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "tcu": {
+   "estado": "regressao",
+   "categoria": "regressao",
+   "motivo": "tcu_busca_incompleta_limite_de_varredura",
+   "testes": [
+    {
+     "nome": "tests/live/test_live_tcu.py::test_live_tcu_positivo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_tcu.py::test_live_tcu_negativo",
+     "estado": "regressao",
+     "categoria": "regressao",
+     "motivo": "tcu_busca_incompleta_limite_de_varredura"
+    },
+    {
+     "nome": "tests/live/test_live_tcu.py::test_live_tcu_documento",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "tjdft": {
+   "estado": "ok",
+   "categoria": null,
+   "motivo": null,
+   "testes": [
+    {
+     "nome": "tests/live/test_live_tjdft.py::test_live_tjdft_positivo",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_tjdft.py::test_live_tjdft_negativo_estrutural",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_tjdft.py::test_live_tjdft_documento_captura_e_parse",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    },
+    {
+     "nome": "tests/live/test_live_tjdft.py::test_live_tjdft_acordao_sem_integra_fica_so_com_ementa",
+     "estado": "ok",
+     "categoria": null,
+     "motivo": null
+    }
+   ]
+  },
+  "tjsp": {
+   "estado": "unavailable",
+   "categoria": "ambiental_desafio",
+   "motivo": "desafio_captcha",
+   "testes": [
+    {
+     "nome": "tests/live/test_live_tjsp.py::test_live_tjsp_positivo",
+     "estado": "unavailable",
+     "categoria": "ambiental_desafio",
+     "motivo": "desafio_captcha"
+    },
+    {
+     "nome": "tests/live/test_live_tjsp.py::test_live_tjsp_negativo",
+     "estado": "unavailable",
+     "categoria": "ambiental_desafio",
+     "motivo": "desafio_captcha"
+    },
+    {
+     "nome": "tests/live/test_live_tjsp.py::test_live_tjsp_documento",
+     "estado": "unavailable",
+     "categoria": "ambiental_desafio",
+     "motivo": "desafio_captcha"
+    }
+   ]
+  }
+ }
+}

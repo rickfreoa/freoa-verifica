@@ -1,12 +1,12 @@
 {
  "plano": "1.4.0",
- "atualizado_em": "2026-10-28T08:14:58+00:00",
+ "atualizado_em": "2026-10-29T11:49:56+00:00",
  "incrementos": [
   {
    "id": "I1",
    "versao": "1.4.0a1",
-   "estado": "aberto",
-   "rotulo": "1.4.0a1: sem íntegras do STJ (I1.2 adiado para I2.6); manifesto de aceite com conferência material da bateria e da instalação por parecer do auditor (I1.5 reduzido)",
+   "estado": "concluido",
+   "rotulo": "1.4.0a1: sem íntegras do STJ (I1.2 adiado para I2.6); manifesto de aceite com conferência material da bateria e da instalação por parecer do auditor (I1.5 reduzido); S0 reduzida à rodada 1 (S0b parte 1 adiada para I2.7); doctor com ressalva do TCU (decisão 0072)",
    "itens": [
     {
      "id": "I1.1",
@@ -25,8 +25,8 @@
     },
     {
      "id": "I1.4",
-     "estado": "pendente",
-     "nota": ""
+     "estado": "concluido",
+     "nota": "PR #12 (bench e linha de base ao vivo da 1.3.0); bateria ao vivo da 1.4.0a1 em docs/auditoria/1.4.0/aceite-i1.md"
     },
     {
      "id": "I1.5",
@@ -40,50 +40,233 @@
     },
     {
      "id": "S0",
-     "estado": "pendente",
+     "estado": "reduzido",
      "nota": ""
     }
    ],
    "etapas": {
     "1_desenvolvimento": {
-     "estado": "pendente",
-     "evidencias": [],
-     "nota": ""
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "especificacao",
+       "campos": {
+        "especificacao": "docs/PLANO-1.4.0.md",
+        "ramo": "release/1.4.0a1"
+       },
+       "data": "2026-10-28T16:07:18+00:00"
+      }
+     ],
+     "nota": "especificação: seção 6 (I1) do plano, com as reduções registradas (I1.2 adiado, I1.5 e S0 reduzidos)"
     },
     "2_teste": {
-     "estado": "pendente",
-     "evidencias": [],
-     "nota": ""
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "run_ci",
+       "campos": {
+        "url": "https://github.com/rickfreoa/freoa-verifica/actions/runs/40671237979",
+        "commit": "5c860546acf6338ae1774eaeec9a9bb8a7de7983",
+        "conclusao": "success",
+        "jobs": [
+         {
+          "nome": "lint",
+          "conclusao": "success"
+         },
+         {
+          "nome": "repositorio",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (ubuntu-latest, 3.11)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (ubuntu-latest, 3.12)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (ubuntu-latest, 3.13)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (ubuntu-latest, 3.14)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (windows-latest, 3.11)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (windows-latest, 3.12)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (windows-latest, 3.13)",
+          "conclusao": "success"
+         },
+         {
+          "nome": "test (windows-latest, 3.14)",
+          "conclusao": "success"
+         }
+        ]
+       },
+       "data": "2026-10-29T11:49:07+00:00"
+      },
+      {
+       "tipo": "bateria_live",
+       "campos": {
+        "relatorio": "docs/auditoria/1.4.0/aceite-i1/live-5c86054.txt",
+        "sha256": "b7e3b3dc45a274577aaced02d070e870b05f00cf1e3c123a81ddfd485a8f3a0d",
+        "saude_fontes": "docs/auditoria/1.4.0/aceite-i1/saude-fontes-5c86054.json",
+        "saude_fontes_sha256": "84a85dcca564e7e7ea27d9b5e9884a10714946cce374a0ba7e654907a489e502",
+        "commit": "5c860546acf6338ae1774eaeec9a9bb8a7de7983",
+        "parecer_bateria": "docs/auditoria/1.4.0/pareceres/i1-bateria-r2.md",
+        "parecer_bateria_sha256": "3439ed35e89a024634b5ed94e5adfa005178a9ea25ff99d168f0a938eadbdbbe"
+       },
+       "data": "2026-10-29T11:49:08+00:00"
+      }
+     ],
+     "nota": "tentativa 3 de 29/10 (DataJud ok após 40 min sem chamadas); tentativas 1 e 2 com DataJud http_429 guardadas em aceite-i1/; falhas fora do escopo: Planalto x3, TCU negativo"
     },
     "3_commit": {
-     "estado": "pendente",
-     "evidencias": [],
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "commit",
+       "campos": {
+        "commit": "5c860546acf6338ae1774eaeec9a9bb8a7de7983"
+       },
+       "data": "2026-10-28T16:07:18+00:00"
+      }
+     ],
      "nota": ""
     },
     "4_incorporacao": {
-     "estado": "pendente",
-     "evidencias": [],
-     "nota": ""
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "parecer",
+       "campos": {
+        "parecer": "docs/auditoria/1.4.0/pareceres/pr16-r2.md",
+        "sha256": "db31cf7336a2e32ae32cb4e17d48addddbb127e2a6047954614bafd8375a91e9",
+        "commit_auditado": "5c860546acf6338ae1774eaeec9a9bb8a7de7983"
+       },
+       "data": "2026-10-28T16:07:18+00:00"
+      },
+      {
+       "tipo": "merge",
+       "campos": {
+        "commit": "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a"
+       },
+       "data": "2026-10-28T16:07:18+00:00"
+      }
+     ],
+     "nota": "merge do PR #16; árvore de 6ac49ee idêntica à de 5c86054 (git diff vazio)"
     },
     "5_publicacao": {
-     "estado": "pendente",
-     "evidencias": [],
-     "nota": ""
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "tag",
+       "campos": {
+        "tag": "v1.4.0a1",
+        "commit": "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a"
+       },
+       "data": "2026-10-28T16:07:19+00:00"
+      },
+      {
+       "tipo": "release",
+       "campos": {
+        "url": "https://github.com/rickfreoa/freoa-verifica/releases/tag/v1.4.0a1",
+        "attestation_verificada": true,
+        "sha256_wheel": "66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f",
+        "sha256_sdist": "9caa6d8e4f7679231404740c85c45926c7c22d9ae9decf872b3366ee8b815e9c"
+       },
+       "data": "2026-10-28T16:07:19+00:00"
+      },
+      {
+       "tipo": "pypi",
+       "campos": {
+        "versao": "1.4.0a1",
+        "sha256_wheel": "66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f",
+        "sha256_sdist": "9caa6d8e4f7679231404740c85c45926c7c22d9ae9decf872b3366ee8b815e9c"
+       },
+       "data": "2026-10-28T16:07:19+00:00"
+      }
+     ],
+     "nota": "PyPI 1.4.0a1 conferida em 28/10/2026 pela API JSON: hashes iguais ao SHA256SUMS da release"
     },
     "6_distribuicao": {
-     "estado": "pendente",
-     "evidencias": [],
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "snapshot",
+       "campos": {
+        "pacotes": [
+         {
+          "nome": "freoa-verifica-snapshot-20261028-1.4.0a1.tar.gz",
+          "sha256": "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa"
+         }
+        ],
+        "bateria_s4": "aprovada",
+        "lista_embutida_commit": "62c0df72b1e1a8660a03644f69724d6983632979"
+       },
+       "data": "2026-10-28T16:07:19+00:00"
+      }
+     ],
      "nota": ""
     },
     "7_instalacao": {
-     "estado": "pendente",
-     "evidencias": [],
-     "nota": ""
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "instalacao",
+       "campos": {
+        "concluida": true,
+        "commit": "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
+        "attestation_verificada": true,
+        "digests": [
+         "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa"
+        ],
+        "parecer_instalacao": "docs/auditoria/1.4.0/pareceres/i1-instalacao.md",
+        "parecer_instalacao_sha256": "8ad5532563f7c4c03c97e4460317966b9a64a2b6f4c7b2d196c4da1527094d4d"
+       },
+       "data": "2026-10-28T16:07:19+00:00"
+      }
+     ],
+     "nota": "instalador oficial no notebook Windows em 28/10/2026; evidências em docs/auditoria/1.4.0/aceite-i1.md"
     },
     "8_execucao": {
-     "estado": "pendente",
-     "evidencias": [],
-     "nota": ""
+     "estado": "concluida",
+     "evidencias": [
+      {
+       "tipo": "doctor",
+       "campos": {
+        "ok": true,
+        "alertas": [
+         "fonte_fora: CVM colegiado e CVM normas transporte_Timeout (29/10)",
+         "recusa_identificado: Planalto recusa_identificado_planalto (decisão 0048)",
+         "ambiental_desafio: TJSP desafio_captcha"
+        ]
+       },
+       "data": "2026-10-29T11:49:08+00:00"
+      },
+      {
+       "tipo": "bateria_live",
+       "campos": {
+        "relatorio": "docs/auditoria/1.4.0/aceite-i1/live.txt",
+        "sha256": "05ab1617b1dcf510f3d19953e36ff711bf98b4e08b51d577bfc42e80bbcf780c",
+        "saude_fontes": "docs/auditoria/1.4.0/aceite-i1/saude-fontes.json",
+        "saude_fontes_sha256": "f2c64a5719bc1cccaf6ca05e97e8e6ef4d2bb8bc8cebf036190928f147437717",
+        "commit": "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
+        "parecer_bateria": "docs/auditoria/1.4.0/pareceres/i1-bateria-r2.md",
+        "parecer_bateria_sha256": "3439ed35e89a024634b5ed94e5adfa005178a9ea25ff99d168f0a938eadbdbbe"
+       },
+       "data": "2026-10-29T11:49:08+00:00"
+      }
+     ],
+     "nota": "doctor de 29/10 07:31 (aceite-i1/doctor-20261029.json); alerta do TCU sem categoria ressalvado pela decisão 0072; bateria de 28/10 em 6ac49ee; falhas fora do escopo: Planalto x3, TCU negativo"
     }
    },
    "reducoes_de_escopo": [
@@ -100,6 +283,13 @@
      "decisao": "D5: três rodadas COM BLOQUEADOR; conteúdo da bateria e do ambiente conferido por parecer do auditor, não pelo validador",
      "registro": "docs/auditoria/1.4.0/i15-reducao-escopo.md",
      "motivo": "o validador não confrontava a saúde das fontes com escopo, contagens e commit"
+    },
+    {
+     "item": "S0",
+     "data": "2026-10-28",
+     "decisao": "D5: passe final independente COM BLOQUEADOR sobre o PR #18; S0 reduzida à rodada 1 (PR #15) e S0b parte 1 adiada para I2.7",
+     "registro": "docs/auditoria/1.4.0/pr18-adiamento.md",
+     "motivo": "registro contraditório no robots libera rotas; falha de gravação após recusa permite repetir o pedido"
     }
    ]
   },
@@ -138,6 +328,11 @@
      "id": "I2.6",
      "estado": "pendente",
      "nota": "segmentação tipada e ligação das íntegras do STJ ao acervo; I1.2 adiado inteiro para cá (docs/auditoria/1.4.0/pr10-adiamento.md)"
+    },
+    {
+     "id": "I2.7",
+     "estado": "pendente",
+     "nota": "S0b parte 1 (robots pelo RFC 9309, decisão 0071), adiada do I1: docs/auditoria/1.4.0/pr18-adiamento.md"
     }
    ],
    "etapas": {

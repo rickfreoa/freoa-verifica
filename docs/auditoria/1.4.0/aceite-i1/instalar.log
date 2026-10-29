@@ -1,0 +1,274 @@
+[saneado: 34 linhas 'Requirement already satisfied' do pip omitidas; caminhos por marcadores]
+limpeza 2026-10-28T11:40:36.3228366-03:00
+marcador orfao removido: 94876-01M618DNYMHBRR29J2YFPRPEAW
+staging removido: fv-snap-dl-295650cf66fc422194849fd0717e0e36
+staging removido: fv-snap-fb9fcf0b2f834384a901b7725f419581
+inicio 2026-10-28T11:41:04.7875356-03:00
+checkout 6ac49ee520afcd37c26e2f9e640952dd7ea2da8a
+instalacao.json antes:
+{
+    "commit":  "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
+    "digest_snapshot":  null,
+    "versao":  "1.4.0a1",
+    "concluida":  false,
+    "proveniencia":  "VERIFICADA: gh attestation verify",
+    "sha256_wheel":  "66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f",
+    "attestation_verificada":  true
+}
+powershell :
+No <aud>\instalar-a1.ps1:5 caractere:1
++ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\instalar- ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+[notice] A new release of pip is available: 26.2.1 -> 26.2.2
+[notice] To update, run: <instalacao>\.venv\Scripts\python.exe -m pip install --upgrade pip
+Processing <instalacao>\freoa_verifica-1.4.0a1-py3-none-any.whl (from freoa-verifica[server] @ file:///<instalacao>/freoa_verifica-1.4.0a1-py3-none-any.whl->-r <instalacao>\requirements-wheel.txt (line 1))
+freoa-verifica is already installed with the same version as the provided wheel. Use --force-reinstall to force an installation of the wheel.
+Pronto. Comandos em: <instalacao>\.venv\Scripts (fv.exe e freoa-verifica-mcp.exe).
+instalador exit=0
+instalacao.json depois:
+{
+    "commit":  "6ac49ee520afcd37c26e2f9e640952dd7ea2da8a",
+    "digest_snapshot":  "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa",
+    "versao":  "1.4.0a1",
+    "concluida":  true,
+    "proveniencia":  "VERIFICADA: gh attestation verify",
+    "sha256_wheel":  "66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f",
+    "attestation_verificada":  true
+}
+freoa-verifica 1.4.0a1
+== doctor
+Diagn├│stico
+-----------
+status: ok
+verificacoes:
+  - [0]
+    nome: versao
+    status: ok
+    detalhe: 1.4.0a1
+  - [1]
+    nome: home
+    status: ok
+    detalhe: <home-fv>
+  - [2]
+    nome: banco
+    status: ok
+    detalhe: <home-fv>\verifica.sqlite3
+  - [3]
+    nome: migracoes
+    status: ok
+    detalhe: 16 vers├Áes
+  - [4]
+    nome: fonte:bcb
+    status: ok
+    detalhe:
+      - [0]
+        nome: positivo
+        status: ok
+        detalhe: None
+      - [1]
+        nome: negativo
+        status: zero
+        detalhe: n=0
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: Resolu├º├úo CMN N┬░ 4.966
+  - [5]
+    nome: fonte:cvm_colegiado
+    status: ok
+    detalhe:
+      - [0]
+        nome: positivo
+        status: ok
+        detalhe: None
+      - [1]
+        nome: negativo
+        status: zero
+        detalhe: n=0
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: https://conteudo.cvm.gov.br/decisoes/2026/20260918_R1/20260918_D3619.html
+  - [6]
+    nome: fonte:cvm_normas
+    status: ok
+    detalhe:
+      - [0]
+        nome: positivo
+        status: ok
+        detalhe: None
+      - [1]
+        nome: negativo
+        status: zero
+        detalhe: n=0
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: Resolu├º├úo CVM no 80, de 29 de mar├ºo de 2022, COM AS ALTERA├ç├òES INTRODUZIDAS PELA
+  - [7]
+    nome: fonte:datajud
+    status: alerta
+    detalhe:
+      - [0]
+        nome: positivo
+        status: unavailable
+        detalhe: http_429
+      - [1]
+        nome: negativo
+        status: unavailable
+        detalhe: http_429
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: datajud_stf_inexistente
+  - [8]
+    nome: fonte:planalto
+    status: alerta
+    detalhe:
+      - [0]
+        nome: positivo
+        status: unavailable
+        detalhe: recusa_identificado_planalto
+      - [1]
+        nome: negativo
+        status: unavailable
+        detalhe: recusa_identificado_planalto
+      - [2]
+        nome: documento
+        status: unavailable
+        detalhe: recusa_identificado_planalto
+  - [9]
+    nome: fonte:senado
+    status: ok
+    detalhe:
+      - [0]
+        nome: positivo
+        status: ok
+        detalhe: senado:552179
+      - [1]
+        nome: negativo
+        status: zero
+        detalhe: n=0
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: LEI-10303-2001-10-31
+  - [10]
+    nome: fonte:stf
+    status: ok
+    detalhe:
+      - [0]
+        nome: positivo
+        status: ok
+        detalhe: 6255858
+      - [1]
+        nome: negativo
+        status: ok
+        detalhe: stf_busca_textual_sob_waf
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: n=3
+  - [11]
+    nome: fonte:stj
+    status: ok
+    detalhe:
+      - [0]
+        nome: positivo
+        status: ok
+        detalhe: espelhos-de-acordaos-corte-especial
+      - [1]
+        nome: negativo
+        status: ok
+        detalhe: http_404
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: n=676
+  - [12]
+    nome: fonte:tcu
+    status: alerta
+    detalhe:
+      - [0]
+        nome: positivo
+        status: ok
+        detalhe: None
+      - [1]
+        nome: negativo
+        status: unavailable
+        detalhe: tcu_busca_incompleta_limite_de_varredura
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: ACORDAO-COMPLETO-2784125
+  - [13]
+    nome: fonte:tjdft
+    status: ok
+    detalhe:
+      - [0]
+        nome: positivo
+        status: ok
+        detalhe: n=3
+      - [1]
+        nome: negativo
+        status: zero
+        detalhe: n=0
+      - [2]
+        nome: documento
+        status: ok
+        detalhe: 2185013
+  - [14]
+    nome: fonte:tjsp
+    status: alerta
+    detalhe:
+      - [0]
+        nome: positivo
+        status: unavailable
+        detalhe: desafio_captcha
+      - [1]
+        nome: negativo
+        status: unavailable
+        detalhe: desafio_captcha
+      - [2]
+        nome: documento
+        status: unavailable
+        detalhe: desafio_captcha
+  - [15]
+    nome: snapshot_proveniencia
+    status: ok
+    detalhe:
+      vinculado: True
+      snapshot_sha256: ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa
+      snapshot_derived_version: 5
+      vinculo_motivo: None
+  - [16]
+    nome: snapshot_digest
+    status: ok
+    detalhe:
+      versao: 1.4.0a1
+      instalado: ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa
+      esperados:
+        - [0]
+          ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa
+      confere: True
+  - [17]
+    nome: attestation
+    status: ok
+    detalhe:
+      attestation_verificada: True
+      versao: 1.4.0a1
+      concluida: True
+      sha256_wheel: 66446a0a265cbd42a5bfea3ff46a20e5f0298445825ce95d38b22e9f17ab4b8f
+      digest_snapshot: ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa
+      versao_instalada: 1.4.0a1
+      motivos:
+  - [18]
+    nome: acervo
+    status: ok
+    detalhe: atende ao manifesto/m├¡nimo
+doctor exit=0
+fim 2026-10-28T12:01:32.0658330-03:00
+wrapper fim 2026-10-28T12:01:32.0658330-03:00
