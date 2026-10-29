@@ -6,10 +6,11 @@ restrições) ou para (barreira). Um pedido por URL; nenhuma repetição, nem ap
 instrumento. O orquestrador não faz rede: cada pedido é um `scripts/capturar_fixture.py` do roteiro, com os mesmos
 argumentos, trocando só a pasta de saída (`--saida` do roteiro vira `<saida>/<última pasta>`).
 
-Se `<saida>/<fonte>/<chave>.captura.json` já existe, o orquestrador o lê e não pede de novo: duas execuções sobre a
-mesma saída nunca repetem um pedido (a primeira pode ser só `--somente-robots`; a segunda segue com as rotas). Antes de
-cada pedido grava `<chave>.tentativa.json`; se numa execução seguinte houver marcador sem `.captura.json` (falha de
-gravação ou queda depois do pedido), o host para sem novo pedido.
+Antes de cada pedido o orquestrador adquire a URL, com criação exclusiva, no registro de tentativas por URL
+(`FV_S0_TENTATIVAS` ou `~/.freoa-verifica/s0-tentativas`, fora de qualquer pasta de saída). URL já adquirida nunca
+recebe outro pedido: se a captura dela existe (nesta ou em outra saída), é reaproveitada; se não existe (falha de
+gravação, queda), o host para. Trocar a saída ou a chave não reabre a URL. O limite é o do registro: outro usuário,
+outra máquina ou outro `FV_S0_TENTATIVAS` não o enxergam.
 
 Uso:
     python scripts/s0_orquestrar.py --roteiro docs/S0-SONDAS.md --saida <pasta fora do repositório> \\
@@ -20,15 +21,17 @@ Uso:
 não recebem nenhum pedido. `--hosts`/`--hosts-arquivo`: restringe a rodada a esses hosts (a rodada 2 da S0b refaz só
 os hosts cuja parada da rodada 1 decorreu da regra antiga). `--somente-robots`: só o `robots.txt` de cada host.
 Caminhos no relatório: a pasta de saída aparece como `<saida>`, o checkout como `<repo>`, o interpretador como
-`<python>`, a casa do usuário como `<home>`, e caminho absoluto citado entre aspas ou com mais de um componente como
-`<caminho>`. Limitação declarada: caminho de um só componente em texto corrido (`/x`) fica, porque é sintaticamente
-igual a caminho de URL (`/robots.txt`), ainda que possa conter nome identificador; e caminho entre aspas simples que
-contenha apóstrofo pode sair truncado no apóstrofo.
+`<python>`, a casa do usuário como `<home>`. Do traceback do instrumento entram só os quadros (caminho por
+marcador, linha, função) e a última linha (a exceção); código-fonte e texto intermediário não entram.
+Limitação declarada: na última linha e na saída sem traceback, a troca é por padrão textual; ficam caminho de um só componente
+(`/x`, igual a caminho de URL), caminho não citado que contenha espaço (o trecho depois do espaço) e caminho entre
+aspas simples com apóstrofo (o trecho depois do apóstrofo).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -108,9 +111,10 @@ def _raizes() -> list[tuple[str, str]]:
 
 
 def _limpo(texto: str, base: Path) -> str:
-    """Texto do instrumento com os caminhos de máquina trocados por marcadores (limitação no docstring do módulo):
-    citado entre aspas sai inteiro como `<caminho>`; a pasta de saída vira `<saida>`; o checkout, o interpretador e a
-    casa do usuário, `<repo>`, `<python>`, `<home>`; outro caminho absoluto (POSIX ou Windows), `<caminho>`.
+    """Troca textual de caminhos por marcadores, usada só na última linha e na saída sem traceback (`_relato`).
+    Citado entre aspas duplas sai inteiro como `<caminho>`; a pasta de saída vira `<saida>`; o checkout, o
+    interpretador e a casa do usuário, `<repo>`, `<python>`, `<home>`; outro caminho absoluto, `<caminho>`. Limites no
+    docstring do módulo.
     O tipo da exceção e a mensagem curta ficam; um traceback inteiro perde só os caminhos."""
     texto = texto.strip()
     # Primeiro o caminho citado, inteiro e com espaços (File "..." dos tracebacks), antes de qualquer raiz conhecida:
@@ -127,12 +131,74 @@ def _limpo(texto: str, base: Path) -> str:
     return texto[-300:]
 
 
-def _gravar_marcador(marcador: Path, url: str) -> None:
-    """Grava, ANTES do pedido, que ele vai ocorrer; escrita completa ou nada (arquivo temporário e troca)."""
-    marcador.parent.mkdir(parents=True, exist_ok=True)
-    tmp = marcador.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"url": url, "inicio": datetime.now(timezone.utc).isoformat()}), encoding="utf-8")
-    os.replace(tmp, marcador)
+def _dir_tentativas() -> Path:
+    """Registro de tentativas por URL, fora de qualquer pasta de saída: `FV_S0_TENTATIVAS` ou `~/.freoa-verifica/s0-tentativas`."""
+    return Path(os.environ.get("FV_S0_TENTATIVAS") or Path.home() / ".freoa-verifica" / "s0-tentativas")
+
+
+def _adquirir_tentativa(registro: Path, url: str, caminho: Path) -> tuple[Path | None, str | None]:
+    """(captura a reaproveitar, None) | (None, razão de parada) | (None, None) = tentativa adquirida, pode pedir.
+
+    Criação exclusiva (`O_CREAT | O_EXCL`): duas execuções concorrentes não adquirem a mesma URL. Entrada existente
+    aponta para a captura que a URL produziu; se ela não existe, houve pedido sem registro e o host para.
+    """
+    if caminho.exists():
+        return caminho, None
+    entrada = registro / (hashlib.sha256(url.encode("utf-8")).hexdigest() + ".json")
+    try:
+        registro.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:  # inclusive FileExistsError de um arquivo no caminho do registro
+        return None, f"tentativa não adquirida ({type(exc).__name__})"
+    try:
+        fd = os.open(entrada, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        try:
+            anterior = Path(json.loads(entrada.read_text(encoding="utf-8"))["captura"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return None, "tentativa anterior com registro ilegível"
+        if anterior.exists():
+            return anterior, None
+        return None, "tentativa anterior sem registro"
+    except OSError as exc:
+        return None, f"tentativa não adquirida ({type(exc).__name__})"
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump({"url": url, "captura": str(caminho), "inicio": datetime.now(timezone.utc).isoformat()}, f)
+    return None, None
+
+
+_QUADRO = re.compile(r'^(\s*)File "(.+)", line (\d+)(?:, in (.+))?$')
+
+
+def _caminho_estrutural(caminho: str, base: Path) -> str:
+    """Caminho de quadro de traceback: só marcadores; sob a saída ou o checkout fica o trecho relativo."""
+    normal = caminho.replace("\\", "/")
+    for raiz, marcador in [(str(base).replace("\\", "/"), "<saida>"), (str(_RAIZ_DO_REPO).replace("\\", "/"), "<repo>")]:
+        if normal.startswith(raiz + "/"):
+            return marcador + normal[len(raiz):]
+    for raiz, marcador in _raizes():
+        if normal.startswith(raiz.replace("\\", "/") + "/") and marcador in ("<python>",):
+            return marcador + "/..."
+    return "<caminho>"
+
+
+def _relato(texto: str, base: Path) -> str:
+    """O que vai ao relatório: a estrutura do traceback (quadros com caminho por marcador, linha e função) e a última
+    linha (a exceção), saneada por `_limpo`. Linhas de código-fonte e texto livre intermediário não entram.
+
+    I2.7 r2 (parecer PR #20 r1, I1; registro do adiamento do PR #18): sanitização por estrutura. Sem traceback,
+    entram só as três últimas linhas, saneadas (limitação declarada no docstring do módulo).
+    """
+    linhas = [ln for ln in texto.strip().splitlines() if ln.strip()]
+    quadros = [(i, _QUADRO.match(ln)) for i, ln in enumerate(linhas)]
+    if not any(m for _, m in quadros):
+        return _limpo("\n".join(linhas[-3:]), base)[-600:]
+    saida = ["Traceback (most recent call last):"]
+    for _, m in quadros:
+        if m:
+            funcao = f", in {m.group(4)}" if m.group(4) else ""
+            saida.append(f'{m.group(1)}File "{_caminho_estrutural(m.group(2), base)}", line {m.group(3)}{funcao}')
+    saida.append(_limpo(linhas[-1], base))
+    return "\n".join(saida)[-600:]
 
 
 def _resumo(leitura) -> dict[str, Any]:
@@ -145,8 +211,9 @@ def _resumo(leitura) -> dict[str, Any]:
 
 def orquestrar(
     roteiro: str, saida: Path, *, barreiras: Mapping[str, str] | None = None, hosts: set[str] | None = None,
-    somente_robots: bool = False, executor: Executor = executar_instrumento,
+    somente_robots: bool = False, executor: Executor = executar_instrumento, tentativas: Path | None = None,
 ) -> dict[str, Any]:
+    registro_tentativas = tentativas or _dir_tentativas()
     barreiras = dict(barreiras or {})
     por_host: dict[str, list[list[str]]] = {}
     for args in comandos(roteiro):
@@ -185,26 +252,21 @@ def orquestrar(
                 pedidas.add(url)
                 novos, pasta = _com_saida(args, saida)
                 caminho = pasta / f"{chave}.captura.json"
-                marcador = pasta / f"{chave}.tentativa.json"
-                reaproveitado = caminho.exists()  # evidência já gravada (rodada anterior): nunca um segundo pedido
-                if not reaproveitado and marcador.exists():
-                    # Passe final PR #18, B2: houve tentativa cujo resultado não foi gravado (falha de escrita, queda);
-                    # nunca um segundo pedido automático. O host para.
-                    h["parada"] = f"tentativa anterior sem registro em {chave}: sem novo pedido (regra invariável 3)"
+                # I2.7 r2 (parecer PR #20 r1, B2): a tentativa é adquirida por URL, com criação exclusiva, num registro
+                # fora da pasta de saída, ANTES do pedido. Trocar saída ou chave não abre novo pedido à mesma URL.
+                origem, razao = _adquirir_tentativa(registro_tentativas, url, caminho)
+                if razao:
+                    h["parada"] = f"{razao} em {chave}: sem pedido (regra invariável 3)"
                     h["comandos"].append({"chave": chave, "url": url, "executado": False, "razao": h["parada"]})
                     continue
-                if not reaproveitado:
-                    try:
-                        _gravar_marcador(marcador, url)
-                    except OSError as exc:
-                        h["parada"] = f"marcador de tentativa não gravado em {chave} ({type(exc).__name__}): sem pedido"
-                        h["comandos"].append({"chave": chave, "url": url, "executado": False, "razao": h["parada"]})
-                        continue
+                reaproveitado = origem is not None
                 p = SimpleNamespace(returncode=None, stdout="", stderr="") if reaproveitado else executor(novos)
-                reg = json.loads(caminho.read_text(encoding="utf-8")) if caminho.exists() else {}
+                fonte_reg = origem or caminho
+                pasta_reg = fonte_reg.parent
+                reg = json.loads(fonte_reg.read_text(encoding="utf-8")) if fonte_reg.exists() else {}
                 item = {"chave": chave, "url": url, "executado": not reaproveitado, "reaproveitado": reaproveitado,
                         "rc": p.returncode,
-                        "stdout": _limpo(p.stdout or "", saida), "stderr": _limpo(p.stderr or "", saida),
+                        "stdout": _relato(p.stdout or "", saida), "stderr": _relato(p.stderr or "", saida),
                         **{k: reg.get(k) for k in CAMPOS_DO_REGISTRO}}
                 h["comandos"].append(item)
                 if eh_robots:
@@ -212,7 +274,7 @@ def orquestrar(
                         leitura = None
                         h["parada"] = f"instrumento sem registro em {chave} (rc={p.returncode}): {item['stderr'][-120:]}"
                         continue
-                    corpo = (pasta / reg["arquivo"]).read_bytes() if reg.get("arquivo") else None
+                    corpo = (pasta_reg / reg["arquivo"]).read_bytes() if reg.get("arquivo") else None
                     leitura = ler_do_registro(reg, corpo)
                     h["robots"] = item["robots"] = _resumo(leitura)
                     if leitura.estado == BARREIRA:
@@ -232,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     quais.add_argument("--hosts-arquivo", type=Path, help="JSON com a lista de hosts da rodada")
     ap.add_argument("--somente-robots", action="store_true")
     ap.add_argument("--relatorio", type=Path, help="padrão: <saida>/relatorio-s0.json")
+    ap.add_argument("--tentativas", type=Path, help="registro de tentativas por URL (padrão: FV_S0_TENTATIVAS ou ~/.freoa-verifica/s0-tentativas)")
     args = ap.parse_args(argv)
     barreiras = json.loads(args.barreiras.read_text(encoding="utf-8")) if args.barreiras else {}
     hosts = None
@@ -241,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
         hosts = set(json.loads(args.hosts_arquivo.read_text(encoding="utf-8")))
     args.saida.mkdir(parents=True, exist_ok=True)
     rel = orquestrar(args.roteiro.read_text(encoding="utf-8"), args.saida.resolve(), barreiras=barreiras,
-                     hosts=hosts, somente_robots=args.somente_robots)
+                     hosts=hosts, somente_robots=args.somente_robots, tentativas=args.tentativas)
     destino = args.relatorio or args.saida / "relatorio-s0.json"
     destino.write_text(json.dumps(rel, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps({h: (v["parada"] or "ok", sum(c["executado"] for c in v["comandos"]), len(v["comandos"]))

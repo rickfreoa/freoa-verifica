@@ -94,9 +94,17 @@ e do instrumento, não de barreira da fonte.
        exige status igual na evidência (e diferente de 200); `corpo_vazio` exige status 200 e, havendo sha256, o
        do corpo vazio; salto 3xx é verificado antes de tudo. Contradição é barreira `registro_contraditorio`. Corpo
        ausente nunca é lido como corpo vazio: 200 sem corpo é barreira `corpo_ausente`.
-     - I2.7, regra invariável 3 entre execuções: antes de cada pedido o orquestrador grava `<chave>.tentativa.json`;
-       marcador sem `.captura.json` numa execução seguinte para o host sem novo pedido, e falha ao gravar o
-       marcador impede o pedido.
+     - I2.7 r2 (parecer PR #20 r1): a coerência é verificada antes de qualquer decisão, nos dois ramos. O registro
+       de sucesso não pode trazer motivo, categoria, exceção, marcador nem status de recusa; os únicos motivos que
+       podem liberar (`http_404`, `http_410`, `corpo_vazio`) exigem status igual ao do motivo, a exceção que o
+       instrumento grava para eles (`HTTPStatusError`; `EmptyBody`) e nenhuma outra, nenhum marcador, categoria
+       nenhuma (4xx) ou `resposta_inesperada` (corpo vazio) e, em `corpo_vazio`, corpo de fato vazio. Tipo inválido
+       (saltos, status, `unavailable`) é barreira `registro_malformado`. O corpo da página de recusa continua sendo
+       evidência e não decide nada.
+     - I2.7 r2, regra invariável 3 entre execuções: antes de cada pedido o orquestrador adquire a URL com criação
+       exclusiva num registro de tentativas por URL, fora de qualquer pasta de saída (`FV_S0_TENTATIVAS` ou
+       `~/.freoa-verifica/s0-tentativas`). URL adquirida nunca recebe outro pedido: a captura dela é reaproveitada,
+       nesta ou em outra saída; sem captura, o host para. O alcance é o do registro (usuário e máquina).
 6. A diferença entre redirecionamento para o mesmo host e para outro host não é recuperável pelo transporte
    (`Location` não é exposto); ambos são barreira, e a evidência registra a exceção e o status 3xx dos saltos.
 

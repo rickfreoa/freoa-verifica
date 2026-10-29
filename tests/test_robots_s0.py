@@ -264,7 +264,7 @@ def test_legado_em_comentario_marcador_de_desafio_continua_vencendo():
 
 
 def test_legado_na_decisao_composta_com_registro():
-    reg = {"status": 200, "sha256": _sha(LEGADO), "cabecalhos": {"content-type": "text/plain"}}
+    reg = {"unavailable": False, "status": 200, "sha256": _sha(LEGADO), "cabecalhos": {"content-type": "text/plain"}}
     leitura = robots_s0.ler_do_registro(reg, LEGADO)
     assert leitura.charset_legado_em_comentario is True
     assert leitura.decidir(HOST + "/privado").acao == VEDADO
@@ -295,7 +295,7 @@ def test_corpo_inexaminavel_com_marcador_de_desafio_e_desafio():
 
 def test_corpo_inexaminavel_e_barreira_na_decisao_composta_com_registro(tmp_path):
     corpo = "User-agent: *\nDisallow: /secret\n".encode("utf-16-le")
-    reg = {"status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "text/html"}}
+    reg = {"unavailable": False, "status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "text/html"}}
     assert robots_s0.ler_do_registro(reg, corpo).decidir(HOST + "/secret").acao == BARREIRA
 
 
@@ -698,7 +698,7 @@ _FORA_DO_RFC = [b"\x0b", b"\x0c", b"\x1c", b"\x1d", b"\x1e"]
 @pytest.mark.parametrize("alto", [b"\xe1", b""])  # com byte legado (caminho do legado) e sem ele (UTF-8 estrito)
 def test_b1_separador_fora_do_rfc_no_comentario_nao_cria_grupo_e_e_barreira(sep, alto):
     corpo = b"User-agent: *\nDisallow: /secret\n#" + alto + sep + b"User-agent: freoa-verifica" + sep + b"Allow: /\n"
-    reg = {"status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "text/plain"}}
+    reg = {"unavailable": False, "status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "text/plain"}}
     leitura = ler_do_registro(reg, corpo)
     assert (leitura.estado, leitura.motivo) == (BARREIRA, "corpo_nao_interpretavel")
     assert leitura.decidir(HOST + "/secret").acao == BARREIRA
@@ -725,7 +725,7 @@ def test_b2_captcha_largo_sem_bom_em_octet_stream_e_barreira(codec):
     corpo = "<html>CAPTCHA</html>".encode(codec)
     r = ler_robots(200, "application/octet-stream", corpo)
     assert r.estado == BARREIRA and r.decidir(HOST + "/secret").acao == BARREIRA
-    reg = {"status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "application/octet-stream"}}
+    reg = {"unavailable": False, "status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "application/octet-stream"}}
     assert ler_do_registro(reg, corpo).decidir(HOST + "/secret").acao == BARREIRA
 
 
@@ -769,3 +769,48 @@ def test_b1_final_corpo_vazio_com_hash_de_outro_corpo_e_barreira():
     assert ler_do_registro(reg).estado == SEM_RESTRICOES
     reg = {"unavailable": True, "motivo": "corpo_vazio", "evidencia": {"status": 404}}
     assert ler_do_registro(reg).estado == BARREIRA
+
+
+# --- I2.7 r2 (parecer PR #20 r1): coerência antes de qualquer retorno permissivo ---------------------------------
+
+def _sucesso(corpo=b"User-agent: *\nAllow: /\n", **extra):
+    reg = {"unavailable": False, "status": 200, "sha256": _sha(corpo), "cabecalhos": {"content-type": "text/plain"}}
+    reg.update(extra)
+    return reg, corpo
+
+
+@pytest.mark.parametrize("extra", [
+    {"evidencia": {"saltos": [{"status": 302}]}},
+    {"motivo": "desafio_captcha", "categoria": "ambiental_desafio", "evidencia": {"status": 403}},
+    {"motivo": "http_403"},
+    {"evidencia": {"status": 403}},
+    {"evidencia": {"excecao": "BlockedHost"}},
+    {"categoria": "recusa_identificado"},
+])
+def test_b1_r2_sucesso_com_sinal_de_recusa_e_barreira(extra):
+    reg, corpo = _sucesso(**extra)
+    assert ler_do_registro(reg, corpo).decidir(HOST + "/config.json").acao == BARREIRA
+
+
+def test_b1_r2_corpo_vazio_com_corpo_nao_vazio_e_barreira():
+    reg = {"unavailable": True, "motivo": "corpo_vazio", "evidencia": {"status": 200, "sha256": SHA256_VAZIO}}
+    assert ler_do_registro(reg, b"User-agent: *\nDisallow: /\n").estado == BARREIRA
+    reg_ok = {**reg, "evidencia": {"status": 200, "sha256": SHA256_VAZIO, "saltos": [{"status": 302}]}}
+    assert ler_do_registro(reg_ok, b"").estado == BARREIRA
+
+
+def test_b1_r2_http_404_com_excecao_e_barreira():
+    reg = {"unavailable": True, "motivo": "http_404", "evidencia": {"status": 404, "excecao": "BlockedHost"}}
+    assert ler_do_registro(reg).motivo == "registro_contraditorio"
+
+
+@pytest.mark.parametrize("ev", [{"saltos": [{"status": "abc"}]}, {"saltos": "302"}, {"status": "404"}, "x"])
+def test_b1_r2_registro_malformado_vira_barreira_sem_excecao(ev):
+    for base in ({"unavailable": True, "motivo": "desafio_captcha", "categoria": "ambiental_desafio"},
+                 {"unavailable": True, "motivo": "http_404"}):
+        leitura = ler_do_registro({**base, "evidencia": ev})
+        assert leitura.estado == BARREIRA and leitura.motivo == "registro_malformado"
+
+
+def test_b1_r2_unavailable_nao_booleano_e_malformado():
+    assert ler_do_registro({"unavailable": "false", "status": 200}).motivo == "registro_malformado"

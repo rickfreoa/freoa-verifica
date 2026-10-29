@@ -62,6 +62,12 @@ ROTEIRO = "\n".join([
 REGRAS = b"User-agent: *\nDisallow: /admin/\n"
 
 
+@pytest.fixture(autouse=True)
+def _tentativas_isoladas(tmp_path, monkeypatch):
+    """O registro de tentativas por URL (I2.7 r2) fica na pasta do teste, nunca na casa do usuário."""
+    monkeypatch.setenv("FV_S0_TENTATIVAS", str(tmp_path / "_tentativas"))
+
+
 class Falso:
     """Instrumento falso: grava `.captura.json` (e corpo) como o real e conta os pedidos por URL."""
 
@@ -378,14 +384,12 @@ def test_b2_final_falha_de_gravacao_apos_o_pedido_nao_permite_repetir(tmp_path):
 
 
 def test_b2_final_marcador_nao_gravado_impede_o_pedido(tmp_path, monkeypatch):
-    def falha(*a, **k):
-        raise PermissionError("somente leitura")
-
-    monkeypatch.setattr(_carregar(), "_gravar_marcador", falha)
+    bloqueio = tmp_path / "registro-arquivo"
+    bloqueio.write_text("não é diretório", encoding="utf-8")  # o registro não pode ser criado
     falso = Falso(HOSTS)
-    rel = orq.orquestrar(ROTEIRO, tmp_path, executor=falso, hosts={"a.jus.br"})
+    rel = orq.orquestrar(ROTEIRO, tmp_path / "saida", executor=falso, hosts={"a.jus.br"}, tentativas=bloqueio / "sub")
     assert falso.chamadas == []
-    assert rel["hosts"]["a.jus.br"]["parada"].startswith("marcador de tentativa não gravado")
+    assert rel["hosts"]["a.jus.br"]["parada"].startswith("tentativa não adquirida")
 
 
 def test_b2_final_marcador_com_registro_reaproveita_sem_novo_pedido(tmp_path):
@@ -408,3 +412,67 @@ def test_i1_final_docstrings_declaram_a_limitacao_e_nao_prometem_relatorio_sem_c
     assert "não contém caminhos de máquina" not in (mod.__doc__ or "")
     assert "Limitação declarada" in (mod.__doc__ or "")
     assert "sem caminho de máquina" not in (mod._limpo.__doc__ or "")
+
+
+# --- I2.7 r2 (parecer PR #20 r1) ------------------------------------------------------------------------------------
+
+def test_b1_r2_indisponivel_com_excecao_nao_libera_e_rota_nao_e_pedida(tmp_path):
+    respostas = {**HOSTS, "b.jus.br": {"robots": (404, "http_404", {"status": 404, "excecao": "BlockedHost"}),
+                                       "rota": (200, b"{}", "application/json")}}
+    rel, falso = _rodar(tmp_path, respostas, hosts={"b.jus.br"})
+    assert _urls(falso) == ["https://b.jus.br/robots.txt"]
+    assert rel["hosts"]["b.jus.br"]["robots"]["motivo"] == "registro_contraditorio"
+
+
+def test_b2_r2_trocar_a_saida_ou_a_chave_nao_reabre_a_url(tmp_path):
+    chamadas = []
+
+    def pede_e_nao_grava(args):
+        chamadas.append(args[args.index("--url") + 1])
+        return SimpleNamespace(returncode=1, stdout="", stderr="PermissionError")
+
+    orq.orquestrar(ROTEIRO, tmp_path / "s1", executor=pede_e_nao_grava, hosts={"c.jus.br"})
+    rel = orq.orquestrar(ROTEIRO, tmp_path / "s2", executor=pede_e_nao_grava, hosts={"c.jus.br"})
+    assert chamadas == ["https://c.jus.br/robots.txt"]
+    assert rel["hosts"]["c.jus.br"]["parada"].startswith("tentativa anterior sem registro")
+    # mesma URL com outra chave e outra pasta (e_robots_de_novo) dentro de uma execução e entre execuções
+    orq.orquestrar(ROTEIRO, tmp_path / "s3", executor=pede_e_nao_grava, hosts={"e.jus.br"})
+    orq.orquestrar(ROTEIRO, tmp_path / "s4", executor=pede_e_nao_grava, hosts={"e.jus.br"})
+    assert chamadas.count("https://e.jus.br/robots.txt") == 1
+
+
+def test_b2_r2_aquisicao_e_exclusiva(tmp_path):
+    mod = _carregar()
+    reg = tmp_path / "_reg"
+    url = "https://c.jus.br/robots.txt"
+    assert mod._adquirir_tentativa(reg, url, tmp_path / "a" / "c.captura.json") == (None, None)
+    # a segunda aquisição (concorrente ou posterior) da mesma URL nunca recebe permissão para pedir
+    origem, razao = mod._adquirir_tentativa(reg, url, tmp_path / "b" / "c.captura.json")
+    assert origem is None and razao == "tentativa anterior sem registro"
+
+
+def test_b2_r2_captura_de_outra_saida_e_reaproveitada_sem_pedido(tmp_path):
+    _, primeiro = _rodar(tmp_path / "s1", HOSTS, hosts={"a.jus.br"})
+    rel, segundo = _rodar(tmp_path / "s2", HOSTS, hosts={"a.jus.br"})
+    assert len(primeiro.chamadas) == 2 and segundo.chamadas == []
+    assert rel["hosts"]["a.jus.br"]["robots"]["estado"] == "regras"
+
+
+def test_i1_r2_relato_estrutural_do_traceback():
+    mod = _carregar()
+    base = Path("/nao/usada")
+    tb = ("Traceback (most recent call last):\n"
+          '  File "D:\\Dados Cliente\\x.py", line 3, in f\n'
+          "    segredo = abrir('Equipe ClienteSegredo')\n"
+          '  File "\\\\PC-RICK\\Equipe ClienteSegredo\\y.py", line 9, in g\n'
+          "TransportError: GET https://x.jus.br/a falhou em /robots.txt\n")
+    saida = mod._relato(tb, base)
+    for proibido in ("Cliente", "PC-RICK", "Dados", "segredo"):
+        assert proibido not in saida, saida
+    assert saida.splitlines()[-1] == "TransportError: GET https://x.jus.br/a falhou em /robots.txt"
+    assert 'File "<caminho>", line 3, in f' in saida and 'File "<caminho>", line 9, in g' in saida
+
+
+def test_i1_r2_limitacao_declarada_inclui_caminho_nao_citado_com_espaco():
+    mod = _carregar()
+    assert "contenha espaço" in mod.__doc__ and "um só componente" in mod.__doc__

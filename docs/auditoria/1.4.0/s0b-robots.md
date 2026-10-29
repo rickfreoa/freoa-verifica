@@ -1,5 +1,7 @@
 # S0b, parte 1: leitura do robots.txt pelo RFC 9309
 
+> Registro histórico da S0b no PR #17/#18 (28/10/2026). As contagens e a descrição do relatório abaixo são as daquela data; o estado do I2.7 está na decisão 0071 (emendas de 29/10/2026) e no docstring de `scripts/s0_orquestrar.py`, inclusive as limitações da sanitização de caminhos.
+
 Implementador: Sonnet, worktree `wt-s0b`, ramo `feat/s0b-robots`, base `origin/main` em `8447cf8` (merge do PR #14).
 Decisão do titular de 28/10/2026, registrada em `docs/decisoes/0071-robots-rfc-9309-na-s0.md`. Nada foi sondado ao
 vivo: todos os testes são offline (servidor local sobre o transporte real, ou instrumento falso).

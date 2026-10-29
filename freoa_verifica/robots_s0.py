@@ -265,37 +265,92 @@ def _ler_200(content_type: str | None, corpo: bytes | None, cabecalhos: Mapping[
                            **base)
 
 
+def _inteiro(v: Any) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _incoerencia(registro: Mapping[str, Any], corpo: bytes | None) -> tuple[str, str] | None:
+    """(motivo, detalhe) se o registro não pode decidir nada; None se é coerente. Roda antes de qualquer retorno.
+
+    I2.7 r2 (parecer PR #20 r1, B1): saltos e tipos são validados primeiro; o registro de sucesso não pode trazer
+    motivo, categoria, exceção, marcador ou status de recusa; os únicos motivos que podem liberar (`http_404`,
+    `http_410`, `corpo_vazio`) exigem evidência limpa e corpo ausente ou vazio. Tudo o mais é barreira.
+    """
+    ev = registro.get("evidencia")
+    if ev is None:
+        ev = {}
+    if not isinstance(ev, Mapping):
+        return "registro_malformado", "evidencia não é objeto"
+    saltos = ev.get("saltos")
+    if saltos is None:
+        saltos = []
+    if not isinstance(saltos, list) or not all(isinstance(s, Mapping) and _inteiro(s.get("status")) for s in saltos):
+        return "registro_malformado", f"saltos malformados: {saltos!r}"
+    if any(300 <= s["status"] <= 399 for s in saltos):
+        return "redirecionamento", f"redirecionamento não seguido: {list(saltos)}"
+    unavailable = registro.get("unavailable")
+    if not isinstance(unavailable, bool):
+        return "registro_malformado", "unavailable não é booleano"
+    motivo, categoria = registro.get("motivo"), registro.get("categoria")
+    st_ev, st_reg = ev.get("status"), registro.get("status")
+    recusa = ev.get("excecao") or ev.get("marcador")
+    if st_ev is not None and not _inteiro(st_ev):
+        return "registro_malformado", f"status da evidência não inteiro: {st_ev!r}"
+    if not unavailable:
+        if st_reg != 200 or not _inteiro(st_reg) or corpo is None:
+            return "registro_inconsistente", f"sucesso sem 200 ou sem corpo gravado (status {st_reg!r})"
+        if registro.get("sha256") != hashlib.sha256(corpo).hexdigest():
+            return "corpo_nao_confere", "sha256 do corpo difere do registro"
+        if motivo or categoria or recusa or st_ev not in (None, 200) or ev.get("sha256") not in (None, registro["sha256"]):
+            return "registro_contraditorio", f"sucesso com sinal de recusa (motivo {motivo!r}, categoria {categoria!r}, " \
+                                             f"evidência {st_ev!r}, exceção {recusa!r})"
+        return None
+    if not isinstance(motivo, str) or not motivo:
+        return "registro_malformado", "indisponibilidade sem motivo"
+    # O corpo de uma recusa (página do 404, do 403) é evidência gravada pelo instrumento (0071) e não decide nada;
+    # só em `corpo_vazio` o corpo precisa ser, de fato, vazio.
+    if motivo in ("http_404", "http_410", "corpo_vazio"):  # os únicos que podem liberar
+        esperado = 200 if motivo == "corpo_vazio" else int(motivo.removeprefix("http_"))
+        # categoria aceita: nenhuma no 4xx (o mapeamento não prova categoria para 404/410); `resposta_inesperada`
+        # em `corpo_vazio`, que é como o transporte classifica o corpo vazio (`EmptyBody`).
+        categoria_ok = categoria in ((None, "resposta_inesperada") if motivo == "corpo_vazio" else (None,))
+        # O instrumento grava o tipo da exceção em toda indisponibilidade (captura.py): `HTTPStatusError` na recusa
+        # HTTP e `EmptyBody` no corpo vazio, sem marcador. Qualquer outra exceção ou marcador é contradição.
+        excecao_ok = ev.get("excecao") in (None, "EmptyBody" if motivo == "corpo_vazio" else "HTTPStatusError")
+        if st_ev != esperado or st_reg not in (None, esperado) or ev.get("marcador") or not excecao_ok or not categoria_ok:
+            return "registro_contraditorio", f"motivo {motivo} com status {st_ev!r}, categoria {categoria!r}, exceção {recusa!r}"
+        if motivo == "corpo_vazio" and (corpo or ev.get("sha256") not in (None, SHA256_VAZIO)
+                                        or registro.get("sha256") not in (None, SHA256_VAZIO)):
+            return "registro_contraditorio", "corpo_vazio com corpo gravado ou sha256 de corpo não vazio"
+        return None
+    if motivo.startswith("http_"):
+        numero = motivo.removeprefix("http_")
+        if not (numero.isdigit() and st_ev == int(numero) and st_ev != 200):
+            return "registro_contraditorio", f"motivo {motivo} com status {st_ev!r} na evidência"
+    return None
+
+
 def ler_do_registro(registro: Mapping[str, Any], corpo: bytes | None = None) -> LeituraRobots:
-    """Leitura do robots.txt a partir do `.captura.json` da sonda (e do corpo gravado, se 200)."""
+    """Leitura do robots.txt a partir do `.captura.json` da sonda (e do corpo gravado, se 200).
+
+    Primeiro a coerência do registro (`_incoerencia`); só registro coerente decide algo além de barreira.
+    """
+    problema = _incoerencia(registro, corpo)
+    if problema is not None:
+        return _barreira(*problema)
     ev = registro.get("evidencia") or {}
     cab = registro.get("cabecalhos") or {}
     ct = cab.get("content-type") or registro.get("content_type") or ev.get("content_type")
     motivo = str(registro.get("motivo") or "")
     if not registro.get("unavailable"):
-        if registro.get("status") != 200 or corpo is None:
-            return _barreira("registro_inconsistente", "registro sem 200 ou sem corpo gravado")
-        if registro.get("sha256") != hashlib.sha256(corpo).hexdigest():
-            return _barreira("corpo_nao_confere", "sha256 do corpo difere do registro")
         return ler_robots(200, ct, corpo, cabecalhos=cab)
-    saltos = ev.get("saltos") or []
-    if any(isinstance(s, Mapping) and 300 <= int(s.get("status") or 0) <= 399 for s in saltos):
-        return _barreira("redirecionamento", f"redirecionamento não seguido: {list(saltos)}")
     if motivo.startswith("desafio_") or registro.get("categoria") == "ambiental_desafio":
         return _barreira(motivo or "desafio", "desafio ou WAF", status=ev.get("status"), content_type=ct,
                          sha256=ev.get("sha256"))
     status = ev.get("status")
     if motivo.startswith("http_"):
-        # Passe final PR #18, B1: o motivo e o status da evidência têm de dizer a mesma coisa; contradição é
-        # barreira, e um 200 registrado como indisponível não vira leitura de robots.
-        numero = motivo.removeprefix("http_")
-        if not (numero.isdigit() and isinstance(status, int) and int(numero) == status and status != 200):
-            return _barreira("registro_contraditorio", f"motivo {motivo} com status {status!r} na evidência",
-                             status=status if isinstance(status, int) else None)
         return ler_robots(status, ct, None)
     if motivo == "corpo_vazio":
-        if status != 200 or ev.get("sha256") not in (None, SHA256_VAZIO):
-            return _barreira("registro_contraditorio", f"corpo_vazio com status {status!r} ou sha256 de corpo não vazio",
-                             status=status if isinstance(status, int) else None)
         return ler_robots(200, ct, b"")
     excecao = ev.get("excecao") or motivo.removeprefix("transporte_")
     mensagem = ev.get("mensagem") or ""
