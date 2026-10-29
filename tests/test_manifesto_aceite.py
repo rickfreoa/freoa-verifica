@@ -1092,7 +1092,9 @@ def test_estado_inicial_do_plano_1_4_0():
     estados_i2 = {it["id"]: it["estado"] for it in incs["I2"]["itens"]}
     assert {k: estados_i2[k] for k in ("I2.2", "I2.3", "I2.7")} == {"I2.2": "adiado", "I2.3": "adiado",
                                                                     "I2.7": "adiado"}
-    assert {"I3.9", "I3.10", "I3.11"} <= {it["id"] for it in incs["I3"]["itens"]}
+    estados_i3 = {it["id"]: it["estado"] for it in incs["I3"]["itens"]}
+    assert {k: estados_i3.get(k) for k in ("I3.9", "I3.10", "I3.11")} == {"I3.9": "pendente", "I3.10": "pendente",
+                                                                       "I3.11": "pendente"}
     # O I1 está em fechamento (docs/auditoria/1.4.0/aceite-i1.md); os demais incrementos seguem sem evidências.
     seguintes = [i for k, i in incs.items() if k != "I1"]
     assert all(e["estado"] == "pendente" for i in seguintes for e in i["etapas"].values())
