@@ -74,6 +74,7 @@ from freoa_verifica.limites import CANCELADO, PRAZO, EntradaInvalida, cancelado,
 from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica import derivados as _derivados
 from freoa_verifica import particao as _particao
+from freoa_verifica import timeline as _timeline
 from freoa_verifica.registro import politica_atual as _politica_atual
 
 _log = logging.getLogger("freoa_verifica.service")
@@ -2942,6 +2943,227 @@ class Verifica:
         }
 
     # ------------------------------------------------------------------
+    # Linha do tempo de um processo (experimental; decisão 0073; PARIDADE-1.4, TD1 a TD5)
+    # ------------------------------------------------------------------
+
+    def timeline_decisoes(
+        self,
+        modo: str,
+        numero_cnj: str | None = None,
+        limite: int = _timeline.LIMITE_PADRAO,
+        cursor: str | None = None,
+        **desconhecidos: Any,
+    ) -> dict[str, Any]:
+        """Linha do tempo de um processo: movimentos do DataJud, comunicações do DJEN e decisões do acervo local.
+
+        Experimental. Só o modo `processo` (o modo `recentes` não está disponível nesta versão). `numero_cnj` com ou
+        sem máscara, com o dígito verificador conferido; a resposta traz os 20 dígitos. `limite` de 1 a 200 (padrão
+        50); `cursor` é o da página anterior. A entrada é validada antes de qualquer consulta: parâmetro inexistente,
+        tipo errado ou fora da faixa é `EntradaInvalida`.
+
+        As três fontes (DataJud, DJEN e acervo local) são necessárias em toda chamada. Estado: `ok` (as três lidas e
+        há eventos), `parcial` (há eventos e alguma fonte não foi lida; `fontes_indisponiveis` diz qual),
+        `indisponivel` (nenhum evento e alguma fonte não foi lida) e `nenhum_no_recorte` (as três lidas, nenhum
+        evento; `cobertura` diz o que foi lido). A resposta nunca afirma que o processo não existe: processo em
+        segredo ou ausente do DataJud é `nao_confirmado_na_fonte` na `cobertura`.
+
+        Ordem: `data` crescente, depois `fonte`, depois identificador estável; `cursor` é a posição do último item
+        entregue (ver `freoa_verifica.timeline`).
+        """
+        if desconhecidos:
+            raise EntradaInvalida("parâmetro desconhecido: " + ", ".join(sorted(map(str, desconhecidos))))
+        _timeline.validar_modo(modo)
+        cnj = _timeline.normalizar_cnj(numero_cnj)
+        _timeline.validar_limite(limite)
+        depois_de = _timeline.validar_cursor(cursor)
+
+        prazo = time.monotonic() + 20.0
+        lidas = {
+            "datajud": self._timeline_datajud(cnj, prazo),
+            "djen": self._timeline_djen(cnj, prazo),
+            "acervo": self._timeline_acervo(cnj),
+        }
+        brutos = [e for fonte in _timeline.FONTES for e in lidas[fonte]["eventos"]]
+        ordenados = _timeline.ordenar(brutos)
+        pagina, truncado, proximo = _timeline.paginar(ordenados, limite, depois_de)
+
+        cobertura = []
+        for fonte in _timeline.FONTES:
+            entrada = lidas[fonte]["cobertura"]
+            datas = sorted(e["data"] for e in ordenados if e["fonte"] == fonte and e["data"])
+            entrada["recorte"] = {"desde": datas[0], "ate": datas[-1]} if datas else None
+            cobertura.append(entrada)
+        nao_lidas = {c["fonte"]: self._timeline_indisponibilidade(c) for c in cobertura
+                     if c["resultado"] not in ("lida", "nao_confirmado_na_fonte")}
+        for c in cobertura:
+            c.pop("motivo_nao_consultada", None)
+        status = _timeline.estado({c["fonte"]: c["fonte"] not in nao_lidas for c in cobertura}, bool(ordenados))
+        com_datajud = any(e["fonte"] == "datajud" for e in ordenados)
+        out: dict[str, Any] = {
+            "modo": "processo",
+            "numero_cnj": cnj,
+            "atribuicao": list(_timeline.ATRIBUICAO) if com_datajud else None,
+            "status": status,
+            "itens": [e["item"] for e in pagina],
+            "total": len(pagina),
+            "truncado": truncado,
+            "cursor": proximo,
+            "cobertura": cobertura,
+        }
+        if nao_lidas:
+            out["fontes_indisponiveis"] = nao_lidas
+            if status == "indisponivel":
+                motivos = {v["motivo"] for v in nao_lidas.values()}
+                out["motivo"] = motivos.pop() if len(motivos) == 1 else "fonte_necessaria_nao_lida"
+        return out
+
+    @staticmethod
+    def _timeline_indisponibilidade(entrada: dict[str, Any]) -> dict[str, Any]:
+        """Objeto de `fontes_indisponiveis` de uma fonte não lida (0073, seção 2; categoria pela decisão 0045)."""
+        if entrada["resultado"] == "indisponivel":
+            return dict(entrada["indisponivel"])
+        return {"motivo": entrada["motivo_nao_consultada"], "categoria": None}
+
+    @staticmethod
+    def _timeline_entrada(fonte: str, resultado: str, escopo: str, *, tribunal: str | None = None,
+                          ultima_atualizacao: str | None = None, indisponivel: dict[str, Any] | None = None,
+                          motivo_nao_consultada: str | None = None) -> dict[str, Any]:
+        entrada = {"fonte": fonte, "tribunal": tribunal, "resultado": resultado, "escopo": escopo, "recorte": None,
+                   "primeiro_numero": None, "ultimo_numero": None, "lacunas": [],
+                   "ultima_atualizacao": ultima_atualizacao, "indisponivel": indisponivel}
+        if motivo_nao_consultada:
+            entrada["motivo_nao_consultada"] = motivo_nao_consultada
+        return entrada
+
+    def _timeline_falha(self, fonte: str, escopo: str, exc: BaseException, tribunal: str | None = None) -> dict[str, Any]:
+        if isinstance(exc, Unavailable):
+            motivo = {"motivo": exc.reason, "categoria": exc.categoria,
+                      **({"evidencia_indisponibilidade": exc.evidencia} if exc.categoria and exc.evidencia else {})}
+        else:  # exceção não prevista do próprio código: decisão 0045 (`regressao`)
+            motivo = {"motivo": type(exc).__name__, "categoria": "regressao"}
+        return {"eventos": [], "cobertura": self._timeline_entrada(
+            fonte, "indisponivel", escopo, tribunal=tribunal, indisponivel=motivo)}
+
+    def _timeline_datajud(self, cnj: str, prazo: float) -> dict[str, Any]:
+        from freoa_verifica.connectors.datajud import court_from_cnj
+
+        escopo = "processos públicos indexados pelo DataJud"
+        tribunal = court_from_cnj(cnj)
+        sigla = tribunal.upper() if tribunal else None
+        if self._offline():
+            return {"eventos": [], "cobertura": self._timeline_entrada(
+                "datajud", "nao_consultada", escopo, tribunal=sigla, motivo_nao_consultada="offline")}
+        if tribunal is None:
+            return {"eventos": [], "cobertura": self._timeline_entrada(
+                "datajud", "nao_consultada", escopo, motivo_nao_consultada="tribunal_sem_rota_datajud")}
+        try:
+            lido = _com_prazo(prazo, self._get("datajud").movimentos_do_processo, tribunal, cnj)
+            if lido is None:  # segredo de justiça ou ausente: a fonte não distingue (TD4)
+                return {"eventos": [], "cobertura": self._timeline_entrada(
+                    "datajud", "nao_confirmado_na_fonte", escopo, tribunal=sigla)}
+            eventos = []
+            for mov in lido["movimentos"]:
+                nome = mov.get("nome") if isinstance(mov.get("nome"), str) and mov["nome"] else None
+                if nome is None and mov.get("codigo") is None:
+                    raise Unavailable("resposta_invalida")
+                nome = nome or f"movimento de código {mov['codigo']}"
+                descricao = f"{nome} ({'; '.join(mov['complementos'])})" if mov["complementos"] else nome
+                eventos.append({
+                    "fonte": "datajud",
+                    "data": _timeline.normalizar_data(mov.get("data_hora")),
+                    "id_origem": f"{mov.get('grau')}|{mov.get('codigo')}|{mov.get('data_hora')}|{nome}",
+                    "item": self._timeline_item(
+                        "metadado_de_fonte", lido["url"], _timeline.normalizar_data(mov.get("data_hora")),
+                        "datajud", descricao, "movimento"),
+                })
+            return {"eventos": eventos, "cobertura": self._timeline_entrada(
+                "datajud", "lida", escopo, tribunal=sigla, ultima_atualizacao=lido["ultima_atualizacao"])}
+        except Exception as exc:  # noqa: BLE001 - toda falha da fonte vira `indisponivel`, nunca ausência (C3)
+            return self._timeline_falha("datajud", escopo, exc, sigla)
+
+    def _timeline_djen(self, cnj: str, prazo: float) -> dict[str, Any]:
+        """DJEN pelo conector `djen` (I3.4). Sem esse conector instalado, a fonte necessária não é lida.
+
+        Contrato esperado do conector: `search(cnj, numero=cnj, limite=N)` devolve candidatos com `key` (identificador
+        estável da comunicação), `url` oficial e `metadata` com `data` (AAAA-MM-DD ou DD/MM/AAAA) e `texto` (como
+        publicado)."""
+        from freoa_verifica.connectors.datajud import court_from_cnj
+
+        escopo = "comunicações do DJEN do processo"
+        tribunal = court_from_cnj(cnj)
+        sigla = tribunal.upper() if tribunal else None
+        if self._offline():
+            return {"eventos": [], "cobertura": self._timeline_entrada(
+                "djen", "nao_consultada", escopo, tribunal=sigla, motivo_nao_consultada="offline")}
+        try:
+            try:
+                conector = self._get("djen")
+            except KeyError:
+                raise Unavailable("conector_djen_ausente") from None
+            lidas = _com_prazo(prazo, conector.search, cnj, numero=cnj, limite=_timeline.LIMITE_MAX)
+            eventos = []
+            for cand in lidas:
+                meta = cand.metadata or {}
+                data, texto = _timeline.normalizar_data(meta.get("data")), meta.get("texto")
+                if not (isinstance(cand.url, str) and cand.url and isinstance(cand.key, str) and cand.key
+                        and isinstance(texto, str) and (data or meta.get("data") in (None, ""))):
+                    raise Unavailable("resposta_invalida")
+                eventos.append({
+                    "fonte": "djen", "data": data, "id_origem": cand.key,
+                    "item": self._timeline_item("metadado_de_fonte", cand.url, data, "djen", texto, "texto_publicado"),
+                })
+            truncada = getattr(lidas, "truncado", False)
+            escopo_lido = (f"{escopo}; leitura parcial: {len(eventos)} de {lidas.total} informadas pela fonte"
+                           if truncada else escopo)
+            return {"eventos": eventos, "cobertura": self._timeline_entrada(
+                "djen", "lida", escopo_lido, tribunal=sigla)}
+        except Exception as exc:  # noqa: BLE001
+            return self._timeline_falha("djen", escopo, exc, sigla)
+
+    def _timeline_acervo(self, cnj: str) -> dict[str, Any]:
+        escopo = "decisões do acervo local com este número CNJ"
+        try:
+            rows = self.conn.execute(
+                """
+                SELECT d.id AS decisao_id, d.judgment_date, d.publication_date, dd.kind, dd.text,
+                       c.id AS capture_id, c.sha256, c.fetched_at, c.url
+                FROM decision d
+                JOIN decision_document dd ON dd.id = (
+                    SELECT x.id FROM decision_document x
+                    WHERE x.decision_id = d.id AND x.capture_id IS NOT NULL
+                    ORDER BY CASE WHEN COALESCE(x.text, '') != '' THEN 0 ELSE 1 END,
+                             CASE x.kind WHEN 'ementa' THEN 0 WHEN 'inteiro_teor' THEN 1 ELSE 2 END,
+                             x.created_at DESC, x.id DESC LIMIT 1)
+                JOIN capture c ON c.id = dd.capture_id
+                WHERE d.identity_status = 'confirmed'
+                  AND REPLACE(REPLACE(REPLACE(d.number, '.', ''), '-', ''), ' ', '') = ?
+                """, (cnj,)).fetchall()
+            eventos, atualizacoes = [], []
+            for r in rows:
+                self._authenticate_capture(r["capture_id"])
+                data = _timeline.normalizar_data(r["judgment_date"]) or _timeline.normalizar_data(r["publication_date"])
+                descricao, _ = _truncate(r["text"] or "", _EMENTA_MAX)
+                item = self._timeline_item("captura", r["url"], data, "acervo", descricao, r["kind"],
+                                           capture_id=r["capture_id"], sha256=r["sha256"],
+                                           fetched_at=r["fetched_at"], decisao_id=r["decisao_id"])
+                eventos.append({"fonte": "acervo", "data": data, "id_origem": r["decisao_id"], "item": item})
+                atualizacoes.append(r["fetched_at"])
+            return {"eventos": eventos, "cobertura": self._timeline_entrada(
+                "acervo", "lida", escopo, ultima_atualizacao=max(atualizacoes) if atualizacoes else None)}
+        except Exception as exc:  # noqa: BLE001
+            if isinstance(exc, SourceUnavailable):
+                exc = Unavailable(exc.reason)
+            return self._timeline_falha("acervo", escopo, exc)
+
+    @staticmethod
+    def _timeline_item(proveniencia: str, url: str, data: str, fonte: str, descricao: str, tipo: str, *,
+                       capture_id: str | None = None, sha256: str | None = None, fetched_at: str | None = None,
+                       decisao_id: str | None = None) -> dict[str, Any]:
+        return {"proveniencia": proveniencia, "url": url, "capture_id": capture_id, "sha256": sha256,
+                "fetched_at": fetched_at, "data": data, "fonte": fonte, "descricao": descricao,
+                "tipo_documental": tipo, "decisao_id": decisao_id}
+
+    # ------------------------------------------------------------------
     # CVM / BCB
     # ------------------------------------------------------------------
 
@@ -3365,7 +3587,7 @@ class Verifica:
 _CARAS = frozenset({
     "buscar_legislacao", "resolver_citacao", "obter_dispositivo", "historico_dispositivo",
     "verificar_citacao", "verificar_texto", "pesquisar_jurisprudencia", "obter_decisao",
-    "buscar_normas_cvm", "buscar_normas_bcb",
+    "buscar_normas_cvm", "buscar_normas_bcb", "timeline_decisoes",
 })
 _CONTADAS = _CARAS | frozenset({
     "obter_evidencia", "listar_fontes", "doctor", "sincronizar", "bench", "snapshot_export",
@@ -3386,7 +3608,7 @@ def _guardar(fn):
             return fn(self, *args, **kwargs)
         entrada = dict(bound.arguments)
         entrada.pop("self", None)
-        _validar(entrada)
+        _validar(entrada, fn.__name__)
         externa = not getattr(self._local, "prof", 0)
         token = _politica_atual.set(self.registro)
         try:

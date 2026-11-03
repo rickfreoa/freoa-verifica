@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from contextlib import asynccontextmanager
 from typing import Any
@@ -12,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, StrictStr
 from freoa_verifica.fronteira import MOTIVO_ENCAMINHADO, origens_permitidas, token_ok, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP, EntradaInvalida, Sobrecarga
+from freoa_verifica import timeline as _timeline
 from freoa_verifica.sanitizacao import Protegido
 from freoa_verifica.service import Verifica
 
@@ -280,6 +282,25 @@ def create_app(
     ):
         return svc.obter_decisao(id, parte=parte, max_chars=max_chars, offset=offset, tribunal=tribunal,
                                  parte_idx=parte_idx, parte_tamanho=parte_tamanho)
+
+    @app.get("/v1/timeline")
+    def get_timeline(
+        request: Request,
+        modo: str,
+        numero_cnj: str | None = None,
+        limite: str | None = None,
+        cursor: str | None = None,
+        _: None = Depends(require_auth),
+    ):
+        """Experimental (decisão 0073). `limite` é lido como texto para recusar o que não é inteiro decimal."""
+        desconhecidos = sorted(set(request.query_params.keys()) - {"modo", "numero_cnj", "limite", "cursor"})
+        if desconhecidos:
+            raise EntradaInvalida("parâmetro desconhecido: " + ", ".join(desconhecidos))
+        if limite is not None and not re.fullmatch(r"[0-9]{1,6}", limite):
+            raise EntradaInvalida(f"limite: esperado inteiro de {_timeline.LIMITE_MIN} a {_timeline.LIMITE_MAX}")
+        return svc.timeline_decisoes(
+            modo, numero_cnj=numero_cnj,
+            limite=_timeline.LIMITE_PADRAO if limite is None else int(limite), cursor=cursor)
 
     @app.get("/v1/normas/cvm")
     def get_cvm(q: str, tipo: str | None = None, _: None = Depends(require_auth)):

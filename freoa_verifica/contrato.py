@@ -22,4 +22,6 @@ EXPERIMENTAL: frozenset[str] = frozenset({
     "obter_evidencia:proveniencia",
     # Partição de `obter_decisao` com `parte_idx` (decisão 0073, seção 7; PARIDADE-1.4, CH1–CH6).
     "obter_decisao:particao",
+    # Ferramenta inteira (decisão 0073, seção 1): linha do tempo de um processo, modo `processo`.
+    "timeline_decisoes:",
 })

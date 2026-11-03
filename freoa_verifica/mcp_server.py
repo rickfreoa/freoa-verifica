@@ -22,6 +22,7 @@ except ModuleNotFoundError:
     from mcp.server.mcpserver import MCPServer as FastMCP
 
 from freoa_verifica import particao as _particao
+from freoa_verifica import timeline as _timeline
 from freoa_verifica.fronteira import origens_permitidas, token_ok, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP
@@ -84,11 +85,28 @@ Offset = Annotated[int, Field(ge=0, le=10_000_000)]
 # superior de `parte_idx` é só o do esquema, e o serviço recusa o índice além de partes_total (decisão 0073).
 ParteIdx = Annotated[int, Field(strict=True, ge=0, le=10_000_000)]
 ParteTamanho = Annotated[int, Field(strict=True, ge=_particao.PARTE_TAMANHO_MIN, le=_particao.PARTE_TAMANHO_MAX)]
+# `timeline_decisoes` (decisão 0073): tipos estritos e faixa do serviço (`freoa_verifica.timeline`).
+ModoTimeline = Annotated[str, Field(strict=True, max_length=32)]
+NumeroCnj = Annotated[str, Field(strict=True, max_length=_timeline.NUMERO_CNJ_MAX)]
+LimiteTimeline = Annotated[int, Field(strict=True, ge=_timeline.LIMITE_MIN, le=_timeline.LIMITE_MAX)]
+CursorTimeline = Annotated[str, Field(strict=True, max_length=_timeline.CURSOR_MAX)]
 Modo = Annotated[Modo, Field(max_length=32)]
-Parte = Annotated[Parte, Field(max_length=32)]
+Parte =Annotated[Parte, Field(max_length=32)]
 Fonte = Annotated[Fonte, Field(max_length=32)]
 Tribunal = Annotated[Tribunal, Field(max_length=256)]
 Tribunais = Annotated[list[Tribunal], Field(max_length=5)]
+
+
+def _proibir_parametros_extras(mcp: FastMCP, ferramenta: str) -> None:
+    """O SDK ignora em silêncio o argumento que o esquema não declara; a ferramenta passa a recusá-lo (decisão 0073).
+
+    Falha ao subir, não em silêncio, se o SDK não expõe o modelo de argumentos."""
+    try:
+        modelo = mcp._tool_manager.get_tool(ferramenta).fn_metadata.arg_model
+    except AttributeError as exc:  # pragma: no cover - depende da versão do SDK
+        raise RuntimeError(f"SDK MCP sem acesso ao modelo de argumentos de {ferramenta}") from exc
+    modelo.model_config["extra"] = "forbid"
+    modelo.model_rebuild(force=True)
 
 
 def _service(home: str | None = None, registro: str | None = None) -> Verifica:
@@ -325,6 +343,33 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         espécie. Pode gravar cache local.
         """
         return svc_().buscar_normas_bcb(q, tipo=tipo)
+
+    @mcp.tool()
+    def timeline_decisoes(
+        modo: ModoTimeline,
+        numero_cnj: NumeroCnj | None = None,
+        limite: LimiteTimeline = 50,
+        cursor: CursorTimeline | None = None,
+    ) -> dict[str, Any]:
+        """Linha do tempo de um processo (experimental): movimentos do DataJud, comunicações do DJEN e decisões do acervo.
+
+        modo: só `processo` nesta versão (o modo `recentes` não está disponível). numero_cnj: número CNJ com ou sem
+        máscara, com o dígito verificador conferido (a resposta traz os 20 dígitos). limite: 1 a 200 (padrão 50);
+        cursor: o da página anterior. DataJud, DJEN e acervo local são sempre as fontes necessárias. status: ok |
+        parcial (há eventos e alguma fonte não foi lida: veja fontes_indisponiveis) | indisponivel (nenhum evento e
+        alguma fonte não foi lida) | nenhum_no_recorte (as três lidas, nenhum evento: leia `cobertura`). Ausência de
+        eventos ou do processo na fonte não é inexistência (nao_confirmado_na_fonte: segredo de justiça ou processo
+        fora do DataJud). Movimento do DataJud é metadado, nunca inteiro teor. Ordem: data crescente, fonte,
+        identificador estável. `atribuicao` (CNJ e DataJud) acompanha os eventos do DataJud. `descricao` vem entre
+        delimitadores de documento oficial.
+        """
+        data_out = svc_().timeline_decisoes(modo, numero_cnj=numero_cnj, limite=limite, cursor=cursor)
+        for item in data_out.get("itens") or []:
+            if isinstance(item, dict) and isinstance(item.get("descricao"), str):
+                item["descricao"] = _wrap_oficial(item["descricao"])
+        return data_out
+
+    _proibir_parametros_extras(mcp, "timeline_decisoes")
 
     @mcp.tool()
     def obter_evidencia(

@@ -17,6 +17,7 @@ from freoa_verifica.connectors.base import (
     ParsedDecision,
     Unavailable,
     register,
+    sob_guarda,
 )
 from freoa_verifica.connectors.httputil import connector_fetch
 from freoa_verifica.identidade_http import UA_POR_CONECTOR
@@ -186,6 +187,61 @@ class DatajudConnector(Connector):
                 "nivelSigilo": src.get("nivelSigilo"),
             },
         )
+
+    @sob_guarda
+    def movimentos_do_processo(self, tribunal: str, numero: str) -> dict[str, Any] | None:
+        """Movimentos dos registros públicos do processo (todos os graus que o DataJud indexa), numa só requisição.
+
+        `None` quando a fonte não devolve registro público do número (processo em segredo ou ausente: a fonte não os
+        distingue). Resposta que não se interpreta é `Unavailable`; nunca lista vazia no lugar dela."""
+        digitos = normalize_cnj(numero)
+        resp = self._post(tribunal, {"size": MAX_ROWS, "query": {"match": {"numeroProcesso": digitos}}})
+        try:
+            payload = json.loads(texto_do_response(resp))
+        except json.JSONDecodeError as exc:
+            raise Unavailable("resposta_invalida") from exc
+        if not isinstance(payload, dict) or payload.get("timed_out") is True:
+            raise Unavailable("resposta_invalida")
+        envoltorio = payload.get("hits")
+        if not isinstance(envoltorio, dict) or not isinstance(envoltorio.get("hits"), list):
+            raise Unavailable("resposta_invalida")
+        total = envoltorio.get("total")
+        total_n = total.get("value") if isinstance(total, dict) else total
+        hits = envoltorio["hits"]
+        if isinstance(total_n, int) and not isinstance(total_n, bool) and total_n > len(hits):
+            raise Unavailable("resposta_invalida")  # leitura cortada: não sustenta a lista de movimentos
+        movimentos: list[dict[str, Any]] = []
+        atualizacoes: list[str] = []
+        achou = False
+        for hit in hits:
+            src = hit.get("_source") if isinstance(hit, dict) else None
+            if not isinstance(src, dict):
+                raise Unavailable("resposta_invalida")
+            if not _is_publico(src) or normalize_cnj(str(src.get("numeroProcesso") or "")) != digitos:
+                continue
+            achou = True
+            lista = src.get("movimentos")
+            if lista is None:
+                lista = []
+            if not isinstance(lista, list):
+                raise Unavailable("resposta_invalida")
+            for mov in lista:
+                if not isinstance(mov, dict):
+                    raise Unavailable("resposta_invalida")
+                complementos = []
+                for c in mov.get("complementosTabelados") or []:
+                    if isinstance(c, dict):
+                        rotulo = c.get("nome") or c.get("descricao")
+                        if isinstance(rotulo, str) and rotulo:
+                            complementos.append(rotulo)
+                movimentos.append({"grau": src.get("grau"), "codigo": mov.get("codigo"), "nome": mov.get("nome"),
+                                   "data_hora": mov.get("dataHora"), "complementos": complementos})
+            if isinstance(src.get("dataHoraUltimaAtualizacao"), str):
+                atualizacoes.append(src["dataHoraUltimaAtualizacao"])
+        if not achou:
+            return None
+        return {"url": resp.final_url, "movimentos": movimentos,
+                "ultima_atualizacao": max(atualizacoes) if atualizacoes else None}
 
     def _search_body(self, tribunal: str, body: dict[str, Any]) -> list[Candidate]:
         resp = self._post(tribunal, body)

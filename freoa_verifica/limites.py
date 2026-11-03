@@ -34,6 +34,9 @@ TETO_TEXTO = {
 # (mínimo, máximo) de parâmetros inteiros.
 FAIXA_INT = {"limite": (1, 50), "max_chars": (1, 50_000), "offset": (0, 10_000_000)}
 MAX_TRIBUNAIS = 5
+# Parâmetros que a própria ferramenta valida, com a faixa que lhe cabe (a tabela acima é a das buscas): a validação
+# genérica os deixa passar. `timeline_decisoes` aceita `limite` de 1 a 200 e `cursor` de até 64 caracteres.
+VALIDADOS_PELA_FERRAMENTA = {"timeline_decisoes": frozenset({"limite", "cursor"})}
 MAX_CORPO_HTTP = 512 * 1024  # bytes; texto de 100k caracteres cabe com folga
 
 
@@ -45,9 +48,10 @@ class Sobrecarga(RuntimeError):
     """Concorrência de operações caras esgotada; adaptadores a traduzem em 503."""
 
 
-def validar(args: dict[str, Any]) -> None:
+def validar(args: dict[str, Any], ferramenta: str | None = None) -> None:
+    proprios = VALIDADOS_PELA_FERRAMENTA.get(ferramenta or "", frozenset())
     for nome, valor in args.items():
-        if valor is None:
+        if valor is None or nome in proprios:
             continue
         if nome in TETO_TEXTO:
             if not isinstance(valor, str):

@@ -59,6 +59,7 @@ Mapa de adaptadores:
 | Normas BCB/CMN | `buscar_normas_bcb` | `buscar_normas_bcb` | `GET /v1/normas/bcb` |
 | Evidência | `obter_evidencia` | `obter_evidencia` | `GET /v1/evidencias/{capture_id}` |
 | Listar fontes | `listar_fontes` | `listar_fontes` | `GET /v1/fontes` |
+| Linha do tempo de um processo (experimental) | `timeline_decisoes` | `timeline_decisoes` | `GET /v1/timeline` (`modo` obrigatório) |
 
 ### Blocos comuns
 
@@ -178,6 +179,33 @@ Entrada inválida (`EntradaInvalida`; REST: `problem+json` 422; MCP: erro de fer
 
 `{fontes: array, total: number, contrato: string}`. `contrato` é a `CONTRATO_VERSAO` (aditivo, ausente nas versões anteriores a esta). Cada fonte: `id`, `autoridade` (strings), `circuito` (array de `{host, estado: "fechado"|"aberto", falhas: number}`), `cobertura` (object, **experimental**: chaves variam por conector), `ultimo_health` (**experimental**: `null` ou resultado do último `health`). Aditivos e **experimentais** (decisão 0056): `capacidade` (`acervo`|`ao_vivo`|`ambos`|`nenhuma`; para tribunal, `ao_vivo` é a busca textual ao vivo), `recorte_acervo` (tribunal: `{decisoes, desde, ate, capturado_em}`; demais fontes: `{capturas, capturado_em}`; contagem `0` é acervo instalado vazio) e `tipos_documento` (lista de `ementa`, `inteiro_teor`, `inteiro_teor_parcial`, `metadados`).
 
+### `timeline_decisoes` (**experimental**, ferramenta inteira)
+
+Decisão 0073 (seções 2 a 6); PARIDADE-1.4, TD1, TD3, TD4, C1 a C8 e C10. Fica fora do teste de compatibilidade (`"timeline_decisoes:"` em `EXPERIMENTAL`) e pode mudar sem aviso. **Só o modo `processo`** nesta versão; `modo: "recentes"` (e qualquer outro) é `EntradaInvalida`, com a mensagem de que o modo `recentes` não está disponível.
+
+Parâmetros: `modo` (obrigatório), `numero_cnj` (obrigatório no modo `processo`; com ou sem máscara, dígito verificador conferido pelo módulo 97 da Resolução CNJ 65/2008), `limite` (inteiro de 1 a 200; padrão 50) e `cursor` (texto de até 64 caracteres, o devolvido pela página anterior). Parâmetro inexistente, tipo errado (inclusive booleano, texto ou número fracionário em `limite`) ou fora da faixa é `EntradaInvalida` (REST: `problem+json` 422; MCP: erro de ferramenta), e **nenhuma fonte é consultada**. Em MCP o esquema é estrito (`limite` com mínimo e máximo, textos com `maxLength`) e a ferramenta recusa argumento que o esquema não declara. No REST (`GET /v1/timeline`, `modo` obrigatório), `limite` é lido como texto e só aceita inteiro decimal.
+
+Resposta: `{modo: "processo", numero_cnj: string (20 dígitos), atribuicao: array|null, status, itens: array, total: number, truncado: bool, cursor: string|null, cobertura: array}`, mais `fontes_indisponiveis` (object `{<fonte>: {motivo, categoria, evidencia_indisponibilidade?}}`; só em `parcial` e `indisponivel`; `categoria` pela decisão 0045, `null` sem prova) e `motivo` (só em `indisponivel`: o motivo comum das fontes não lidas, ou `fonte_necessaria_nao_lida` quando diferem). `total` conta os `itens` da página.
+
+**Fontes necessárias**, fixas em toda chamada: DataJud, DJEN e acervo local. Estado (`status`), calculado sobre todos os eventos do processo e não sobre a página:
+
+| Literal | Condição |
+|---|---|
+| `ok` | as três fontes lidas e há eventos |
+| `parcial` | há eventos e alguma fonte necessária não foi lida |
+| `indisponivel` | nenhum evento e alguma fonte necessária não foi lida (a ausência de eventos não é afirmada) |
+| `nenhum_no_recorte` | as três lidas e nenhum evento; `cobertura` diz o que foi lido |
+
+Fonte **lida** é a consultada com sucesso (`resultado` `lida` ou `nao_confirmado_na_fonte`); **não lida**, a que falhou ou recusou (`indisponivel`) ou não foi consultada (`nao_consultada`: modo offline, com motivo `offline`, para DataJud e DJEN; tribunal sem rota no DataJud, motivo `tribunal_sem_rota_datajud`). Nenhuma resposta, campo ou estado diz que o processo não existe: processo em segredo de justiça ou ausente do DataJud é `resultado: "nao_confirmado_na_fonte"` (com `escopo`) na entrada `datajud` da `cobertura`, o que conta como fonte lida mas não dispensa as outras duas.
+
+`cobertura`: uma entrada por fonte, na ordem `datajud`, `djen`, `acervo`, com `fonte`, `tribunal` (string|null), `resultado` (`lida`, `nao_confirmado_na_fonte`, `indisponivel`, `nao_consultada`), `escopo`, `recorte` (`{desde, ate}` das datas dos eventos da fonte, ou `null`), `primeiro_numero` e `ultimo_numero` (`null`), `lacunas` (`[]`), `ultima_atualizacao` (string|null: a do DataJud, quando a fonte informa; a captura mais recente, no acervo) e `indisponivel` (object|null: `{motivo, categoria, evidencia_indisponibilidade?}` quando `resultado` é `indisponivel`).
+
+`itens`: eventos, cada um com o bloco de prova (`proveniencia`, `url`, `capture_id`, `sha256`, `fetched_at`; os três últimos só não nulos quando `proveniencia` é `captura`), `data` (AAAA-MM-DD; vazia quando a fonte não traz data legível), `fonte` (`datajud`, `djen`, `acervo`), `descricao` (conteúdo oficial; em MCP vem entre os delimitadores de documento, normalização admitida), `tipo_documental` (aberto: `movimento`, `texto_publicado`, `ementa`, `inteiro_teor`) e `decisao_id` (string|null). Eventos do DataJud: `proveniencia: "metadado_de_fonte"`, `tipo_documental: "movimento"`, nunca inteiro teor. Eventos do DJEN: `tipo_documental: "texto_publicado"` (decisão 0047), também `metadado_de_fonte` (a ferramenta não grava captura própria da consulta). Eventos do acervo: uma decisão confirmada do mesmo número por evento, com `proveniencia: "captura"`, `capture_id`, `sha256` (dos bytes capturados), `fetched_at`, `decisao_id` e a ementa (ou o texto disponível, até 1.200 caracteres). `atribuicao` é não nula, com a atribuição ao CNJ e ao DataJud (Portaria CNJ nº 374/2026), quando há evento do DataJud no resultado, e só então.
+
+**Ordem e paginação** (determinísticas). Ordem: `data` crescente (evento sem data vem primeiro), depois `fonte` em ordem alfabética (`acervo`, `datajud`, `djen`), depois o identificador estável do evento: `sha256(fonte, identificador de origem)` truncado em 16 hexadecimais e um sufixo de ordem entre eventos idênticos na mesma data, fonte e origem (o conteúdo desempata antes do sufixo, de modo que a ordem não depende da que a fonte devolveu). O identificador não aparece nos itens. O `cursor` é a posição do último item entregue (`data|fonte|identificador`), não um deslocamento: a página seguinte traz os eventos de posição estritamente maior, sem omitir nem repetir evento, ainda que a fronteira de página caia entre eventos de mesma data e fonte. `truncado` é `true` e `cursor` não nulo quando há mais eventos; na última página, `truncado: false` e `cursor: null`. Cursor além do último evento devolve página vazia com o `status` do resultado.
+
+O DJEN é lido pelo conector `djen` (I3.4). Enquanto ele não estiver instalado, a fonte aparece como `indisponivel` (`conector_djen_ausente`) e o estado nunca é `ok` nem `nenhum_no_recorte`.
+
 ## Estados
 
 Campos de estado fechado: o conjunto de literais abaixo é parte do contrato. O teste compara, por caminho, o conjunto de valores de `status`, `motivo`, `modo_busca`, `relacao` e `parte_entregue` da resposta atual com o congelado. Ocorrência: `*` em qualquer ferramenta que o emita; entre parênteses, onde foi observado.
@@ -203,6 +231,7 @@ Campos de estado fechado: o conjunto de literais abaixo é parte do contrato. O 
 | `nao_encontrado_na_fonte` | fonte oficial consultada pelo número CNJ não devolveu o processo |
 | `processo_confirmado` | processo existe com mais de um registro (busca por número) |
 | `parte_indisponivel` | decisão existe, mas a parte pedida (ementa, inteiro teor, voto, certidão) não foi capturada |
+| `nenhum_no_recorte` | só em `timeline_decisoes` (experimental): toda fonte necessária lida e nenhum evento; `cobertura` diz o que foi lido |
 | `erro` | só no limite de tamanho do MCP em `verificar_texto` |
 
 **`status` de dimensão** (`identity`, `text`, `temporal`, `support`, de `verificar_citacao`):
