@@ -271,3 +271,62 @@ def test_0075_situacao_revogada_nao_converte_historico(svc_160):
     out_corr = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022")
     assert out_corr["temporal"]["status"] == "divergent"
     assert out_corr["temporal"]["reason_code"] == "OBRA_REVOGADA_NA_FONTE"
+
+
+def test_0075_evidencia_eixos_verificar_citacao(svc_160):
+    """3.2: Eixos da evidência em verificar_citacao."""
+    svc, rw, doc = svc_160
+    prov = doc.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    res = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text)
+    ev = res["identity"]["evidence"][0]
+    assert ev["captured_at"] == rw.fetched_at
+    assert ev["acervo_ate"] is None  # CVM é fonte viva
+    assert ev["source_kind"] == "resolucao_cvm"
+    assert ev["natureza_texto"] == "consolidacao_oficial"
+    assert ev["procedencia"] == "nao_identificado"
+    assert ev["esfera"] == "federal"
+
+
+def test_0075_evidencia_eixos_obter_dispositivo(svc_160):
+    """3.2: Eixos da evidência em obter_dispositivo."""
+    svc, rw, _ = svc_160
+    res = svc.obter_dispositivo(citacao="art. 1º da Resolução CVM nº 160/2022")
+    assert res["status"] == "encontrada"
+    ev = res["evidencia"]
+    assert ev["captured_at"] == rw.fetched_at
+    assert ev["acervo_ate"] is None
+    assert ev["source_kind"] == "resolucao_cvm"
+    assert ev["natureza_texto"] == "consolidacao_oficial"
+    assert ev["procedencia"] == "nao_identificado"
+    assert ev["esfera"] == "federal"
+
+
+def test_0075_evidencia_planalto_acervo_ate(tmp_path, monkeypatch):
+    """3.2: Planalto calcula acervo_ate da maior fetched_at do acervo instalado."""
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    s = Verifica(home=tmp_path)
+    body_lsa = load_fixture("planalto_lei_6404_1976")
+    from freoa_verifica.parsers.planalto import parse_planalto
+    doc_lsa = parse_planalto(body_lsa)
+    s.indexar_obra(
+        source_id="planalto",
+        work_key=WorkKey("federal", "lei", "6404", 1976),
+        document=doc_lsa,
+        body=body_lsa,
+        url="http://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm",
+        fetched_at="2026-10-18T12:00:00Z",
+        work_date="1976-12-15",
+        label="Lei nº 6.404/1976",
+        content_type="text/html; charset=windows-1252",
+    )
+    res = s.obter_dispositivo(citacao="art. 1º da Lei 6404/1976")
+    assert res["status"] == "encontrada"
+    ev = res["evidencia"]
+    assert ev["captured_at"] == "2026-10-18T12:00:00Z"
+    assert ev["acervo_ate"] == "2026-10-18"
+    assert ev["source_kind"] == "lei"
+    assert ev["natureza_texto"] == "consolidacao_oficial"
+    assert ev["esfera"] == "federal"
+    s.close()

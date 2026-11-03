@@ -52,6 +52,16 @@ class Evidence:
     trecho_oficial: str | None = None
     fontes_consultadas: list[dict] | None = None  # experimental; só quando fonte anterior ficou indisponível (0058)
     proveniencia: dict | None = None  # experimental; só quando o texto vem de captura sem Content-Type (0065)
+    captured_at: str | None = None
+    acervo_ate: str | None = None
+    source_kind: str = "nao_identificado"
+    natureza_texto: str = "nao_identificado"
+    procedencia: str = "nao_identificado"
+    esfera: str = "nao_identificado"
+
+    def __post_init__(self) -> None:
+        if self.captured_at is None and self.fetched_at is not None:
+            self.captured_at = self.fetched_at
 
 
 @dataclass
@@ -92,6 +102,9 @@ class ResolvedWork:
     caminhos_conhecidos: frozenset[str] = frozenset()  # dispositivos de qualquer captura canônica da obra (0034)
     fontes_consultadas: list[dict] = field(default_factory=list)  # fontes anteriores sem resposta na captura (0058)
     proveniencia: dict | None = None  # experimental; `{interpretacao: "legado_sem_cabecalho"}` (0065)
+    source_id: str | None = None
+    acervo_ate: str | None = None
+    procedencia_tipo: str = "nao_identificado"
 
 
 class Resolver(Protocol):
@@ -151,6 +164,66 @@ class MemoryResolver:
         return None
 
 
+_SOURCE_KINDS = frozenset({
+    "lei", "lei_complementar", "decreto", "decreto_lei", "medida_provisoria",
+    "emenda_constitucional", "constituicao", "resolucao_cvm", "instrucao_cvm",
+    "parecer_orientacao_cvm", "resolucao_cmn", "resolucao_bcb", "circular_bcb",
+})
+
+
+def _inferir_source_kind(wk: WorkKey | None) -> str:
+    if wk is None:
+        return "nao_identificado"
+    auth = (wk.authority or "").lower()
+    kind = (wk.kind or "").lower()
+    if auth == "federal":
+        if kind in ("lei", "lei_complementar", "decreto", "decreto_lei", "medida_provisoria", "emenda_constitucional", "constituicao"):
+            return kind
+    elif auth == "cvm":
+        if kind in ("resolucao", "resolucao_cvm"):
+            return "resolucao_cvm"
+        if kind in ("instrucao", "instrucao_cvm"):
+            return "instrucao_cvm"
+        if kind in ("parecer_orientacao", "parecer_orientacao_cvm"):
+            return "parecer_orientacao_cvm"
+    elif auth == "cmn":
+        if kind in ("resolucao", "resolucao_cmn"):
+            return "resolucao_cmn"
+    elif auth == "bcb":
+        if kind in ("resolucao", "resolucao_bcb"):
+            return "resolucao_bcb"
+        if kind in ("circular", "circular_bcb"):
+            return "circular_bcb"
+    if kind in _SOURCE_KINDS:
+        return kind
+    return "nao_identificado"
+
+
+def _inferir_natureza_texto(rw: ResolvedWork) -> str:
+    profile = getattr(rw.document, "profile", "") or ""
+    auth = (rw.work_key.authority or "").lower() if rw.work_key else ""
+    if profile == "planalto" or auth == "federal":
+        return "consolidacao_oficial"
+    if auth == "cvm" or profile.startswith("cvm"):
+        return "consolidacao_oficial"
+    return "nao_identificado"
+
+
+def _inferir_esfera(wk: WorkKey | None) -> str:
+    if wk is None:
+        return "nao_identificado"
+    auth = (wk.authority or "").lower()
+    if auth in ("federal", "senado", "cvm", "bcb", "cmn", "stf", "stj"):
+        return "federal"
+    return "nao_identificado"
+
+
+def _inferir_procedencia(rw: ResolvedWork) -> str:
+    if hasattr(rw, "procedencia_tipo") and rw.procedencia_tipo:
+        return rw.procedencia_tipo
+    return "nao_identificado"
+
+
 def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, span=None) -> Evidence:
     t = trecho
     if t and len(t) > _MAX_TRECHO:
@@ -165,6 +238,12 @@ def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, sp
         trecho_oficial=t,
         fontes_consultadas=rw.fontes_consultadas or None,
         proveniencia=rw.proveniencia,
+        captured_at=rw.fetched_at,
+        acervo_ate=rw.acervo_ate,
+        source_kind=_inferir_source_kind(rw.work_key),
+        natureza_texto=_inferir_natureza_texto(rw),
+        procedencia=_inferir_procedencia(rw),
+        esfera=_inferir_esfera(rw.work_key),
     )
 
 
@@ -929,6 +1008,11 @@ def populate_from_parsed(
             from freoa_verifica.connectors.base import Unavailable
             raise Unavailable("orcamento")
 
+    acervo_ate = None
+    if source_id == "planalto":
+        row_c = conn.execute("SELECT MAX(fetched_at) FROM capture WHERE source_id='planalto' AND fetched_at IS NOT NULL").fetchone()
+        acervo_ate = str(row_c[0])[:10] if (row_c and row_c[0]) else None
+
     return ResolvedWork(
         work_id=work_id,
         work_key=work_key,
@@ -943,4 +1027,6 @@ def populate_from_parsed(
         proveniencia=({"interpretacao": ORIGEM_LEGADO} if conn.execute(
             "SELECT origem_da_codificacao FROM capture WHERE id=?", (capture_id,)).fetchone()[0] == ORIGEM_LEGADO
             else None),
+        source_id=source_id,
+        acervo_ate=acervo_ate,
     )

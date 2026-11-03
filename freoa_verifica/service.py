@@ -61,6 +61,10 @@ from freoa_verifica.verify import (
     SourceUnavailable,
     _current_redaction,
     _find_provision,
+    _inferir_esfera,
+    _inferir_natureza_texto,
+    _inferir_procedencia,
+    _inferir_source_kind,
     _redaction_by_id,
     _result_to_json,
     persistir_resultado,
@@ -675,6 +679,8 @@ class Verifica:
             canonica = self._rebuild_from_db(work_key, _exact=True)
             rw = canonica if isinstance(canonica, ResolvedWork) else rw
         self._resolver.add(rw)
+        if source_id == "planalto" and hasattr(self, "_cached_acervo_ate_planalto"):
+            delattr(self, "_cached_acervo_ate_planalto")
         if work_key.year <= 0:
             with self.conn:
                 self.conn.execute("INSERT OR IGNORE INTO work_year_issue(work_id,reason,capture_id) VALUES (?,?,?)",
@@ -731,6 +737,10 @@ class Verifica:
         if declared is None and doc.profile in {"planalto","cvm_docx","cvm_pdf","cvm_html","bcb_json","senado_norma"}:
             raise SourceUnavailable("IDENTIDADE_NAO_DECLARADA")
         wk = WorkKey(row["authority"], row["kind"], row["number"], int(row["year"]))
+        source_id = cap.get("source_id") if cap else None
+        acervo_ate = None
+        if source_id == "planalto" or (source_id is None and (row["authority"] == "federal" or doc.profile == "planalto")):
+            acervo_ate = self._acervo_ate_planalto()
         rw = ResolvedWork(
             work_id=work_id,
             work_key=wk,
@@ -745,8 +755,36 @@ class Verifica:
             persisted_incomplete=incomplete,
             caminhos_conhecidos=frozenset(conhecidos),
             proveniencia=_proveniencia(cap, saved),
+            source_id=source_id,
+            acervo_ate=acervo_ate,
         )
         return rw
+
+    def _acervo_ate_planalto(self) -> str | None:
+        if not hasattr(self, "_cached_acervo_ate_planalto"):
+            row = self.conn.execute(
+                "SELECT MAX(fetched_at) FROM capture WHERE source_id='planalto' AND fetched_at IS NOT NULL"
+            ).fetchone()
+            val = str(row[0])[:10] if (row and row[0]) else None
+            self._cached_acervo_ate_planalto = val
+        return self._cached_acervo_ate_planalto
+
+    def _evidencia_dispositivo(self, rw: ResolvedWork) -> dict[str, Any]:
+        acervo_ate = rw.acervo_ate
+        if acervo_ate is None and (rw.work_key.authority == "federal" or rw.document.profile == "planalto"):
+            acervo_ate = self._acervo_ate_planalto()
+        return {
+            "capture_id": rw.capture_id,
+            "url": rw.url,
+            "fetched_at": rw.fetched_at,
+            "sha256": rw.sha256,
+            "captured_at": rw.fetched_at,
+            "acervo_ate": acervo_ate,
+            "source_kind": _inferir_source_kind(rw.work_key),
+            "natureza_texto": _inferir_natureza_texto(rw),
+            "procedencia": _inferir_procedencia(rw),
+            "esfera": _inferir_esfera(rw.work_key),
+        }
 
     def reparar_anos(self) -> dict:
         """Repara projeção de identidade a partir de modelos de capturas autenticadas.
@@ -1389,12 +1427,7 @@ class Verifica:
                 "caminho": None,
                 "texto": None,
                 "aviso": "informe caminho ou citação com dispositivo",
-                "evidencia": {
-                    "capture_id": rw.capture_id,
-                    "url": rw.url,
-                    "fetched_at": rw.fetched_at,
-                    "sha256": rw.sha256,
-                },
+                "evidencia": self._evidencia_dispositivo(rw),
                 **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
             }
         if rw.persisted_incomplete:
@@ -1466,12 +1499,7 @@ class Verifica:
             "anotacoes": anotacoes,
             "fundamento_temporal": None,
             "correspondencia_textual": None,
-            "evidencia": {
-                "capture_id": rw.capture_id,
-                "url": rw.url,
-                "fetched_at": rw.fetched_at,
-                "sha256": rw.sha256,
-            },
+            "evidencia": self._evidencia_dispositivo(rw),
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
         }
 
