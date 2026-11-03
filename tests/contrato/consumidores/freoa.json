@@ -1,0 +1,190 @@
+{
+  "consumidor": "freoa",
+  "versao_minima": "1.4.0a2",
+  "ferramentas": {
+    "verificar_citacao": {
+      "caminhos_esperados": [
+        "identity.status",
+        "text.status",
+        "temporal.status",
+        "support.status",
+        "identity.reason_code",
+        "text.reason_code",
+        "temporal.reason_code",
+        "support.reason_code",
+        "identity.evidence[].capture_id",
+        "identity.evidence[].fetched_at",
+        "identity.evidence[].sha256",
+        "identity.evidence[].url",
+        "identity.evidence[].captured_at",
+        "identity.evidence[].acervo_ate",
+        "identity.evidence[].source_kind",
+        "identity.evidence[].natureza_texto",
+        "identity.evidence[].procedencia",
+        "identity.evidence[].esfera",
+        "fundamento_temporal",
+        "correspondencia_textual",
+        "run_id"
+      ],
+      "estados_esperados": {
+        "identity.status": ["verified", "not_found", "unavailable", "unknown", "ambiguous"],
+        "text.status": ["verified", "divergent", "not_assessed", "unknown"],
+        "temporal.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "not_assessed", "ambiguous"],
+        "support.status": ["not_assessed", "verified", "unknown"]
+      },
+      "caminhos": [
+        "identity.status",
+        "text.status",
+        "temporal.status",
+        "support.status",
+        "identity.reason_code",
+        "text.reason_code",
+        "temporal.reason_code",
+        "support.reason_code",
+        "identity.evidence[].capture_id",
+        "identity.evidence[].fetched_at",
+        "identity.evidence[].sha256",
+        "identity.evidence[].url",
+        "identity.evidence[].captured_at",
+        "identity.evidence[].acervo_ate",
+        "identity.evidence[].source_kind",
+        "identity.evidence[].natureza_texto",
+        "identity.evidence[].procedencia",
+        "identity.evidence[].esfera",
+        "fundamento_temporal",
+        "correspondencia_textual",
+        "run_id"
+      ],
+      "estados": {
+        "identity.status": ["verified", "not_found", "unavailable", "unknown", "ambiguous"],
+        "text.status": ["verified", "divergent", "not_assessed", "unknown"],
+        "temporal.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "not_assessed", "ambiguous"],
+        "support.status": ["not_assessed", "verified", "unknown"]
+      }
+    },
+    "obter_dispositivo": {
+      "caminhos_esperados": [
+        "status",
+        "caminho",
+        "texto",
+        "texto_atual",
+        "vigencia.status",
+        "vigencia.reason_code",
+        "evidencia.capture_id",
+        "evidencia.fetched_at",
+        "evidencia.sha256",
+        "evidencia.url",
+        "evidencia.captured_at",
+        "evidencia.acervo_ate",
+        "evidencia.source_kind",
+        "evidencia.natureza_texto",
+        "evidencia.procedencia",
+        "evidencia.esfera",
+        "fundamento_temporal",
+        "correspondencia_textual"
+      ],
+      "estados_esperados": {
+        "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"],
+        "vigencia.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "ambiguous"]
+      },
+      "caminhos": [
+        "status",
+        "caminho",
+        "texto",
+        "texto_atual",
+        "vigencia.status",
+        "vigencia.reason_code",
+        "evidencia.capture_id",
+        "evidencia.fetched_at",
+        "evidencia.sha256",
+        "evidencia.url",
+        "evidencia.captured_at",
+        "evidencia.acervo_ate",
+        "evidencia.source_kind",
+        "evidencia.natureza_texto",
+        "evidencia.procedencia",
+        "evidencia.esfera",
+        "fundamento_temporal",
+        "correspondencia_textual"
+      ],
+      "estados": {
+        "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"],
+        "vigencia.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "ambiguous"]
+      }
+    },
+    "listar_fontes": {
+      "caminhos_esperados": [
+        "fontes[].id",
+        "fontes[].autoridade",
+        "fontes[].capacidade",
+        "qualificacao[].porta",
+        "qualificacao[].escopo",
+        "qualificacao[].estado",
+        "qualificacao[].rotulo",
+        "avisos_incidente[].id",
+        "avisos_incidente[].data",
+        "avisos_incidente[].acao"
+      ],
+      "estados_esperados": {
+        "fontes[].capacidade": ["acervo", "ao_vivo", "ambos", "nenhuma"],
+        "qualificacao[].estado": ["aprovada", "reprovada", "nao_apurada", "suspensa"],
+        "avisos_incidente[].acao": ["retirada", "correcao"]
+      },
+      "caminhos": [
+        "fontes[].id",
+        "fontes[].autoridade",
+        "fontes[].capacidade",
+        "qualificacao[].porta",
+        "qualificacao[].escopo",
+        "qualificacao[].estado",
+        "qualificacao[].rotulo",
+        "avisos_incidente[].id",
+        "avisos_incidente[].data",
+        "avisos_incidente[].acao"
+      ],
+      "estados": {
+        "fontes[].capacidade": ["acervo", "ao_vivo", "ambos", "nenhuma"],
+        "qualificacao[].estado": ["aprovada", "reprovada", "nao_apurada", "suspensa"],
+        "avisos_incidente[].acao": ["retirada", "correcao"]
+      }
+    },
+    "obter_registro": {
+      "caminhos_esperados": [
+        "status",
+        "run_id",
+        "ferramenta",
+        "criado_em",
+        "politica",
+        "parametros",
+        "estado",
+        "evidencias",
+        "fundamento_temporal",
+        "integridade.confere",
+        "confere_evidencias",
+        "confere_fundamento"
+      ],
+      "estados_esperados": {
+        "status": ["encontrada", "inexistente"],
+        "politica": ["completo", "sem_conteudo"]
+      },
+      "caminhos": [
+        "status",
+        "run_id",
+        "ferramenta",
+        "criado_em",
+        "politica",
+        "parametros",
+        "estado",
+        "evidencias",
+        "fundamento_temporal",
+        "integridade.confere",
+        "confere_evidencias",
+        "confere_fundamento"
+      ],
+      "estados": {
+        "status": ["encontrada", "inexistente"],
+        "politica": ["completo", "sem_conteudo"]
+      }
+    }
+  }
+}

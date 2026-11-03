@@ -6,6 +6,7 @@ Para (re)congelar, só sobre o código 1.2.0: `pytest tests/contrato --congelar-
 from __future__ import annotations
 
 import copy
+import json
 import re
 from pathlib import Path
 
@@ -259,3 +260,49 @@ def test_isencoes_por_caminho_continuam_iguais():
     assert h.incompatibilidades("obter_decisao", c, {"particao": {"x": 1}}, isentos)  # `texto` segue exigido
     assert h.incompatibilidades("obter_decisao", {"particaox": 1}, {}, isentos)  # nome parecido não é descendente
     assert h.incompatibilidades("obter_decisao_x", c, {"texto": "s"}, isentos)
+
+
+# ----------------------------------------------------------------------------------------------
+# Decisão 0075, seção 3.5: Contrato do consumidor FREOA
+# ----------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_contrato_consumidor_freoa_satisfeito(ambiente, adaptador):
+    contrato_consumidor = json.loads(
+        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
+    )
+    casos_por_ferramenta = {
+        "verificar_citacao": ["verificar_citacao_verified", "verificar_citacao_historica_riscada"],
+        "obter_dispositivo": ["obter_dispositivo"],
+        "listar_fontes": ["listar_fontes"],
+        "obter_registro": ["obter_registro_encontrada", "obter_registro_inexistente"],
+    }
+    casos_map = {c[0]: c for c in h.CASOS}
+
+    for ferramenta, spec in contrato_consumidor["ferramentas"].items():
+        nomes_casos = casos_por_ferramenta[ferramenta]
+        caminhos_observados: set[str] = set()
+        estados_observados: dict[str, set[str]] = {}
+
+        for nome_caso in nomes_casos:
+            _, _, args = casos_map[nome_caso]
+            resp = _responder(ambiente, adaptador, ferramenta, args)
+            norm = h.normalizar(resp)
+            caminhos_observados.update(h.achatar(norm).keys())
+            for k, v in h.estados(norm).items():
+                estados_observados.setdefault(k, set()).update(v)
+
+        caminhos_esperados = set(spec.get("caminhos_esperados", spec.get("caminhos", [])))
+        faltando_caminhos = caminhos_esperados - caminhos_observados
+        assert not faltando_caminhos, (
+            f"[{adaptador}] {ferramenta}: caminhos esperados pelo FREOA não observados: {faltando_caminhos}"
+        )
+
+        estados_esperados = spec.get("estados_esperados", spec.get("estados", {}))
+        for caminho_estado, permitidos in estados_esperados.items():
+            observados = estados_observados.get(caminho_estado, set())
+            fora = observados - set(permitidos)
+            assert not fora, (
+                f"[{adaptador}] {ferramenta}: estados não suportados pelo consumidor em {caminho_estado}: {fora}"
+            )
+

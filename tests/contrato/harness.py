@@ -26,10 +26,19 @@ CNJ_INVALIDO = "0710920-40.2025.8.07.0000"
 TRECHO_LSA = "A alienação, direta ou indireta, do controle de companhia aberta"
 CITACAO_LSA = "art. 254-A da Lei 6.404/76"
 
+CITACAO_160 = "art. 2º, XVI da Resolução CVM nº 160/2022"
+TRECHO_160_RISCADO = (
+    "pessoas vinculadas: controladores, diretos ou indiretos, ou administradores dos participantes do consórcio "
+    "de distribuição, do emissor, do ofertante, bem como seus cônjuges ou companheiros, seus ascendentes, descendentes "
+    "e colaterais até o 2o grau, e as demais pessoas vinculadas à emissão e à distribuição, conforme definidas "
+    "na regulamentação da CVM que dispõe sobre normas e procedimentos a serem observados nas operações realizadas "
+    "com valores mobiliários em mercados regulamentados;"
+)
+
 # Voláteis documentados em docs/CONTRATO.md (seção "Voláteis"): o valor é trocado por marcador do mesmo
 # tipo; só a presença e o tipo contam.
 VOLATEIS_CHAVES = frozenset({
-    "fetched_at", "captured_at", "created_at", "data_captura", "ultima_atualizacao",  # instantes
+    "fetched_at", "captured_at", "created_at", "data_captura", "ultima_atualizacao", "criado_em",  # instantes
     "home", "caminho_arquivo", "db_path", "blob_path",  # caminhos de máquina (`path` é caminho de dispositivo: estável)
     "duracao_ms", "elapsed_ms", "latencia_ms",  # durações
     "run_id",  # identificador de execução
@@ -37,7 +46,7 @@ VOLATEIS_CHAVES = frozenset({
 # Chaves cujo conteúdo é hash ou saldo de execução, não do dado.
 VOLATEIS_HASH_CHAVES = frozenset({"run_hash", "execucao_sha256", "ultimo_health"})
 # Chaves que carregam estado enumerado: o conjunto de valores é parte do contrato.
-CHAVES_DE_ESTADO = frozenset({"status", "motivo", "modo_busca", "relacao", "parte_entregue"})
+CHAVES_DE_ESTADO = frozenset({"status", "motivo", "modo_busca", "relacao", "parte_entregue", "politica"})
 
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 _ULID = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
@@ -63,7 +72,12 @@ def indexar_decisao(svc, court, official, *, text, ementa="ementa oficial", kind
 
 
 def semear(svc) -> dict[str, str]:
-    """Decisões sintéticas: inteiro teor longo, só ementa, e identificador repetido em dois tribunais."""
+    """Decisões sintéticas e obras para casos de teste de contrato."""
+    from freoa_verifica import situacao
+    from freoa_verifica.aliases import WorkKey
+    from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
+    from tests.fixture_util import load_fixture
+
     ids = {}
     ids["stj_inteiro"] = indexar_decisao(
         svc, "STJ", "900001", text="Inteiro teor sintético do acórdão. " * 80, ementa="Ementa sintética do acordão.",
@@ -72,6 +86,49 @@ def semear(svc) -> dict[str, str]:
     indexar_decisao(svc, "STJ", "555", text="texto stj 555 " * 20, ementa="ementa stj 555")
     indexar_decisao(svc, "TCU", "555", text="texto tcu 555 " * 20, ementa="ementa tcu 555",
                     cls="Acórdão", organ="Plenário")
+
+    # Obra com redação riscada em data passada (RCVM 160)
+    body_160 = load_fixture("cvm_resol_160_consolid_docx")
+    doc_160 = parse_cvm_docx(body_160)
+    rw_160 = svc.indexar_obra(
+        source_id="cvm_normas",
+        work_key=WorkKey("cvm", "resolucao", "160", 2022),
+        document=doc_160,
+        body=body_160,
+        url="https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.docx",
+        fetched_at="2026-10-18T00:00:00Z",
+        work_date="2022-07-13",
+        label="Resolução CVM nº 160/2022",
+    )
+    situacao.gravar(
+        svc.conn,
+        situacao.WorkStatus(
+            rw_160.work_id,
+            "vigente_declarada",
+            captura_id=rw_160.capture_id,
+            sha256=rw_160.sha256,
+            lido_em="2026-10-18T00:00:00Z",
+        ),
+    )
+    ids["capture_160"] = rw_160.capture_id
+
+    # Execução para caso de obter_registro
+    run_res = svc.verificar_citacao(CITACAO_LSA, trecho=TRECHO_LSA)
+    ids["run_id_valido"] = run_res["run_id"]
+
+    # Aviso de incidente de exemplo para listar_fontes cobrir os campos
+    (Path(svc.home) / "avisos_incidente.json").write_text(
+        json.dumps([{
+            "id": "AV-000",
+            "data": "2026-11-03",
+            "versoes_afetadas": ["1.4.0a1"],
+            "acao": "correcao",
+            "descricao": "Aviso de teste de contrato",
+            "referencia": "decisao 0075",
+        }]),
+        encoding="utf-8",
+    )
+
     return ids
 
 
@@ -105,6 +162,13 @@ CASOS: list[tuple[str, str, dict[str, Any]]] = [
     ("obter_evidencia", "obter_evidencia", {"capture_id": "@capture_lsa", "max_chars": 300}),
     ("obter_evidencia_inexistente", "obter_evidencia", {"capture_id": "capture-inexistente"}),
     ("listar_fontes", "listar_fontes", {}),
+    ("verificar_citacao_historica_riscada", "verificar_citacao", {
+        "citacao": CITACAO_160,
+        "trecho": TRECHO_160_RISCADO,
+        "data": "2022-08-01",
+    }),
+    ("obter_registro_encontrada", "obter_registro", {"run_id": "@run_id_valido"}),
+    ("obter_registro_inexistente", "obter_registro", {"run_id": "01M6H1Y11Y99K728HPNASE0000"}),
 ]
 
 
@@ -168,6 +232,12 @@ def chamar_rest(client, ferramenta: str, args: dict[str, Any]) -> dict:
         r = client.get(f"/v1/evidencias/{a.pop('capture_id')}", params=a)
     elif ferramenta == "listar_fontes":
         r = client.get("/v1/fontes")
+    elif ferramenta == "obter_registro":
+        run_id = a.pop("run_id")
+        if "evidencias" in a or "fundamento_temporal" in a:
+            r = client.post(f"/v1/registros/{run_id}/conferencia", json=a)
+        else:
+            r = client.get(f"/v1/registros/{run_id}", params=a)
     else:  # pragma: no cover
         raise KeyError(ferramenta)
     assert r.status_code == 200, (ferramenta, r.status_code, r.text)
