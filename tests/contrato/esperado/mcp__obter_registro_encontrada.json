@@ -8,7 +8,8 @@
     },
     "ferramenta": "obter_registro",
     "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede",
-    "versao": "1.4.0a2"
+    "versao": "1.4.0a1",
+    "versao_destino": "1.4.0a2"
   },
   "resposta": {
     "confere_evidencias": null,
@@ -40,11 +41,11 @@
       "confere": true
     },
     "parametros": {
-      "citacao_sha256": "hmac1:c7cb4da03e477698288ab5fa656f77325d225f2c7bf644ce59ed472298f9067b",
+      "citacao_sha256": "hmac1:6fd0e0a8d4ca039a1ee998774e2e106c5f3bfae2f3f12ca285858ecf86473a65",
       "data_sha256": null,
-      "modo_sha256": "hmac1:cd1a8d1de08e85aa12062a2619b2f5b9f9af0d010b4ff3fc98b5bd86d6cd6811",
+      "modo_sha256": "hmac1:0e54182d3d304157fda141630a4d848bd43161631bc618a14f3e8c672a70dbd6",
       "registro": "sem_conteudo",
-      "trecho_sha256": "hmac1:bba477fba69b33bf9eb195411d7b5fc20796dea6ad6f39590aabc9f0921d91b1"
+      "trecho_sha256": "hmac1:f45255fb0ad5bf3277fb56a430d531f10b983c4bbb362ac1a6f1c229e56b50f9"
     },
     "politica": "sem_conteudo",
     "run_id": "<ulid>",

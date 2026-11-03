@@ -10,7 +10,8 @@
     },
     "ferramenta": "verificar_citacao",
     "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede",
-    "versao": "1.4.0a2"
+    "versao": "1.4.0a1",
+    "versao_destino": "1.4.0a2"
   },
   "resposta": {
     "algo_versions": {

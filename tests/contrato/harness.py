@@ -392,25 +392,29 @@ CASOS_NOVOS_1_4_0 = frozenset({
     "verificar_citacao_historica_riscada",
 })
 COMMIT_1_4_0 = "7a3347a"
-VERSAO_1_4_0 = "1.4.0a2"
+VERSAO_1_4_0 = "1.4.0a1"
+VERSAO_DESTINO_1_4_0 = "1.4.0a2"
 
 
 def gravar(adaptador: str, caso: str, ferramenta: str, entrada: dict, resposta: dict) -> None:
     is_novo = caso in CASOS_NOVOS_1_4_0
+    prov = {
+        "adaptador": adaptador,
+        "caso": caso,
+        "commit": COMMIT_1_4_0 if is_novo else COMMIT_1_2_0,
+        "entrada": entrada,
+        "ferramenta": ferramenta,
+        "origem": (
+            "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede"
+            if is_novo
+            else "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede"
+        ),
+        "versao": VERSAO_1_4_0 if is_novo else "1.2.0",
+    }
+    if is_novo:
+        prov["versao_destino"] = VERSAO_DESTINO_1_4_0
     doc = {
-        "_proveniencia": {
-            "commit": COMMIT_1_4_0 if is_novo else COMMIT_1_2_0,
-            "versao": VERSAO_1_4_0 if is_novo else "1.2.0",
-            "adaptador": adaptador,
-            "caso": caso,
-            "ferramenta": ferramenta,
-            "entrada": entrada,
-            "origem": (
-                "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede"
-                if is_novo
-                else "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede"
-            ),
-        },
+        "_proveniencia": prov,
         "resposta": normalizar(resposta),
     }
     ESPERADO.mkdir(exist_ok=True)
