@@ -46,7 +46,10 @@ VOLATEIS_CHAVES = frozenset({
 # Chaves cujo conteúdo é hash ou saldo de execução, não do dado.
 VOLATEIS_HASH_CHAVES = frozenset({"run_hash", "execucao_sha256", "ultimo_health"})
 # Chaves que carregam estado enumerado: o conjunto de valores é parte do contrato.
-CHAVES_DE_ESTADO = frozenset({"status", "motivo", "modo_busca", "relacao", "parte_entregue", "politica"})
+CHAVES_DE_ESTADO = frozenset({
+    "status", "motivo", "modo_busca", "relacao", "parte_entregue", "politica",
+    "estado", "acao", "capacidade",
+})
 
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 _ULID = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
@@ -383,12 +386,30 @@ def nome_arquivo(adaptador: str, caso: str) -> Path:
     return ESPERADO / f"{adaptador}__{caso}.json"
 
 
+CASOS_NOVOS_1_4_0 = frozenset({
+    "obter_registro_encontrada",
+    "obter_registro_inexistente",
+    "verificar_citacao_historica_riscada",
+})
+COMMIT_1_4_0 = "7a3347a"
+VERSAO_1_4_0 = "1.4.0a2"
+
+
 def gravar(adaptador: str, caso: str, ferramenta: str, entrada: dict, resposta: dict) -> None:
+    is_novo = caso in CASOS_NOVOS_1_4_0
     doc = {
         "_proveniencia": {
-            "commit": COMMIT_1_2_0, "versao": "1.2.0", "adaptador": adaptador, "caso": caso,
-            "ferramenta": ferramenta, "entrada": entrada,
-            "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+            "commit": COMMIT_1_4_0 if is_novo else COMMIT_1_2_0,
+            "versao": VERSAO_1_4_0 if is_novo else "1.2.0",
+            "adaptador": adaptador,
+            "caso": caso,
+            "ferramenta": ferramenta,
+            "entrada": entrada,
+            "origem": (
+                "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede"
+                if is_novo
+                else "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede"
+            ),
         },
         "resposta": normalizar(resposta),
     }

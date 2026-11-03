@@ -3,58 +3,59 @@
   "versao_minima": "1.4.0a2",
   "ferramentas": {
     "verificar_citacao": {
-      "caminhos_esperados": [
-        "identity.status",
-        "text.status",
-        "temporal.status",
-        "support.status",
-        "identity.reason_code",
-        "text.reason_code",
-        "temporal.reason_code",
-        "support.reason_code",
-        "identity.evidence[].capture_id",
-        "identity.evidence[].fetched_at",
-        "identity.evidence[].sha256",
-        "identity.evidence[].url",
-        "identity.evidence[].captured_at",
-        "identity.evidence[].acervo_ate",
-        "identity.evidence[].source_kind",
-        "identity.evidence[].natureza_texto",
-        "identity.evidence[].procedencia",
-        "identity.evidence[].esfera",
-        "fundamento_temporal",
-        "correspondencia_textual",
-        "run_id"
-      ],
-      "estados_esperados": {
-        "identity.status": ["verified", "not_found", "unavailable", "unknown", "ambiguous"],
-        "text.status": ["verified", "divergent", "not_assessed", "unknown"],
-        "temporal.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "not_assessed", "ambiguous"],
-        "support.status": ["not_assessed", "verified", "unknown"]
+      "caminhos": {
+        "identity.status": "string",
+        "text.status": "string",
+        "temporal.status": "string",
+        "support.status": "string",
+        "identity.reason_code": "string|null",
+        "text.reason_code": "string|null",
+        "temporal.reason_code": "string|null",
+        "support.reason_code": "string|null",
+        "identity.evidence[].capture_id": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].fetched_at": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].sha256": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].url": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].captured_at": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].acervo_ate": {
+          "tipo": "string|null",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].source_kind": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].natureza_texto": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].procedencia": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "identity.evidence[].esfera": {
+          "tipo": "string",
+          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+        },
+        "fundamento_temporal": "object|null",
+        "correspondencia_textual": "object|null",
+        "run_id": "string"
       },
-      "caminhos": [
-        "identity.status",
-        "text.status",
-        "temporal.status",
-        "support.status",
-        "identity.reason_code",
-        "text.reason_code",
-        "temporal.reason_code",
-        "support.reason_code",
-        "identity.evidence[].capture_id",
-        "identity.evidence[].fetched_at",
-        "identity.evidence[].sha256",
-        "identity.evidence[].url",
-        "identity.evidence[].captured_at",
-        "identity.evidence[].acervo_ate",
-        "identity.evidence[].source_kind",
-        "identity.evidence[].natureza_texto",
-        "identity.evidence[].procedencia",
-        "identity.evidence[].esfera",
-        "fundamento_temporal",
-        "correspondencia_textual",
-        "run_id"
-      ],
       "estados": {
         "identity.status": ["verified", "not_found", "unavailable", "unknown", "ambiguous"],
         "text.status": ["verified", "divergent", "not_assessed", "unknown"],
@@ -63,85 +64,95 @@
       }
     },
     "obter_dispositivo": {
-      "caminhos_esperados": [
-        "status",
-        "caminho",
-        "texto",
-        "texto_atual",
-        "vigencia.status",
-        "vigencia.reason_code",
-        "evidencia.capture_id",
-        "evidencia.fetched_at",
-        "evidencia.sha256",
-        "evidencia.url",
-        "evidencia.captured_at",
-        "evidencia.acervo_ate",
-        "evidencia.source_kind",
-        "evidencia.natureza_texto",
-        "evidencia.procedencia",
-        "evidencia.esfera",
-        "fundamento_temporal",
-        "correspondencia_textual"
-      ],
-      "estados_esperados": {
-        "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"],
-        "vigencia.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "ambiguous"]
+      "caminhos": {
+        "status": "string",
+        "caminho": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "texto": {
+          "tipo": "string|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "texto_atual": {
+          "tipo": "object|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "vigencia.status": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "vigencia.reason_code": {
+          "tipo": "string|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.capture_id": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.fetched_at": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.sha256": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.url": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.captured_at": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.acervo_ate": {
+          "tipo": "string|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.source_kind": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.natureza_texto": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.procedencia": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencia.esfera": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "fundamento_temporal": {
+          "tipo": "object|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "correspondencia_textual": {
+          "tipo": "object|null",
+          "condicao": {"status": "encontrada"}
+        }
       },
-      "caminhos": [
-        "status",
-        "caminho",
-        "texto",
-        "texto_atual",
-        "vigencia.status",
-        "vigencia.reason_code",
-        "evidencia.capture_id",
-        "evidencia.fetched_at",
-        "evidencia.sha256",
-        "evidencia.url",
-        "evidencia.captured_at",
-        "evidencia.acervo_ate",
-        "evidencia.source_kind",
-        "evidencia.natureza_texto",
-        "evidencia.procedencia",
-        "evidencia.esfera",
-        "fundamento_temporal",
-        "correspondencia_textual"
-      ],
       "estados": {
         "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"],
         "vigencia.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "ambiguous"]
       }
     },
     "listar_fontes": {
-      "caminhos_esperados": [
-        "fontes[].id",
-        "fontes[].autoridade",
-        "fontes[].capacidade",
-        "qualificacao[].porta",
-        "qualificacao[].escopo",
-        "qualificacao[].estado",
-        "qualificacao[].rotulo",
-        "avisos_incidente[].id",
-        "avisos_incidente[].data",
-        "avisos_incidente[].acao"
-      ],
-      "estados_esperados": {
-        "fontes[].capacidade": ["acervo", "ao_vivo", "ambos", "nenhuma"],
-        "qualificacao[].estado": ["aprovada", "reprovada", "nao_apurada", "suspensa"],
-        "avisos_incidente[].acao": ["retirada", "correcao"]
+      "caminhos": {
+        "fontes[].id": "string",
+        "fontes[].autoridade": "string",
+        "fontes[].capacidade": "string",
+        "qualificacao[].porta": "string",
+        "qualificacao[].escopo": "string",
+        "qualificacao[].estado": "string",
+        "qualificacao[].rotulo": "string",
+        "avisos_incidente[].id": "string",
+        "avisos_incidente[].data": "string",
+        "avisos_incidente[].acao": "string"
       },
-      "caminhos": [
-        "fontes[].id",
-        "fontes[].autoridade",
-        "fontes[].capacidade",
-        "qualificacao[].porta",
-        "qualificacao[].escopo",
-        "qualificacao[].estado",
-        "qualificacao[].rotulo",
-        "avisos_incidente[].id",
-        "avisos_incidente[].data",
-        "avisos_incidente[].acao"
-      ],
       "estados": {
         "fontes[].capacidade": ["acervo", "ao_vivo", "ambos", "nenhuma"],
         "qualificacao[].estado": ["aprovada", "reprovada", "nao_apurada", "suspensa"],
@@ -149,38 +160,50 @@
       }
     },
     "obter_registro": {
-      "caminhos_esperados": [
-        "status",
-        "run_id",
-        "ferramenta",
-        "criado_em",
-        "politica",
-        "parametros",
-        "estado",
-        "evidencias",
-        "fundamento_temporal",
-        "integridade.confere",
-        "confere_evidencias",
-        "confere_fundamento"
-      ],
-      "estados_esperados": {
-        "status": ["encontrada", "inexistente"],
-        "politica": ["completo", "sem_conteudo"]
+      "caminhos": {
+        "status": "string",
+        "run_id": "string",
+        "ferramenta": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "criado_em": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "politica": {
+          "tipo": "string",
+          "condicao": {"status": "encontrada"}
+        },
+        "parametros": {
+          "tipo": "object",
+          "condicao": {"status": "encontrada"}
+        },
+        "estado": {
+          "tipo": "object",
+          "condicao": {"status": "encontrada"}
+        },
+        "evidencias": {
+          "tipo": "array|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "fundamento_temporal": {
+          "tipo": "object|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "integridade.confere": {
+          "tipo": "bool|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "confere_evidencias": {
+          "tipo": "array|null",
+          "condicao": {"status": "encontrada"}
+        },
+        "confere_fundamento": {
+          "tipo": "bool|null",
+          "condicao": {"status": "encontrada"}
+        }
       },
-      "caminhos": [
-        "status",
-        "run_id",
-        "ferramenta",
-        "criado_em",
-        "politica",
-        "parametros",
-        "estado",
-        "evidencias",
-        "fundamento_temporal",
-        "integridade.confere",
-        "confere_evidencias",
-        "confere_fundamento"
-      ],
       "estados": {
         "status": ["encontrada", "inexistente"],
         "politica": ["completo", "sem_conteudo"]

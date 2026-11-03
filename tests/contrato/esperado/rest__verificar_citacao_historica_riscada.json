@@ -2,15 +2,15 @@
   "_proveniencia": {
     "adaptador": "rest",
     "caso": "verificar_citacao_historica_riscada",
-    "commit": "239bef6",
+    "commit": "7a3347a",
     "entrada": {
       "citacao": "art. 2º, XVI da Resolução CVM nº 160/2022",
       "data": "2022-08-01",
       "trecho": "pessoas vinculadas: controladores, diretos ou indiretos, ou administradores dos participantes do consórcio de distribuição, do emissor, do ofertante, bem como seus cônjuges ou companheiros, seus ascendentes, descendentes e colaterais até o 2o grau, e as demais pessoas vinculadas à emissão e à distribuição, conforme definidas na regulamentação da CVM que dispõe sobre normas e procedimentos a serem observados nas operações realizadas com valores mobiliários em mercados regulamentados;"
     },
     "ferramenta": "verificar_citacao",
-    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
-    "versao": "1.2.0"
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
   },
   "resposta": {
     "algo_versions": {

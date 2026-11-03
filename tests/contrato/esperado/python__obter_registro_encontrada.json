@@ -2,13 +2,13 @@
   "_proveniencia": {
     "adaptador": "python",
     "caso": "obter_registro_encontrada",
-    "commit": "239bef6",
+    "commit": "7a3347a",
     "entrada": {
       "run_id": "@run_id_valido"
     },
     "ferramenta": "obter_registro",
-    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
-    "versao": "1.2.0"
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
   },
   "resposta": {
     "confere_evidencias": null,
