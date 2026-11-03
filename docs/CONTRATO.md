@@ -33,7 +33,7 @@ Regras:
 
 O teste normaliza **somente** isto antes de gravar e comparar; todo o resto é comparado como está:
 
-- **Instantes**: valores de `fetched_at`, `captured_at`, `created_at`, `data_captura`, `ultima_atualizacao` e qualquer string que comece por data-e-hora ISO (`AAAA-MM-DDTHH:MM:SS`) viram `"<instante>"`.
+- **Instantes**: valores de `fetched_at`, `captured_at`, `created_at`, `criado_em`, `data_captura`, `ultima_atualizacao` e qualquer string que comece por data-e-hora ISO (`AAAA-MM-DDTHH:MM:SS`) viram `"<instante>"`.
 - **Caminhos de máquina**: `home`, `caminho_arquivo`, `db_path`, `blob_path` viram `"<volatil>"`. (`path` e `caminho` de dispositivo, como `art254-A`, **não** são voláteis.)
 - **Durações**: `duracao_ms`, `elapsed_ms`, `latencia_ms` viram `0`.
 - **Identificadores gerados**: strings que são ULID (26 caracteres Crockford: `work_id`, `capture_id`, `id` de decisão, `run_id`) viram `"<ulid>"`.
@@ -59,6 +59,7 @@ Mapa de adaptadores:
 | Normas BCB/CMN | `buscar_normas_bcb` | `buscar_normas_bcb` | `GET /v1/normas/bcb` |
 | Evidência | `obter_evidencia` | `obter_evidencia` | `GET /v1/evidencias/{capture_id}` |
 | Listar fontes | `listar_fontes` | `listar_fontes` | `GET /v1/fontes` |
+| Obter registro | `obter_registro` | `obter_registro` | `GET /v1/registros/{run_id}` / `POST /v1/registros/{run_id}/conferencia` |
 
 ### Blocos comuns
 
@@ -68,8 +69,14 @@ Mapa de adaptadores:
 |---|---|---|---|
 | `capture_id` | string | não | identificador da captura oficial |
 | `fetched_at` | string | não | instante da captura |
+| `captured_at` | string | não | instante da captura (mesmo valor de `fetched_at`; nome estável para o FREOA) |
 | `sha256` | string | não | hash do documento capturado |
 | `url` | string | não | URL oficial |
+| `acervo_ate` | string | sim | data `AAAA-MM-DD` do corte do acervo congelado da fonte (hoje só `planalto`: última captura da fonte no acervo instalado); `null` em fonte viva |
+| `source_kind` | string | não | espécie do ato: `lei`, `lei_complementar`, `decreto`, `decreto_lei`, `medida_provisoria`, `emenda_constitucional`, `constituicao`, `resolucao_cvm`, `instrucao_cvm`, `parecer_orientacao_cvm`, `resolucao_cmn`, `resolucao_bcb`, `circular_bcb` (aberto) ou `nao_identificado` |
+| `natureza_texto` | string | não | `publicacao_original`, `consolidacao_oficial`, `reconstrucao_mecanica` ou `nao_identificado` |
+| `procedencia` | string | não | `captura_direta`, `snapshot`, `cadeia_de_alteracoes`, `sessao_assistida` ou `nao_identificado` |
+| `esfera` | string | não | `federal`, `estadual`, `municipal` ou `nao_identificado` (metadado) |
 | `path` | string | sim | caminho canônico do dispositivo |
 | `span` | array de 2 number | sim | intervalo do trecho no texto oficial (só na dimensão `text`) |
 | `trecho_oficial` | string | sim | texto oficial confrontado |
@@ -106,7 +113,7 @@ Mapa de adaptadores:
 
 ### `verificar_citacao`
 
-`{algo_versions: object, citation: object|ausente, identity, text, temporal, support, proposicao: string|null, run_id: string}`. `citation` ausente quando a citação não é reconhecida. `proposicao` ecoa a entrada (nunca avaliada: `support.status` é sempre `not_assessed`). `run_id` é volátil. Citação provável pode trazer `conferencia` (object) e rebaixamento das dimensões.
+`{algo_versions: object, citation: object|ausente, identity, text, temporal, support, proposicao: string|null, run_id: string, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `citation` ausente quando a citação não é reconhecida. `proposicao` ecoa a entrada (nunca avaliada: `support.status` é sempre `not_assessed`). `run_id` é volátil. Citação provável pode trazer `conferencia` (object) e rebaixamento das dimensões. `fundamento_temporal` (`{tipo, capture_id, url, sha256, data}`) vem `null` sem fundamento do período ou em consulta corrente. `correspondencia_textual` (`{resultado: "coincide"|"parcial"|"diverge", redaction_id, riscada, origem}`) só vem preenchido em consulta histórica com trecho e identidade verificada (decisão 0075).
 
 ### `verificar_texto`
 
@@ -118,7 +125,7 @@ Mapa de adaptadores:
 
 ### `obter_dispositivo`
 
-`{status, work_id, caminho, texto: string, texto_atual: string|null, truncado: bool, evidencia, vigencia: {status, regras: array, flags: array, intervalo: {inicio, fim}, reason_code}, anotacoes: array, redacoes_anteriores: array, redacao_anterior_ausente_na_fonte: bool, situacao_obra: object|null}`. `status` negativo devolve só `{status, ...}` (`{"status":"inexistente"}` ou com `motivo`).
+`{status, work_id, caminho, texto: string, texto_atual: string|null, truncado: bool, evidencia, vigencia: {status, regras: array, flags: array, intervalo: {inicio, fim}, reason_code}, anotacoes: array, redacoes_anteriores: array, redacao_anterior_ausente_na_fonte: bool, situacao_obra: object|null, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `status` negativo devolve só `{status, ...}` (`{"status":"inexistente"}` ou com `motivo`).
 
 ### `historico_dispositivo`
 
@@ -176,7 +183,16 @@ Entrada inválida (`EntradaInvalida`; REST: `problem+json` 422; MCP: erro de fer
 
 ### `listar_fontes`
 
-`{fontes: array, total: number, contrato: string}`. `contrato` é a `CONTRATO_VERSAO` (aditivo, ausente nas versões anteriores a esta). Cada fonte: `id`, `autoridade` (strings), `circuito` (array de `{host, estado: "fechado"|"aberto", falhas: number}`), `cobertura` (object, **experimental**: chaves variam por conector), `ultimo_health` (**experimental**: `null` ou resultado do último `health`). Aditivos e **experimentais** (decisão 0056): `capacidade` (`acervo`|`ao_vivo`|`ambos`|`nenhuma`; para tribunal, `ao_vivo` é a busca textual ao vivo), `recorte_acervo` (tribunal: `{decisoes, desde, ate, capturado_em}`; demais fontes: `{capturas, capturado_em}`; contagem `0` é acervo instalado vazio) e `tipos_documento` (lista de `ementa`, `inteiro_teor`, `inteiro_teor_parcial`, `metadados`).
+`{fontes: array, total: number, contrato: string, qualificacao: array, avisos_incidente: array}`. `contrato` é a `CONTRATO_VERSAO` (aditivo, ausente nas versões anteriores a esta). Cada fonte: `id`, `autoridade` (strings), `circuito` (array de `{host, estado: "fechado"|"aberto", falhas: number}`), `cobertura` (object, **experimental**: chaves variam por conector), `ultimo_health` (**experimental**: `null` ou resultado do último `health`). Aditivos e **experimentais** (decisão 0056): `capacidade` (`acervo`|`ao_vivo`|`ambos`|`nenhuma`; para tribunal, `ao_vivo` é a busca textual ao vivo), `recorte_acervo` (tribunal: `{decisoes, desde, ate, capturado_em}`; demais fontes: `{capturas, capturado_em}`; contagem `0` é acervo instalado vazio) e `tipos_documento` (lista de `ementa`, `inteiro_teor`, `inteiro_teor_parcial`, `metadados`). `qualificacao` (decisão 0075, aditivo) traz a lista de qualificações formais por porta e escopo (`{porta, escopo, estado, versao, manifesto, rotulo}`). `avisos_incidente` (decisão 0075, aditivo) traz comunicados de incidentes conhecidos (`{id, data, versoes_afetadas, acao, descricao, referencia}`).
+
+### `obter_registro`
+
+`{status, run_id, ferramenta, criado_em, politica, parametros, estado: {identity, text, temporal, support}, evidencias, fundamento_temporal, integridade: {algoritmo: "hmac-sha256", confere: bool|null}, confere_evidencias: array|null, confere_fundamento: bool|null}` em `encontrada`; `{status, run_id}` em `inexistente` (decisão 0075).
+
+Entrada: `run_id` (string), e opcionalmente `evidencias` (array de `{capture_id, sha256, url}`) e `fundamento_temporal` (object).
+Política e integridade:
+- Sob política `completo`: os parâmetros, evidências e fundamento temporal são armazenados em claro; `integridade.confere` valida o HMAC do registro completo com a chave do home.
+- Sob política `sem_conteudo`: dados sensíveis são armazenados apenas como compromissos HMAC canônicos; `evidencias` e `fundamento_temporal` são devolvidos como `null`. Se apresentados na chamada, `confere_evidencias` e `confere_fundamento` confrontam os itens apresentados contra os compromissos gravados, conferindo a autenticidade sem expor o conteúdo armazenado.
 
 ## Estados
 
@@ -217,6 +233,7 @@ Campos de estado fechado: o conjunto de literais abaixo é parte do contrato. O 
 **`modo_busca`**: `normal`, `ampliada` (AND sem resultado, repetido com OR), `numero_cnj`, `numero`.
 **`relacao`**: `exato`, `incidente_do_mesmo_processo`.
 **`parte_entregue`**: `ementa`, `inteiro_teor`, `voto`, `certidao`, ou `null`.
+**`politica`**: `completo`, `sem_conteudo` (em `obter_registro`).
 **`motivo`** (aberto; códigos observados): `offline`, `COBERTURA`, `PARTE_NAO_CAPTURADA`, `CNJ_DIGITO_VERIFICADOR_INVALIDO`, `EVIDENCIA_AUSENTE`, `IDENTIFICADOR_EM_MAIS_DE_UM_REGISTRO`, `DISPOSITIVO_INEXISTENTE`, `orcamento`, `fonte_nao_suportada`. Motivo novo é aditivo.
 
 ## Inconsistências conhecidas

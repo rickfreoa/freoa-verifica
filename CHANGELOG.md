@@ -1,5 +1,44 @@
 # Histórico de versões
 
+## 1.4.0a2 (não publicada)
+
+Pré-release do incremento IL.0 (emenda IL do plano 1.4.0 e decisão 0075). Correção da fronteira e estado temporal com data referida a D, tipagem de evidência em eixos, nova ferramenta `obter_registro` com conferência por HMAC, novos metadados em `listar_fontes` e contrato formal do consumidor FREOA.
+
+### Correção de estado com data referida a D (decisão 0075, seção 2)
+
+- Consulta com `data` referida a D anterior à data corrente ("consulta histórica") sem fundamento documental do período retorna `temporal.status == "unknown"` com `reason_code: "sem_fundamento_do_periodo"`. O texto riscado da compilada e a data de ato alterador não constituem fundamento temporal do período.
+- Em consulta histórica com trecho, `text.status` retorna `unknown` com `reason_code: "sem_fundamento_do_periodo"`. O resultado do confronto mecânico com as redações conhecidas é exposto no campo aditivo `correspondencia_textual` (`resultado`, `redaction_id`, `riscada`, `origem`), nunca no estado.
+- `nao_existia` é restrito a: (a) D anterior à data do próprio ato; (b) D anterior ao ato que incluiu o dispositivo quando a anotação for de inclusão sem questão de juízo pendente.
+- A regra prevalece em todas as portas de saída: `verificar_citacao`, `verificar_texto`, `obter_dispositivo` (`vigencia.status` e `vigencia.reason_code`). A situação declarada pela página do ato (`situacao_obra`) não rebaixa abstenção por falta de fundamento temporal em negativa.
+- `historico_dispositivo`: itens da linha do tempo ganham `limites_inferidos` (bool) e `fundamento_temporal`.
+
+### Eixos de evidência e metadados de defasagem (decisão 0075, seção 3.2)
+
+- Campos aditivos em `evidence[]` e `evidencia`:
+  - `captured_at`: instante da captura (estável para consumo por agentes).
+  - `acervo_ate`: data de corte do acervo congelado (`AAAA-MM-DD` em acervos locais como Planalto; `null` em fonte viva).
+  - `source_kind`: espécie normativa tipada (`lei`, `resolucao_cvm`, `resolucao_bcb`, etc. ou `nao_identificado`).
+  - `natureza_texto`: `publicacao_original`, `consolidacao_oficial`, `reconstrucao_mecanica` ou `nao_identificado`.
+  - `procedencia`: `captura_direta`, `snapshot`, `cadeia_de_alteracoes`, `sessao_assistida` ou `nao_identificado`.
+  - `esfera`: `federal`, `estadual`, `municipal` ou `nao_identificado`.
+
+### Qualificação e incidentes em `listar_fontes` (decisão 0075, seção 3.3)
+
+- `qualificacao`: lista de qualificações formais por porta e escopo (`porta`, `escopo`, `estado`, `versao`, `manifesto`, `rotulo`).
+- `avisos_incidente`: comunicados de incidentes conhecidos (`id`, `data`, `versoes_afetadas`, `acao`, `descricao`, `referencia`), unindo catálogo versionado e `<home>/avisos_incidente.json`.
+
+### Ferramenta `obter_registro` (decisão 0075, seção 3.4)
+
+- Nova ferramenta pública em Python, MCP e REST (`GET /v1/registros/{run_id}` e `POST /v1/registros/{run_id}/conferencia`).
+- Permite recuperar registro local de operações de verificação por `run_id`.
+- Em modo `sem_conteudo`, protege dados sensíveis através de compromissos HMAC (`hmac-sha256`) canônicos sobre tuplas de evidência e fundamento temporal, permitindo conferência por apresentação externa sem persistência em claro no banco local.
+- `registro_mac` garante a integridade de ponta a ponta do registro armazenado.
+
+### Contrato do consumidor FREOA (decisão 0075, seção 3.5)
+
+- Especificação formal em `tests/contrato/consumidores/freoa.json` definindo os caminhos obrigatórios e estados esperados para `verificar_citacao`, `obter_dispositivo`, `listar_fontes` e `obter_registro`.
+- Teste de contrato `test_contrato_consumidor_freoa_satisfeito` validando conformidade em Python, MCP e REST.
+
 ## 1.4.0a1 — 28/10/2026
 
 Pré-release do incremento I1 do plano `docs/PLANO-1.4.0.md` (pipeline e preparação das fontes). Decisões 0067 a 0070. Registros em `docs/auditoria/1.4.0/`. O que a versão não entrega vem logo abaixo, e vale mais do que o resto desta seção.

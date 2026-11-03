@@ -13,7 +13,7 @@ PROIBIDAS = re.compile(r"todas as decis|cobertura completa|cobertura total|cober
 FERRAMENTAS = {
     "buscar_legislacao", "resolver_citacao", "obter_dispositivo", "historico_dispositivo", "verificar_citacao",
     "verificar_texto", "pesquisar_jurisprudencia", "obter_decisao", "buscar_normas_cvm", "buscar_normas_bcb",
-    "obter_evidencia", "listar_fontes",
+    "obter_evidencia", "listar_fontes", "obter_registro",
 }
 
 

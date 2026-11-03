@@ -1,0 +1,17 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "obter_registro_inexistente",
+    "commit": "239bef6",
+    "entrada": {
+      "run_id": "01M6H1Y11Y99K728HPNASE0000"
+    },
+    "ferramenta": "obter_registro",
+    "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
+    "versao": "1.2.0"
+  },
+  "resposta": {
+    "run_id": "<ulid>",
+    "status": "inexistente"
+  }
+}
