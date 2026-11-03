@@ -1,0 +1,140 @@
+[
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "identity.status",
+    "literal": "unavailable",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "identity.status",
+    "literal": "unknown",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "identity.status",
+    "literal": "ambiguous",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "temporal.status",
+    "literal": "verified",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "temporal.status",
+    "literal": "divergent",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "temporal.status",
+    "literal": "not_found",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "temporal.status",
+    "literal": "ambiguous",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "support.status",
+    "literal": "verified",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "verificar_citacao",
+    "caminho": "support.status",
+    "literal": "unknown",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "status",
+    "literal": "inexistente",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "status",
+    "literal": "indisponivel",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "status",
+    "literal": "unknown",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "status",
+    "literal": "formato_invalido",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "vigencia.status",
+    "literal": "verified",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "vigencia.status",
+    "literal": "unknown",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "vigencia.status",
+    "literal": "divergent",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "vigencia.status",
+    "literal": "not_found",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "vigencia.status",
+    "literal": "ambiguous",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "listar_fontes",
+    "caminho": "qualificacao[].estado",
+    "literal": "aprovada",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "listar_fontes",
+    "caminho": "qualificacao[].estado",
+    "literal": "reprovada",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "listar_fontes",
+    "caminho": "qualificacao[].estado",
+    "literal": "suspensa",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "listar_fontes",
+    "caminho": "avisos_incidente[].acao",
+    "literal": "retirada",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  },
+  {
+    "ferramenta": "obter_registro",
+    "caminho": "politica",
+    "literal": "completo",
+    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+  }
+]

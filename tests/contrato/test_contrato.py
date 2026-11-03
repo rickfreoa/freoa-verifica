@@ -24,6 +24,8 @@ from freoa_verifica.rest import create_app  # noqa: E402
 from tests.contrato import harness as h  # noqa: E402
 
 CONTRATO_MD = Path(__file__).resolve().parents[2] / "docs" / "CONTRATO.md"
+FREOA_JSON = Path(__file__).resolve().parent / "consumidores" / "freoa.json"
+FREOA_NAO_EXERCITADOS_JSON = Path(__file__).resolve().parent / "consumidores" / "freoa_nao_exercitados.json"
 
 
 @pytest.fixture
@@ -338,6 +340,9 @@ def _validar_caminho_elemento(
     if not isinstance(val, list):
         return [f"tipo incompatível em {passo}: esperado array, observado {h._tipo(val)}"]
 
+    if len(val) == 0:
+        return [f"caminho ausente: {caminho}"]
+
     erros: list[str] = []
     for i, item in enumerate(val):
         passo_i = f"{passo[:-2]}[{i}]"
@@ -410,16 +415,37 @@ def conferir_literais_observados(
     spec: dict[str, Any],
     respostas: list[dict[str, Any]],
     isentos: frozenset[str] = frozenset(),
+    nao_exercitados: list[dict[str, str]] | None = None,
 ) -> list[str]:
     """Para cada (ferramenta, caminho, literal) em estados do freoa.json,
 
-    exige que o literal seja efetivamente OBSERVADO em pelo menos uma resposta
-    atual da implementação.
+    exige que:
+    (a) todo literal consumido fora de freoa_nao_exercitados.json seja observado em pelo
+        menos uma resposta atual da implementação;
+    (b) a lista freoa_nao_exercitados.json seja exata: literal da lista que passe a ser
+        observado reprova (obriga a retirá-lo da lista), e literal consumido não observado
+        e fora da lista reprova.
     """
     erros: list[str] = []
     estados_spec = spec.get("estados", {})
     if not estados_spec:
         return []
+
+    if nao_exercitados is None:
+        nao_exercitados = json.loads(FREOA_NAO_EXERCITADOS_JSON.read_text(encoding="utf-8"))
+
+    nao_exercitados_map: set[tuple[str, str]] = {
+        (item["caminho"], item["literal"])
+        for item in nao_exercitados
+        if item.get("ferramenta") == ferramenta
+    }
+
+    # Valida se os itens em nao_exercitados realmente constam na especificação consumida
+    for caminho_ne, literal_ne in nao_exercitados_map:
+        if caminho_ne not in estados_spec or literal_ne not in estados_spec[caminho_ne]:
+            erros.append(
+                f"literal {literal_ne!r} em {caminho_ne} consta de freoa_nao_exercitados.json mas não é consumido em freoa.json"
+            )
 
     observados_por_caminho: dict[str, set[str]] = {}
     for resp in respostas:
@@ -433,7 +459,15 @@ def conferir_literais_observados(
             continue
         observados = observados_por_caminho.get(caminho_estado, set())
         for literal in permitidos:
-            if literal not in observados:
+            chave = (caminho_estado, literal)
+            is_nao_exercitado = chave in nao_exercitados_map
+            is_observado = literal in observados
+
+            if is_nao_exercitado and is_observado:
+                erros.append(
+                    f"literal {literal!r} em {caminho_estado} consta de freoa_nao_exercitados.json mas foi observado nas respostas (deve ser retirado da lista)"
+                )
+            elif not is_nao_exercitado and not is_observado:
                 erros.append(
                     f"literal {literal!r} em {caminho_estado} não foi observado em nenhuma resposta da implementação"
                 )
@@ -442,9 +476,7 @@ def conferir_literais_observados(
 
 @pytest.mark.parametrize("adaptador", h.ADAPTADORES)
 def test_contrato_consumidor_freoa_satisfeito(ambiente, adaptador):
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     casos_por_ferramenta = {
         "verificar_citacao": [
             "verificar_citacao_verified",
@@ -468,16 +500,14 @@ def test_contrato_consumidor_freoa_satisfeito(ambiente, adaptador):
             assert not erros, f"[{adaptador}] {ferramenta} ({nome_caso}):\n" + "\n".join(erros)
             respostas.append(resp)
 
-        # 1.a: Preservação de literais pela IMPLEMENTAÇÃO
+        # 1.a / D5: Preservação de literais pela IMPLEMENTAÇÃO com verificação exata
         erros_literais = conferir_literais_observados(ferramenta, spec, respostas, DEPRECATED)
-        assert not erros_literais, f"[{adaptador}] {ferramenta} literais não observados:\n" + "\n".join(erros_literais)
+        assert not erros_literais, f"[{adaptador}] {ferramenta} literais não observados / divergentes da lista:\n" + "\n".join(erros_literais)
 
 
 @pytest.mark.repositorio
 def test_contrato_consumidor_freoa_estados_no_documento():
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     md = CONTRATO_MD.read_text(encoding="utf-8")
     for ferramenta, spec in contrato_consumidor["ferramentas"].items():
         for caminho_estado, permitidos in spec.get("estados", {}).items():
@@ -486,9 +516,7 @@ def test_contrato_consumidor_freoa_estados_no_documento():
 
 
 def test_gate_mutante_remocao_caminho():
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
     congelado = copy.deepcopy(h.carregar("python", "verificar_citacao_verified")["resposta"])
     del congelado["identity"]["status"]
@@ -497,9 +525,7 @@ def test_gate_mutante_remocao_caminho():
 
 
 def test_gate_mutante_troca_de_tipo():
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
     congelado = copy.deepcopy(h.carregar("python", "verificar_citacao_verified")["resposta"])
     congelado["identity"]["status"] = 42
@@ -508,9 +534,7 @@ def test_gate_mutante_troca_de_tipo():
 
 
 def test_gate_mutante_retirada_de_literal():
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     spec = copy.deepcopy(contrato_consumidor["ferramentas"]["verificar_citacao"])
     congelado = h.carregar("python", "verificar_citacao_verified")["resposta"]
     spec["estados"]["identity.status"] = [e for e in spec["estados"]["identity.status"] if e != "verified"]
@@ -520,9 +544,7 @@ def test_gate_mutante_retirada_de_literal():
 
 @pytest.mark.repositorio
 def test_gate_mutante_retirada_de_literal_do_documento():
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     md_sem_literal = CONTRATO_MD.read_text(encoding="utf-8").replace("`verified`", "removido")
     faltando = [v for v in contrato_consumidor["ferramentas"]["verificar_citacao"]["estados"]["identity.status"]
                 if f"`{v}`" not in md_sem_literal]
@@ -530,9 +552,7 @@ def test_gate_mutante_retirada_de_literal_do_documento():
 
 
 def test_gate_mutante_literal_novo():
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
     congelado = copy.deepcopy(h.carregar("python", "verificar_citacao_verified")["resposta"])
     congelado["identity"]["status"] = "literal_novo_nao_documentado"
@@ -545,9 +565,7 @@ def test_gate_mutante_campo_por_elemento_lista():
 
     a evidência duplicada e capture_id removido só do segundo elemento deve REPROVAR.
     """
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
     resposta_real = copy.deepcopy(h.carregar("python", "verificar_citacao_verified")["resposta"])
     assert len(resposta_real["identity"]["evidence"]) >= 1
@@ -568,9 +586,7 @@ def test_gate_mutante_preservacao_literais_implementacao(ambiente, adaptador):
     todo identity.status == "verified" por "unknown" (sem mexer em especificação
     nem documentação) deve REPROVAR o gate nos três adaptadores.
     """
-    contrato_consumidor = json.loads(
-        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
-    )
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
     casos = [
         "verificar_citacao_verified",
@@ -593,3 +609,99 @@ def test_gate_mutante_preservacao_literais_implementacao(ambiente, adaptador):
     assert any("verified" in e and "identity.status" in e for e in erros), (
         f"[{adaptador}] Esperava reprovação por ausência de 'verified' em identity.status, obteve: {erros}"
     )
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_gate_mutante_esvaziar_evidence_mantendo_verified(ambiente, adaptador):
+    """Mutante obrigatório (item 3): resposta com identity.evidence=[] mantendo
+
+    identity.status == "verified" deve REPROVAR nos três adaptadores por caminho ausente.
+    """
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
+    spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
+    casos_map = {c[0]: c for c in h.CASOS}
+    _, _, args = casos_map["verificar_citacao_verified"]
+    resp = _responder(ambiente, adaptador, "verificar_citacao", args)
+    resp_mutada = copy.deepcopy(resp)
+    assert resp_mutada["identity"]["status"] == "verified"
+    assert len(resp_mutada["identity"]["evidence"]) >= 1
+    resp_mutada["identity"]["evidence"] = []
+
+    erros = validar_resposta_consumidor("verificar_citacao", spec, resp_mutada)
+    assert any("identity.evidence" in e and "caminho ausente" in e for e in erros), (
+        f"[{adaptador}] Esperava reprovação por identity.evidence[] ausente quando vazia em verified, obteve: {erros}"
+    )
+
+
+def test_gate_mutante_acrescentar_literal_exercitado_a_lista_reprova():
+    """Mutante de (2) / item 4: acrescentar à lista freoa_nao_exercitados.json um literal
+
+    que é efetivamente exercitado (ex.: 'verified' em identity.status) deve REPROVAR.
+    """
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
+    spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
+    casos = [
+        "verificar_citacao_verified",
+        "verificar_citacao_trecho_divergente",
+        "verificar_citacao_obra_inexistente",
+        "verificar_citacao_historica_riscada",
+    ]
+    respostas = [h.carregar("python", c)["resposta"] for c in casos]
+
+    nao_exercitados = json.loads(FREOA_NAO_EXERCITADOS_JSON.read_text(encoding="utf-8"))
+    nao_exercitados_mutados = list(nao_exercitados) + [{
+        "ferramenta": "verificar_citacao",
+        "caminho": "identity.status",
+        "literal": "verified",
+        "motivo": "sem caso no harness; cobertura pendente do IL.0b",
+    }]
+
+    erros = conferir_literais_observados(
+        "verificar_citacao", spec, respostas, DEPRECATED, nao_exercitados=nao_exercitados_mutados
+    )
+    assert any("verified" in e and "consta de freoa_nao_exercitados.json mas foi observado" in e for e in erros), (
+        f"Esperava reprovação por acrescentar literal exercitado à lista, obteve: {erros}"
+    )
+
+
+def test_gate_mutante_retirar_literal_exercitado_reprova():
+    """Mutante de (2) / item 4: retirar um literal exercitado (ex.: 'verified' em identity.status)
+
+    das respostas da implementação deve REPROVAR o teste de preservação.
+    """
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
+    spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
+    casos = [
+        "verificar_citacao_verified",
+        "verificar_citacao_trecho_divergente",
+        "verificar_citacao_obra_inexistente",
+        "verificar_citacao_historica_riscada",
+    ]
+    respostas = []
+    for caso_nome in casos:
+        resp = copy.deepcopy(h.carregar("python", caso_nome)["resposta"])
+        if isinstance(resp.get("identity"), dict) and resp["identity"].get("status") == "verified":
+            resp["identity"]["status"] = "not_found"
+        respostas.append(resp)
+
+    erros = conferir_literais_observados("verificar_citacao", spec, respostas, DEPRECATED)
+    assert any("verified" in e and "não foi observado" in e for e in erros), (
+        f"Esperava reprovação por retirada de literal exercitado 'verified', obteve: {erros}"
+    )
+
+
+def test_contrato_consumidor_freoa_nao_exercitados_valido():
+    """Garante que freoa_nao_exercitados.json é exato, válido contra freoa.json e preserva a regra do D5."""
+    contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
+    nao_exercitados = json.loads(FREOA_NAO_EXERCITADOS_JSON.read_text(encoding="utf-8"))
+    assert isinstance(nao_exercitados, list)
+    assert len(nao_exercitados) == 23
+    for item in nao_exercitados:
+        assert set(item.keys()) == {"ferramenta", "caminho", "literal", "motivo"}
+        assert item["motivo"] == "sem caso no harness; cobertura pendente do IL.0b"
+        ferr = item["ferramenta"]
+        cam = item["caminho"]
+        lit = item["literal"]
+        spec = contrato_consumidor["ferramentas"][ferr]
+        assert cam in spec["estados"], f"{cam} não está em estados de {ferr}"
+        assert lit in spec["estados"][cam], f"{lit} não está em estados de {ferr}:{cam}"

@@ -14,53 +14,53 @@
         "support.reason_code": "string|null",
         "identity.evidence[].capture_id": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].fetched_at": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].sha256": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].url": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].captured_at": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].acervo_ate": {
           "tipo": "string|null",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].source_kind": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].natureza_texto": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].procedencia": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "identity.evidence[].esfera": {
           "tipo": "string",
-          "condicao": {"identity.status": ["verified", "divergent", "unknown"]}
+          "condicao": {"identity.status": "verified"}
         },
         "fundamento_temporal": "object|null",
         "correspondencia_textual": "object|null",
         "run_id": "string"
       },
       "estados": {
-        "identity.status": ["verified", "not_found"],
+        "identity.status": ["verified", "not_found", "unavailable", "unknown", "ambiguous"],
         "text.status": ["verified", "divergent", "not_assessed", "unknown"],
-        "temporal.status": ["vigente_na_fonte", "unknown", "not_assessed"],
-        "support.status": ["not_assessed"]
+        "temporal.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "not_assessed", "ambiguous"],
+        "support.status": ["not_assessed", "verified", "unknown"]
       }
     },
     "obter_dispositivo": {
@@ -136,8 +136,8 @@
         }
       },
       "estados": {
-        "status": ["encontrada"],
-        "vigencia.status": ["vigente_na_fonte"]
+        "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"],
+        "vigencia.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "ambiguous"]
       }
     },
     "listar_fontes": {
@@ -155,8 +155,8 @@
       },
       "estados": {
         "fontes[].capacidade": ["acervo", "ao_vivo", "ambos", "nenhuma"],
-        "qualificacao[].estado": ["nao_apurada"],
-        "avisos_incidente[].acao": ["correcao"]
+        "qualificacao[].estado": ["aprovada", "reprovada", "nao_apurada", "suspensa"],
+        "avisos_incidente[].acao": ["retirada", "correcao"]
       }
     },
     "obter_registro": {
@@ -206,7 +206,7 @@
       },
       "estados": {
         "status": ["encontrada", "inexistente"],
-        "politica": ["sem_conteudo"]
+        "politica": ["completo", "sem_conteudo"]
       }
     }
   }
