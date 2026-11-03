@@ -671,7 +671,7 @@ def select(
         interval, flags=flags, needs_judgment=needs_judgment
     )
     reason = None
-    if status == "verified" and not current_query and fundamento_temporal is None:
+    if not current_query and fundamento_temporal is None:
         status = "unknown"
         reason = "sem_fundamento_do_periodo"
         if "sem_fundamento_do_periodo" not in flags:

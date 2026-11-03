@@ -379,6 +379,10 @@ def _decidir(cur: str, ws: WorkStatus | None, data: str | None, hoje: date) -> t
     if ws.situacao in ("revogada", "cancelada"):
         efeito = _iso(ws.data_efeito)
         if efeito is not None:
+            # 0075, §2, itens 1 e 6: Em consulta histórica sem fundamento, nenhuma negativa pode
+            # vir só da situação atual: a abstenção prevalece (situação continua em situacao_obra).
+            if d != hoje and cur in ("unknown", "sem_fundamento_do_periodo"):
+                return None
             return ("revogado", REVOGADO_NA_FONTE) if d >= efeito else ("flag", POSTERIOR)
         if d >= hoje:
             return ("revogado", REVOGADO_NA_FONTE)
@@ -450,7 +454,8 @@ def aplicar_situacao_tr(tr, status: WorkStatus | None, data: str | None, hoje: d
 
     hoje = hoje or today_sp()
     r = getattr(tr, "reason", None) or ""
-    if r == "sem_fundamento_do_periodo":
+    flags = getattr(tr, "flags", [])
+    if r == "sem_fundamento_do_periodo" or "sem_fundamento_do_periodo" in flags:
         cur = "sem_fundamento_do_periodo"
     else:
         cur = {"verified": "bom", "vigente_na_fonte": "bom", "revogado": "revogado", "nao_existia": "preservar",

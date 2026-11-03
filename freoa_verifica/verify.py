@@ -912,19 +912,24 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
     ferramenta = "verificar_citacao"
 
     # Evidências únicas (todas as dimensões, na ordem)
+    # Não criar compromisso para evidência sem capture_id, sha256 e url (decisão 0075 / parecer Codex r1)
     evidencias_unicas: list[dict[str, Any]] = []
     vistos_ev: set[tuple[Any, Any, Any]] = set()
     for d in ("identity", "text", "temporal", "support"):
         for ev in (resultado.get(d) or {}).get("evidence") or []:
             if isinstance(ev, dict):
-                tup_key = (ev.get("capture_id"), ev.get("sha256"), ev.get("url"))
-                if tup_key not in vistos_ev:
-                    vistos_ev.add(tup_key)
-                    evidencias_unicas.append({
-                        "capture_id": ev.get("capture_id"),
-                        "sha256": ev.get("sha256"),
-                        "url": ev.get("url"),
-                    })
+                cid = ev.get("capture_id")
+                sha = ev.get("sha256")
+                url = ev.get("url")
+                if cid and sha and url:
+                    tup_key = (cid, sha, url)
+                    if tup_key not in vistos_ev:
+                        vistos_ev.add(tup_key)
+                        evidencias_unicas.append({
+                            "capture_id": cid,
+                            "sha256": sha,
+                            "url": url,
+                        })
 
     compromissos_ev = [
         hmac_entrada(conn, "evidencia", json.dumps(item, ensure_ascii=False, sort_keys=True))

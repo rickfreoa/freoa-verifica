@@ -679,8 +679,14 @@ class Verifica:
             canonica = self._rebuild_from_db(work_key, _exact=True)
             rw = canonica if isinstance(canonica, ResolvedWork) else rw
         self._resolver.add(rw)
-        if source_id == "planalto" and hasattr(self, "_cached_acervo_ate_planalto"):
-            delattr(self, "_cached_acervo_ate_planalto")
+        if source_id == "planalto":
+            if hasattr(self, "_cached_acervo_ate_planalto"):
+                delattr(self, "_cached_acervo_ate_planalto")
+            corte = self._acervo_ate_planalto()
+            for w in self._resolver.works.values():
+                if w.source_id == "planalto" or (w.source_id is None and (w.work_key.authority == "federal" or w.document.profile == "planalto")):
+                    w.acervo_ate = corte
+            rw.acervo_ate = corte
         if work_key.year <= 0:
             with self.conn:
                 self.conn.execute("INSERT OR IGNORE INTO work_year_issue(work_id,reason,capture_id) VALUES (?,?,?)",
@@ -770,9 +776,8 @@ class Verifica:
         return self._cached_acervo_ate_planalto
 
     def _evidencia_dispositivo(self, rw: ResolvedWork) -> dict[str, Any]:
-        acervo_ate = rw.acervo_ate
-        if acervo_ate is None and (rw.work_key.authority == "federal" or rw.document.profile == "planalto"):
-            acervo_ate = self._acervo_ate_planalto()
+        is_planalto = (rw.source_id == "planalto" or (rw.source_id is None and (rw.work_key.authority == "federal" or rw.document.profile == "planalto")))
+        acervo_ate = self._acervo_ate_planalto() if is_planalto else None
         return {
             "capture_id": rw.capture_id,
             "url": rw.url,
@@ -1837,6 +1842,12 @@ class Verifica:
             "reason_code": out.get("support", {}).get("reason_code") or "SUPPORT_NOT_ASSESSED",
             "evidence": out.get("support", {}).get("evidence") or [],
         }
+        # Recalcular acervo_ate nas evidências emitidas caso seja Planalto
+        corte_planalto = self._acervo_ate_planalto()
+        for dim_name in ("identity", "text", "temporal", "support"):
+            for ev in (out.get(dim_name) or {}).get("evidence") or []:
+                if isinstance(ev, dict) and (ev.get("acervo_ate") is not None or (ev.get("url") or "").startswith("https://www.planalto.gov.br")):
+                    ev["acervo_ate"] = corte_planalto
         if gravar and not self._read_only:
             recibo = {k: v for k, v in out.items() if k not in ("run_id", "proposicao")}
             out["run_id"] = persistir_resultado(self.conn, citacao, trecho, data, modo, recibo)
@@ -1896,9 +1907,12 @@ class Verifica:
         class _Adapter:
             def resolve(self, work: WorkKey):
                 resolved = outer._resolve(work, strict=True)
+                corte = outer._acervo_ate_planalto()
                 for item in resolved if isinstance(resolved, list) else [resolved]:
                     if isinstance(item, ResolvedWork) and item.capture_id:
                         outer._authenticate_capture(item.capture_id)
+                        if item.source_id == "planalto" or (item.source_id is None and (item.work_key.authority == "federal" or item.document.profile == "planalto")):
+                            item.acervo_ate = corte
                 return resolved
 
         return _Adapter()
@@ -3225,6 +3239,12 @@ class Verifica:
             compromissos = set(json.loads(row["evidencias_compromissos"])) if row["evidencias_compromissos"] else set()
             confere_evidencias = []
             for e in evidencias:
+                if not isinstance(e, dict) or not (e.get("capture_id") and e.get("sha256") and e.get("url")):
+                    confere_evidencias.append({
+                        "capture_id": e.get("capture_id") if isinstance(e, dict) else None,
+                        "confere": False,
+                    })
+                    continue
                 tup = {
                     "capture_id": e.get("capture_id"),
                     "sha256": e.get("sha256"),

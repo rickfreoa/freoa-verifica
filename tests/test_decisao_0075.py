@@ -273,6 +273,60 @@ def test_0075_situacao_revogada_nao_converte_historico(svc_160):
     assert out_corr["temporal"]["reason_code"] == "OBRA_REVOGADA_NA_FONTE"
 
 
+def test_0075_regressao_auditor_r1_art2_inc16_vacatio_situacao_revogada(svc_160):
+    """B.1 (Auditor Codex r1 ALTO): redação histórica selecionada cujo estado intermediário
+    já é unknown (ex.: vacatio) não pode ser convertida pela situação gravada da obra em negativa.
+    Reprodução exata: cvm_resol_160_consolid_docx, art. 2º, XVI, data 2023-01-01, obra revogada com data_efeito=2022-12-01.
+    Testado nos 3 caminhos: verificar_citacao, obter_dispositivo e verificar_texto.
+    """
+    svc, rw, doc = svc_160
+    prov = doc.provision("art2.inc16")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    ws = situacao.WorkStatus(
+        work_id=rw.work_id,
+        situacao="revogada",
+        texto_oficial="Revogada por Resolução CVM 200",
+        ato_revogador="Resolução CVM 200",
+        data_efeito="2022-12-01",
+        captura_id=rw.capture_id,
+        sha256=rw.sha256,
+        lido_em="2026-10-18T00:00:00Z",
+    )
+    situacao.gravar(svc.conn, ws)
+
+    # 1. Caminho verificar_citacao
+    res_cit = svc.verificar_citacao(
+        "art. 2º, XVI da Resolução CVM nº 160/2022",
+        trecho=current.text,
+        data="2023-01-01",
+    )
+    assert res_cit["temporal"]["status"] == "unknown"
+    assert res_cit["temporal"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert res_cit["fundamento_temporal"] is None
+
+    # 2. Caminho obter_dispositivo
+    res_disp = svc.obter_dispositivo(
+        citacao="art. 2º, XVI da Resolução CVM nº 160/2022",
+        data="2023-01-01",
+    )
+    assert res_disp["status"] == "encontrada"
+    assert res_disp["vigencia"]["status"] == "unknown"
+    assert res_disp["vigencia"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert res_disp["fundamento_temporal"] is None
+
+    # 3. Caminho verificar_texto
+    texto = f'Conforme o art. 2º, XVI da RCVM 160: "{current.text}".'
+    res_txt = svc.verificar_texto(texto, data="2023-01-01")
+    assert res_txt["total"] == 1
+    cit_emb = res_txt["citacoes"][0]
+    assert cit_emb["text"]["status"] == "unknown"
+    assert cit_emb["text"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert cit_emb["verificacao"]["temporal"]["status"] == "unknown"
+    assert cit_emb["verificacao"]["temporal"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert cit_emb["verificacao"]["fundamento_temporal"] is None
+
+
 def test_0075_evidencia_eixos_verificar_citacao(svc_160):
     """3.2: Eixos da evidência em verificar_citacao."""
     svc, rw, doc = svc_160
@@ -301,6 +355,60 @@ def test_0075_evidencia_eixos_obter_dispositivo(svc_160):
     assert ev["natureza_texto"] == "consolidacao_oficial"
     assert ev["procedencia"] == "nao_identificado"
     assert ev["esfera"] == "federal"
+
+
+def test_0075_regressao_auditor_r1_acervo_ate_duas_obras_capturas_distintas(tmp_path, monkeypatch):
+    """B.4 (Auditor Codex r1 MÉDIO): acervo_ate congelado no ResolvedWork fica desatualizado;
+    calcule ao emitir a resposta ou invalide nas obras carregadas.
+    Regressão com duas obras e capturas em datas distintas.
+    """
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    from freoa_verifica.parsers.model import ParsedDocument, Provision, Redaction
+
+    with Verifica(home=tmp_path) as svc:
+        p1 = Provision("art1", "Art. 1º", "", [Redaction("Texto 1", False, 0)])
+        doc1 = ParsedDocument(profile="planalto", parser_version="1", title="LEI Nº 6.404, DE 15 DE DEZEMBRO DE 1976.", ementa=None, text="Texto 1", provisions=[p1])
+        svc.indexar_obra(
+            source_id="planalto",
+            work_key=WorkKey("federal", "lei", "6404", 1976),
+            document=doc1,
+            body=b"<html>Lei 6404</html>",
+            url="https://www.planalto.gov.br/lei6404.htm",
+            fetched_at="2026-10-18T12:00:00Z",
+            work_date="1976-12-15",
+            label="Lei nº 6.404/1976",
+            content_type="text/html; charset=utf-8",
+        )
+        # Primeira obra carregada: corte é 2026-10-18
+        res1_cit = svc.verificar_citacao("art. 1º da Lei 6.404/76", trecho="Texto 1")
+        assert res1_cit["identity"]["evidence"][0]["acervo_ate"] == "2026-10-18"
+        res1_disp = svc.obter_dispositivo(citacao="art. 1º da Lei 6.404/76")
+        assert res1_disp["evidencia"]["acervo_ate"] == "2026-10-18"
+
+        # Segunda obra com captura mais recente (2026-10-19)
+        p2 = Provision("art1", "Art. 1º", "", [Redaction("Texto 2", False, 0)])
+        doc2 = ParsedDocument(profile="planalto", parser_version="1", title="LEI Nº 10.406, DE 10 DE JANEIRO DE 2002.", ementa=None, text="Texto 2", provisions=[p2])
+        svc.indexar_obra(
+            source_id="planalto",
+            work_key=WorkKey("federal", "lei", "10406", 2002),
+            document=doc2,
+            body=b"<html>Lei 10406</html>",
+            url="https://www.planalto.gov.br/lei10406.htm",
+            fetched_at="2026-10-19T15:00:00Z",
+            work_date="2002-01-10",
+            label="Lei nº 10.406/2002",
+            content_type="text/html; charset=utf-8",
+        )
+
+        # Agora o corte agregado da primeira obra (que já estava em cache) deve refletir 2026-10-19
+        res1_atualizada_cit = svc.verificar_citacao("art. 1º da Lei 6.404/76", trecho="Texto 1")
+        assert res1_atualizada_cit["identity"]["evidence"][0]["acervo_ate"] == "2026-10-19"
+        res1_atualizada_disp = svc.obter_dispositivo(citacao="art. 1º da Lei 6.404/76")
+        assert res1_atualizada_disp["evidencia"]["acervo_ate"] == "2026-10-19"
+
+        # E a segunda obra também
+        res2_disp = svc.obter_dispositivo(citacao="art. 1º da Lei 10.406/2002")
+        assert res2_disp["evidencia"]["acervo_ate"] == "2026-10-19"
 
 
 def test_0075_evidencia_planalto_acervo_ate(tmp_path, monkeypatch):
@@ -461,6 +569,41 @@ def test_0075_obter_registro_sem_conteudo_com_conferencia(svc_160):
     assert reg_conf["confere_evidencias"] == [
         {"capture_id": rw.capture_id, "confere": True},
         {"capture_id": rw.capture_id, "confere": False},
+    ]
+
+
+def test_0075_regressao_auditor_r1_evidencias_incompletas_e_vazias_rejeitadas(svc_160):
+    """B.3 (Auditor Codex r1 MÉDIO): confere_evidencias não pode dar true para apresentação vazia
+    ou incompleta, e operações sem captura não criam compromisso.
+    """
+    svc, rw, _ = svc_160
+    res = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022")
+    run_id = res["run_id"]
+
+    # 1. Apresentação vazia / incompleta deve dar confere: False
+    conferencia = svc.obter_registro(run_id, evidencias=[{}, {"capture_id": None}, {"capture_id": "c1"}])
+    assert conferencia["status"] == "encontrada"
+    assert conferencia["confere_evidencias"] == [
+        {"capture_id": None, "confere": False},
+        {"capture_id": None, "confere": False},
+        {"capture_id": "c1", "confere": False},
+    ]
+
+    # 2. Operação que não teve captura (sem capture_id, sha256 ou url) não grava compromissos de captura
+    from freoa_verifica.verify import persistir_resultado
+
+    run_id_unav = persistir_resultado(
+        svc.conn,
+        "citacao inexistente 99999",
+        None,
+        None,
+        "literal",
+        {"identity": {"status": "unavailable", "evidence": [{"source_id": "cvm", "tentativa": True}]}},
+    )
+    conf_unav = svc.obter_registro(run_id_unav, evidencias=[{}, {"capture_id": None}])
+    assert conf_unav["confere_evidencias"] == [
+        {"capture_id": None, "confere": False},
+        {"capture_id": None, "confere": False},
     ]
 
 
