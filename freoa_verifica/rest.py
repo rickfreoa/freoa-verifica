@@ -5,13 +5,14 @@ from __future__ import annotations
 import os
 import sys
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from freoa_verifica.fronteira import MOTIVO_ENCAMINHADO, origens_permitidas, token_ok, validar
 from freoa_verifica.limites import servidor_max_concorrencia
 from freoa_verifica.limites import MAX_CORPO_HTTP, EntradaInvalida, Sobrecarga
+from freoa_verifica.mcp_server import EvidenciaConferencia, FundamentoTemporalConferencia
 from freoa_verifica.sanitizacao import Protegido
 from freoa_verifica.service import Verifica
 
@@ -102,9 +103,9 @@ class _TextoIn(BaseModel):
 
 
 class _ConferenciaRegistroIn(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    evidencias: list[dict[str, Any]] | None = None
-    fundamento_temporal: dict[str, Any] | None = None
+    model_config = ConfigDict(extra="forbid")
+    evidencias: Annotated[list[EvidenciaConferencia], Field(max_length=100)] | None = None
+    fundamento_temporal: FundamentoTemporalConferencia | None = None
 
 
 def create_app(
@@ -318,10 +319,20 @@ def create_app(
         body: _ConferenciaRegistroIn,
         _: None = Depends(require_auth),
     ):
+        evidencias_raw = (
+            [e.model_dump() for e in body.evidencias]
+            if body.evidencias is not None
+            else None
+        )
+        ft_raw = (
+            body.fundamento_temporal.model_dump()
+            if body.fundamento_temporal is not None
+            else None
+        )
         return svc.obter_registro(
             run_id,
-            evidencias=body.evidencias,
-            fundamento_temporal=body.fundamento_temporal,
+            evidencias=evidencias_raw,
+            fundamento_temporal=ft_raw,
         )
 
     app.add_middleware(_LimiteCorpo)

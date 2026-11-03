@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -89,7 +89,23 @@ Parte = Annotated[Parte, Field(max_length=32)]
 Fonte = Annotated[Fonte, Field(max_length=32)]
 Tribunal = Annotated[Tribunal, Field(max_length=256)]
 Tribunais = Annotated[list[Tribunal], Field(max_length=5)]
-EvidenciasConferencia = Annotated[list[dict[str, Any]], Field(max_length=100)]
+class EvidenciaConferencia(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    capture_id: Annotated[str, Field(min_length=1, max_length=256)]
+    sha256: Annotated[str, Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")]
+    url: Annotated[str, Field(min_length=1, max_length=2048)]
+
+
+class FundamentoTemporalConferencia(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tipo: Annotated[str, Field(min_length=1, max_length=64)]
+    capture_id: Annotated[str, Field(min_length=1, max_length=256)]
+    url: Annotated[str, Field(min_length=1, max_length=2048)]
+    sha256: Annotated[str, Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")]
+    data: Annotated[str, Field(min_length=10, max_length=10, pattern=r"^\d{4}-\d{2}-\d{2}$")]
+
+
+EvidenciasConferencia = Annotated[list[EvidenciaConferencia], Field(max_length=100)]
 
 
 def _service(home: str | None = None, registro: str | None = None) -> Verifica:
@@ -348,17 +364,27 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
     def obter_registro(
         run_id: Identificador,
         evidencias: EvidenciasConferencia | None = None,
-        fundamento_temporal: dict[str, Any] | None = None,
+        fundamento_temporal: FundamentoTemporalConferencia | None = None,
     ) -> dict[str, Any]:
         """Registro local da operação de verificação (decisão 0075, 3.4).
 
         Entrada: run_id e, opcionais, evidencias e fundamento_temporal para conferência.
         Saída em encontrada traz integridade e status de conferência dos compromissos.
         """
+        evidencias_raw = (
+            [e.model_dump() if hasattr(e, "model_dump") else e for e in evidencias]
+            if evidencias is not None
+            else None
+        )
+        ft_raw = (
+            fundamento_temporal.model_dump()
+            if hasattr(fundamento_temporal, "model_dump")
+            else fundamento_temporal
+        )
         return svc_().obter_registro(
             run_id=run_id,
-            evidencias=evidencias,
-            fundamento_temporal=fundamento_temporal,
+            evidencias=evidencias_raw,
+            fundamento_temporal=ft_raw,
         )
 
     @mcp.tool()

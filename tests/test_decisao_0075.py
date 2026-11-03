@@ -697,3 +697,97 @@ def test_0075_rest_e_mcp_obter_registro(svc_160):
     finally:
         from pathlib import Path
         ms._servicos.pop(str(Path(svc.home).resolve()), None)
+
+
+def test_0075_mcp_e_rest_obter_registro_validacao_estrita(svc_160):
+    """Auditor r2 MÉDIO: validação estrita (Pydantic) de evidencias e fundamento_temporal.
+    O exemplo do parecer ([{"capture_id": 42, "sha256": [], "url": {"x": "y"}, "extra": "accepted"}])
+    e extras são recusados; a forma válida continua aceita em MCP e REST.
+    """
+    import asyncio
+    from starlette.testclient import TestClient
+    from freoa_verifica import mcp_server as ms
+    from freoa_verifica.rest import create_app
+
+    svc, rw, doc = svc_160
+    prov = doc.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+    res = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text)
+    run_id = res["run_id"]
+
+    ev_invalida_parecer = [
+        {"capture_id": 42, "sha256": [], "url": {"x": "y"}, "extra": "accepted"}
+    ]
+    ev_valida = [
+        {"capture_id": rw.capture_id, "sha256": rw.sha256, "url": rw.url}
+    ]
+    ft_invalido_extra = {
+        "tipo": "versao_oficial_na_data",
+        "capture_id": rw.capture_id,
+        "url": rw.url,
+        "sha256": rw.sha256,
+        "data": "2022-08-01",
+        "extra": "proibido",
+    }
+    ft_valido = {
+        "tipo": "versao_oficial_na_data",
+        "capture_id": rw.capture_id,
+        "url": rw.url,
+        "sha256": rw.sha256,
+        "data": "2022-08-01",
+    }
+
+    # REST
+    app = create_app(home=str(svc.home), token="t")
+    with TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as c:
+        # Exemplo do parecer recusado com 422
+        r_inv1 = c.post(
+            f"/v1/registros/{run_id}/conferencia",
+            json={"evidencias": ev_invalida_parecer},
+            headers={"Authorization": "Bearer t"},
+        )
+        assert r_inv1.status_code == 422
+
+        # Extra em fundamento_temporal recusado com 422
+        r_inv2 = c.post(
+            f"/v1/registros/{run_id}/conferencia",
+            json={"fundamento_temporal": ft_invalido_extra},
+            headers={"Authorization": "Bearer t"},
+        )
+        assert r_inv2.status_code == 422
+
+        # Forma válida aceita com 200
+        r_ok = c.post(
+            f"/v1/registros/{run_id}/conferencia",
+            json={"evidencias": ev_valida, "fundamento_temporal": ft_valido},
+            headers={"Authorization": "Bearer t"},
+        )
+        assert r_ok.status_code == 200
+
+    # MCP
+    server = ms.create_mcp(home=str(svc.home))
+    try:
+        from mcp import Client
+
+        async def _call_client(args):
+            async with Client(server) as client:
+                return await client.call_tool("obter_registro", args)
+
+        # Exemplo do parecer recusado pelo MCP (ToolError ou is_error no protocolo)
+        with pytest.raises(Exception):
+            asyncio.run(server.call_tool("obter_registro", {"run_id": run_id, "evidencias": ev_invalida_parecer}))
+        res_mcp_inv1 = asyncio.run(_call_client({"run_id": run_id, "evidencias": ev_invalida_parecer}))
+        assert res_mcp_inv1.is_error
+
+        # Extra em fundamento_temporal recusado pelo MCP
+        with pytest.raises(Exception):
+            asyncio.run(server.call_tool("obter_registro", {"run_id": run_id, "fundamento_temporal": ft_invalido_extra}))
+        res_mcp_inv2 = asyncio.run(_call_client({"run_id": run_id, "fundamento_temporal": ft_invalido_extra}))
+        assert res_mcp_inv2.is_error
+
+        # Forma válida aceita pelo MCP
+        res_mcp_ok = asyncio.run(_call_client({"run_id": run_id, "evidencias": ev_valida, "fundamento_temporal": ft_valido}))
+        assert not res_mcp_ok.is_error
+    finally:
+        from pathlib import Path
+        ms._servicos.pop(str(Path(svc.home).resolve()), None)
