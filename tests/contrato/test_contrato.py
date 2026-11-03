@@ -309,6 +309,55 @@ def _condicao_satisfeita(resposta: dict[str, Any], condicao: dict[str, Any] | No
     return True
 
 
+def _validar_caminho_elemento(
+    atual: Any,
+    partes: list[str],
+    caminho: str,
+    tipos_esperados: set[str],
+    prefixo: str = "",
+) -> list[str]:
+    if not partes:
+        t = h._tipo(atual)
+        if t not in tipos_esperados:
+            return [f"tipo incompatível em {caminho}: esperado {tipos_esperados}, observado {t}"]
+        return []
+
+    p = partes[0]
+    resto = partes[1:]
+    is_list = p.endswith("[]")
+    campo = p[:-2] if is_list else p
+    passo = f"{prefixo}.{p}" if prefixo else p
+
+    if not isinstance(atual, dict) or campo not in atual:
+        return [f"caminho ausente: {caminho}"]
+
+    val = atual[campo]
+    if not is_list:
+        return _validar_caminho_elemento(val, resto, caminho, tipos_esperados, passo)
+
+    if not isinstance(val, list):
+        return [f"tipo incompatível em {passo}: esperado array, observado {h._tipo(val)}"]
+
+    erros: list[str] = []
+    for i, item in enumerate(val):
+        passo_i = f"{passo[:-2]}[{i}]"
+        if resto:
+            if not isinstance(item, dict):
+                erros.append(f"tipo incompatível no elemento {i} de {passo}: esperado object, observado {h._tipo(item)}")
+            else:
+                sub_erros = _validar_caminho_elemento(item, resto, caminho, tipos_esperados, passo_i)
+                for se in sub_erros:
+                    if se.startswith("caminho ausente:") and f"elemento {i}" not in se:
+                        erros.append(f"{se} (elemento {i})")
+                    else:
+                        erros.append(se)
+        else:
+            t = h._tipo(item)
+            if t not in tipos_esperados:
+                erros.append(f"tipo incompatível no elemento {i} de {caminho}: esperado {tipos_esperados}, observado {t}")
+    return erros
+
+
 def validar_resposta_consumidor(
     ferramenta: str,
     spec: dict[str, Any],
@@ -318,10 +367,9 @@ def validar_resposta_consumidor(
     """Valida uma resposta contra a especificação de um consumidor (ex.: FREOA)."""
     erros: list[str] = []
     norm = h.normalizar(resposta)
-    mapa_tipos = h.achatar(norm)
     mapa_estados = h.estados(norm)
 
-    # 1. Caminhos e tipos
+    # 1. Caminhos e tipos por elemento aplicável
     caminhos_spec = spec.get("caminhos", {})
     for caminho, def_caminho in caminhos_spec.items():
         if f"{ferramenta}:{caminho}" in DEPRECATED or h._isento(ferramenta, caminho, isentos):
@@ -337,18 +385,11 @@ def validar_resposta_consumidor(
         if not _condicao_satisfeita(resposta, condicao):
             continue
 
-        if caminho not in mapa_tipos:
-            erros.append(f"caminho ausente: {caminho}")
-            continue
-
         tipos_esperados = set(tipo_expr.split("|"))
-        tipos_observados = mapa_tipos[caminho]
-        if not tipos_observados.issubset(tipos_esperados):
-            erros.append(
-                f"tipo incompatível em {caminho}: esperado {tipos_esperados}, observado {tipos_observados}"
-            )
+        partes = caminho.split(".")
+        erros.extend(_validar_caminho_elemento(norm, partes, caminho, tipos_esperados))
 
-    # 2. Literais e preservação de estados
+    # 2. Literais e conformidade de estados na resposta
     estados_spec = spec.get("estados", {})
     for caminho_estado, permitidos in estados_spec.items():
         if f"{ferramenta}:{caminho_estado}" in DEPRECATED or h._isento(ferramenta, caminho_estado, isentos):
@@ -364,13 +405,53 @@ def validar_resposta_consumidor(
     return erros
 
 
+def conferir_literais_observados(
+    ferramenta: str,
+    spec: dict[str, Any],
+    respostas: list[dict[str, Any]],
+    isentos: frozenset[str] = frozenset(),
+) -> list[str]:
+    """Para cada (ferramenta, caminho, literal) em estados do freoa.json,
+
+    exige que o literal seja efetivamente OBSERVADO em pelo menos uma resposta
+    atual da implementação.
+    """
+    erros: list[str] = []
+    estados_spec = spec.get("estados", {})
+    if not estados_spec:
+        return []
+
+    observados_por_caminho: dict[str, set[str]] = {}
+    for resp in respostas:
+        norm = h.normalizar(resp)
+        mapa_est = h.estados(norm)
+        for caminho_est, vals in mapa_est.items():
+            observados_por_caminho.setdefault(caminho_est, set()).update(vals)
+
+    for caminho_estado, permitidos in estados_spec.items():
+        if f"{ferramenta}:{caminho_estado}" in DEPRECATED or h._isento(ferramenta, caminho_estado, isentos):
+            continue
+        observados = observados_por_caminho.get(caminho_estado, set())
+        for literal in permitidos:
+            if literal not in observados:
+                erros.append(
+                    f"literal {literal!r} em {caminho_estado} não foi observado em nenhuma resposta da implementação"
+                )
+    return erros
+
+
 @pytest.mark.parametrize("adaptador", h.ADAPTADORES)
 def test_contrato_consumidor_freoa_satisfeito(ambiente, adaptador):
     contrato_consumidor = json.loads(
         (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
     )
     casos_por_ferramenta = {
-        "verificar_citacao": ["verificar_citacao_verified", "verificar_citacao_historica_riscada"],
+        "verificar_citacao": [
+            "verificar_citacao_verified",
+            "verificar_citacao_trecho_divergente",
+            "verificar_citacao_obra_inexistente",
+            "verificar_citacao_historica_riscada",
+        ],
         "obter_dispositivo": ["obter_dispositivo"],
         "listar_fontes": ["listar_fontes"],
         "obter_registro": ["obter_registro_encontrada", "obter_registro_inexistente"],
@@ -379,11 +460,17 @@ def test_contrato_consumidor_freoa_satisfeito(ambiente, adaptador):
 
     for ferramenta, spec in contrato_consumidor["ferramentas"].items():
         nomes_casos = casos_por_ferramenta[ferramenta]
+        respostas = []
         for nome_caso in nomes_casos:
             _, _, args = casos_map[nome_caso]
             resp = _responder(ambiente, adaptador, ferramenta, args)
             erros = validar_resposta_consumidor(ferramenta, spec, resp, DEPRECATED)
             assert not erros, f"[{adaptador}] {ferramenta} ({nome_caso}):\n" + "\n".join(erros)
+            respostas.append(resp)
+
+        # 1.a: Preservação de literais pela IMPLEMENTAÇÃO
+        erros_literais = conferir_literais_observados(ferramenta, spec, respostas, DEPRECATED)
+        assert not erros_literais, f"[{adaptador}] {ferramenta} literais não observados:\n" + "\n".join(erros_literais)
 
 
 @pytest.mark.repositorio
@@ -451,3 +538,58 @@ def test_gate_mutante_literal_novo():
     congelado["identity"]["status"] = "literal_novo_nao_documentado"
     erros = validar_resposta_consumidor("verificar_citacao", spec, congelado)
     assert any("identity.status" in e and "literal_novo_nao_documentado" in e for e in erros)
+
+
+def test_gate_mutante_campo_por_elemento_lista():
+    """Mutante obrigatório (item 1.b): resposta real de verificar_citacao com
+
+    a evidência duplicada e capture_id removido só do segundo elemento deve REPROVAR.
+    """
+    contrato_consumidor = json.loads(
+        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
+    )
+    spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
+    resposta_real = copy.deepcopy(h.carregar("python", "verificar_citacao_verified")["resposta"])
+    assert len(resposta_real["identity"]["evidence"]) >= 1
+
+    ev0 = copy.deepcopy(resposta_real["identity"]["evidence"][0])
+    ev1 = copy.deepcopy(ev0)
+    del ev1["capture_id"]
+    resposta_real["identity"]["evidence"] = [ev0, ev1]
+
+    erros = validar_resposta_consumidor("verificar_citacao", spec, resposta_real)
+    assert any("capture_id" in e for e in erros), f"Esperava reprovação por capture_id ausente no elemento 1, obteve: {erros}"
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_gate_mutante_preservacao_literais_implementacao(ambiente, adaptador):
+    """Mutante obrigatório (item 1.a): monkeypatch que troca, nas respostas,
+
+    todo identity.status == "verified" por "unknown" (sem mexer em especificação
+    nem documentação) deve REPROVAR o gate nos três adaptadores.
+    """
+    contrato_consumidor = json.loads(
+        (Path(__file__).resolve().parent / "consumidores" / "freoa.json").read_text(encoding="utf-8")
+    )
+    spec = contrato_consumidor["ferramentas"]["verificar_citacao"]
+    casos = [
+        "verificar_citacao_verified",
+        "verificar_citacao_trecho_divergente",
+        "verificar_citacao_obra_inexistente",
+        "verificar_citacao_historica_riscada",
+    ]
+    casos_map = {c[0]: c for c in h.CASOS}
+
+    respostas_mutadas = []
+    for nome_caso in casos:
+        _, _, args = casos_map[nome_caso]
+        resp = _responder(ambiente, adaptador, "verificar_citacao", args)
+        resp_mutada = copy.deepcopy(resp)
+        if isinstance(resp_mutada.get("identity"), dict) and resp_mutada["identity"].get("status") == "verified":
+            resp_mutada["identity"]["status"] = "unknown"
+        respostas_mutadas.append(resp_mutada)
+
+    erros = conferir_literais_observados("verificar_citacao", spec, respostas_mutadas, DEPRECATED)
+    assert any("verified" in e and "identity.status" in e for e in erros), (
+        f"[{adaptador}] Esperava reprovação por ausência de 'verified' em identity.status, obteve: {erros}"
+    )

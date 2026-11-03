@@ -57,10 +57,10 @@
         "run_id": "string"
       },
       "estados": {
-        "identity.status": ["verified", "not_found", "unavailable", "unknown", "ambiguous"],
+        "identity.status": ["verified", "not_found"],
         "text.status": ["verified", "divergent", "not_assessed", "unknown"],
-        "temporal.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "not_assessed", "ambiguous"],
-        "support.status": ["not_assessed", "verified", "unknown"]
+        "temporal.status": ["vigente_na_fonte", "unknown", "not_assessed"],
+        "support.status": ["not_assessed"]
       }
     },
     "obter_dispositivo": {
@@ -136,8 +136,8 @@
         }
       },
       "estados": {
-        "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"],
-        "vigencia.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "ambiguous"]
+        "status": ["encontrada"],
+        "vigencia.status": ["vigente_na_fonte"]
       }
     },
     "listar_fontes": {
@@ -155,8 +155,8 @@
       },
       "estados": {
         "fontes[].capacidade": ["acervo", "ao_vivo", "ambos", "nenhuma"],
-        "qualificacao[].estado": ["aprovada", "reprovada", "nao_apurada", "suspensa"],
-        "avisos_incidente[].acao": ["retirada", "correcao"]
+        "qualificacao[].estado": ["nao_apurada"],
+        "avisos_incidente[].acao": ["correcao"]
       }
     },
     "obter_registro": {
@@ -206,7 +206,7 @@
       },
       "estados": {
         "status": ["encontrada", "inexistente"],
-        "politica": ["completo", "sem_conteudo"]
+        "politica": ["sem_conteudo"]
       }
     }
   }
