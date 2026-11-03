@@ -89,6 +89,7 @@ Parte = Annotated[Parte, Field(max_length=32)]
 Fonte = Annotated[Fonte, Field(max_length=32)]
 Tribunal = Annotated[Tribunal, Field(max_length=256)]
 Tribunais = Annotated[list[Tribunal], Field(max_length=5)]
+EvidenciasConferencia = Annotated[list[dict[str, Any]], Field(max_length=100)]
 
 
 def _service(home: str | None = None, registro: str | None = None) -> Verifica:
@@ -345,8 +346,8 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
 
     @mcp.tool()
     def obter_registro(
-        run_id: str,
-        evidencias: list[dict[str, Any]] | None = None,
+        run_id: Identificador,
+        evidencias: EvidenciasConferencia | None = None,
         fundamento_temporal: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Registro local da operação de verificação (decisão 0075, 3.4).

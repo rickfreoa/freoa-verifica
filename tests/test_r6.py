@@ -124,7 +124,10 @@ def test_before_first_available_redaction(annotation,expected):
     r=select(p,'2009-01-01',work_date='1990-01-01' if annotation else None)
     assert r.status==expected
     if expected=='unknown':
-        assert r.reason=='HISTORICO_ANTERIOR_AUSENTE'
+        # Decisão 0075, §2, item 3: D anterior ao primeiro início conhecido fora dos
+        # dois casos de nao_existia produz sem_fundamento_do_periodo;
+        # sem anotação de início conhecido mantém HISTORICO_ANTERIOR_AUSENTE.
+        assert r.reason == ('sem_fundamento_do_periodo' if annotation == 'redacao_dada' else 'HISTORICO_ANTERIOR_AUSENTE')
     assert select(p,'1980-01-01',work_date='1990-01-01').status=='nao_existia'
 
 
