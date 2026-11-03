@@ -330,3 +330,51 @@ def test_0075_evidencia_planalto_acervo_ate(tmp_path, monkeypatch):
     assert ev["natureza_texto"] == "consolidacao_oficial"
     assert ev["esfera"] == "federal"
     s.close()
+
+
+def test_0075_listar_fontes_qualificacao_e_avisos(tmp_path):
+    """3.3: qualificacao e avisos_incidente em listar_fontes."""
+    s = Verifica(home=tmp_path)
+    lf = s.listar_fontes()
+    assert "qualificacao" in lf
+    assert "avisos_incidente" in lf
+    assert isinstance(lf["qualificacao"], list)
+    assert len(lf["qualificacao"]) == 6
+    for q in lf["qualificacao"]:
+        assert q["porta"] in ("L", "A", "stj_1_4_0")
+        assert q["estado"] == "nao_apurada"
+        assert q["versao"] is None
+        assert q["manifesto"] is None
+        assert isinstance(q["rotulo"], str) and q["rotulo"]
+    assert lf["avisos_incidente"] == []
+    s.close()
+
+
+def test_0075_listar_fontes_avisos_incidente_home_validacao(tmp_path):
+    """3.3: Leitura e validação estrita de <home>/avisos_incidente.json."""
+    import json
+    from pathlib import Path
+
+    home_avisos = [
+        {
+            "id": "AV-001",
+            "data": "2026-11-03",
+            "versoes_afetadas": ["1.4.0a1"],
+            "acao": "correcao",
+            "descricao": "Correção de estado temporal",
+            "referencia": "decisao 0075",
+        },
+        {
+            "id": "AV-INVALIDO",
+            # falta data, acao errada
+            "acao": "invalida",
+        },
+    ]
+    (Path(tmp_path) / "avisos_incidente.json").write_text(json.dumps(home_avisos), encoding="utf-8")
+
+    s = Verifica(home=tmp_path)
+    lf = s.listar_fontes()
+    avisos = lf["avisos_incidente"]
+    assert len(avisos) == 1
+    assert avisos[0]["id"] == "AV-001"
+    s.close()

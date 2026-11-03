@@ -3192,7 +3192,68 @@ class Verifica:
                     "circuito": circuit,
                 }
             )
-        return {"fontes": fontes, "total": len(fontes), "contrato": CONTRATO_VERSAO}
+        return {
+            "fontes": fontes,
+            "total": len(fontes),
+            "contrato": CONTRATO_VERSAO,
+            "qualificacao": self._carregar_qualificacao(),
+            "avisos_incidente": self._carregar_avisos_incidente(),
+        }
+
+    def _carregar_qualificacao(self) -> list[dict[str, Any]]:
+        try:
+            from importlib.resources import files
+            raw = files("freoa_verifica").joinpath("data/qualificacao.json").read_text(encoding="utf-8")
+            return json.loads(raw)
+        except (OSError, ValueError, TypeError):
+            _log.warning("falha ao carregar qualificacao.json", exc_info=True)
+            return []
+
+    def _carregar_avisos_incidente(self) -> list[dict[str, Any]]:
+        avisos: list[dict[str, Any]] = []
+        try:
+            from importlib.resources import files
+            raw = files("freoa_verifica").joinpath("data/avisos_incidente.json").read_text(encoding="utf-8")
+            avisos.extend(json.loads(raw))
+        except (OSError, ValueError, TypeError):
+            _log.warning("falha ao carregar avisos_incidente.json do pacote", exc_info=True)
+
+        if self.home:
+            home_avisos_path = Path(self.home) / "avisos_incidente.json"
+            if home_avisos_path.is_file():
+                try:
+                    conteudo = json.loads(home_avisos_path.read_text(encoding="utf-8"))
+                    if isinstance(conteudo, list):
+                        for item in conteudo:
+                            if self._validar_aviso_incidente(item):
+                                avisos.append(item)
+                            else:
+                                _log.warning("aviso de incidente invalido descartado: %r", item)
+                    else:
+                        _log.warning("<home>/avisos_incidente.json deve ser uma lista JSON")
+                except (OSError, ValueError, TypeError):
+                    _log.warning("falha ao ler <home>/avisos_incidente.json", exc_info=True)
+        return avisos
+
+    @staticmethod
+    def _validar_aviso_incidente(item: Any) -> bool:
+        if not isinstance(item, dict):
+            return False
+        if not isinstance(item.get("id"), str) or not item["id"]:
+            return False
+        if not isinstance(item.get("data"), str) or not item["data"]:
+            return False
+        if not isinstance(item.get("versoes_afetadas"), list) or not all(
+            isinstance(v, str) for v in item["versoes_afetadas"]
+        ):
+            return False
+        if item.get("acao") not in ("retirada", "correcao"):
+            return False
+        if not isinstance(item.get("descricao"), str):
+            return False
+        if not isinstance(item.get("referencia"), str):
+            return False
+        return True
 
     def sincronizar(
         self,
