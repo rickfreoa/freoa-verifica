@@ -113,7 +113,7 @@ def test_data_passada_sem_data_efeito_unknown(svc):
     _, path = _indexar_bcb(svc, _bcb_body(Revogado=True))
     out = svc.verificar_citacao(_cit(path), data="2023-01-10")
     assert out["temporal"]["status"] == "unknown"
-    assert out["temporal"]["reason_code"] == "REVOGACAO_DATA_DESCONHECIDA"
+    assert out["temporal"]["reason_code"] == "sem_fundamento_do_periodo"
 
 
 def _ws(sit, **kw):
@@ -223,9 +223,10 @@ def test_cvm_pagina_revogada_marca_obra(svc):
     out = svc.verificar_citacao(f"Resolução CVM 80/2022, {_art(path)}")
     assert out["temporal"]["reason_code"] == "OBRA_REVOGADA_NA_FONTE"
     assert any("REVOGADA pela" in (e["trecho_oficial"] or "") for e in out["temporal"]["evidence"])
-    # a data do ato revogador nunca vira data de efeito
+    # a data do ato revogador nunca vira data de efeito (decisão 0075: consulta histórica dá sem_fundamento_do_periodo)
     passado = svc.verificar_citacao(f"Resolução CVM 80/2022, {_art(path)}", data="2022-06-01")
-    assert passado["temporal"]["reason_code"] == "REVOGACAO_DATA_DESCONHECIDA"
+    assert passado["temporal"]["status"] == "unknown"
+    assert passado["temporal"]["reason_code"] == "sem_fundamento_do_periodo"
 
 
 def test_cvm_vigente_declarada_controle_positivo(svc):

@@ -177,12 +177,25 @@ def test_mutante_redacao_riscada_data_atual(env):
     res = verificar(
         "art. 2º, XVI, da Resolução CVM nº 160",
         trecho=struck.text,
-        data="2023-01-01",  # vigente ≠ riscada
+        data="2023-01-01",  # vigente ≠ riscada em data histórica
         repo=conn,
         resolver=resolver,
     )
-    assert res.text.status != "verified"
-    assert res.text.reason_code in (
+    assert res.text.status == "unknown"
+    assert res.text.reason_code == "sem_fundamento_do_periodo"
+    assert res.correspondencia_textual is not None
+    assert res.correspondencia_textual["resultado"] == "coincide"
+    assert res.correspondencia_textual["riscada"] is True
+
+    # na data atual sem `data`, o texto riscado continua divergente
+    res_atual = verificar(
+        "art. 2º, XVI, da Resolução CVM nº 160",
+        trecho=struck.text,
+        repo=conn,
+        resolver=resolver,
+    )
+    assert res_atual.text.status == "divergent"
+    assert res_atual.text.reason_code in (
         "TRECHO_DE_OUTRA_REDACAO",
         "TEXTO_DIVERGENTE",
         "TEXTO_PARCIAL",
@@ -238,15 +251,39 @@ def test_rcvm160_temporal_causal(env):
         repo=conn,
         resolver=resolver,
     )
-    assert r1.text.status == "verified"
-    assert r2.text.status == "verified"
-    # redação original (R3) com limites conhecidos → verified;
-    # redação alterada com vacatio → unknown (não verified)
-    assert r1.temporal.status == "verified"
+    # Decisão 0075: em data histórica sem fundamento documental do período,
+    # text e temporal são unknown com sem_fundamento_do_periodo.
+    assert r1.text.status == "unknown"
+    assert r1.text.reason_code == "sem_fundamento_do_periodo"
+    assert r1.correspondencia_textual == {
+        "resultado": "coincide",
+        "redaction_id": "r0",
+        "riscada": True,
+        "origem": "rasura_compilada",
+    }
+    assert r1.temporal.status == "unknown"
+    assert r1.temporal.reason_code == "sem_fundamento_do_periodo"
+
+    assert r2.text.status == "unknown"
+    assert r2.text.reason_code == "sem_fundamento_do_periodo"
+    assert r2.correspondencia_textual == {
+        "resultado": "coincide",
+        "redaction_id": "r1",
+        "riscada": False,
+        "origem": "redacao_atual",
+    }
     assert r2.temporal.status == "unknown"
-    assert "vacatio_nao_verificada" in (
-        r2.temporal.reason_code or ""
-    ) or r2.temporal.status == "unknown"
+
+    # Com fundamento_temporal não nulo, o comportamento de verified fica permitido (decisão 0075)
+    from freoa_verifica.temporal import select as temporal_select
+    tr_fund = temporal_select(
+        prov,
+        "2022-08-01",
+        work_date=rw160.work_date,
+        amending_act_texts=rw160.amending_act_texts,
+        fundamento_temporal={"tipo": "versao_oficial_na_data"},
+    )
+    assert tr_fund.status == "verified"
 
     # trocar datas → texto deixa de verified
     bad = verificar(

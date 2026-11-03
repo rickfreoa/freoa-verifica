@@ -367,11 +367,11 @@ def _desatualizada(ws: WorkStatus, hoje: date) -> bool:
 
 
 def _decidir(cur: str, ws: WorkStatus | None, data: str | None, hoje: date) -> tuple[str, str] | None:
-    """cur: bom (verified/vigente_na_fonte) | revogado | preservar | unknown | nao_avaliado.
+    """cur: bom (verified/vigente_na_fonte) | revogado | preservar | unknown | nao_avaliado | sem_fundamento_do_periodo.
 
     Devolve (acao, motivo) com acao em revogado|unknown|flag, ou None (sem efeito).
     """
-    if ws is None or ws.situacao in ("nao_aplicavel",) or cur in ("revogado", "preservar"):
+    if ws is None or ws.situacao in ("nao_aplicavel",) or cur in ("revogado", "preservar", "sem_fundamento_do_periodo"):
         return None
     d = hoje if data is None else _iso(data)
     if d is None:
@@ -405,7 +405,9 @@ def aplicar_situacao(temporal_dim, status: WorkStatus | None, data: str | None, 
 
     hoje = hoje or today_sp()
     s, r = temporal_dim.status, temporal_dim.reason_code or ""
-    if s in ("verified", "vigente_na_fonte"):
+    if r == "sem_fundamento_do_periodo":
+        cur = "sem_fundamento_do_periodo"
+    elif s in ("verified", "vigente_na_fonte"):
         cur = "bom"
     elif (s == "divergent" and r.startswith("REVOGADO")) or r == REVOGADO_NA_FONTE:
         cur = "revogado"
@@ -447,8 +449,12 @@ def aplicar_situacao_tr(tr, status: WorkStatus | None, data: str | None, hoje: d
     from freoa_verifica.temporal import today_sp
 
     hoje = hoje or today_sp()
-    cur = {"verified": "bom", "vigente_na_fonte": "bom", "revogado": "revogado", "nao_existia": "preservar",
-           "ambiguous": "preservar"}.get(tr.status, "unknown")
+    r = getattr(tr, "reason", None) or ""
+    if r == "sem_fundamento_do_periodo":
+        cur = "sem_fundamento_do_periodo"
+    else:
+        cur = {"verified": "bom", "vigente_na_fonte": "bom", "revogado": "revogado", "nao_existia": "preservar",
+               "ambiguous": "preservar"}.get(tr.status, "unknown")
     acao = _decidir(cur, status, data, hoje)
     if acao is None:
         return tr

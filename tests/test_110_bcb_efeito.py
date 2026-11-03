@@ -29,10 +29,14 @@ def test_data_anterior_ao_efeito_deixa_de_ser_unknown(svc):  # noqa: F811
     rw, path = _indexar_bcb(svc, body)
     row = svc.conn.execute("SELECT ato_revogador, data_efeito FROM work_status WHERE work_id=?", (rw.work_id,)).fetchone()
     assert tuple(row) == ("Resolução CMN nº 5.295/2026", "2026-06-01")
+    # Decisão 0075: em consulta histórica, temporal é unknown com sem_fundamento_do_periodo
     antes = svc.verificar_citacao(_cit(path), data="2025-01-10")["temporal"]
     depois = svc.verificar_citacao(_cit(path), data="2026-07-01")["temporal"]
-    assert antes["status"] in {"verified", "vigente_na_fonte"} and "REVOGACAO_POSTERIOR" in str(antes)
-    assert (depois["status"], depois["reason_code"]) == ("divergent", "OBRA_REVOGADA_NA_FONTE")
+    assert (antes["status"], antes["reason_code"]) == ("unknown", "sem_fundamento_do_periodo")
+    assert (depois["status"], depois["reason_code"]) == ("unknown", "sem_fundamento_do_periodo")
+    # Na consulta corrente, a situação da obra revogada na fonte produz divergent
+    corrente = svc.verificar_citacao(_cit(path))["temporal"]
+    assert (corrente["status"], corrente["reason_code"]) == ("divergent", "OBRA_REVOGADA_NA_FONTE")
 
 
 def test_anterior_compara_instantes():

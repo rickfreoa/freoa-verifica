@@ -1464,6 +1464,8 @@ class Verifica:
             },
             "redacoes_anteriores": anteriores,
             "anotacoes": anotacoes,
+            "fundamento_temporal": None,
+            "correspondencia_textual": None,
             "evidencia": {
                 "capture_id": rw.capture_id,
                 "url": rw.url,
@@ -1523,6 +1525,8 @@ class Verifica:
                     "flags": fl,
                     "riscada": d.redaction.struck,
                     "trecho": _truncate(d.redaction.text, 160)[0],
+                    "limites_inferidos": bool(d.redaction.annotations or fim is not None),
+                    "fundamento_temporal": None,
                 }
             )
         eventos = []
@@ -1738,6 +1742,8 @@ class Verifica:
     def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
                    trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
         """C4 (decisão 0027): todos os rebaixamentos, nesta ordem, e só então o recibo."""
+        out.setdefault("fundamento_temporal", None)
+        out.setdefault("correspondencia_textual", None)
         if cite is not None and self._promover_sem_ano(cite):
             out["citation"] = _citation_to_dict(cite)
         # C1: negativa de dispositivo só com pode_negar.

@@ -1,0 +1,273 @@
+"""Testes de regressão da Decisão 0075 (IL.0: estado com data e fronteira com o FREOA)."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import pytest
+
+from freoa_verifica import situacao
+from freoa_verifica.aliases import WorkKey
+from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
+from freoa_verifica.parsers.model import Annotation, Provision, Redaction
+from freoa_verifica.service import Verifica
+from freoa_verifica.temporal import select as temporal_select
+from tests.fixture_util import load_fixture
+
+
+@pytest.fixture
+def svc_160(tmp_path, monkeypatch):
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    s = Verifica(home=tmp_path)
+    body_160 = load_fixture("cvm_resol_160_consolid_docx")
+    doc_160 = parse_cvm_docx(body_160)
+    rw = s.indexar_obra(
+        source_id="cvm_normas",
+        work_key=WorkKey("cvm", "resolucao", "160", 2022),
+        document=doc_160,
+        body=body_160,
+        url="https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.docx",
+        fetched_at="2026-10-18T00:00:00Z",
+        work_date="2022-07-13",
+        label="Resolução CVM nº 160/2022",
+    )
+    # Situação inicial vigente declarada autenticada
+    situacao.gravar(
+        s.conn,
+        situacao.WorkStatus(
+            rw.work_id,
+            "vigente_declarada",
+            captura_id=rw.capture_id,
+            sha256=rw.sha256,
+            lido_em=datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    yield s, rw, doc_160
+    s.close()
+
+
+def test_0075_regressao_a_texto_riscado_data_historica(svc_160):
+    """(a) texto riscado em data histórica dá unknown/sem_fundamento_do_periodo e coincide com riscada: true."""
+    svc, _, doc = svc_160
+    prov = doc.provision("art2.inc16")
+    struck = next(r for r in prov.redactions if r.struck)
+
+    res = svc.verificar_citacao("art. 2º, XVI da Resolução CVM nº 160/2022", trecho=struck.text, data="2022-08-01")
+    assert res["identity"]["status"] == "verified"
+    assert res["text"]["status"] == "unknown"
+    assert res["text"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert res["temporal"]["status"] == "unknown"
+    assert res["temporal"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert res["fundamento_temporal"] is None
+    corr = res["correspondencia_textual"]
+    assert corr is not None
+    assert corr["resultado"] == "coincide"
+    assert corr["riscada"] is True
+    assert corr["origem"] == "rasura_compilada"
+
+
+def test_0075_regressao_b_texto_atual_data_historica(svc_160):
+    """(b) texto atual em data histórica, idem com origem: redacao_atual."""
+    svc, _, doc = svc_160
+    prov = doc.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    res = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text, data="2023-01-01")
+    assert res["identity"]["status"] == "verified"
+    assert res["text"]["status"] == "unknown"
+    assert res["text"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert res["temporal"]["status"] == "unknown"
+    assert res["temporal"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert res["fundamento_temporal"] is None
+    corr = res["correspondencia_textual"]
+    assert corr is not None
+    assert corr["resultado"] == "coincide"
+    assert corr["riscada"] is False
+    assert corr["origem"] == "redacao_atual"
+
+
+def test_0075_regressao_c_trecho_de_outra_redacao_data_historica(svc_160):
+    """(c) trecho de outra redação dá unknown e correspondencia que aponta a redação coincidente."""
+    svc, _, doc = svc_160
+    prov = doc.provision("art2.inc16")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    # Em 2022-08-01 vigorava a redação original (r0), mas o trecho passado é da redação posterior (r1)
+    res = svc.verificar_citacao("art. 2º, XVI da Resolução CVM nº 160/2022", trecho=current.text, data="2022-08-01")
+    assert res["text"]["status"] == "unknown"
+    assert res["text"]["reason_code"] == "sem_fundamento_do_periodo"
+    corr = res["correspondencia_textual"]
+    assert corr is not None
+    assert corr["resultado"] == "coincide"
+    assert corr["redaction_id"] == "r1"
+    assert corr["riscada"] is False
+    assert corr["origem"] == "redacao_atual"
+
+
+def test_0075_regressao_d_data_trocada_e_caractere_alterado_nunca_verified(svc_160):
+    """(d) data trocada e caractere alterado nunca dão verified."""
+    svc, _, doc = svc_160
+    prov = doc.provision("art2.inc16")
+    current = next(r for r in prov.redactions if not r.struck)
+    adulterado = current.text + " modificado"
+
+    res = svc.verificar_citacao("art. 2º, XVI da Resolução CVM nº 160/2022", trecho=adulterado, data="2023-01-01")
+    assert res["text"]["status"] != "verified"
+    assert res["temporal"]["status"] != "verified"
+    assert res["text"]["status"] == "unknown"
+    assert res["text"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert res["correspondencia_textual"]["resultado"] in ("parcial", "diverge")
+
+
+def test_0075_regressao_e_consulta_corrente_inalterada(svc_160):
+    """(e) consulta corrente inalterada (vigente_na_fonte)."""
+    svc, _, doc = svc_160
+    prov = doc.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    res = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text)
+    assert res["temporal"]["status"] == "vigente_na_fonte"
+    assert res["text"]["status"] == "verified"
+    assert res["correspondencia_textual"] is None
+    assert res["fundamento_temporal"] is None
+
+
+def test_0075_regressao_f_nao_existia():
+    """(f) nao_existia inalterado: D anterior à obra e D anterior à inclusão sem juízo pendente."""
+    # 1. D anterior à data da obra
+    p1 = Provision(path="art1", label="Art. 1º", scope="norma", redactions=[Redaction(order=0, text="Texto original", struck=False, annotations=[])])
+    res_antes_obra = temporal_select(p1, "1970-01-01", work_date="1976-12-15")
+    assert res_antes_obra.status == "nao_existia"
+
+    # 2. D anterior à inclusão comprovada sem juízo pendente
+    ann_inc = Annotation(kind="incluido", raw="Incluído pela Lei 10.000", act_ref="Lei 10.000", act_date="2000-01-01")
+    p2 = Provision(path="art1-A", label="Art. 1º-A", scope="norma", redactions=[Redaction(order=0, text="Texto novo", struck=False, annotations=[ann_inc])])
+    res_antes_inc = temporal_select(p2, "1995-01-01", work_date="1976-12-15")
+    assert res_antes_inc.status == "nao_existia"
+
+    # 3. D anterior à inclusão COM juízo pendente -> unknown com sem_fundamento_do_periodo
+    ann_vig = Annotation(kind="vigencia", raw="Vigência a definir")
+    p3 = Provision(path="art1-B", label="Art. 1º-B", scope="norma", redactions=[Redaction(order=0, text="Texto c pendencia", struck=False, annotations=[ann_inc, ann_vig])])
+    res_pendente = temporal_select(p3, "1995-01-01", work_date="1976-12-15")
+    assert res_pendente.status == "unknown"
+    assert res_pendente.reason == "sem_fundamento_do_periodo"
+    assert "sem_fundamento_do_periodo" in res_pendente.flags
+
+
+def test_0075_regressao_g_revogado_historico_vira_unknown():
+    """(g) revogado histórico vira unknown com flag revogacao_anotada, revogado corrente continua revogado."""
+    ann_rev = Annotation(kind="revogado", raw="Revogado pela Lei 9.000", act_ref="Lei 9.000", act_date="1995-01-01")
+    prov = Provision(
+        path="art5",
+        label="Art. 5º",
+        scope="norma",
+        redactions=[
+            Redaction(order=0, text="Texto", struck=True, annotations=[ann_rev]),
+        ],
+    )
+    # Consulta histórica após revogação: unknown com flags
+    res_hist = temporal_select(prov, "2000-01-01", work_date="1980-01-01")
+    assert res_hist.status == "unknown"
+    assert res_hist.reason == "sem_fundamento_do_periodo"
+    assert "sem_fundamento_do_periodo" in res_hist.flags
+    assert "revogacao_anotada" in res_hist.flags
+
+    # Consulta corrente (sem data): continua revogado
+    res_corr = temporal_select(prov, None, work_date="1980-01-01")
+    assert res_corr.status == "revogado"
+
+
+def test_0075_fundamento_temporal_permite_verified():
+    """select com fundamento_temporal não nulo permite verified em data histórica."""
+    prov = Provision(
+        path="art1",
+        label="Art. 1º",
+        scope="norma",
+        redactions=[
+            Redaction(order=0, text="Texto original", struck=False, annotations=[]),
+        ],
+    )
+    # Sem fundamento: unknown
+    res_sem = temporal_select(prov, "2000-01-01", work_date="1990-01-01")
+    assert res_sem.status == "unknown"
+    assert res_sem.reason == "sem_fundamento_do_periodo"
+
+    # Com fundamento fictício: verified
+    fundamento = {"tipo": "versao_oficial_na_data", "capture_id": "c1", "url": "https://example.org", "sha256": "abc", "data": "2000-01-01"}
+    res_com = temporal_select(prov, "2000-01-01", work_date="1990-01-01", fundamento_temporal=fundamento)
+    assert res_com.status == "verified"
+
+
+def test_0075_obter_dispositivo_data_historica(svc_160):
+    """obter_dispositivo com data histórica: vigencia corrigida e fundamento_temporal/correspondencia_textual no topo."""
+    svc, _, _ = svc_160
+    out = svc.obter_dispositivo(citacao="art. 2º, XVI da Resolução CVM nº 160/2022", data="2022-08-01")
+    assert out["status"] == "encontrada"
+    assert out["fundamento_temporal"] is None
+    assert out["correspondencia_textual"] is None
+    assert out["vigencia"]["status"] == "unknown"
+    assert out["vigencia"]["reason_code"] == "sem_fundamento_do_periodo"
+
+
+def test_0075_historico_dispositivo(svc_160):
+    """historico_dispositivo: cada item de linha_do_tempo ganha limites_inferidos e fundamento_temporal."""
+    svc, _, _ = svc_160
+    out = svc.historico_dispositivo("art. 2º, XVI da Resolução CVM nº 160/2022")
+    assert out["status"] == "encontrada"
+    assert len(out["linha_do_tempo"]) >= 2
+    for item in out["linha_do_tempo"]:
+        assert "limites_inferidos" in item
+        assert isinstance(item["limites_inferidos"], bool)
+        assert "fundamento_temporal" in item
+        assert item["fundamento_temporal"] is None
+
+
+def test_0075_verificar_texto_embutida(svc_160):
+    """verificar_texto em data histórica propaga a correção para a verificação embutida."""
+    svc, _, doc = svc_160
+    prov = doc.provision("art2.inc16")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    texto = f'Conforme o art. 2º, XVI da RCVM 160: "{current.text}".'
+    out = svc.verificar_texto(texto, data="2023-01-01")
+    assert out["total"] == 1
+    c = out["citacoes"][0]
+    assert c["identity"]["status"] == "verified"
+    assert c["text"]["status"] == "unknown"
+    assert c["text"]["reason_code"] == "sem_fundamento_do_periodo"
+    v = c["verificacao"]
+    assert v is not None
+    assert v["fundamento_temporal"] is None
+    assert v["correspondencia_textual"]["resultado"] == "coincide"
+
+
+def test_0075_situacao_revogada_nao_converte_historico(svc_160):
+    """Situação de obra CVM gravada como revogada não converte sem_fundamento_do_periodo em consulta histórica."""
+    svc, rw, doc = svc_160
+    prov = doc.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    # Gravar situação revogada na obra
+    ws = situacao.WorkStatus(
+        work_id=rw.work_id,
+        situacao="revogada",
+        texto_oficial="Revogada por...",
+        ato_revogador="Resolução CVM 200",
+        data_efeito="2022-12-01",
+        captura_id=rw.capture_id,
+        sha256=rw.sha256,
+        lido_em="2026-10-18T00:00:00Z",
+    )
+    situacao.gravar(svc.conn, ws)
+
+    # Consulta histórica: continua unknown / sem_fundamento_do_periodo
+    out_hist = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text, data="2023-01-01")
+    assert out_hist["temporal"]["status"] == "unknown"
+    assert out_hist["temporal"]["reason_code"] == "sem_fundamento_do_periodo"
+    assert out_hist["text"]["status"] == "unknown"
+    assert out_hist["text"]["reason_code"] == "sem_fundamento_do_periodo"
+
+    # Consulta corrente: situação da obra revogada converte em divergent
+    out_corr = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022")
+    assert out_corr["temporal"]["status"] == "divergent"
+    assert out_corr["temporal"]["reason_code"] == "OBRA_REVOGADA_NA_FONTE"

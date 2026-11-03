@@ -20,7 +20,11 @@ from freoa_verifica.parsers.model import (
     RevokedProvision,
 )
 from freoa_verifica.store import repo as store_repo
-from freoa_verifica.temporal import select as temporal_select
+from freoa_verifica.temporal import (
+    _is_current_query,
+    select as temporal_select,
+    today_sp,
+)
 from freoa_verifica.textcmp import ALGO_VERSION as TEXTCMP_VERSION
 from freoa_verifica.textcmp import compare
 from freoa_verifica.texto_resposta import ORIGEM_LEGADO
@@ -66,6 +70,8 @@ class VerificationResult:
     algo_versions: dict[str, str] = field(default_factory=lambda: dict(ALGO_VERSIONS))
     citation: Citation | None = None
     run_id: str | None = None
+    fundamento_temporal: dict[str, Any] | None = None
+    correspondencia_textual: dict[str, Any] | None = None
 
 
 @dataclass
@@ -261,6 +267,86 @@ def _search_text_in_work(
     return None
 
 
+def _calcular_correspondencia_textual(
+    prov: Provision | None,
+    trecho: str | None,
+    modo: str,
+    temporal_res: Any | None,
+    is_historical: bool,
+    identity_status: str,
+) -> dict[str, Any] | None:
+    if not is_historical or trecho is None or identity_status != "verified" or prov is None:
+        return None
+
+    # Se há redação selecionada pelo temporal:
+    red = _redaction_by_id(prov, temporal_res.redaction_id) if (temporal_res and temporal_res.redaction_id) else None
+
+    if red is not None:
+        cmp = compare(trecho, red.text, modo)
+        if cmp.status == "match":
+            return {
+                "resultado": "coincide",
+                "redaction_id": temporal_res.redaction_id,
+                "riscada": bool(red.struck),
+                "origem": "rasura_compilada" if (red.struck or red.superseded_without_strike) else "redacao_atual",
+            }
+        # Se não casou com a selecionada, procura coincidência exata em todas as redações (ex.: trecho de outra redação)
+        for other in prov.redactions:
+            if other is red:
+                continue
+            cmp_other = compare(trecho, other.text, modo, exact_only=True)
+            if cmp_other.status == "match":
+                return {
+                    "resultado": "coincide",
+                    "redaction_id": f"r{other.order}",
+                    "riscada": bool(other.struck),
+                    "origem": "rasura_compilada" if (other.struck or other.superseded_without_strike) else "redacao_atual",
+                }
+        if cmp.status == "partial":
+            return {
+                "resultado": "parcial",
+                "redaction_id": temporal_res.redaction_id,
+                "riscada": bool(red.struck),
+                "origem": "rasura_compilada" if (red.struck or red.superseded_without_strike) else "redacao_atual",
+            }
+        return {
+            "resultado": "diverge",
+            "redaction_id": temporal_res.redaction_id,
+            "riscada": bool(red.struck),
+            "origem": "rasura_compilada" if (red.struck or red.superseded_without_strike) else "redacao_atual",
+        }
+
+    # Sem redação selecionada: procurar coincidência exata em todas as redações
+    for r in prov.redactions:
+        cmp_r = compare(trecho, r.text, modo, exact_only=True)
+        if cmp_r.status == "match":
+            return {
+                "resultado": "coincide",
+                "redaction_id": f"r{r.order}",
+                "riscada": bool(r.struck),
+                "origem": "rasura_compilada" if (r.struck or r.superseded_without_strike) else "redacao_atual",
+            }
+
+    # Se não coincide exatamente com nenhuma:
+    vigente = _current_redaction(prov)
+    if vigente is not None:
+        cmp_v = compare(trecho, vigente.text, modo)
+        if cmp_v.status == "partial":
+            return {
+                "resultado": "parcial",
+                "redaction_id": f"r{vigente.order}",
+                "riscada": bool(vigente.struck),
+                "origem": "rasura_compilada" if (vigente.struck or vigente.superseded_without_strike) else "redacao_atual",
+            }
+
+    return {
+        "resultado": "diverge",
+        "redaction_id": None,
+        "riscada": None,
+        "origem": "redacao_atual",
+    }
+
+
 def verificar(
     citacao: str,
     trecho: str | None = None,
@@ -271,6 +357,7 @@ def verificar(
     *,
     _path: str | None = None,
     persistir: bool = True,
+    fundamento_temporal: Any = None,
 ) -> VerificationResult:
     """Verifica citação nas dimensões identity/text/temporal/support.
 
@@ -280,6 +367,9 @@ def verificar(
         raise ValueError("resolver é obrigatório")
     if not persistir:
         repo = None
+
+    today = today_sp()
+    is_historical = not _is_current_query(data, today)
 
     cite = parse_one(citacao)
     if _path is not None:
@@ -492,6 +582,7 @@ def verificar(
             work_date=rw.work_date,
             amending_act_texts=rw.amending_act_texts,
             fetched_at=rw.fetched_at,
+            fundamento_temporal=fundamento_temporal,
         )
         temporal_dim = _map_temporal(temporal_res, rw, path)
 
@@ -504,12 +595,14 @@ def verificar(
     elif prov is None:
         text_dim = (Dimension("not_found", "SEM_DISPOSITIVO") if identity.status == "not_found"
                     else Dimension("unknown", identity.reason_code))
-    elif temporal_res and temporal_res.status in ("revogado", "nao_existia", "ambiguous"):
-        text_dim = Dimension("unknown", temporal_res.reason or temporal_res.status.upper())
+    elif temporal_res and (temporal_res.status in ("revogado", "nao_existia", "ambiguous") or "revogacao_anotada" in temporal_res.flags):
+        reason = "REVOGADO" if "revogacao_anotada" in temporal_res.flags else (temporal_res.reason or temporal_res.status.upper())
+        text_dim = Dimension("unknown", reason)
     elif temporal_res and temporal_res.reason in {"INICIO_SUCESSOR_DESCONHECIDO", "CAPTURA_DATA_INVALIDA"}:
         text_dim = Dimension("unknown", temporal_res.reason)
     elif (temporal_res and not temporal_res.redaction_id
-          and temporal_res.status not in ("verified", "vigente_na_fonte")):
+          and temporal_res.status not in ("verified", "vigente_na_fonte")
+          and "sem_fundamento_do_periodo" not in temporal_res.flags):
         # C3: sem redação selecionada para a data pedida, não confrontar a atual.
         text_dim = Dimension("unknown", temporal_res.reason or "HISTORICO_ANTERIOR_AUSENTE")
     else:
@@ -520,7 +613,7 @@ def verificar(
         if red is None:
             text_dim = Dimension("not_found", "SEM_REDACAO")
         elif red.superseded_without_strike and (
-            temporal_res is None or temporal_res.status not in {"verified", "vigente_na_fonte"}
+            temporal_res is None or (temporal_res.status not in {"verified", "vigente_na_fonte"} and "sem_fundamento_do_periodo" not in temporal_res.flags)
         ):
             # Não afirmar texto sobre redação superada sem rasura fora de verified
             text_dim = Dimension(
@@ -541,16 +634,21 @@ def verificar(
             elif cmp.status == "match":
                 if uncertain:
                     text_dim = Dimension("unknown", "UNCERTAIN_CONTINUATION", [ev])
+                elif is_historical:
+                    text_dim = Dimension("unknown", "sem_fundamento_do_periodo", [ev])
                 else:
                     text_dim = Dimension("verified", "TEXTO_OK", [ev])
             elif cmp.status == "partial":
-                text_dim = Dimension(
-                    "divergent",
-                    "TEXTO_PARCIAL",
-                    [ev],
-                )
-                text_dim.evidence[0].trecho_oficial = red.text[:_MAX_TRECHO]
-                text_dim.reason_code = "TEXTO_PARCIAL"
+                if is_historical:
+                    text_dim = Dimension("unknown", "sem_fundamento_do_periodo", [ev])
+                else:
+                    text_dim = Dimension(
+                        "divergent",
+                        "TEXTO_PARCIAL",
+                        [ev],
+                    )
+                    text_dim.evidence[0].trecho_oficial = red.text[:_MAX_TRECHO]
+                    text_dim.reason_code = "TEXTO_PARCIAL"
             else:
                 other_hit = None
                 for r2 in prov.redactions:
@@ -561,38 +659,75 @@ def verificar(
                         other_hit = r2
                         break
                 if other_hit is not None:
-                    text_dim = Dimension(
-                        "divergent",
-                        "TRECHO_DE_OUTRA_REDACAO",
-                        [
-                            ev,
-                            _ev_from_resolved(
-                                rw,
-                                path,
-                                other_hit.text,
-                            ),
-                        ],
-                    )
-                else:
-                    elsewhere = _search_text_in_work(rw.document, trecho, modo, path)
-                    if elsewhere:
+                    if is_historical:
                         text_dim = Dimension(
-                            "divergent",
-                            "TRECHO_EM_OUTRO_DISPOSITIVO",
+                            "unknown",
+                            "sem_fundamento_do_periodo",
                             [
                                 ev,
-                                _ev_from_resolved(rw, elsewhere[0], None),
+                                _ev_from_resolved(
+                                    rw,
+                                    path,
+                                    other_hit.text,
+                                ),
                             ],
                         )
                     else:
-                        text_dim = Dimension("divergent", "TEXTO_DIVERGENTE", [ev])
+                        text_dim = Dimension(
+                            "divergent",
+                            "TRECHO_DE_OUTRA_REDACAO",
+                            [
+                                ev,
+                                _ev_from_resolved(
+                                    rw,
+                                    path,
+                                    other_hit.text,
+                                ),
+                            ],
+                        )
+                else:
+                    elsewhere = _search_text_in_work(rw.document, trecho, modo, path)
+                    if elsewhere:
+                        if is_historical:
+                            text_dim = Dimension(
+                                "unknown",
+                                "sem_fundamento_do_periodo",
+                                [
+                                    ev,
+                                    _ev_from_resolved(rw, elsewhere[0], None),
+                                ],
+                            )
+                        else:
+                            text_dim = Dimension(
+                                "divergent",
+                                "TRECHO_EM_OUTRO_DISPOSITIVO",
+                                [
+                                    ev,
+                                    _ev_from_resolved(rw, elsewhere[0], None),
+                                ],
+                            )
+                    else:
+                        if is_historical:
+                            text_dim = Dimension("unknown", "sem_fundamento_do_periodo", [ev])
+                        else:
+                            text_dim = Dimension("divergent", "TEXTO_DIVERGENTE", [ev])
 
+    corr_textual = _calcular_correspondencia_textual(
+        prov=prov,
+        trecho=trecho,
+        modo=modo,
+        temporal_res=temporal_res,
+        is_historical=is_historical,
+        identity_status=identity.status,
+    )
     result = VerificationResult(
         identity=identity,
         text=text_dim,
         temporal=temporal_dim,
         support=support,
         citation=cite,
+        fundamento_temporal=fundamento_temporal,
+        correspondencia_textual=corr_textual,
     )
     return _persist(repo, citacao, trecho, data, modo, result)
 
@@ -632,6 +767,8 @@ def _result_to_json(result: VerificationResult) -> dict[str, Any]:
         "temporal": dim(result.temporal),
         "support": dim(result.support),
         "algo_versions": result.algo_versions,
+        "fundamento_temporal": result.fundamento_temporal,
+        "correspondencia_textual": result.correspondencia_textual,
     }
     if result.citation is not None:
         c = result.citation
