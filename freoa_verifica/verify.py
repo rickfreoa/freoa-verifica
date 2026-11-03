@@ -908,10 +908,76 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
     else:
         result_json = json.dumps(resultado, ensure_ascii=False, sort_keys=True)
     run_id = new_ulid()
+    created_at = datetime.now(timezone.utc).isoformat()
+    ferramenta = "verificar_citacao"
+
+    # Evidências únicas (todas as dimensões, na ordem)
+    evidencias_unicas: list[dict[str, Any]] = []
+    vistos_ev: set[tuple[Any, Any, Any]] = set()
+    for d in ("identity", "text", "temporal", "support"):
+        for ev in (resultado.get(d) or {}).get("evidence") or []:
+            if isinstance(ev, dict):
+                tup_key = (ev.get("capture_id"), ev.get("sha256"), ev.get("url"))
+                if tup_key not in vistos_ev:
+                    vistos_ev.add(tup_key)
+                    evidencias_unicas.append({
+                        "capture_id": ev.get("capture_id"),
+                        "sha256": ev.get("sha256"),
+                        "url": ev.get("url"),
+                    })
+
+    compromissos_ev = [
+        hmac_entrada(conn, "evidencia", json.dumps(item, ensure_ascii=False, sort_keys=True))
+        for item in evidencias_unicas
+    ]
+    evidencias_compromissos = json.dumps(compromissos_ev, ensure_ascii=False, sort_keys=True)
+    if politica_atual.get() == "sem_conteudo":
+        evidencias_claro = None
+    else:
+        evidencias_claro = json.dumps(evidencias_unicas, ensure_ascii=False, sort_keys=True)
+
+    ft = resultado.get("fundamento_temporal")
+    if ft is not None:
+        ft_canon = json.dumps(ft, ensure_ascii=False, sort_keys=True)
+        fundamento_compromisso = hmac_entrada(conn, "fundamento_temporal", ft_canon)
+        fundamento_claro = ft_canon if politica_atual.get() != "sem_conteudo" else None
+    else:
+        fundamento_compromisso = None
+        fundamento_claro = None
+
+    doc_mac = {
+        "id": run_id,
+        "ferramenta": ferramenta,
+        "created_at": created_at,
+        "request_hash": request_hash,
+        "request_json": request_json,
+        "result_json": result_json,
+        "evidencias_compromissos": evidencias_compromissos,
+        "fundamento_compromisso": fundamento_compromisso,
+        "evidencias_claro": evidencias_claro,
+        "fundamento_claro": fundamento_claro,
+    }
+    registro_mac = hmac_entrada(conn, "registro", json.dumps(doc_mac, ensure_ascii=False, sort_keys=True))
+
     conn.execute(
-        "INSERT INTO run(id, request_hash, request_json, policy_version, result_json) "
-        "VALUES (?,?,?,?,?)",
-        (run_id, request_hash, request_json, POLICY_VERSION, result_json),
+        "INSERT INTO run("
+        "id, ferramenta, created_at, request_hash, request_json, policy_version, result_json, "
+        "evidencias_compromissos, fundamento_compromisso, evidencias_claro, fundamento_claro, registro_mac"
+        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            run_id,
+            ferramenta,
+            created_at,
+            request_hash,
+            request_json,
+            POLICY_VERSION,
+            result_json,
+            evidencias_compromissos,
+            fundamento_compromisso,
+            evidencias_claro,
+            fundamento_claro,
+            registro_mac,
+        ),
     )
     conn.commit()
     return run_id

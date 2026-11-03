@@ -344,6 +344,23 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         )
 
     @mcp.tool()
+    def obter_registro(
+        run_id: str,
+        evidencias: list[dict[str, Any]] | None = None,
+        fundamento_temporal: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Registro local da operação de verificação (decisão 0075, 3.4).
+
+        Entrada: run_id e, opcionais, evidencias e fundamento_temporal para conferência.
+        Saída em encontrada traz integridade e status de conferência dos compromissos.
+        """
+        return svc_().obter_registro(
+            run_id=run_id,
+            evidencias=evidencias,
+            fundamento_temporal=fundamento_temporal,
+        )
+
+    @mcp.tool()
     def listar_fontes() -> dict[str, Any]:
         """Lista as fontes, o que cada uma cobre e o recorte do acervo instalado. Comece por aqui.
 

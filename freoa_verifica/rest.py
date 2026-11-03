@@ -101,6 +101,12 @@ class _TextoIn(BaseModel):
     data: StrictStr | None = None
 
 
+class _ConferenciaRegistroIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    evidencias: list[dict[str, Any]] | None = None
+    fundamento_temporal: dict[str, Any] | None = None
+
+
 def create_app(
     home: str | None = None,
     token: str | None = None,
@@ -301,6 +307,22 @@ def create_app(
     @app.get("/v1/fontes")
     def get_fontes(_: None = Depends(require_auth)):
         return svc.listar_fontes()
+
+    @app.get("/v1/registros/{run_id}")
+    def get_registro(run_id: str, _: None = Depends(require_auth)):
+        return svc.obter_registro(run_id)
+
+    @app.post("/v1/registros/{run_id}/conferencia")
+    def post_registro_conferencia(
+        run_id: str,
+        body: _ConferenciaRegistroIn,
+        _: None = Depends(require_auth),
+    ):
+        return svc.obter_registro(
+            run_id,
+            evidencias=body.evidencias,
+            fundamento_temporal=body.fundamento_temporal,
+        )
 
     app.add_middleware(_LimiteCorpo)
     return app

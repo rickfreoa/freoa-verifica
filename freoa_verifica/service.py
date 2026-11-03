@@ -3160,6 +3160,106 @@ class Verifica:
             vivo = True  # captura sob demanda na fonte oficial
         return ("ambos" if n and vivo else "acervo" if n else "ao_vivo" if vivo else "nenhuma"), recorte
 
+    def obter_registro(
+        self,
+        run_id: str,
+        evidencias: list[dict[str, Any]] | None = None,
+        fundamento_temporal: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Registro local da operação de verificação (decisão 0075, 3.4)."""
+        from freoa_verifica.registro import hmac_entrada
+
+        if not run_id or not isinstance(run_id, str):
+            return {"status": "inexistente", "run_id": run_id}
+
+        row = self.conn.execute("SELECT * FROM run WHERE id=?", (run_id,)).fetchone()
+        if row is None:
+            return {"status": "inexistente", "run_id": run_id}
+
+        confere_mac: bool | None = None
+        if row["registro_mac"] is not None:
+            doc_mac = {
+                "id": row["id"],
+                "ferramenta": row["ferramenta"],
+                "created_at": row["created_at"],
+                "request_hash": row["request_hash"],
+                "request_json": row["request_json"],
+                "result_json": row["result_json"],
+                "evidencias_compromissos": row["evidencias_compromissos"],
+                "fundamento_compromisso": row["fundamento_compromisso"],
+                "evidencias_claro": row["evidencias_claro"],
+                "fundamento_claro": row["fundamento_claro"],
+            }
+            recalculado = hmac_entrada(self.conn, "registro", json.dumps(doc_mac, ensure_ascii=False, sort_keys=True))
+            confere_mac = bool(row["registro_mac"] == recalculado)
+
+        res_json = json.loads(row["result_json"]) if row["result_json"] else {}
+        req_json = json.loads(row["request_json"]) if row["request_json"] else {}
+
+        if row["evidencias_claro"] is not None:
+            politica = "completo"
+        elif res_json.get("registro") == "sem_conteudo" or req_json.get("registro") == "sem_conteudo":
+            politica = "sem_conteudo"
+        else:
+            politica = "completo"
+
+        parametros = req_json
+
+        estado = {
+            d: {
+                "status": (res_json.get(d) or {}).get("status"),
+                "reason_code": (res_json.get(d) or {}).get("reason_code"),
+            }
+            for d in ("identity", "text", "temporal", "support")
+        }
+
+        if politica == "completo":
+            evidencias_out = json.loads(row["evidencias_claro"]) if row["evidencias_claro"] else []
+            fundamento_out = json.loads(row["fundamento_claro"]) if row["fundamento_claro"] else None
+        else:
+            evidencias_out = None
+            fundamento_out = None
+
+        confere_evidencias = None
+        if evidencias is not None:
+            compromissos = set(json.loads(row["evidencias_compromissos"])) if row["evidencias_compromissos"] else set()
+            confere_evidencias = []
+            for e in evidencias:
+                tup = {
+                    "capture_id": e.get("capture_id"),
+                    "sha256": e.get("sha256"),
+                    "url": e.get("url"),
+                }
+                h = hmac_entrada(self.conn, "evidencia", json.dumps(tup, ensure_ascii=False, sort_keys=True))
+                confere_evidencias.append({
+                    "capture_id": e.get("capture_id"),
+                    "confere": bool(h in compromissos),
+                })
+
+        confere_fundamento = None
+        if fundamento_temporal is not None:
+            ft_canon = json.dumps(fundamento_temporal, ensure_ascii=False, sort_keys=True)
+            h_ft = hmac_entrada(self.conn, "fundamento_temporal", ft_canon)
+            confere_fundamento = bool(row["fundamento_compromisso"] is not None and h_ft == row["fundamento_compromisso"])
+
+        return {
+            "status": "encontrada",
+            "run_id": row["id"],
+            "ferramenta": row["ferramenta"] or "verificar_citacao",
+            "criado_em": row["created_at"],
+            "politica": politica,
+            "parametros": parametros,
+            "estado": estado,
+            "evidencias": evidencias_out,
+            "fundamento_temporal": fundamento_out,
+            "integridade": {
+                "algoritmo": "hmac-sha256",
+                "confere": confere_mac,
+            },
+            "confere_evidencias": confere_evidencias,
+            "confere_fundamento": confere_fundamento,
+        }
+
     def listar_fontes(self) -> dict[str, Any]:
         fontes = []
         for cid, cls in registry().items():

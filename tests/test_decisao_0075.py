@@ -378,3 +378,179 @@ def test_0075_listar_fontes_avisos_incidente_home_validacao(tmp_path):
     assert len(avisos) == 1
     assert avisos[0]["id"] == "AV-001"
     s.close()
+
+
+def test_0075_obter_registro_inexistente(svc_160):
+    """3.4: obter_registro inexistente."""
+    svc, _, _ = svc_160
+    reg = svc.obter_registro("01M6H1Y11Y99K728HPNASE0000")
+    assert reg == {"status": "inexistente", "run_id": "01M6H1Y11Y99K728HPNASE0000"}
+
+
+def test_0075_obter_registro_completo(tmp_path, monkeypatch):
+    """3.4: obter_registro sob política completo."""
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    monkeypatch.setenv("FV_REGISTRO", "completo")
+    s = Verifica(home=tmp_path)
+    body_160 = load_fixture("cvm_resol_160_consolid_docx")
+    doc_160 = parse_cvm_docx(body_160)
+    rw = s.indexar_obra(
+        source_id="cvm_normas",
+        work_key=WorkKey("cvm", "resolucao", "160", 2022),
+        document=doc_160,
+        body=body_160,
+        url="https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.docx",
+        fetched_at="2026-10-18T00:00:00Z",
+        work_date="2022-07-13",
+        label="Resolução CVM nº 160/2022",
+    )
+    situacao.gravar(
+        s.conn,
+        situacao.WorkStatus(
+            rw.work_id,
+            "vigente_declarada",
+            captura_id=rw.capture_id,
+            sha256=rw.sha256,
+            lido_em="2026-10-18T00:00:00Z",
+        ),
+    )
+    prov = doc_160.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+    res = s.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text)
+    run_id = res["run_id"]
+    assert run_id is not None
+
+    reg = s.obter_registro(run_id)
+    assert reg["status"] == "encontrada"
+    assert reg["run_id"] == run_id
+    assert reg["ferramenta"] == "verificar_citacao"
+    assert reg["politica"] == "completo"
+    assert reg["integridade"]["confere"] is True
+    assert isinstance(reg["evidencias"], list)
+    assert len(reg["evidencias"]) > 0
+    assert reg["evidencias"][0]["capture_id"] == rw.capture_id
+    assert reg["confere_evidencias"] is None
+    assert reg["confere_fundamento"] is None
+    s.close()
+
+
+def test_0075_obter_registro_sem_conteudo_com_conferencia(svc_160):
+    """3.4: obter_registro sob política sem_conteudo com conferência de evidências."""
+    svc, rw, doc = svc_160
+    prov = doc.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    res = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text)
+    run_id = res["run_id"]
+    assert run_id is not None
+
+    # Sem apresentação de evidências
+    reg = svc.obter_registro(run_id)
+    assert reg["status"] == "encontrada"
+    assert reg["politica"] == "sem_conteudo"
+    assert reg["evidencias"] is None
+    assert reg["fundamento_temporal"] is None
+    assert reg["integridade"]["confere"] is True
+    assert reg["confere_evidencias"] is None
+    assert reg["confere_fundamento"] is None
+
+    # Com apresentação de evidência correta e falsa
+    ev_correta = {"capture_id": rw.capture_id, "sha256": rw.sha256, "url": rw.url}
+    ev_falsa = {"capture_id": rw.capture_id, "sha256": "1" * 64, "url": rw.url}
+    reg_conf = svc.obter_registro(run_id, evidencias=[ev_correta, ev_falsa])
+    assert reg_conf["confere_evidencias"] == [
+        {"capture_id": rw.capture_id, "confere": True},
+        {"capture_id": rw.capture_id, "confere": False},
+    ]
+
+
+def test_0075_obter_registro_integridade_adulterada(svc_160):
+    """3.4: adulteração de registro quebra MAC de integridade."""
+    svc, rw, doc = svc_160
+    prov = doc.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+
+    res = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text)
+    run_id = res["run_id"]
+
+    # Desativa temporariamente o trigger imutavel para simular adulteração externa
+    trigs = svc.conn.execute("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='run'").fetchall()
+    for name, _ in trigs:
+        svc.conn.execute(f'DROP TRIGGER "{name}"')
+
+    svc.conn.execute("UPDATE run SET result_json='{}' WHERE id=?", (run_id,))
+    svc.conn.commit()
+
+    for _, sql in trigs:
+        svc.conn.execute(sql)
+    svc.conn.commit()
+
+    reg = svc.obter_registro(run_id)
+    assert reg["status"] == "encontrada"
+    assert reg["integridade"]["confere"] is False
+
+
+def test_0075_obter_registro_legado_sem_mac(tmp_path):
+    """3.4: registro legado sem registro_mac dá integridade.confere = null."""
+    s = Verifica(home=tmp_path)
+    run_id = "01LEGADO000000000000000000"
+    s.conn.execute(
+        "INSERT INTO run (id, request_hash, request_json, policy_version, created_at, result_json) "
+        "VALUES (?,?,?,?,?,?)",
+        (run_id, "hash", '{"citacao": "art 1"}', "verify-r5-1", "2026-01-01T00:00:00Z", '{"identity": {"status": "verified"}}'),
+    )
+    s.conn.commit()
+
+    reg = s.obter_registro(run_id)
+    assert reg["status"] == "encontrada"
+    assert reg["integridade"]["confere"] is None
+    assert reg["ferramenta"] == "verificar_citacao"
+    s.close()
+
+
+def test_0075_rest_e_mcp_obter_registro(svc_160):
+    """3.4: obter_registro em REST (GET e POST conferencia) e MCP."""
+    import asyncio
+    import json
+    from starlette.testclient import TestClient
+    from freoa_verifica import mcp_server as ms
+    from freoa_verifica.rest import create_app
+
+    svc, rw, doc = svc_160
+    prov = doc.provision("art1")
+    current = next(r for r in prov.redactions if not r.struck)
+    res = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", trecho=current.text)
+    run_id = res["run_id"]
+    ev = {"capture_id": rw.capture_id, "sha256": rw.sha256, "url": rw.url}
+
+    # 1. REST GET /v1/registros/{run_id}
+    app = create_app(home=str(svc.home), token="t")
+    with TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as c:
+        r_get = c.get(f"/v1/registros/{run_id}", headers={"Authorization": "Bearer t"})
+        assert r_get.status_code == 200
+        data_get = r_get.json()
+        assert data_get["status"] == "encontrada"
+        assert data_get["run_id"] == run_id
+
+        # 2. REST POST /v1/registros/{run_id}/conferencia
+        r_post = c.post(
+            f"/v1/registros/{run_id}/conferencia",
+            json={"evidencias": [ev]},
+            headers={"Authorization": "Bearer t"},
+        )
+        assert r_post.status_code == 200
+        data_post = r_post.json()
+        assert data_post["confere_evidencias"] == [{"capture_id": rw.capture_id, "confere": True}]
+
+    # 3. MCP tool obter_registro
+    server = ms.create_mcp(home=str(svc.home))
+    try:
+        mcp_res = asyncio.run(server.call_tool("obter_registro", {"run_id": run_id, "evidencias": [ev]}))
+        assert not mcp_res.is_error
+        text_content = mcp_res.content[0].text if hasattr(mcp_res.content[0], "text") else mcp_res.content[0]
+        payload = json.loads(text_content)
+        assert payload["status"] == "encontrada"
+        assert payload["confere_evidencias"] == [{"capture_id": rw.capture_id, "confere": True}]
+    finally:
+        from pathlib import Path
+        ms._servicos.pop(str(Path(svc.home).resolve()), None)
