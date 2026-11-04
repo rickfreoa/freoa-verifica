@@ -2,18 +2,6 @@
   {
     "ferramenta": "verificar_citacao",
     "caminho": "identity.status",
-    "literal": "unavailable",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
-  },
-  {
-    "ferramenta": "verificar_citacao",
-    "caminho": "identity.status",
-    "literal": "unknown",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
-  },
-  {
-    "ferramenta": "verificar_citacao",
-    "caminho": "identity.status",
     "literal": "ambiguous",
     "motivo": "sem caso no harness; cobertura pendente do IL.0b"
   },
@@ -54,16 +42,22 @@
     "motivo": "sem caso no harness; cobertura pendente do IL.0b"
   },
   {
-    "ferramenta": "obter_dispositivo",
-    "caminho": "status",
-    "literal": "inexistente",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+    "ferramenta": "verificar_citacao",
+    "caminho": "temporal.status",
+    "literal": "unavailable",
+    "motivo": "sem caso no harness; exige falha forçada da autenticação da evidência (IL.0-R, rodada 2); variante coberta por teste dedicado"
   },
   {
-    "ferramenta": "obter_dispositivo",
+    "ferramenta": "verificar_citacao",
+    "caminho": "text.status",
+    "literal": "unavailable",
+    "motivo": "sem caso no harness; exige falha forçada da autenticação da evidência (IL.0-R, rodada 2); variante coberta por teste dedicado"
+  },
+  {
+    "ferramenta": "verificar_citacao",
     "caminho": "status",
     "literal": "indisponivel",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+    "motivo": "sem caso no harness; recusa pelos derivados exige home de versão antiga (IL.0-R, rodada 2); variante coberta por teste dedicado"
   },
   {
     "ferramenta": "obter_dispositivo",
@@ -73,15 +67,21 @@
   },
   {
     "ferramenta": "obter_dispositivo",
-    "caminho": "status",
-    "literal": "formato_invalido",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
-  },
-  {
-    "ferramenta": "obter_dispositivo",
     "caminho": "vigencia.status",
     "literal": "ambiguous",
     "motivo": "sem caso no harness; dispositivo ambíguo exige fixture própria (IL.0-R, C12)"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "status",
+    "literal": "ambigua",
+    "motivo": "sem caso no harness; exige fixture própria (IL.0-R, rodada 2); variante coberta por teste dedicado"
+  },
+  {
+    "ferramenta": "obter_dispositivo",
+    "caminho": "status",
+    "literal": "unavailable",
+    "motivo": "sem caso no harness; exige falha forçada da autenticação da evidência (IL.0-R, rodada 2); variante coberta por teste dedicado"
   },
   {
     "ferramenta": "listar_fontes",

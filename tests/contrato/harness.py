@@ -178,6 +178,15 @@ CASOS: list[tuple[str, str, dict[str, Any]]] = [
     ("obter_dispositivo_nao_existia", "obter_dispositivo", {"citacao": CITACAO_LSA, "data": "1970-01-01"}),
     ("obter_dispositivo_historica", "obter_dispositivo", {"citacao": CITACAO_160, "data": "2022-08-01"}),
     ("obter_dispositivo_sem_caminho", "obter_dispositivo", {"citacao": "Lei 6.404/76"}),
+    # IL.0-R, rodada 2 (C12): variantes legítimas da fachada que o contrato do consumidor precisa aceitar.
+    ("obter_dispositivo_requer_conferencia", "obter_dispositivo", {"citacao": "Lei 6.404, art. 254-A"}),
+    ("obter_dispositivo_formato_invalido", "obter_dispositivo", {"citacao": "xyz"}),
+    ("obter_dispositivo_inexistente", "obter_dispositivo", {"work_id": "obra-inexistente"}),
+    ("obter_dispositivo_indisponivel", "obter_dispositivo", {"citacao": "art. 1 da Lei 8.666/93"}),
+    ("verificar_citacao_dispositivo_inexistente", "verificar_citacao", {"citacao": "art. 999 da Lei 6.404/76", "trecho": "trecho qualquer"}),
+    ("verificar_citacao_fonte_indisponivel", "verificar_citacao", {"citacao": "art. 1 da Lei 8.666/93"}),
+    ("verificar_citacao_requer_conferencia", "verificar_citacao", {
+        "citacao": "Lei 6.404, art. 254-A", "trecho": TRECHO_LSA, "data": "2020-01-01"}),
     ("obter_registro_encontrada", "obter_registro", {"run_id": "@run_id_valido"}),
     ("obter_registro_inexistente", "obter_registro", {"run_id": "01M6H1Y11Y99K728HPNASE0000"}),
 ]
@@ -406,18 +415,29 @@ CASOS_IL0R = frozenset({
     "obter_dispositivo_historica",
     "obter_dispositivo_sem_caminho",
 })
+# IL.0-R, rodada 2 (C12): casos gravados com o código do commit abaixo (o das correções C4, C6, C8 e C11), offline.
+CASOS_IL0R2 = frozenset({
+    "obter_dispositivo_requer_conferencia",
+    "obter_dispositivo_formato_invalido",
+    "obter_dispositivo_inexistente",
+    "obter_dispositivo_indisponivel",
+    "verificar_citacao_dispositivo_inexistente",
+    "verificar_citacao_fonte_indisponivel",
+    "verificar_citacao_requer_conferencia",
+})
 COMMIT_IL0R = "3a3ba0b"
+COMMIT_IL0R2 = "8539bac"
 COMMIT_1_4_0 = "7a3347a"
 VERSAO_1_4_0 = "1.4.0a1"
 VERSAO_DESTINO_1_4_0 = "1.4.0a2"
 
 
 def commit_do_caso(caso: str) -> str:
-    return COMMIT_IL0R if caso in CASOS_IL0R else COMMIT_1_4_0 if caso in CASOS_NOVOS_1_4_0 else COMMIT_1_2_0
+    return COMMIT_IL0R2 if caso in CASOS_IL0R2 else COMMIT_IL0R if caso in CASOS_IL0R else COMMIT_1_4_0 if caso in CASOS_NOVOS_1_4_0 else COMMIT_1_2_0
 
 
 def gravar(adaptador: str, caso: str, ferramenta: str, entrada: dict, resposta: dict) -> None:
-    is_il0r = caso in CASOS_IL0R
+    is_il0r = caso in CASOS_IL0R or caso in CASOS_IL0R2
     is_novo = caso in CASOS_NOVOS_1_4_0 or is_il0r
     prov = {
         "adaptador": adaptador,
@@ -426,7 +446,7 @@ def gravar(adaptador: str, caso: str, ferramenta: str, entrada: dict, resposta: 
         "entrada": entrada,
         "ferramenta": ferramenta,
         "origem": (
-            "entrada sintética + acervo de teste local (decisão 0075 / IL.0" + ("-R, C12" if is_il0r else "") + "), FV_OFFLINE=1, sem rede"
+            "entrada sintética + acervo de teste local (decisão 0075 / IL.0" + ("-R, C12" + (", rodada 2" if caso in CASOS_IL0R2 else "") if is_il0r else "") + "), FV_OFFLINE=1, sem rede"
             if is_novo
             else "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede"
         ),

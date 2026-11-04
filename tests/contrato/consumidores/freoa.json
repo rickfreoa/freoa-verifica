@@ -4,14 +4,14 @@
   "ferramentas": {
     "verificar_citacao": {
       "caminhos": {
-        "identity.status": "string",
-        "text.status": "string",
-        "temporal.status": "string",
-        "support.status": "string",
-        "identity.reason_code": "string|null",
-        "text.reason_code": "string|null",
-        "temporal.reason_code": "string|null",
-        "support.reason_code": "string|null",
+        "identity.status": {"tipo": "string", "condicao": {"support.status": "@nao_nulo"}},
+        "text.status": {"tipo": "string", "condicao": {"support.status": "@nao_nulo"}},
+        "temporal.status": {"tipo": "string", "condicao": {"support.status": "@nao_nulo"}},
+        "support.status": {"tipo": "string", "condicao": {"identity.status": "@nao_nulo"}},
+        "identity.reason_code": {"tipo": "string|null", "condicao": {"support.status": "@nao_nulo"}},
+        "text.reason_code": {"tipo": "string|null", "condicao": {"support.status": "@nao_nulo"}},
+        "temporal.reason_code": {"tipo": "string|null", "condicao": {"support.status": "@nao_nulo"}},
+        "support.reason_code": {"tipo": "string|null", "condicao": {"identity.status": "@nao_nulo"}},
         "identity.evidence[].capture_id": {
           "tipo": "string",
           "condicao": {"identity.status": "verified"}
@@ -54,12 +54,13 @@
         },
         "fundamento_temporal": "object|null",
         "correspondencia_textual": "object|null",
-        "run_id": "string"
+        "run_id": "string|null"
       },
       "estados": {
+        "status": ["indisponivel"],
         "identity.status": ["verified", "not_found", "unavailable", "unknown", "ambiguous"],
-        "text.status": ["verified", "divergent", "not_assessed", "unknown"],
-        "temporal.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "not_assessed", "ambiguous"],
+        "text.status": ["verified", "divergent", "not_found", "not_assessed", "unknown", "unavailable"],
+        "temporal.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "not_assessed", "ambiguous", "unavailable"],
         "support.status": ["not_assessed", "verified", "unknown"]
       }
     },
@@ -126,17 +127,11 @@
           "tipo": "string",
           "condicao": {"status": "encontrada"}
         },
-        "fundamento_temporal": {
-          "tipo": "object|null",
-          "condicao": {"status": "encontrada"}
-        },
-        "correspondencia_textual": {
-          "tipo": "object|null",
-          "condicao": {"status": "encontrada"}
-        }
+        "fundamento_temporal": "object|null",
+        "correspondencia_textual": "object|null"
       },
       "estados": {
-        "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"],
+        "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido", "requer_conferencia", "ambigua", "unavailable"],
         "vigencia.status": ["vigente_na_fonte", "unknown", "revogado", "nao_existia", "ambiguous"]
       }
     },

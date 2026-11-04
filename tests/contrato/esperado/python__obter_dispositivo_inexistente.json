@@ -1,0 +1,18 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "obter_dispositivo_inexistente",
+    "commit": "8539bac",
+    "entrada": {
+      "work_id": "obra-inexistente"
+    },
+    "ferramenta": "obter_dispositivo",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0-R, C12, rodada 2), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
+  },
+  "resposta": {
+    "correspondencia_textual": null,
+    "fundamento_temporal": null,
+    "status": "inexistente"
+  }
+}

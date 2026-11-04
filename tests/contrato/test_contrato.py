@@ -486,6 +486,9 @@ def test_contrato_consumidor_freoa_satisfeito(ambiente, adaptador):
             "verificar_citacao_trecho_divergente",
             "verificar_citacao_obra_inexistente",
             "verificar_citacao_historica_riscada",
+            "verificar_citacao_dispositivo_inexistente",
+            "verificar_citacao_fonte_indisponivel",
+            "verificar_citacao_requer_conferencia",
         ],
         "obter_dispositivo": [
             "obter_dispositivo",
@@ -493,6 +496,10 @@ def test_contrato_consumidor_freoa_satisfeito(ambiente, adaptador):
             "obter_dispositivo_nao_existia",
             "obter_dispositivo_historica",
             "obter_dispositivo_sem_caminho",
+            "obter_dispositivo_requer_conferencia",
+            "obter_dispositivo_formato_invalido",
+            "obter_dispositivo_inexistente",
+            "obter_dispositivo_indisponivel",
         ],
         "listar_fontes": ["listar_fontes"],
         "obter_registro": ["obter_registro_encontrada", "obter_registro_inexistente"],
@@ -705,10 +712,14 @@ def test_contrato_consumidor_freoa_nao_exercitados_valido():
     nao_exercitados = json.loads(FREOA_NAO_EXERCITADOS_JSON.read_text(encoding="utf-8"))
     assert isinstance(nao_exercitados, list)
     # IL.0-R, C12: 23 -> 19 (quatro literais de `vigencia.status` passaram a ser exercitados ou saíram do contrato,
-    # e `ambiguous` ganhou motivo próprio). Alteração do arquivo do consumidor sujeita a auditoria.
+    # e `ambiguous` ganhou motivo próprio). Rodada 2: sete casos novos exercitam cinco literais; entram cinco variantes
+    # legítimas que só testes dedicados provocam (lista exata: 19). Alteração do arquivo do consumidor sujeita a auditoria.
     assert len(nao_exercitados) == 19
     motivos = {"sem caso no harness; cobertura pendente do IL.0b",
-               "sem caso no harness; dispositivo ambíguo exige fixture própria (IL.0-R, C12)"}
+               "sem caso no harness; dispositivo ambíguo exige fixture própria (IL.0-R, C12)",
+               "sem caso no harness; exige falha forçada da autenticação da evidência (IL.0-R, rodada 2); variante coberta por teste dedicado",
+               "sem caso no harness; recusa pelos derivados exige home de versão antiga (IL.0-R, rodada 2); variante coberta por teste dedicado",
+               "sem caso no harness; exige fixture própria (IL.0-R, rodada 2); variante coberta por teste dedicado"}
     for item in nao_exercitados:
         assert set(item.keys()) == {"ferramenta", "caminho", "literal", "motivo"}
         assert item["motivo"] in motivos
@@ -755,3 +766,129 @@ def test_gate_mutante_resposta_com_literal_fora_do_contrato_reprova():
                                                   "ambiguous"]  # lista errada do passe final
     erros = validar_resposta_consumidor("obter_dispositivo", spec_antigo, resp, DEPRECATED)
     assert any("revogado" in e for e in erros), erros
+
+
+# ----------------------------------------------------------------------------------------------
+# IL.0-R, rodada 2 (C12): todas as variantes legítimas da fachada satisfazem o contrato do consumidor
+# ----------------------------------------------------------------------------------------------
+
+def _servicos_dos_adaptadores(ambiente):
+    return [ambiente["python"], ambiente["rest"].app.state.verifica]  # o MCP compartilha o serviço do Python
+
+
+def _spec(ferramenta):
+    return json.loads(FREOA_JSON.read_text(encoding="utf-8"))["ferramentas"][ferramenta]
+
+
+def _falha_de_autenticacao_so_na_finalizacao(monkeypatch):
+    import sys
+
+    from freoa_verifica.service import Verifica
+    from freoa_verifica.verify import SourceUnavailable
+
+    original = Verifica._authenticate_capture
+
+    def seletivo(self, capture_id):
+        f = sys._getframe(1)
+        while f is not None:
+            if f.f_code.co_name == "_finalizar":
+                raise SourceUnavailable("EVIDENCIA_CORROMPIDA")
+            f = f.f_back
+        return original(self, capture_id)
+
+    monkeypatch.setattr(Verifica, "_authenticate_capture", seletivo)
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_obter_dispositivo_variantes_ambigua_unknown_e_unavailable(ambiente, monkeypatch, adaptador):
+    import dataclasses
+
+    from freoa_verifica.service import Verifica
+    from freoa_verifica.verify import SourceUnavailable
+
+    rw = next(iter(ambiente["python"]._resolver.works.values()))
+    args = {"citacao": h.CITACAO_LSA}
+    spec = _spec("obter_dispositivo")
+    for esperado, preparar in (
+        ("ambigua", lambda m: m.setattr(Verifica, "_resolve", lambda self, *a, **k: [rw, rw])),
+        ("unknown", lambda m: m.setattr(
+            Verifica, "_resolve", lambda self, *a, **k: dataclasses.replace(rw, persisted_incomplete=True))),
+        ("unavailable", lambda m: m.setattr(
+            Verifica, "_authenticate_output",
+            lambda self, valor: (_ for _ in ()).throw(SourceUnavailable("EVIDENCIA_CORROMPIDA")))),
+    ):
+        with monkeypatch.context() as m:
+            preparar(m)
+            resp = _responder(ambiente, adaptador, "obter_dispositivo", args)
+        assert resp["status"] == esperado, (adaptador, resp)
+        assert resp["fundamento_temporal"] is None and resp["correspondencia_textual"] is None
+        assert not validar_resposta_consumidor("obter_dispositivo", spec, resp, DEPRECATED), (adaptador, esperado)
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_verificar_citacao_rebaixamento_final_publica_unavailable(ambiente, monkeypatch, adaptador):
+    spec = _spec("verificar_citacao")
+    with monkeypatch.context() as m:
+        _falha_de_autenticacao_so_na_finalizacao(m)
+        resp = _responder(ambiente, adaptador, "verificar_citacao",
+                          {"citacao": h.CITACAO_LSA, "trecho": h.TRECHO_LSA})
+    assert resp["identity"]["status"] == "unavailable" and resp["text"]["status"] == "unavailable"
+    assert resp["correspondencia_textual"] is None
+    erros = validar_resposta_consumidor("verificar_citacao", spec, resp, DEPRECATED)
+    assert not erros, (adaptador, erros)
+    # mutante: o contrato anterior (sem `unavailable` em `text.status`) reprova a variante legítima
+    antigo = copy.deepcopy(spec)
+    antigo["estados"]["text.status"] = ["verified", "divergent", "not_assessed", "unknown"]
+    assert any("text.status" in e and "unavailable" in e for e in validar_resposta_consumidor(
+        "verificar_citacao", antigo, resp, DEPRECATED))
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_run_id_nulo_no_modo_somente_leitura_satisfaz_o_contrato(ambiente, monkeypatch, adaptador):
+    for svc in _servicos_dos_adaptadores(ambiente):
+        monkeypatch.setattr(svc, "_read_only", True)
+    spec = _spec("verificar_citacao")
+    resp = _responder(ambiente, adaptador, "verificar_citacao", {"citacao": h.CITACAO_LSA, "trecho": h.TRECHO_LSA})
+    assert resp["run_id"] is None and resp["registro"] == {"gravado": False, "motivo": "somente_leitura"}
+    assert not validar_resposta_consumidor("verificar_citacao", spec, resp, DEPRECATED), adaptador
+    antigo = copy.deepcopy(spec)
+    antigo["caminhos"]["run_id"] = "string"
+    assert any("run_id" in e for e in validar_resposta_consumidor("verificar_citacao", antigo, resp, DEPRECATED))
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_recusa_pelos_derivados_satisfaz_o_contrato(ambiente, monkeypatch, adaptador):
+    from freoa_verifica import service as modulo
+
+    monkeypatch.setattr(modulo._derivados, "compativel", lambda conn: False)
+    vc = _responder(ambiente, adaptador, "verificar_citacao", {"citacao": h.CITACAO_LSA, "trecho": h.TRECHO_LSA})
+    od = _responder(ambiente, adaptador, "obter_dispositivo", {"citacao": h.CITACAO_LSA})
+    assert vc["status"] == "indisponivel" and vc["run_id"] is None
+    assert vc["registro"] == {"gravado": False, "motivo": "acervo_desatualizado"}
+    assert od["status"] == "indisponivel"
+    assert not validar_resposta_consumidor("verificar_citacao", _spec("verificar_citacao"), vc, DEPRECATED), adaptador
+    assert not validar_resposta_consumidor("obter_dispositivo", _spec("obter_dispositivo"), od, DEPRECATED), adaptador
+    for r in (vc, od):
+        assert r["fundamento_temporal"] is None and r["correspondencia_textual"] is None
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_obter_dispositivo_requer_conferencia_era_rejeitado_pelo_contrato_antigo(ambiente, adaptador):
+    resp = _responder(ambiente, adaptador, "obter_dispositivo", {"citacao": "Lei 6.404, art. 254-A"})
+    assert resp["status"] == "requer_conferencia"
+    spec = _spec("obter_dispositivo")
+    assert not validar_resposta_consumidor("obter_dispositivo", spec, resp, DEPRECATED)
+    antigo = copy.deepcopy(spec)
+    antigo["estados"]["status"] = ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"]
+    erros = validar_resposta_consumidor("obter_dispositivo", antigo, resp, DEPRECATED)
+    assert any("requer_conferencia" in e for e in erros), erros
+
+
+def test_c12_todo_literal_de_obter_dispositivo_status_e_exercitado_ou_declarado():
+    """Lista exata: o que o harness não exercita está em `freoa_nao_exercitados.json`, com motivo e teste dedicado."""
+    spec = _spec("obter_dispositivo")["estados"]["status"]
+    nao = {i["literal"] for i in json.loads(FREOA_NAO_EXERCITADOS_JSON.read_text(encoding="utf-8"))
+           if i["ferramenta"] == "obter_dispositivo" and i["caminho"] == "status"}
+    observados = {h.carregar("python", c[0])["resposta"]["status"] for c in h.CASOS if c[1] == "obter_dispositivo"}
+    assert set(spec) == observados | nao and not (observados & nao)
+    assert nao == {"unknown", "ambigua", "unavailable"}
