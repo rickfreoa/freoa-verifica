@@ -177,27 +177,6 @@ def test_0075_regressao_g_revogado_historico_vira_unknown():
     assert res_corr.status == "revogado"
 
 
-def test_0075_fundamento_temporal_permite_verified():
-    """select com fundamento_temporal não nulo permite verified em data histórica."""
-    prov = Provision(
-        path="art1",
-        label="Art. 1º",
-        scope="norma",
-        redactions=[
-            Redaction(order=0, text="Texto original", struck=False, annotations=[]),
-        ],
-    )
-    # Sem fundamento: unknown
-    res_sem = temporal_select(prov, "2000-01-01", work_date="1990-01-01")
-    assert res_sem.status == "unknown"
-    assert res_sem.reason == "sem_fundamento_do_periodo"
-
-    # Com fundamento fictício: verified
-    fundamento = {"tipo": "versao_oficial_na_data", "capture_id": "c1", "url": "https://example.org", "sha256": "abc", "data": "2000-01-01"}
-    res_com = temporal_select(prov, "2000-01-01", work_date="1990-01-01", fundamento_temporal=fundamento)
-    assert res_com.status == "verified"
-
-
 def test_0075_obter_dispositivo_data_historica(svc_160):
     """obter_dispositivo com data histórica: vigencia corrigida e fundamento_temporal/correspondencia_textual no topo."""
     svc, _, _ = svc_160
@@ -339,7 +318,7 @@ def test_0075_evidencia_eixos_verificar_citacao(svc_160):
     assert ev["acervo_ate"] is None  # CVM é fonte viva
     assert ev["source_kind"] == "resolucao_cvm"
     assert ev["natureza_texto"] == "consolidacao_oficial"
-    assert ev["procedencia"] == "nao_identificado"
+    assert ev["procedencia"] == "captura_direta"  # IL.0-R, C6: marca persistida pela captura
     assert ev["esfera"] == "federal"
 
 
@@ -353,7 +332,7 @@ def test_0075_evidencia_eixos_obter_dispositivo(svc_160):
     assert ev["acervo_ate"] is None
     assert ev["source_kind"] == "resolucao_cvm"
     assert ev["natureza_texto"] == "consolidacao_oficial"
-    assert ev["procedencia"] == "nao_identificado"
+    assert ev["procedencia"] == "captura_direta"  # IL.0-R, C6: marca persistida pela captura
     assert ev["esfera"] == "federal"
 
 
@@ -642,6 +621,11 @@ def test_0075_obter_registro_legado_sem_mac(tmp_path):
         "VALUES (?,?,?,?,?,?)",
         (run_id, "hash", '{"citacao": "art 1"}', "verify-r5-1", "2026-01-01T00:00:00Z", '{"identity": {"status": "verified"}}'),
     )
+    s.conn.commit()
+    # IL.0-R, C8: o legado é o que o selo autenticado lista; o selo nasce com a chave do home.
+    from freoa_verifica import registro
+
+    registro.chave_do_home(tmp_path, s.conn)
     s.conn.commit()
 
     reg = s.obter_registro(run_id)

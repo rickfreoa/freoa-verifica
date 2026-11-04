@@ -125,7 +125,7 @@ Mapa de adaptadores:
 
 ### `obter_dispositivo`
 
-`{status, work_id, caminho, texto: string, texto_atual: string|null, truncado: bool, evidencia, vigencia: {status, regras: array, flags: array, intervalo: {inicio, fim}, reason_code}, anotacoes: array, redacoes_anteriores: array, redacao_anterior_ausente_na_fonte: bool, situacao_obra: object|null, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `status` negativo devolve só `{status, ...}` (`{"status":"inexistente"}` ou com `motivo`).
+`{status, work_id, caminho, texto: string, texto_atual: string|null, truncado: bool, evidencia, vigencia: {status, regras: array, flags: array, intervalo: {inicio, fim}, reason_code}, anotacoes: array, redacoes_anteriores: array, redacao_anterior_ausente_na_fonte: bool, situacao_obra: object|null, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `status` negativo devolve só `{status, ...}` (`{"status":"inexistente"}` ou com `motivo`); `fundamento_temporal` e `correspondencia_textual` vêm em todo ramo, `null` quando inaplicáveis. `vigencia.status` publica `vigente_na_fonte`, `unknown`, `revogado`, `nao_existia` ou `ambiguous`; sem caminho (`caminho: null`) não há `texto` nem `vigencia`.
 
 ### `historico_dispositivo`
 
@@ -191,6 +191,7 @@ Entrada inválida (`EntradaInvalida`; REST: `problem+json` 422; MCP: erro de fer
 
 Entrada: `run_id` (string), e opcionalmente `evidencias` (array de `{capture_id, sha256, url}`) e `fundamento_temporal` (object).
 Política e integridade:
+- `integridade.confere` é `null` só para registro anterior à 1.4.0a2 listado no selo autenticado por HMAC do home; registro sem MAC fora do selo dá `false`. A conferência é leitura pura: funciona em home somente leitura.
 - Sob política `completo`: os parâmetros, evidências e fundamento temporal são armazenados em claro; `integridade.confere` valida o HMAC do registro completo com a chave do home.
 - Sob política `sem_conteudo`: dados sensíveis são armazenados apenas como compromissos HMAC canônicos; `evidencias` e `fundamento_temporal` são devolvidos como `null`. Se apresentados na chamada, `confere_evidencias` e `confere_fundamento` confrontam os itens apresentados contra os compromissos gravados, conferindo a autenticidade sem expor o conteúdo armazenado.
 

@@ -56,6 +56,27 @@ def _chave_ausente_com_historico(conn: sqlite3.Connection | None) -> bool:
     return conn.execute("SELECT 1 FROM run WHERE request_hash LIKE 'hmac1:%' LIMIT 1").fetchone() is not None
 
 
+def ler_chave_do_home(home: Path) -> bytes:
+    """Só leitura da chave (IL.0-R, C9): nunca cria o arquivo nem escreve no banco; ausente é erro.
+
+    Serve à recuperação e à conferência de registros, que precisam funcionar em home somente leitura
+    (`PRAGMA query_only=ON`). Criação e impressão digital ficam em `chave_do_home`.
+    """
+    caminho = Path(home) / ARQUIVO_CHAVE
+    try:
+        em_cache = _cache_chaves.get(str(caminho))
+        if em_cache and em_cache[1] == _assinatura(caminho):
+            return em_cache[0]
+        chave = caminho.read_bytes()
+        assinatura = _assinatura(caminho)
+    except FileNotFoundError:
+        raise RuntimeError(f"CHAVE_REGISTRO_AUSENTE: {caminho}") from None
+    if len(chave) != 32:
+        raise RuntimeError(f"{caminho} corrompida (esperado 32 bytes)")
+    _cache_chaves[str(caminho)] = (chave, assinatura)
+    return chave
+
+
 def chave_do_home(home: Path, conn: sqlite3.Connection | None = None) -> bytes:
     """Segredo de 32 bytes do home (`<home>/registro.key`), criado atomicamente e com modo 0o600.
 
@@ -73,7 +94,9 @@ def chave_do_home(home: Path, conn: sqlite3.Connection | None = None) -> bytes:
             return em_cache[0]
     except FileNotFoundError:
         pass
+    criada = False
     if not caminho.exists():
+        criada = True
         if _chave_ausente_com_historico(conn):
             raise RuntimeError(
                 f"CHAVE_REGISTRO_AUSENTE: {caminho} sumiu mas o home tem registros com HMAC; "
@@ -96,6 +119,8 @@ def chave_do_home(home: Path, conn: sqlite3.Connection | None = None) -> bytes:
     if conn is not None:
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_IMPRESSAO, _impressao(chave)))
     _cache_chaves[str(caminho)] = (chave, _assinatura(caminho))
+    if conn is not None and criada:
+        selar_legado(conn)  # C8: os registros sem MAC que já existem são os legados; os futuros terão MAC
     return chave
 
 
@@ -104,14 +129,19 @@ def _home_da_conexao(conn: sqlite3.Connection) -> Path | None:
     return Path(arquivo).parent if arquivo else None
 
 
-def hmac_entrada(conn: sqlite3.Connection, campo: str, valor: str) -> str:
+def hmac_entrada(conn: sqlite3.Connection, campo: str, valor: str, *, leitura: bool = False) -> str:
     """HMAC-SHA256 de conteúdo de entrada do usuário, com segredo do home e separação por campo.
 
     Só para entradas (citação, trecho, requisição). Hash de evidência pública (bytes de documento
     oficial, capturas) segue sha256 puro: é verificável por qualquer pessoa.
+
+    `leitura=True` (C9) só lê a chave existente: não cria arquivo nem grava a impressão no banco.
     """
     home = _home_da_conexao(conn)
-    chave = chave_do_home(home, conn) if home else _chaves_efemeras.setdefault(str(id(conn)), secrets.token_bytes(32))
+    if not home:
+        chave = _chaves_efemeras.setdefault(str(id(conn)), secrets.token_bytes(32))
+    else:
+        chave = ler_chave_do_home(home) if leitura else chave_do_home(home, conn)
     mac = hmac.new(chave, campo.encode("utf-8") + b"\0" + valor.encode("utf-8"), hashlib.sha256)
     return PREFIXO_HMAC + mac.hexdigest()
 
@@ -242,3 +272,44 @@ def purgar(home: Path, antes: str, apagar_original: bool = False) -> dict[str, A
                                  "falhas": falhas}, ensure_ascii=False) + "\n")
     return {"status": "ok", **registro, "apagados": apagados, "falhas": falhas,
             "apagar_manualmente": [f["arquivo"] for f in falhas] if apagar_original else movidos}
+
+
+# ----------------------------------------------------------------------
+# Registro legado autenticado (IL.0-R, C8)
+# ----------------------------------------------------------------------
+
+META_LEGADO = "registro_legado_ids"
+META_LEGADO_MAC = "registro_legado_mac"
+
+
+def _canon_legado(ids: list[str]) -> str:
+    return json.dumps(sorted(ids), ensure_ascii=False)
+
+
+def selar_legado(conn: sqlite3.Connection) -> bool:
+    """Grava, autenticado por HMAC do home, o conjunto dos `run.id` sem MAC existentes agora (anteriores à
+    1.4.0a2). Só sela uma vez: com o selo presente não faz nada. Devolve se selou."""
+    if conn.execute("SELECT 1 FROM meta WHERE key=?", (META_LEGADO,)).fetchone():
+        return False
+    ids = [r[0] for r in conn.execute("SELECT id FROM run WHERE registro_mac IS NULL")]
+    canon = _canon_legado(ids)
+    mac = hmac_entrada(conn, "registro_legado", canon)
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_LEGADO, canon))
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_LEGADO_MAC, mac))
+    return True
+
+
+def legado_autenticado(conn: sqlite3.Connection, run_id: str) -> bool:
+    """O registro é legado só se o selo autenticado o lista; selo ausente, adulterado ou ilegível: não.
+
+    Não depende de nenhuma coluna da própria linha (apagáveis por quem não tem a chave)."""
+    canon = conn.execute("SELECT value FROM meta WHERE key=?", (META_LEGADO,)).fetchone()
+    mac = conn.execute("SELECT value FROM meta WHERE key=?", (META_LEGADO_MAC,)).fetchone()
+    if canon is None or mac is None:
+        return False
+    try:
+        esperado = hmac_entrada(conn, "registro_legado", canon[0], leitura=True)
+        ids = json.loads(canon[0])
+    except (RuntimeError, ValueError, OSError):
+        return False
+    return hmac.compare_digest(esperado, mac[0]) and run_id in set(ids)

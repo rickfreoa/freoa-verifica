@@ -274,16 +274,7 @@ def test_rcvm160_temporal_causal(env):
     }
     assert r2.temporal.status == "unknown"
 
-    # Com fundamento_temporal não nulo, o comportamento de verified fica permitido (decisão 0075)
-    from freoa_verifica.temporal import select as temporal_select
-    tr_fund = temporal_select(
-        prov,
-        "2022-08-01",
-        work_date=rw160.work_date,
-        amending_act_texts=rw160.amending_act_texts,
-        fundamento_temporal={"tipo": "versao_oficial_na_data"},
-    )
-    assert tr_fund.status == "verified"
+    # IL.0-R, C2: nenhum caminho aceita fundamento temporal (ver tests/test_il0r.py).
 
     # trocar datas → texto deixa de verified
     bad = verificar(

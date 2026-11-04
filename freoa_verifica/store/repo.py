@@ -59,6 +59,9 @@ def interpretacao_indisponivel(capture_sha256: str | None = None, url: str | Non
     return Unavailable("interpretacao_indisponivel", "resposta_inesperada", evidencia)
 
 
+PROCEDENCIAS_DE_GRAVACAO = frozenset({"captura_direta", "sessao_assistida"})
+
+
 def save_capture(
     conn: sqlite3.Connection,
     resp: Response,
@@ -67,8 +70,15 @@ def save_capture(
     home: Path | None = None,
     edition_id: str | None = None,
     outcome: str | None = None,
+    procedencia: str = "captura_direta",
 ) -> str:
-    """Persiste blob e linha de capture; mesma tripla (sha256, url, fetched_at) não duplica."""
+    """Persiste blob e linha de capture; mesma tripla (sha256, url, fetched_at) não duplica.
+
+    `procedencia` (0075, §3.2) é gravada por captura: `captura_direta` (conector neste home) ou
+    `sessao_assistida`. `snapshot` só entra pela instalação de snapshot.
+    """
+    if procedencia not in PROCEDENCIAS_DE_GRAVACAO:
+        raise ValueError(f"procedencia inválida: {procedencia!r}")
     digest = hashlib.sha256(resp.body).hexdigest()
     if digest != resp.sha256:
         raise ValueError("sha256 da resposta diverge do corpo")
@@ -80,8 +90,8 @@ def save_capture(
         "INSERT INTO capture("
         "id, source_id, edition_id, url, final_url, fetched_at, status, "
         "headers_json, redirects_json, sha256, mime, size, outcome, "
-        "content_type, codificacao, origem_da_codificacao"
-        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "content_type, codificacao, origem_da_codificacao, procedencia"
+        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(sha256, url, fetched_at) DO NOTHING",
         (
             capture_id,
@@ -100,6 +110,7 @@ def save_capture(
             content_type,
             codificacao,
             origem,
+            procedencia,
         ),
     )
     row = conn.execute(

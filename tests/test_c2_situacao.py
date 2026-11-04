@@ -126,8 +126,10 @@ def _dim(status, reason=None):
 
 def test_regras_com_data_efeito():
     rev = _ws("revogada", data_efeito="2025-01-01", texto_oficial="x", lido_em="2026-10-01")
-    out = situacao.aplicar_situacao(_dim("verified"), rev, "2025-06-01", HOJE)
+    out = situacao.aplicar_situacao(_dim("verified"), rev, HOJE.isoformat(), HOJE)
     assert (out.status, out.reason_code) == ("divergent", "OBRA_REVOGADA_NA_FONTE")
+    # IL.0-R, C1: para D diferente de hoje a situação (o que a página declara hoje) nunca decide.
+    assert situacao.aplicar_situacao(_dim("verified"), rev, "2025-06-01", HOJE).status == "verified"
     fut = _ws("revogada", data_efeito="2027-01-01", lido_em="2026-10-01")
     out = situacao.aplicar_situacao(_dim("vigente_na_fonte", "VIGENTE_NA_FONTE"), fut, None, HOJE)
     assert out.status == "vigente_na_fonte" and "REVOGACAO_POSTERIOR" in out.reason_code

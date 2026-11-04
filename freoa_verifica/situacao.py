@@ -361,6 +361,11 @@ def _iso(value: str | None) -> date | None:
         return None
 
 
+def consulta_historica(d: date | None, hoje: date) -> bool:
+    """D diferente de hoje (passada ou futura). Sem D válida não há consulta histórica a decidir aqui."""
+    return d is not None and d != hoje
+
+
 def _desatualizada(ws: WorkStatus, hoje: date) -> bool:
     lido = _iso(ws.lido_em)
     return lido is None or (hoje - lido).days > MAX_IDADE_DIAS
@@ -377,12 +382,13 @@ def _decidir(cur: str, ws: WorkStatus | None, data: str | None, hoje: date) -> t
     if d is None:
         return None
     if ws.situacao in ("revogada", "cancelada"):
+        # C1 (0075, §2, itens 1, 5 e 6): guarda histórica única. Para D diferente de hoje, sem fundamento
+        # validado, a situação cadastral (o que a página declara hoje) nunca produz conclusão, seja qual
+        # for o estado intermediário (unknown, not_assessed, ausência de dispositivo). Cobre os dois ramos.
+        if consulta_historica(d, hoje):
+            return None
         efeito = _iso(ws.data_efeito)
         if efeito is not None:
-            # 0075, §2, itens 1 e 6: Em consulta histórica sem fundamento, nenhuma negativa pode
-            # vir só da situação atual: a abstenção prevalece (situação continua em situacao_obra).
-            if d != hoje and cur in ("unknown", "sem_fundamento_do_periodo"):
-                return None
             return ("revogado", REVOGADO_NA_FONTE) if d >= efeito else ("flag", POSTERIOR)
         if d >= hoje:
             return ("revogado", REVOGADO_NA_FONTE)

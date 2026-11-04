@@ -224,26 +224,48 @@ def _inferir_procedencia(rw: ResolvedWork) -> str:
     return "nao_identificado"
 
 
+_PROCEDENCIAS = frozenset({"captura_direta", "snapshot", "cadeia_de_alteracoes", "sessao_assistida", "nao_identificado"})
+
+
+def campos_evidencia(capture_id: str | None, sha256: str | None, url: str | None, fetched_at: str | None, *,
+                     source_kind: str = "nao_identificado", natureza_texto: str = "nao_identificado",
+                     procedencia: str | None = None, esfera: str = "nao_identificado",
+                     acervo_ate: str | None = None) -> dict[str, Any]:
+    """Construtor único da evidência capturada publicada (0075, §3.2; IL.0-R, C6): os quatro campos
+    de captura e os seis eixos. Normas, decisões, `verificar_citacao` e `obter_dispositivo` passam por aqui."""
+    return {
+        "capture_id": capture_id,
+        "sha256": sha256,
+        "url": url,
+        "fetched_at": fetched_at,
+        "captured_at": fetched_at,
+        "acervo_ate": acervo_ate,
+        "source_kind": source_kind or "nao_identificado",
+        "natureza_texto": natureza_texto or "nao_identificado",
+        "procedencia": procedencia if procedencia in _PROCEDENCIAS else "nao_identificado",
+        "esfera": esfera or "nao_identificado",
+    }
+
+
+def campos_evidencia_obra(rw: ResolvedWork, acervo_ate: str | None) -> dict[str, Any]:
+    return campos_evidencia(
+        rw.capture_id, rw.sha256, rw.url, rw.fetched_at,
+        source_kind=_inferir_source_kind(rw.work_key), natureza_texto=_inferir_natureza_texto(rw),
+        procedencia=_inferir_procedencia(rw), esfera=_inferir_esfera(rw.work_key), acervo_ate=acervo_ate,
+    )
+
+
 def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, span=None) -> Evidence:
     t = trecho
     if t and len(t) > _MAX_TRECHO:
         t = t[:_MAX_TRECHO]
     return Evidence(
-        capture_id=rw.capture_id,
-        sha256=rw.sha256,
-        url=rw.url,
-        fetched_at=rw.fetched_at,
         path=path,
         span=span,
         trecho_oficial=t,
         fontes_consultadas=rw.fontes_consultadas or None,
         proveniencia=rw.proveniencia,
-        captured_at=rw.fetched_at,
-        acervo_ate=rw.acervo_ate,
-        source_kind=_inferir_source_kind(rw.work_key),
-        natureza_texto=_inferir_natureza_texto(rw),
-        procedencia=_inferir_procedencia(rw),
-        esfera=_inferir_esfera(rw.work_key),
+        **campos_evidencia_obra(rw, rw.acervo_ate),
     )
 
 
@@ -436,7 +458,6 @@ def verificar(
     *,
     _path: str | None = None,
     persistir: bool = True,
-    fundamento_temporal: Any = None,
 ) -> VerificationResult:
     """Verifica citação nas dimensões identity/text/temporal/support.
 
@@ -620,8 +641,10 @@ def verificar(
                 fetched_at=rw.fetched_at,
             )
             temporal_dim = _map_temporal(temporal_res, rw, path)
+            # 0075, §2.2: abstenção histórica por falta de fundamento prevalece sobre o motivo de revogação.
             text_dim = (
-                Dimension("unknown", "DISPOSITIVO_REVOGADO")
+                Dimension("unknown", "sem_fundamento_do_periodo"
+                          if temporal_res.reason == "sem_fundamento_do_periodo" else "DISPOSITIVO_REVOGADO")
                 if trecho is not None
                 else Dimension("not_assessed", "SEM_TRECHO")
             )
@@ -661,7 +684,6 @@ def verificar(
             work_date=rw.work_date,
             amending_act_texts=rw.amending_act_texts,
             fetched_at=rw.fetched_at,
-            fundamento_temporal=fundamento_temporal,
         )
         temporal_dim = _map_temporal(temporal_res, rw, path)
 
@@ -675,7 +697,11 @@ def verificar(
         text_dim = (Dimension("not_found", "SEM_DISPOSITIVO") if identity.status == "not_found"
                     else Dimension("unknown", identity.reason_code))
     elif temporal_res and (temporal_res.status in ("revogado", "nao_existia", "ambiguous") or "revogacao_anotada" in temporal_res.flags):
-        reason = "REVOGADO" if "revogacao_anotada" in temporal_res.flags else (temporal_res.reason or temporal_res.status.upper())
+        if temporal_res.reason == "sem_fundamento_do_periodo":
+            # C5: motivo da abstenção histórica antes dos tratamentos de revogação.
+            reason = "sem_fundamento_do_periodo"
+        else:
+            reason = "REVOGADO" if "revogacao_anotada" in temporal_res.flags else (temporal_res.reason or temporal_res.status.upper())
         text_dim = Dimension("unknown", reason)
     elif temporal_res and temporal_res.reason in {"INICIO_SUCESSOR_DESCONHECIDO", "CAPTURA_DATA_INVALIDA"}:
         text_dim = Dimension("unknown", temporal_res.reason)
@@ -805,7 +831,6 @@ def verificar(
         temporal=temporal_dim,
         support=support,
         citation=cite,
-        fundamento_temporal=fundamento_temporal,
         correspondencia_textual=corr_textual,
     )
     return _persist(repo, citacao, trecho, data, modo, result)
@@ -1100,4 +1125,7 @@ def populate_from_parsed(
             else None),
         source_id=source_id,
         acervo_ate=acervo_ate,
+        # C6: a marca persistida da captura (a existente prevalece sobre a regravação idêntica).
+        procedencia_tipo=(conn.execute("SELECT procedencia FROM capture WHERE id=?", (capture_id,)).fetchone()[0]
+                          or "nao_identificado"),
     )

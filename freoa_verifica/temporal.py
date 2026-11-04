@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Any
 from zoneinfo import ZoneInfo
 
 from freoa_verifica.parsers.model import Annotation, Provision, Redaction
@@ -372,7 +371,6 @@ def select(
     fetched_at: str | None = None,
     ambiguous: bool = False,
     quarantined: bool = False,
-    fundamento_temporal: Any = None,
 ) -> TemporalResult:
     """Seleciona a redação aplicável em `data` (ISO) ou a vigente se data is None.
 
@@ -478,7 +476,8 @@ def select(
     if revoked_at is not None:
         end_d = _parse_iso(revoked_at)
         if end_d and target >= end_d:
-            if not current_query and fundamento_temporal is None:
+            if not current_query:
+                # 0075, §2.5: sem resolvedor de versões oficiais (IL.2) nenhuma data histórica tem fundamento.
                 return TemporalResult(
                     status="unknown",
                     redaction_id=None,
@@ -516,6 +515,18 @@ def select(
     first_start = _parse_iso(dated[0].start) if dated[0].start else None
     if first_start and target < first_start:
         inclusion = dated[0].intro_annotation
+        if current_query:
+            # Consulta corrente: semântica de 430e654 (0075, §2.4).
+            proven = inclusion is not None and inclusion.kind == "incluido"
+            return TemporalResult(
+                status="nao_existia" if proven else "unknown",
+                redaction_id=None,
+                interval=None,
+                rules_applied=rules,
+                flags=gflags,
+                needs_judgment=needs_judgment,
+                reason=None if proven else "HISTORICO_ANTERIOR_AUSENTE",
+            )
         has_pending_judgment = (
             needs_judgment
             or "revogacao_parcial" in gflags
@@ -671,7 +682,7 @@ def select(
         interval, flags=flags, needs_judgment=needs_judgment
     )
     reason = None
-    if not current_query and fundamento_temporal is None:
+    if not current_query:
         status = "unknown"
         reason = "sem_fundamento_do_periodo"
         if "sem_fundamento_do_periodo" not in flags:

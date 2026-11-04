@@ -34,6 +34,21 @@ Pré-release do incremento IL.0 (emenda IL do plano 1.4.0 e decisão 0075). Corr
 - Em modo `sem_conteudo`, protege dados sensíveis através de compromissos HMAC (`hmac-sha256`) canônicos sobre tuplas de evidência e fundamento temporal, permitindo conferência por apresentação externa sem persistência em claro no banco local.
 - `registro_mac` garante a integridade de ponta a ponta do registro armazenado.
 
+### IL.0-R: correções do passe final do PR #25 (`docs/auditoria/1.4.0/il0r-especificacao.md`, C1 a C12)
+
+- C1: guarda histórica única. A situação cadastral (CVM, BCB, CMN; `revogada` e `cancelada`) nunca produz negativa para D diferente de hoje, qualquer que seja o estado intermediário (`unknown` com qualquer motivo, `not_assessed`, consulta sem dispositivo), com ou sem data de efeito, inclusive em consulta futura. A mesma guarda se repete na resposta final de `verificar_citacao`, `verificar_texto` e `obter_dispositivo`. Mantêm-se `nao_existia`, `ambiguous` e entradas inválidas.
+- C2: removido `fundamento_temporal` de `temporal.select` e de `verify.verificar` (sem resolvedor de versões oficiais, só no IL.2). O campo publicado é sempre `null`.
+- C3: a restrição de inclusão e de `redacao_dada` futuras vale só para consulta histórica; a corrente tem a semântica de `430e654`.
+- C4: `fundamento_temporal` e `correspondencia_textual` em todo ramo de `verificar_citacao` e `obter_dispositivo`; a correspondência é `null` sempre que a identidade final não for `verified`.
+- C5: em consulta histórica sem fundamento, `text.reason_code` é `sem_fundamento_do_periodo` também nos ramos de revogação.
+- C6: toda evidência capturada (normas e decisões) sai de um construtor único com os seis eixos. `procedencia` é persistida por captura (migração 18, coluna `capture.procedencia`): `captura_direta`, `snapshot` (instalação de snapshot, inclusive em acervo misto) ou `sessao_assistida`; captura anterior sem marca é `nao_identificado`.
+- C7: `acervo_ate` calculado na emissão, sem cache.
+- C8: o registro legado é o que o selo autenticado por HMAC do home lista (migração 19 e criação da chave); registro novo sem MAC dá `integridade.confere: false`.
+- C9: `obter_registro` não escreve no banco (leitura da chave separada da criação); funciona com `PRAGMA query_only=ON`.
+- C10: `obter_registro` entre as operações contadas.
+- C11: decisões, súmulas, processos e as saídas antecipadas com conclusão gravam recibo e devolvem `run_id`; em modo somente leitura a resposta traz `registro: {gravado: false, motivo: "somente_leitura"}`.
+- C12: `vigencia.status` do consumidor com os literais publicados (`vigente_na_fonte`, `unknown`, `revogado`, `nao_existia`, `ambiguous`) e quatro casos novos no harness (revogação corrente, inexistência documental, obtenção histórica, sem caminho).
+
 ### Contrato do consumidor FREOA (decisão 0075, seção 3.5)
 
 - Especificação formal em `tests/contrato/consumidores/freoa.json` definindo os caminhos obrigatórios e estados esperados para `verificar_citacao`, `obter_dispositivo`, `listar_fontes` e `obter_registro`.

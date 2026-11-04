@@ -50,6 +50,7 @@ from freoa_verifica.parsers.model import (
 )
 from freoa_verifica.store import blobs, repo
 from freoa_verifica.store.db import connect, data_home
+from freoa_verifica.temporal import _parse_iso, today_sp
 from freoa_verifica.temporal import select as temporal_select
 from freoa_verifica.texto_resposta import (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO, content_type_do_response,
                                            interpretar_legado_padrao)
@@ -62,9 +63,8 @@ from freoa_verifica.verify import (
     _current_redaction,
     _find_provision,
     _inferir_esfera,
-    _inferir_natureza_texto,
-    _inferir_procedencia,
-    _inferir_source_kind,
+    campos_evidencia,
+    campos_evidencia_obra,
     _redaction_by_id,
     _result_to_json,
     persistir_resultado,
@@ -89,6 +89,30 @@ from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E4
 _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
 # Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
 _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
+
+
+_NEGATIVAS_DA_SITUACAO = frozenset({"REVOGADO", "DISPOSITIVO_REVOGADO", situacao.REVOGADO_NA_FONTE})
+
+
+def _historica(data: str | None) -> bool:
+    """D válida e diferente de hoje (America/Sao_Paulo): consulta histórica, passada ou futura."""
+    d = _parse_iso(data) if data else None
+    return d is not None and d != today_sp()
+
+
+def _guarda_historica(out: dict[str, Any], data: str | None) -> None:
+    """C1: sem fundamento validado (hoje nunca há, IL.2) nenhum estado final para D afirma `verified`,
+    `divergent` ou revogação. Mantêm-se `nao_existia`, `ambiguous` e entradas inválidas."""
+    if not _historica(data):
+        return
+    temporal = out.get("temporal") or {}
+    if (temporal.get("status") in ("verified", "vigente_na_fonte", "divergent")
+            or temporal.get("reason_code") in _NEGATIVAS_DA_SITUACAO):
+        out["temporal"] = {**temporal, "status": "unknown", "reason_code": "sem_fundamento_do_periodo"}
+    texto = out.get("text") or {}
+    if texto.get("status") in ("verified", "divergent") or (
+            texto.get("reason_code") in _NEGATIVAS_DA_SITUACAO and (out.get("temporal") or {}).get("status") != "not_found"):
+        out["text"] = {**texto, "status": "unknown", "reason_code": "sem_fundamento_do_periodo"}
 
 
 class _InterpretacaoIndisponivel(Exception):
@@ -680,8 +704,6 @@ class Verifica:
             rw = canonica if isinstance(canonica, ResolvedWork) else rw
         self._resolver.add(rw)
         if source_id == "planalto":
-            if hasattr(self, "_cached_acervo_ate_planalto"):
-                delattr(self, "_cached_acervo_ate_planalto")
             corte = self._acervo_ate_planalto()
             for w in self._resolver.works.values():
                 if w.source_id == "planalto" or (w.source_id is None and (w.work_key.authority == "federal" or w.document.profile == "planalto")):
@@ -763,33 +785,21 @@ class Verifica:
             proveniencia=_proveniencia(cap, saved),
             source_id=source_id,
             acervo_ate=acervo_ate,
+            procedencia_tipo=(cap.get("procedencia") if cap else None) or "nao_identificado",
         )
         return rw
 
     def _acervo_ate_planalto(self) -> str | None:
-        if not hasattr(self, "_cached_acervo_ate_planalto"):
-            row = self.conn.execute(
-                "SELECT MAX(fetched_at) FROM capture WHERE source_id='planalto' AND fetched_at IS NOT NULL"
-            ).fetchone()
-            val = str(row[0])[:10] if (row and row[0]) else None
-            self._cached_acervo_ate_planalto = val
-        return self._cached_acervo_ate_planalto
+        # C7: calculado na emissão, sem cache; vale também para alteração do acervo por outro processo.
+        row = self.conn.execute(
+            "SELECT MAX(fetched_at) FROM capture WHERE source_id='planalto' AND fetched_at IS NOT NULL"
+        ).fetchone()
+        return str(row[0])[:10] if (row and row[0]) else None
 
     def _evidencia_dispositivo(self, rw: ResolvedWork) -> dict[str, Any]:
         is_planalto = (rw.source_id == "planalto" or (rw.source_id is None and (rw.work_key.authority == "federal" or rw.document.profile == "planalto")))
         acervo_ate = self._acervo_ate_planalto() if is_planalto else None
-        return {
-            "capture_id": rw.capture_id,
-            "url": rw.url,
-            "fetched_at": rw.fetched_at,
-            "sha256": rw.sha256,
-            "captured_at": rw.fetched_at,
-            "acervo_ate": acervo_ate,
-            "source_kind": _inferir_source_kind(rw.work_key),
-            "natureza_texto": _inferir_natureza_texto(rw),
-            "procedencia": _inferir_procedencia(rw),
-            "esfera": _inferir_esfera(rw.work_key),
-        }
+        return campos_evidencia_obra(rw, acervo_ate)
 
     def reparar_anos(self) -> dict:
         """Repara projeção de identidade a partir de modelos de capturas autenticadas.
@@ -1385,6 +1395,20 @@ class Verifica:
         caminho: str | None = None,
         data: str | None = None,
     ) -> dict[str, Any]:
+        out = self._obter_dispositivo(citacao, work_id, caminho, data)
+        # C4: campos aditivos em todos os ramos, `null` quando inaplicáveis (hoje sempre).
+        out["fundamento_temporal"] = None
+        out["correspondencia_textual"] = None
+        vig = out.get("vigencia")
+        if isinstance(vig, dict) and _historica(data) and (
+                vig.get("status") in ("verified", "vigente_na_fonte", "revogado")
+                or vig.get("reason_code") in _NEGATIVAS_DA_SITUACAO):
+            # C1: guarda histórica final (obter_dispositivo não tem trecho nem identidade a rebaixar).
+            out["vigencia"] = {**vig, "status": "unknown", "reason_code": "sem_fundamento_do_periodo"}
+        return out
+
+    def _obter_dispositivo(self, citacao: str | None, work_id: str | None, caminho: str | None,
+                           data: str | None) -> dict[str, Any]:
         rw: ResolvedWork | None = None
         path = caminho
         if citacao:
@@ -1650,7 +1674,7 @@ class Verifica:
                     "proposicao": proposicao,
                     "run_id": None,
                     "citation": _citation_to_dict(cite),
-                }, _cite or cite, citacao, trecho, data, modo, gravar=False, em_texto=_cite is not None)
+                }, _cite or cite, citacao, trecho, data, modo, em_texto=_cite is not None)
             if isinstance(resolved, ResolvedWork) and not resolved.capture_id:
                 return self._finalizar({
                     "identity": {
@@ -1676,7 +1700,7 @@ class Verifica:
                     "proposicao": proposicao,
                     "run_id": None,
                     "citation": _citation_to_dict(cite),
-                }, _cite or cite, citacao, trecho, data, modo, gravar=False, em_texto=_cite is not None)
+                }, _cite or cite, citacao, trecho, data, modo, em_texto=_cite is not None)
 
         result = verificar(
             citacao,
@@ -1754,6 +1778,7 @@ class Verifica:
             status, evidencia = self._confirm_cnj(cite)
         else:
             status, evidencia = self._confirm_decision(cite.decision)
+        evidencia = self._ev_captura(evidencia, court=getattr(cite.decision, "court", None))
         ident = {
             "encontrada": ("verified", "DECISAO_CONFIRMADA_NA_CAPTURA"),
             "processo_confirmado": ("verified", "PROCESSO_CONFIRMADO_MAIS_DE_UM_REGISTRO"),
@@ -1770,12 +1795,11 @@ class Verifica:
             "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED", "evidence": []},
             "proposicao": proposicao, "run_id": None, "citation": _citation_to_dict(cite),
         }
-        return self._finalizar(out, cite, citacao, trecho, data, modo, gravar=False)
+        return self._finalizar(out, cite, citacao, trecho, data, modo)
 
     def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
                    trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
         """C4 (decisão 0027): todos os rebaixamentos, nesta ordem, e só então o recibo."""
-        out.setdefault("fundamento_temporal", None)
         out.setdefault("correspondencia_textual", None)
         if cite is not None and self._promover_sem_ano(cite):
             out["citation"] = _citation_to_dict(cite)
@@ -1813,6 +1837,12 @@ class Verifica:
             out["identity"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
             out["text"] = {"status": "not_assessed", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
             out["temporal"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
+        # C1 (0075, §2, itens 1, 5 e 6): guarda histórica na saída, defesa em profundidade da guarda da situação.
+        _guarda_historica(out, data)
+        # C4: campos aditivos depois de todos os rebaixamentos (ponto único de finalização).
+        out["fundamento_temporal"] = None  # sem resolvedor de versões oficiais (IL.2), sempre nulo
+        if out["identity"].get("status") != "verified":
+            out["correspondencia_textual"] = None
         # Nunca verified sem capture_id correspondente.
         for dim_name in ("identity", "text", "temporal"):
             dim = out.get(dim_name) or {}
@@ -1848,9 +1878,12 @@ class Verifica:
             for ev in (out.get(dim_name) or {}).get("evidence") or []:
                 if isinstance(ev, dict) and (ev.get("acervo_ate") is not None or (ev.get("url") or "").startswith("https://www.planalto.gov.br")):
                     ev["acervo_ate"] = corte_planalto
-        if gravar and not self._read_only:
-            recibo = {k: v for k, v in out.items() if k not in ("run_id", "proposicao")}
-            out["run_id"] = persistir_resultado(self.conn, citacao, trecho, data, modo, recibo)
+        if gravar:
+            if self._read_only:
+                out["registro"] = {"gravado": False, "motivo": "somente_leitura"}  # C11: modo declarado
+            else:
+                recibo = {k: v for k, v in out.items() if k not in ("run_id", "proposicao")}
+                out["run_id"] = persistir_resultado(self.conn, citacao, trecho, data, modo, recibo)
         return out
 
     def _authenticate_capture(self, capture_id):
@@ -1943,11 +1976,13 @@ class Verifica:
             trecho = self._trecho_apos_aspas(texto[:next_start], cite.span[1])
             if cite.kind == "processo":
                 status, evidencia = self._confirm_cnj(cite, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
+                evidencia = self._ev_captura(evidencia)
             elif cite.work is None and cite.decision is None:
                 status = "formato_invalido"
             elif cite.work is None and cite.decision is not None:
                 # Reconhecimento só sintático — nunca "encontrada".
                 status, evidencia = self._confirm_decision(cite.decision, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
+                evidencia = self._ev_captura(evidencia, court=getattr(cite.decision, "court", None))
             else:
                 verif = self.verificar_citacao(cite.raw, trecho=trecho, data=data, modo="literal", _path=cite.path, _cite=cite)
                 identity = verif.get("identity", {})
@@ -2045,9 +2080,23 @@ class Verifica:
                 return "indisponivel", None, rows
         except (OSError, ValueError, blobs.BlobError):
             return "indisponivel", None, rows
-        return ("processo_confirmado" if multiple else "encontrada"), {"capture_id": doc["capture_id"], "sha256": doc["capture_sha"],
-                              "url": doc["url"], "fetched_at": doc["fetched_at"],
-                              **({"uf_citada_nao_conferida": key.uf.upper()} if uf_nao_conferida else {})}, rows
+        return ("processo_confirmado" if multiple else "encontrada"), self._ev_captura({
+            "capture_id": doc["capture_id"], "sha256": doc["capture_sha"], "url": doc["url"], "fetched_at": doc["fetched_at"],
+            **({"uf_citada_nao_conferida": key.uf.upper()} if uf_nao_conferida else {})}, court=rows[0]["court"]), rows
+
+    def _ev_captura(self, ev: dict | None, *, court: str | None = None) -> dict | None:
+        """C6: evidência de decisão/processo pelo construtor único, com a procedência persistida da captura."""
+        if not isinstance(ev, dict) or not ev.get("capture_id"):
+            return ev
+        cap = self.conn.execute("SELECT source_id, procedencia FROM capture WHERE id=?", (ev["capture_id"],)).fetchone()
+        planalto = bool(cap and cap["source_id"] == "planalto")
+        ev.update(campos_evidencia(
+            ev["capture_id"], ev.get("sha256"), ev.get("url"), ev.get("fetched_at"),
+            esfera=_inferir_esfera(WorkKey(court.lower(), "", "", 0)) if court else "nao_identificado",
+            procedencia=cap["procedencia"] if cap else None,
+            acervo_ate=self._acervo_ate_planalto() if planalto else None,
+        ))
+        return ev
 
     @staticmethod
     def _decision_context_date(text):
@@ -3181,7 +3230,14 @@ class Verifica:
         fundamento_temporal: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Registro local da operação de verificação (decisão 0075, 3.4)."""
-        from freoa_verifica.registro import hmac_entrada
+        from freoa_verifica.registro import hmac_entrada as _hmac, legado_autenticado
+
+        def hmac_entrada(conn, campo, valor, *, leitura=True):
+            # C9: leitura da chave sem escrita; chave ilegível ou ausente não confere (nunca levanta).
+            try:
+                return _hmac(conn, campo, valor, leitura=leitura)
+            except RuntimeError:
+                return None
 
         if not run_id or not isinstance(run_id, str):
             return {"status": "inexistente", "run_id": run_id}
@@ -3191,7 +3247,10 @@ class Verifica:
             return {"status": "inexistente", "run_id": run_id}
 
         confere_mac: bool | None = None
-        if row["registro_mac"] is not None:
+        if row["registro_mac"] is None:
+            # C8: `null` (legado) só para o que o selo autenticado da migração lista; novo sem MAC não confere.
+            confere_mac = None if legado_autenticado(self.conn, row["id"]) else False
+        else:
             doc_mac = {
                 "id": row["id"],
                 "ferramenta": row["ferramenta"],
@@ -3583,7 +3642,7 @@ _CARAS = frozenset({
     "buscar_normas_cvm", "buscar_normas_bcb",
 })
 _CONTADAS = _CARAS | frozenset({
-    "obter_evidencia", "listar_fontes", "doctor", "sincronizar", "bench", "snapshot_export",
+    "obter_evidencia", "obter_registro", "listar_fontes", "doctor", "sincronizar", "bench", "snapshot_export",
     "snapshot_info", "indexar_obra", "reparar_anos", "reprocessar_capturas",
     "restaurar_identidades_validadas", "reparar_identidades",
 })
