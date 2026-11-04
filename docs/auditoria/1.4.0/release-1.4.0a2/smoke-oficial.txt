@@ -1,0 +1,41 @@
+﻿usage: fv runs [-h] {purgar} ...
+
+positional arguments:
+  {purgar}
+    purgar    reconstruir o banco sem execu├º├Áes anteriores a DATA
+
+options:
+  -h, --help  show this help message and exit
+== verifica
+Verifica├º├úo
+-----------
+identity:
+  status: verified
+  reason_code: OBRA_E_CAMINHO_OK
+  evidence:
+    - [0]
+      capture_id: 01M5678Q6V7RBRYKGZ9HXDZ04K
+      sha256: 06e8f3a3e638d5618cfdaf454b792268352f06f60e9ec6517700f73deb27964b
+      url: https://www.planalto.gov.br/ccivil_03/leis/l6404compilada.htm
+      fetched_at: 2026-10-18T00:40:56.561339+00:00
+      path: art116
+      span: None
+      trecho_oficial: None
+      proveniencia:
+        interpretacao: legado_padrao_da_fonte_conferido
+      captured_at: 2026-10-18T00:40:56.561339+00:00
+      acervo_ate: 2026-10-18
+      source_kind: lei
+      natureza_texto: consolidacao_oficial
+      procedencia: nao_identificado
+      esfera: federal
+text:
+  status: not_assessed
+  reason_code: SEM_TRECHO
+exit=-1
+== verifica data historica
+
+usage: fv verifica [-h] [--trecho TRECHO] [--data DATA] [--modo MODO]
+  --data DATA
+
+

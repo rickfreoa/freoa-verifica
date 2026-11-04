@@ -1,0 +1,17 @@
+$ErrorActionPreference = "Continue"
+$env:PYTHONIOENCODING = "utf-8"; [Console]::OutputEncoding = [Text.Encoding]::UTF8; $OutputEncoding = [Text.Encoding]::UTF8
+$R = "<rel>"; $CI = "$R\ci"; $L = "$R\bytes-etapas.txt"
+$repo = "rickfreoa/freoa-verifica"
+function Etapa($n, [scriptblock]$b) { "== $n" | Out-File -Append -Encoding utf8 $L; & $b *>&1 | Out-File -Append -Encoding utf8 $L; "-> exit=$LASTEXITCODE" | Out-File -Append -Encoding utf8 $L }
+Remove-Item $L -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force $CI | Out-Null
+Etapa "download rascunho" { gh release download v1.4.0a2 --repo $repo -D $CI --clobber; Get-ChildItem $CI | Select Name, Length | Format-Table -AutoSize | Out-String }
+Etapa "SHA256SUMS" { Push-Location $CI; $ok = $true; foreach ($ln in Get-Content SHA256SUMS) { $h, $f = $ln -split '\s+\*?', 2; $f = $f.Trim(); $a = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower(); "$f $($a -eq $h.ToLower())"; if ($a -ne $h.ToLower()) { $ok = $false } }; Pop-Location; if (-not $ok) { cmd /c exit 1 } else { cmd /c exit 0 } }
+Etapa "attestation" { $fail = 0; foreach ($f in Get-ChildItem $CI -Include *.whl, *.tar.gz -Recurse | Where-Object { $_.Name -notlike "*snapshot*" }) { "-- $($f.Name)"; gh attestation verify $f.FullName --repo $repo --format json | ConvertFrom-Json | % { $_.verificationResult.statement.subject | % { "subject $($_.name) $($_.digest.sha256)" }; "workflow $($_.verificationResult.signature.certificate.buildSignerURI)" }; if ($LASTEXITCODE) { $fail++ } }; cmd /c exit $fail }
+Etapa "conteudo wheel" { & <repo>\.venv\Scripts\python.exe <supervisor>\conferir-wheel-a2.py $CI }
+Etapa "venv limpo" { if (Test-Path "$R\venv-ci") { Remove-Item -Recurse -Force "$R\venv-ci" }; py -3.14 -m venv "$R\venv-ci"; & "$R\venv-ci\Scripts\python.exe" -m pip install -q -r <repo>\requirements\ci.lock; $w = (Get-ChildItem $CI -Filter *.whl)[0].FullName; & "$R\venv-ci\Scripts\python.exe" -m pip install -q --no-deps $w; & "$R\venv-ci\Scripts\fv.exe" --version }
+$H = "$R\home-ci"
+Etapa "install vinculado" { if (Test-Path $H) { Remove-Item -Recurse -Force $H }; New-Item -ItemType Directory $H | Out-Null; & "$R\venv-ci\Scripts\fv.exe" --home $H snapshot install --arquivo "$R\snapshot\freoa-verifica-snapshot-20261104-1.4.0a2.tar.gz" }
+Etapa "S4 pos-instalacao" { & "$R\venv-ci\Scripts\fv.exe" acervo conferir --home $H --manifesto "$R\manifesto-1.4.0a2.json" --pos-instalacao --estrito }
+Etapa "doctor" { & "$R\venv-ci\Scripts\fv.exe" --home $H doctor --offline }
+"FIM" | Out-File -Append -Encoding utf8 $L

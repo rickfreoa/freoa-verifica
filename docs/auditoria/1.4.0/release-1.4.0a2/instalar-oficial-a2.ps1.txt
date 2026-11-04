@@ -1,0 +1,16 @@
+$L = "<rel>\instalacao-oficial.txt"
+$env:PYTHONIOENCODING = "utf-8"
+Remove-Item $L -ErrorAction SilentlyContinue
+$tmp = "<rel>\instalador"; New-Item -ItemType Directory -Force $tmp | Out-Null
+Invoke-WebRequest "https://raw.githubusercontent.com/rickfreoa/freoa-verifica/v1.4.0a2/scripts/instalar-freoa-verifica.ps1" -OutFile "$tmp\instalar-freoa-verifica.ps1" -UseBasicParsing
+"sha256 instalador: $((Get-FileHash "$tmp\instalar-freoa-verifica.ps1").Hash)" | Out-File -Encoding utf8 $L
+"sha256 instalador no repo: $((Get-FileHash <repo>\scripts\instalar-freoa-verifica.ps1).Hash)" | Out-File -Append -Encoding utf8 $L
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$tmp\instalar-freoa-verifica.ps1" *>&1 | Out-File -Append -Encoding utf8 $L
+"-> instalador exit=$LASTEXITCODE" | Out-File -Append -Encoding utf8 $L
+$fv = "$env:USERPROFILE\freoa-verifica\.venv\Scripts\fv.exe"
+"== versao" | Out-File -Append -Encoding utf8 $L; & $fv --version *>&1 | Out-File -Append -Encoding utf8 $L
+"== instalacao.json" | Out-File -Append -Encoding utf8 $L; Get-Content "$env:LOCALAPPDATA\freoa-verifica\instalacao.json" | Out-File -Append -Encoding utf8 $L
+"== doctor" | Out-File -Append -Encoding utf8 $L; & $fv doctor --offline *>&1 | Out-File -Append -Encoding utf8 $L; "-> exit=$LASTEXITCODE" | Out-File -Append -Encoding utf8 $L
+"== smoke" | Out-File -Append -Encoding utf8 $L
+& "$env:USERPROFILE\freoa-verifica\.venv\Scripts\python.exe" -c "from freoa_verifica.service import Verifica; v=Verifica(); r=v.verificar_dispositivo(norma='Lei 6.404/1976', dispositivo='art. 116') if hasattr(v,'verificar_dispositivo') else None; print(type(r).__name__, (r or {}).get('status') if isinstance(r,dict) else r)" *>&1 | Out-File -Append -Encoding utf8 $L
+"FIM" | Out-File -Append -Encoding utf8 $L
