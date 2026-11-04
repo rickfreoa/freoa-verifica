@@ -1,6 +1,6 @@
 # Histórico de versões
 
-## 1.4.0a2 (não publicada)
+## 1.4.0a2 - 04/11/2026
 
 Pré-release do incremento IL.0 (emenda IL do plano 1.4.0 e decisão 0075). Correção da fronteira e estado temporal com data referida a D, tipagem de evidência em eixos, nova ferramenta `obter_registro` com conferência por HMAC, novos metadados em `listar_fontes` e contrato formal do consumidor FREOA.
 
