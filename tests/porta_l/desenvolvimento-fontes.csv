@@ -1,0 +1,17 @@
+url,sha256,capturado_em,status,content-type,tamanho
+https://legis.senado.leg.br/dadosabertos/legislacao/548280,ed4a5ac90a2f66e581579f04e0dc71570d61d0916281ba1f5d919ea694958340,2026-11-03T17:28:28Z,200,application/xml,286795
+https://www.normas.leg.br/?urn=urn:lex:br:federal:lei:1976-12-15;6404,ac27de17b1214543569122323a9c976f53d4b297692d6781b4aaf1b3c56cd55a,2026-11-03T17:28:26Z,200,text/html,66002
+https://www2.camara.leg.br/legin/fed/decret/2009/decreto-6871-4-junho-2009-588673-normaatualizada-pe.pdf,e9939bf024999f99bf350758694f46b5fc624760eac2b4147b18e48ccfd433b6,2026-11-03T17:27:43Z,200,application/pdf,200095
+https://www2.camara.leg.br/legin/fed/decret/2018/decreto-9580-22-novembro-2018-787360-normaatualizada-pe.pdf,539dd7111c8e8fd6f2d1cabe64c689c9bd5fff2f2b83d26cb4bc7769d8c68708,2026-11-03T17:27:46Z,200,application/pdf,2027644
+https://www2.camara.leg.br/legin/fed/decret/2021/decreto-10829-5-outubro-2021-791815-anexo-pe.pdf,8f477e1304798ab3fd42cabb9b083826a93349be6dcb6cabedc7c53b5eaaa077,2026-11-03T17:27:36Z,200,application/pdf,346268
+https://www2.camara.leg.br/legin/fed/lei/1960-1969/lei-5172-25-outubro-1966-358971-normaatualizada-pl.pdf,55ca0fb244809f253ed05d81198bbda9b5cbac0625c2beacd12e8d4eac38c7e6,2026-11-03T17:27:30Z,200,application/pdf,324747
+https://www2.camara.leg.br/legin/fed/lei/1960-1969/lei-5172-25-outubro-1966-358971-publicacaooriginal-1-pl.html,a4923227c0c09ce830002e4f3a74d18f90d7c90710d667442c3bac3917506b3f,2026-11-03T17:27:34Z,200,text/html,187756
+https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.pdf,db7245b126336d45de1d2a46a685320adbe8a271124002cdb4981456d0c0548c,2026-11-03T17:28:15Z,200,application/pdf,680154
+https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html,7dc335d77b1b30f7165c27cb62ce4525bb464b68bf4d03bf5387d7d264156822,2026-11-03T17:28:21Z,200,text/html,365194
+https://www2.camara.leg.br/legin/fed/lei/2001/lei-10303-31-outubro-2001-414210-publicacaooriginal-1-pl.html,396d43186ded03a33fee8ca05874e59d073723f6bdb296b3c34a7494e15c85e9,2026-11-03T17:28:07Z,200,text/html,105981
+https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-normaatualizada-pl.pdf,0e99087585779653b794a450bd6c6a2e136c9a242e3e3c15e0408d0ae4570640,2026-11-03T17:27:03Z,200,application/pdf,1031734
+https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html,58eb633237ae483da55f8bedb8c541cc1270ddde121084aee6706c4975be9003,2026-11-03T17:27:17Z,200,text/html,793397
+https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-normaatualizada-pl.pdf,2c8b4c1c87cc319150cb14a69c7d4566c9f8d810a4ca5b7ab062f9f0951031df,2026-11-03T17:27:20Z,200,application/pdf,859007
+https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html,a231acb388e65b023db0536b60d134e146890f1f642413d1d4e8616317a3c6b0,2026-11-03T23:21:02Z,200,text/html,117838
+https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html,4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3,2026-11-03T23:21:02Z,200,text/html,103071
+https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-publicacaooriginal-157831-pe.html,cf1d55ac8adfc5b25b9f6a749d4454150013839c73bd4e774ed065ef15f988b4,2026-11-03T17:28:23Z,200,text/html,79060
