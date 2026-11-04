@@ -1,13 +1,17 @@
 """IL.1: matriz, validador e conjunto de desenvolvimento da Porta L congelados por hash (il1-congelamento.md).
 
-O validador e seus testes ficam em scripts/porta_l (dependem de pypdf, fora do lock da CI); aqui se confere só
-que os bytes congelados não mudaram e a forma mínima do conjunto de desenvolvimento.
+O validador e seus testes ficam em scripts/porta_l, fora de testpaths; aqui se confere só que os bytes congelados não
+mudaram e a forma mínima do conjunto de desenvolvimento. Depende do checkout (docs e scripts): marcador repositorio.
 """
 
 import hashlib
 import json
 from collections import Counter
 from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.repositorio
 
 RAIZ = Path(__file__).resolve().parents[1]
 PL = RAIZ / "tests" / "porta_l"
