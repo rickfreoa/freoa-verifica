@@ -150,7 +150,13 @@ def hmac_entrada(conn: sqlite3.Connection, campo: str, valor: str, *, leitura: b
     """
     home = _home_da_conexao(conn)
     if not home:
-        chave = _chaves_efemeras.setdefault(str(id(conn)), secrets.token_bytes(32))
+        chave = getattr(conn, "_chave_fv", None)  # banco sem home: a chave vive na conexão gerenciada
+        if chave is None:
+            chave = secrets.token_bytes(32)
+            try:
+                setattr(conn, "_chave_fv", chave)
+            except AttributeError:  # conexão não gerenciada (sqlite3 puro): chave por identidade, como antes
+                chave = _chaves_efemeras.setdefault(str(id(conn)), chave)
     else:
         chave = ler_chave_do_home(home) if leitura else chave_do_home(home, conn)
     mac = hmac.new(chave, campo.encode("utf-8") + b"\0" + valor.encode("utf-8"), hashlib.sha256)
@@ -291,7 +297,7 @@ def purgar(home: Path, antes: str, apagar_original: bool = False) -> dict[str, A
 
 META_LEGADO = "registro_legado_ids"
 META_LEGADO_MAC = "registro_legado_mac"
-_ancoras_efemeras: dict[int, tuple[sqlite3.Connection, str, str]] = {}  # banco sem home: a âncora vive no processo
+_ATRIBUTO_ANCORA = "_ancora_fv"  # banco sem home: a âncora vive na própria conexão gerenciada (store.db.ConexaoFV)
 
 
 def _canon_legado(ids: list[str]) -> str:
@@ -303,8 +309,7 @@ def _ancora_ler(conn: sqlite3.Connection) -> tuple[str, str] | None:
     na memória do processo. Quem altera o banco sem a chave não a apaga nem a recria. `None`: sem âncora."""
     home = _home_da_conexao(conn)
     if home is None:
-        achada = _ancoras_efemeras.get(id(conn))
-        return (achada[1], achada[2]) if achada and achada[0] is conn else None
+        return getattr(conn, _ATRIBUTO_ANCORA, None)
     try:
         _, resto = _separar_chave((home / ARQUIVO_CHAVE).read_bytes(), home / ARQUIVO_CHAVE)
         if not resto:
@@ -317,11 +322,15 @@ def _ancora_ler(conn: sqlite3.Connection) -> tuple[str, str] | None:
         return ("", "")  # trailer presente e ilegível: existe âncora, e ela não autentica nada
 
 
-def _ancora_gravar(conn: sqlite3.Connection, canon: str, mac: str) -> None:
+def _ancora_gravar(conn: sqlite3.Connection, canon: str, mac: str) -> bool:
+    """Grava a âncora; `False` se não há onde (conexão sem home que não é gerenciada): nada passa por legado."""
     home = _home_da_conexao(conn)
     if home is None:
-        _ancoras_efemeras[id(conn)] = (conn, canon, mac)
-        return
+        try:
+            setattr(conn, _ATRIBUTO_ANCORA, (canon, mac))  # morre com a conexão: sem registro global, sem identidade reaproveitada
+        except AttributeError:
+            return False
+        return True
     caminho = home / ARQUIVO_CHAVE
     chave, _ = _separar_chave(caminho.read_bytes(), caminho)
     trailer = _TAG_ANCORA + json.dumps({"ids": canon, "mac": mac}, ensure_ascii=False).encode("utf-8")
@@ -336,6 +345,7 @@ def _ancora_gravar(conn: sqlite3.Connection, canon: str, mac: str) -> None:
     finally:
         tmp.unlink(missing_ok=True)
     _cache_chaves.pop(str(caminho), None)
+    return True
 
 
 def _fronteira_estabelecida(conn: sqlite3.Connection) -> bool:
@@ -355,7 +365,8 @@ def selar_legado(conn: sqlite3.Connection) -> bool:
     ids = [r[0] for r in conn.execute("SELECT id FROM run WHERE registro_mac IS NULL")]
     canon = _canon_legado(ids)
     mac = hmac_entrada(conn, "registro_legado", canon)
-    _ancora_gravar(conn, canon, mac)
+    if not _ancora_gravar(conn, canon, mac):
+        return False
     conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_LEGADO, canon))  # espelho: indício
     conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_LEGADO_MAC, mac))
     return True
@@ -372,6 +383,8 @@ def legado_autenticado(conn: sqlite3.Connection, run_id: str) -> bool:
     try:
         esperado = hmac_entrada(conn, "registro_legado", canon, leitura=True)
         ids = json.loads(canon)
-    except (RuntimeError, ValueError, OSError):
+        if not (isinstance(ids, list) and all(isinstance(i, str) for i in ids) and isinstance(mac, str)):
+            return False
+        return hmac.compare_digest(esperado.encode("utf-8"), mac.encode("utf-8")) and run_id in set(ids)
+    except (RuntimeError, ValueError, TypeError, OSError):
         return False
-    return hmac.compare_digest(esperado, mac) and isinstance(ids, list) and run_id in set(ids)

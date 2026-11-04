@@ -8,7 +8,10 @@ Pré-release do incremento IL.0 (emenda IL do plano 1.4.0 e decisão 0075). Corr
 
 - Campos aditivos (`fundamento_temporal`, `correspondencia_textual`) normalizados no último ponto antes da emissão em todo estado de `verificar_citacao` e `obter_dispositivo`, inclusive `formato_invalido`, `requer_conferencia`, `ambigua`, `indisponivel`, `inexistente`, `unknown` e a recusa pelos derivados incompatíveis; `correspondencia_textual` é nula depois de qualquer rebaixamento da identidade.
 - Evidência da situação cadastral pelo construtor comum, com o recibo da captura; `natureza_texto` deduzida do documento, não da autoridade.
-- Âncora do registro legado fora do banco (arquivo da chave do home); reaplicar a migração 019 não a recompõe. `obter_registro` devolve integridade inválida, sem exceção, para campo persistido malformado.
+- Âncora do registro legado fora do banco (arquivo da chave do home; na conexão gerenciada em banco sem home, sem registro global); reaplicar a migração não a recompõe. `obter_registro` devolve integridade inválida, sem exceção, para qualquer coluna lida com tipo SQLite inesperado (BLOB, número), texto que não é UTF-8, JSON inválido ou âncora malformada.
+- IL.0-R, rodada 3: as migrações 17 a 19 do ramo (nunca incorporadas nem publicadas) viram a migração única 17 (`run`, `capture.procedencia` e selo do legado). Consolidação deliberada: nenhum banco real tem estado intermediário; o ponto de partida é o banco da `main` (versão 16), cujos registros viram legado autenticado.
+- A recusa por derivados incompatíveis em `verificar_citacao` e `verificar_texto` grava recibo e devolve `run_id` em serviço gravável.
+- Contrato do consumidor com variantes por discriminante: a verificação exige as quatro dimensões e seus `status`/`reason_code`; a recusa e a recuperação com integridade inválida têm forma própria.
 - Decisões, súmulas e processos dentro de `verificar_texto` e a recusa pelo gate de derivados têm recibo ou declaração de não gravação. Motivo `sem_fundamento_do_periodo` também em `verify.verificar` para revogação sem data.
 - Contrato do consumidor com todas as variantes legítimas da fachada.
 
@@ -49,9 +52,9 @@ Pré-release do incremento IL.0 (emenda IL do plano 1.4.0 e decisão 0075). Corr
 - C3: a restrição de inclusão e de `redacao_dada` futuras vale só para consulta histórica; a corrente tem a semântica de `430e654`.
 - C4: `fundamento_temporal` e `correspondencia_textual` em todo ramo de `verificar_citacao` e `obter_dispositivo`; a correspondência é `null` sempre que a identidade final não for `verified`.
 - C5: em consulta histórica sem fundamento, `text.reason_code` é `sem_fundamento_do_periodo` também nos ramos de revogação.
-- C6: toda evidência capturada (normas e decisões) sai de um construtor único com os seis eixos. `procedencia` é persistida por captura (migração 18, coluna `capture.procedencia`): `captura_direta`, `snapshot` (instalação de snapshot, inclusive em acervo misto) ou `sessao_assistida`; captura anterior sem marca é `nao_identificado`.
+- C6: toda evidência capturada (normas e decisões) sai de um construtor único com os seis eixos. `procedencia` é persistida por captura (migração 17, coluna `capture.procedencia`): `captura_direta`, `snapshot` (instalação de snapshot, inclusive em acervo misto) ou `sessao_assistida`; captura anterior sem marca é `nao_identificado`.
 - C7: `acervo_ate` calculado na emissão, sem cache.
-- C8: o registro legado é o que o selo autenticado por HMAC do home lista (migração 19 e criação da chave); registro novo sem MAC dá `integridade.confere: false`.
+- C8: o registro legado é o que o selo autenticado por HMAC do home lista (migração 17 e criação da chave); registro novo sem MAC dá `integridade.confere: false`.
 - C9: `obter_registro` não escreve no banco (leitura da chave separada da criação); funciona com `PRAGMA query_only=ON`.
 - C10: `obter_registro` entre as operações contadas.
 - C11: decisões, súmulas, processos e as saídas antecipadas com conclusão gravam recibo e devolvem `run_id`; em modo somente leitura a resposta traz `registro: {gravado: false, motivo: "somente_leitura"}`.

@@ -917,7 +917,8 @@ def _persist(
     return result
 
 
-def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any]) -> str:
+def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any], *,
+                        ferramenta: str = "verificar_citacao") -> str:
     """Grava o recibo (C4): chamado só depois da finalização, com a conclusão devolvida.
 
     Política `sem_conteudo` (C5): só hashes, política e dimensões; sem citação, trecho nem evidência.
@@ -949,7 +950,6 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
         result_json = json.dumps(resultado, ensure_ascii=False, sort_keys=True)
     run_id = new_ulid()
     created_at = datetime.now(timezone.utc).isoformat()
-    ferramenta = "verificar_citacao"
 
     # Evidências únicas (todas as dimensões, na ordem)
     # Não criar compromisso para evidência sem capture_id, sha256 e url (decisão 0075 / parecer Codex r1)

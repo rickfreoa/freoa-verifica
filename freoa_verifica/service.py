@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import inspect
 import json
 import logging
@@ -3258,43 +3259,13 @@ class Verifica:
             # C9: leitura da chave sem escrita; chave ilegível ou ausente não confere (nunca levanta).
             try:
                 return _hmac(conn, campo, valor, leitura=leitura)
-            except RuntimeError:
+            except (RuntimeError, ValueError, TypeError):
                 return None
 
-        if not run_id or not isinstance(run_id, str):
-            return {"status": "inexistente", "run_id": run_id}
-
-        row = self.conn.execute("SELECT * FROM run WHERE id=?", (run_id,)).fetchone()
-        if row is None:
-            return {"status": "inexistente", "run_id": run_id}
-
-        # Estrutura de TODOS os campos persistidos antes de qualquer acesso: JSON inválido ou tipo inadequado vira
-        # resposta controlada de integridade inválida, e o que não é autêntico não monta a resposta.
-        campos = _campos_do_registro(row)
-        confere_mac: bool | None = None
-        if row["registro_mac"] is None:
-            # C8: `null` (legado) só para o que a âncora autenticada lista; novo sem MAC não confere.
-            confere_mac = None if legado_autenticado(self.conn, row["id"]) else False
-        else:
-            doc_mac = {
-                "id": row["id"],
-                "ferramenta": row["ferramenta"],
-                "created_at": row["created_at"],
-                "request_hash": row["request_hash"],
-                "request_json": row["request_json"],
-                "result_json": row["result_json"],
-                "evidencias_compromissos": row["evidencias_compromissos"],
-                "fundamento_compromisso": row["fundamento_compromisso"],
-                "evidencias_claro": row["evidencias_claro"],
-                "fundamento_claro": row["fundamento_claro"],
-            }
-            recalculado = hmac_entrada(self.conn, "registro", json.dumps(doc_mac, ensure_ascii=False, sort_keys=True))
-            confere_mac = bool(row["registro_mac"] == recalculado)
-
-        if campos is None or confere_mac is False:
+        def invalido(run, motivo):
             return {
                 "status": "encontrada",
-                "run_id": row["id"],
+                "run_id": run,
                 "ferramenta": None,
                 "criado_em": None,
                 "politica": None,
@@ -3302,14 +3273,42 @@ class Verifica:
                 "estado": None,
                 "evidencias": None,
                 "fundamento_temporal": None,
-                "integridade": {
-                    "algoritmo": "hmac-sha256",
-                    "confere": False,
-                    "motivo": "ESTRUTURA_INVALIDA" if campos is None else "MAC_NAO_CONFERE",
-                },
+                "integridade": {"algoritmo": "hmac-sha256", "confere": False, "motivo": motivo},
                 "confere_evidencias": None,
                 "confere_fundamento": None,
             }
+
+        if not run_id or not isinstance(run_id, str):
+            return {"status": "inexistente", "run_id": run_id}
+
+        try:
+            row = self.conn.execute("SELECT * FROM run WHERE id=?", (run_id,)).fetchone()
+        except sqlite3.OperationalError as exc:
+            if "decode" not in str(exc).lower():  # texto que não é UTF-8 na linha: adulteração, não falha de acesso
+                raise
+            existe = self.conn.execute("SELECT 1 FROM run WHERE id=?", (run_id,)).fetchone()
+            return invalido(run_id, "ESTRUTURA_INVALIDA") if existe else {"status": "inexistente", "run_id": run_id}
+        if row is None:
+            return {"status": "inexistente", "run_id": run_id}
+
+        # Tipo SQLite e estrutura de TODAS as colunas lidas, antes de qualquer serialização ou acesso: o que não é
+        # texto (ou nulo) ou é JSON inválido vira resposta controlada de integridade inválida, sem montar o documento do
+        # MAC a partir de conteúdo não confiável.
+        campos = _campos_do_registro(row)
+        if campos is None:
+            return invalido(run_id, "ESTRUTURA_INVALIDA")
+        confere_mac: bool | None = None
+        if row["registro_mac"] is None:
+            # C8: `null` (legado) só para o que a âncora autenticada lista; novo sem MAC não confere.
+            confere_mac = None if legado_autenticado(self.conn, row["id"]) else False
+        else:
+            doc_mac = {c: row[c] for c in _COLUNAS_DO_MAC}
+            recalculado = hmac_entrada(self.conn, "registro", json.dumps(doc_mac, ensure_ascii=False, sort_keys=True))
+            confere_mac = bool(recalculado is not None and hmac.compare_digest(
+                row["registro_mac"].encode("utf-8"), recalculado.encode("utf-8")))
+
+        if confere_mac is False:
+            return invalido(row["id"], "MAC_NAO_CONFERE")
         res_json, req_json = campos["result"], campos["request"]
 
         if row["evidencias_claro"] is not None:
@@ -3702,8 +3701,21 @@ def _json_tipado(valor: Any, tipo: type | tuple, vazio: Any) -> tuple[bool, Any]
     return (True, lido) if isinstance(lido, tipo) else (False, None)
 
 
+_COLUNAS_DO_MAC = ("id", "ferramenta", "created_at", "request_hash", "request_json", "result_json",
+                   "evidencias_compromissos", "fundamento_compromisso", "evidencias_claro", "fundamento_claro")
+_COLUNAS_DO_REGISTRO = _COLUNAS_DO_MAC + ("registro_mac",)
+_OBRIGATORIAS_DO_REGISTRO = ("id", "created_at", "request_hash", "request_json")
+
+
 def _campos_do_registro(row) -> dict[str, Any] | None:
-    """Estrutura validada das colunas JSON de `run`; `None` se qualquer uma é inválida ou malformada."""
+    """Estrutura validada das colunas de `run` lidas pela conferência; `None` se qualquer uma tem tipo SQLite
+    inesperado (BLOB, inteiro, real), falta, ou carrega JSON inválido ou malformado."""
+    for coluna in _COLUNAS_DO_REGISTRO:
+        valor = row[coluna]
+        if valor is None and coluna in _OBRIGATORIAS_DO_REGISTRO:
+            return None
+        if valor is not None and not isinstance(valor, str):
+            return None
     ok_res, res = _json_tipado(row["result_json"], dict, {})
     ok_req, req = _json_tipado(row["request_json"], dict, {})
     ok_ev, ev = _json_tipado(row["evidencias_claro"], list, [])
@@ -3723,17 +3735,33 @@ _COM_ADITIVOS = frozenset({"obter_dispositivo", "verificar_citacao"})
 _COM_RECIBO = frozenset({"verificar_citacao", "verificar_texto"})
 
 
-def _final_da_fachada(nome: str, out: Any, *, recusa: bool = False) -> Any:
+def _final_da_fachada(nome: str, out: Any) -> Any:
     """Último ponto antes da emissão de toda operação da fachada (Python, MCP e REST): campos aditivos de C4 em todo
     estado de `obter_dispositivo` e `verificar_citacao` (inclusive `formato_invalido`, `indisponivel`, `unknown` e a
-    recusa pelos derivados) e, na recusa, a declaração de que nada foi gravado (C11)."""
-    if not isinstance(out, dict):
-        return out
-    if nome in _COM_ADITIVOS:
+    recusa pelos derivados)."""
+    if isinstance(out, dict) and nome in _COM_ADITIVOS:
         _normalizar_aditivos(out)
-    if recusa and nome in _COM_RECIBO:
-        out.setdefault("run_id", None)
-        out.setdefault("registro", {"gravado": False, "motivo": "acervo_desatualizado"})
+    return out
+
+
+def _recibo_da_recusa(self, nome: str, out: dict[str, Any], entrada: dict[str, Any]) -> dict[str, Any]:
+    """C11: a recusa por derivados incompatíveis é conclusão de verificação (`indisponivel/ACERVO_DESATUALIZADO`).
+    Em serviço gravável grava o recibo, com a política de minimização vigente, e devolve o `run_id`; em somente leitura
+    declara o modo, como o restante da finalização. Independe da compatibilidade dos derivados (só toca `run`)."""
+    if nome not in _COM_RECIBO or not isinstance(out, dict):
+        return out
+    if self._read_only:
+        out.update(run_id=None, registro={"gravado": False, "motivo": "somente_leitura"})
+        return out
+    indisponivel = {"status": "unavailable", "reason_code": out.get("reason_code")}
+    recibo = {**{k: v for k, v in out.items() if k != "acervo_incompleto"},
+              "identity": dict(indisponivel), "text": {"status": "not_assessed", "reason_code": out.get("reason_code")},
+              "temporal": {"status": "unknown", "reason_code": out.get("reason_code")},
+              "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED"}}
+    texto = nome == "verificar_texto"
+    out["run_id"] = persistir_resultado(
+        self.conn, entrada["texto" if texto else "citacao"], None if texto else entrada.get("trecho"),
+        entrada.get("data"), "literal" if texto else entrada.get("modo", "literal"), recibo, ferramenta=nome)
     return out
 
 
@@ -3757,7 +3785,8 @@ def _guardar(fn):
             # tem identidade efetiva e bloqueio por host; aninhadas compartilham a da chamada externa.
             with self._operacao(caro), da_chamada():
                 if fn.__name__ in _DEPENDENTES and not _derivados.compativel(self.conn):
-                    return _final_da_fachada(fn.__name__, _derivados.indisponivel(self.acervo_status()), recusa=True)
+                    recusa = _derivados.indisponivel(self.acervo_status())
+                    return _final_da_fachada(fn.__name__, _recibo_da_recusa(self, fn.__name__, recusa, entrada))
                 out = _final_da_fachada(fn.__name__, fn(self, *args, **kwargs))
                 if externa and self.exigir_acervo and isinstance(out, dict):
                     aviso = self.acervo_status()
