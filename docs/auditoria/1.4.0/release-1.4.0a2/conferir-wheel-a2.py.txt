@@ -1,0 +1,21 @@
+import glob, json, sys, zipfile
+ci = sys.argv[1]
+whls = glob.glob(ci + r"\*.whl")
+assert len(whls) == 1, whls
+z = zipfile.ZipFile(whls[0])
+nomes = z.namelist()
+testes = [n for n in nomes if n.startswith("tests/") or "/tests/" in n.split("freoa_verifica/")[0]]
+print("wheel:", whls[0].split("\\")[-1], "arquivos:", len(nomes), "tests/:", len(testes))
+cat = json.loads(z.read("freoa_verifica/data/snapshots-oficiais.json"))
+itens = cat if isinstance(cat, list) else cat.get("snapshots", cat)
+alvo = [i for i in itens if isinstance(i, dict) and i.get("versao_pacote_min") == "1.4.0a2"]
+print("entrada a2:", alvo)
+ok = len(testes) == 0 and len(alvo) == 1 and alvo[0]["sha256"] == "8e2ad821ae78ace4b61a4a0957ac73ffb4ce4ba48408d7bd05efbec5f0bfff9e"
+meta = [n for n in nomes if n.endswith("METADATA")]
+v = [l for l in z.read(meta[0]).decode().splitlines() if l.startswith("Version:")]
+print(v)
+ok = ok and v == ["Version: 1.4.0a2"]
+sdists = glob.glob(ci + r"\*.tar.gz")
+print("sdists:", [s.split("\\")[-1] for s in sdists])
+print("OK" if ok else "FALHA")
+sys.exit(0 if ok else 1)
