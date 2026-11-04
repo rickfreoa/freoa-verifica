@@ -32,6 +32,7 @@ from typing import Literal, Mapping
 
 _MIMES = frozenset({"text/html", "application/json", "text/plain"})
 _MIMES_PDF = _MIMES | {"application/pdf"}
+_MIMES_XML = _MIMES | {"application/xml", "text/xml"}
 
 
 SEGMENTOS_PROIBIDOS = ("login", "admin", "cadastro", "auth", "conta", "usuario")
@@ -92,6 +93,8 @@ _ESAJ = "e-SAJ, consulta de jurisprudência de 2º grau (cjsg)"
 _B = "confirmação nível B: página do próprio sistema, indexada por busca, não lida; sonda bloqueada até confirmação "
 _B += "documental (página oficial lida ou confirmação do titular); "
 _S0B = "endpoint de resultado não documentado em página oficial: fora da S0, pendência S0b; "
+_IL2B = "caminho não documentado em página oficial lida (nível B: só busca na web ou projeto de terceiros) não entra no catálogo; "
+_IL2B += "pendência IL.2-b (documentação oficial lida ou sessão assistida, decisão 0067); "
 
 FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
     _f("tst", "TST: pesquisa de jurisprudência (portal, backend REST e consulta de documento)",
@@ -186,6 +189,58 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
     _f("tjpr", "TJPR: consulta de jurisprudência", {"portal.tjpr.jus.br": ("/jurisprudencia/",)},
        "portal.tjpr.jus.br=https://www.tjpr.jus.br/jurisprudencia (link https://portal.tjpr.jus.br/jurisprudencia/)",
        nota="nível A; " + _S0B.strip()),
+    # --- IL.2 (emenda IL, seção 5): rotas de legislação. Leitura das páginas oficiais pela ferramenta do agente em 04/11/2026
+    # (não é sonda); nenhuma rota foi pedida pelo instrumento.
+    _f("senado_legislacao", "Senado Federal: Dados Abertos Legislativos, serviço de legislação (identificação, URN, vide)",
+       {"legis.senado.leg.br": ("/dadosabertos/legislacao/urn.json", "/dadosabertos/legislacao/lista.json",
+                                "/dadosabertos/legislacao/LEI/6404/1976.json")},
+       "legis.senado.leg.br=https://legis.senado.leg.br/dadosabertos/v3/api-docs (especificação OpenAPI do próprio serviço, "
+       "lida; catálogo em https://www12.senado.leg.br/dados-abertos/conjuntos?portal=Legislativo&grupo=legislacao)",
+       consultas={"legis.senado.leg.br": ("/dadosabertos/legislacao/urn.json", "/dadosabertos/legislacao/lista.json")},
+       nota="nível A (caminhos da especificação OpenAPI oficial: /legislacao/urn?urn=, /legislacao/lista com tipo, numero e "
+            "ano, /legislacao/{tipo}/{numdata}/{anoseq}; formato por extensão `.json`, também documentada); os valores "
+            "(URN LEX, sigla LEI, norma) são inferência: linha T. A especificação não descreve os campos da resposta nem "
+            "diz se há atos alteradores além dos `vide`: só a sonda mostra. Sem POST, sem autenticação. A especificação "
+            "avisa que mais de 10 requisições por segundo recebem 429 e que 503 ocorre em alta demanda: uma requisição por "
+            "comando. Termos: a página de dados abertos diz só 'licença que permita sua livre utilização'; a Política de "
+            "uso do portal do Senado foi apenas citada, não lida."),
+    _f("lexml", "LexML Brasil: busca SRU (URN, identificação)",
+       {"www.lexml.gov.br": ("/busca/SRU",)},
+       "www.lexml.gov.br=https://www12.senado.leg.br/dados-abertos/legislativo/legislacao/acervo-do-portal-lexml "
+       "(página oficial lida: API LexML por URL, padrão SRU, resposta XML; o link 'exemplo de utilização' leva a "
+       "www.lexml.gov.br/busca/SRU)",
+       mimes=_MIMES_XML, consultas={"www.lexml.gov.br": ("/busca/SRU",)},
+       nota="nível A no host e no caminho /busca/SRU (o exemplo oficial usa http: a sonda exige https, a resposta diz se "
+            "o host o serve); o índice `urn` e o valor da consulta são inferência do exemplo oficial (query=urn = "
+            "\"senado.federal pls 2008\"): linha T. A página oficial de documentação do webservice redireciona ao padrão "
+            "SRU da Library of Congress e não traz endereço nem índices do LexML: documentação própria do LexML não "
+            "lida. Resolvedor de URN do LexML: nenhuma página oficial lida, fora do catálogo (" + _IL2B.strip() + ")"),
+    _f("normas_leg", "normas.leg.br: portal de normas da legislação federal (Congresso Nacional)",
+       {"normas.leg.br": ()},
+       "normas.leg.br=https://www12.senado.leg.br/noticias/materias/2025/11/13/senado-ganha-premio-pela-criacao-do-portal-normas-leg.br "
+       "(página oficial lida, com link para https://normas.leg.br/)",
+       nota="nível A só no host: o portal é de página única, a leitura oficial não menciona API, download em massa nem "
+            "texto por dispositivo. A API pública que o br-eli-mcp usa (base /api/public, URN mais sufixo de dispositivo) "
+            "vem só de projeto de terceiros, sem página oficial lida: " + _IL2B.strip() + " só robots.txt."),
+    _f("camara_legislacao", "Câmara dos Deputados: Legislação Informatizada (publicação original e texto publicado)",
+       {"www.camara.leg.br": ("/legislacao",), "www2.camara.leg.br": ()},
+       "www.camara.leg.br=https://www.camara.leg.br/legislacao (página oficial lida); "
+       "www2.camara.leg.br=https://www.camara.leg.br/legislacao (links oficiais para www2.camara.leg.br/atividade-legislativa/legislacao/)",
+       nota="nível A nos dois hosts. O texto publicado de cada norma fica em páginas de slug com identificador numérico "
+            "em www2.camara.leg.br/legin/ (padrão visto em páginas lidas do próprio host); o identificador de uma norma "
+            "só sai da busca do portal, sem rota documentada em página oficial lida: " + _IL2B.strip() + " só "
+            "robots.txt em www2. O portal de Dados Abertos da Câmara (dadosabertos.camara.leg.br) não documenta "
+            "endpoint de legislação: em HOSTS_RECUSADOS. Termos de uso: link 'Termos de uso e política de privacidade' "
+            "no rodapé, não lido; nenhuma licença explícita no conteúdo."),
+    _f("dou", "Imprensa Nacional: Diário Oficial da União (texto publicado)",
+       {"www.in.gov.br": ()},
+       "www.in.gov.br=https://github.com/Imprensa-Nacional (organização oficial; indica https://www.in.gov.br como site)",
+       nota="nível A só no host; nenhuma rota de texto publicado consta de página oficial lida (a página de dados abertos "
+            "do portal não pôde ser lida: " + _IL2B.strip() + " só robots.txt). INLABS (inlabs.in.gov.br) fica fora: "
+            "exige cadastro e login, o que só pode ser sessão assistida (decisão 0067), nunca automatizada; a página "
+            "inicial estava em manutenção e indica a 'Base de Dados de Publicações do DOU' no portal da Imprensa Nacional. "
+            "O README oficial do INLABS diz acesso livre e gratuito desde 01/01/2020, PDF e XML das edições completas, "
+            "só os últimos 4 meses na ferramenta."),
 ]))
 
 # fonte-sonda barrada: id -> motivo. Fora do catálogo; o instrumento a recusa antes da rede.
@@ -206,4 +261,8 @@ HOSTS_RECUSADOS: Mapping[str, str] = MappingProxyType({
     "docs.pdpj.jus.br": "documentação do BNP, não é fonte de decisões",
     "marketplace.pdpj.jus.br": "marketplace de serviços da PDPJ, não é fonte de decisões",
     "juridico.ai": "agregador privado: nunca",
+    "inlabs.in.gov.br": "INLABS exige cadastro e login: só sessão assistida (decisão 0067), nunca automatizada",
+    "dadosabertos.camara.leg.br": "API de Dados Abertos da Câmara: nenhum endpoint de legislação em página oficial lida",
+    "projeto.lexml.gov.br": "portal de documentação e download do projeto LexML, não é fonte de normas",
+    "www12.senado.leg.br": "páginas de documentação dos dados abertos do Senado, não são fonte de normas",
 })

@@ -17,6 +17,7 @@ Roteiro executável pelo supervisor, no notebook com IP brasileiro, depois da au
 
   A regra de erro é mais conservadora que o RFC 9309 (que trata 4xx como ausência de restrições) por decisão do supervisor de 28/10/2026.
 - Consulta neutra: `acordo de acionistas` (ou `sociedade anônima`). Nenhum dado de cliente, número de processo ou nome de parte.
+- Fontes de legislação (IL.2: `senado_legislacao`, `lexml`, `normas_leg`, `camara_legislacao`, `dou`): a consulta neutra é a Lei 6.404/1976 (art. 116 é dispositivo; as rotas de identificação são da norma); a lei com anexos é a Lei Complementar 123/2006 e a MP convertida é a MP 881/2019, convertida na Lei 13.874/2019 (capacidades d e c da matriz da Porta L). Caminho que só consta de busca na web ou de projeto de terceiros é nível B e não entra no catálogo: aparece na tabela como bloqueado, sem comando.
 - Nível de cada linha: "P" = `robots.txt` (RFC 9309). "A" = URL lida em página oficial (ou publicada pelo próprio portal). "B" = host indexado por busca, não lido em página oficial: bloqueado. "T" = caminho lido em página oficial com parâmetros inferidos; a sonda confirma ou refuta, e, se refutar, o resultado vira pendência S0b: não se descobre endpoint por navegador nem fora do instrumento.
 - Bloqueio de host B: as sondas em host de nível B ficam bloqueadas até confirmação documental (página oficial lida ou confirmação do titular). O instrumento as recusa (saída 2, antes da rede, inclusive o `robots.txt`) sem `--confirmado-por-titular`; com a flag, o `.captura.json` registra `confirmado_por_titular: true` e `confirmacao_host: "B"`. Nenhum host de nível B foi confirmado.
 - Saída: `C:/dev/fv14-sondas/<id>/` (fora do repositório; o instrumento recusa destino dentro dele). Cada comando leva `--chave <fonte>_<etapa>` distinta e gera `<chave>.<ext>` (corpo, só se 200) e `<chave>.captura.json` (registro). O instrumento recusa gravar sobre `.captura.json` (ou corpo) já existente: evidência não se sobrescreve, e refazer um comando exige chave nova e motivo registrado (nunca após barreira).
@@ -350,6 +351,112 @@ python scripts/capturar_fixture.py --fonte-sonda tjpr --sonda --saida C:/dev/fv1
 Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
 
 Notas: Formulário e resultado da pesquisa pública não constam de página oficial lida: pendência S0b (se o resultado for POST, é a mesma pendência).
+
+### senado_legislacao: Senado Federal: Dados Abertos Legislativos, serviço de legislação (identificação, URN, vide)
+
+Hosts e rotas do catálogo: `legis.senado.leg.br`: `/dadosabertos/legislacao/urn.json` (consulta), `/dadosabertos/legislacao/lista.json` (consulta), `/dadosabertos/legislacao/LEI/6404/1976.json`. Confirmação: A.
+
+| # | O quê | Nível | Estado |
+|---|---|---|---|
+| 1 | robots.txt | P | liberada |
+| 2 | identificação pela sigla, número e ano: Lei 6.404/1976 | T | liberada |
+| 3 | norma pela URN: Lei 6.404/1976 (consulta neutra; art. 116 é dispositivo, a rota é da norma) | T | liberada |
+| 4 | norma pela URN: Lei Complementar 123/2006 (lei com anexos; capacidade d) | T | liberada |
+| 5 | norma pela URN: Lei 13.874/2019 (conversão da MP 881/2019; capacidade c) | T | liberada |
+| 6 | norma pela URN: MP 881/2019 (a medida provisória convertida) | T | liberada |
+| 7 | pesquisa de normas federais: Lei 6.404/1976 | T | liberada |
+
+```powershell
+python scripts/capturar_fixture.py --fonte-sonda senado_legislacao --sonda --saida C:/dev/fv14-sondas/senado_legislacao --chave senado_legislacao_robots --url "https://legis.senado.leg.br/robots.txt"
+python scripts/capturar_fixture.py --fonte-sonda senado_legislacao --sonda --saida C:/dev/fv14-sondas/senado_legislacao --chave senado_legislacao_ident_lsa --url "https://legis.senado.leg.br/dadosabertos/legislacao/LEI/6404/1976.json"
+python scripts/capturar_fixture.py --fonte-sonda senado_legislacao --sonda --saida C:/dev/fv14-sondas/senado_legislacao --chave senado_legislacao_urn_lsa --url "https://legis.senado.leg.br/dadosabertos/legislacao/urn.json?urn=urn%3Alex%3Abr%3Afederal%3Alei%3A1976-12-15%3B6404"
+python scripts/capturar_fixture.py --fonte-sonda senado_legislacao --sonda --saida C:/dev/fv14-sondas/senado_legislacao --chave senado_legislacao_urn_lc123 --url "https://legis.senado.leg.br/dadosabertos/legislacao/urn.json?urn=urn%3Alex%3Abr%3Afederal%3Alei.complementar%3A2006-12-14%3B123"
+python scripts/capturar_fixture.py --fonte-sonda senado_legislacao --sonda --saida C:/dev/fv14-sondas/senado_legislacao --chave senado_legislacao_urn_lei13874 --url "https://legis.senado.leg.br/dadosabertos/legislacao/urn.json?urn=urn%3Alex%3Abr%3Afederal%3Alei%3A2019-09-20%3B13874"
+python scripts/capturar_fixture.py --fonte-sonda senado_legislacao --sonda --saida C:/dev/fv14-sondas/senado_legislacao --chave senado_legislacao_urn_mp881 --url "https://legis.senado.leg.br/dadosabertos/legislacao/urn.json?urn=urn%3Alex%3Abr%3Afederal%3Amedida.provisoria%3A2019-04-30%3B881"
+python scripts/capturar_fixture.py --fonte-sonda senado_legislacao --sonda --saida C:/dev/fv14-sondas/senado_legislacao --chave senado_legislacao_lista_lsa --url "https://legis.senado.leg.br/dadosabertos/legislacao/lista.json?tipo=LEI&numero=6404&ano=1976"
+```
+
+Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
+
+Notas: A rota e os parâmetros vêm da especificação OpenAPI oficial do serviço; os valores (URN LEX, sigla `LEI`) são inferência, por isso a linha é T: se a sonda refutar (404, `urn` não resolvida, sigla diferente), o resultado vira pendência IL.2-b, sem descoberta fora do instrumento. A especificação diz que a identificação retorna "detalhes da norma" e que os tipos `vide` apontam normas e dispositivos relacionados; se há texto, anexos ou atos alteradores no corpo, a sonda é que diz (anote os campos). Datas e tipos das URN das linhas 4 a 6 (`lei.complementar`, `medida.provisoria`) são do vocabulário LEX e não foram conferidos em página oficial lida. Uma requisição por comando (a especificação avisa 429 acima de 10 por segundo). O catálogo não inclui as rotas por código (`/legislacao/{codigo}`) nem as listas de tipos (301 para outro formato, que a sonda não segue).
+
+### lexml: LexML Brasil: busca SRU (URN, identificação)
+
+Hosts e rotas do catálogo: `www.lexml.gov.br`: `/busca/SRU` (consulta). Confirmação: A.
+
+| # | O quê | Nível | Estado |
+|---|---|---|---|
+| 1 | robots.txt | P | liberada |
+| 2 | SRU: Lei 6.404/1976 pela URN | T | liberada |
+| 3 | SRU: Lei Complementar 123/2006 (lei com anexos; capacidade d) | T | liberada |
+| 4 | SRU: MP 881/2019 (a medida provisória convertida na Lei 13.874/2019; capacidade c) | T | liberada |
+
+```powershell
+python scripts/capturar_fixture.py --fonte-sonda lexml --sonda --saida C:/dev/fv14-sondas/lexml --chave lexml_robots --url "https://www.lexml.gov.br/robots.txt"
+python scripts/capturar_fixture.py --fonte-sonda lexml --sonda --saida C:/dev/fv14-sondas/lexml --chave lexml_sru_lsa --url "https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=urn+%3D+%22urn%3Alex%3Abr%3Afederal%3Alei%3A1976-12-15%3B6404%22&maximumRecords=1"
+python scripts/capturar_fixture.py --fonte-sonda lexml --sonda --saida C:/dev/fv14-sondas/lexml --chave lexml_sru_lc123 --url "https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=urn+%3D+%22urn%3Alex%3Abr%3Afederal%3Alei.complementar%3A2006-12-14%3B123%22&maximumRecords=1"
+python scripts/capturar_fixture.py --fonte-sonda lexml --sonda --saida C:/dev/fv14-sondas/lexml --chave lexml_sru_mp881 --url "https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=urn+%3D+%22urn%3Alex%3Abr%3Afederal%3Amedida.provisoria%3A2019-04-30%3B881%22&maximumRecords=1"
+```
+
+Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
+
+Notas: A página oficial do Senado diz que a API do LexML é por URL, padrão SRU, com resposta XML, e o link de exemplo leva a `www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=urn = "senado.federal pls 2008"`. Os valores de consulta aqui são inferência a partir desse exemplo (índice `urn`, valor em forma de URN LEX): se a sonda devolver zero registros ou erro de índice, é o achado, e o formato correto vira pendência IL.2-b. O exemplo oficial usa `http://`; a sonda exige `https://`. `maximumRecords` é parâmetro do padrão SRU, não lido na documentação do LexML (que não foi encontrada). O total de registros vem em `numberOfRecords` (anote se é exato). Resolvedor de URN do LexML: sem página oficial lida, fora do roteiro.
+
+### normas_leg: normas.leg.br: portal de normas da legislação federal (Congresso Nacional)
+
+Hosts e rotas do catálogo: `normas.leg.br`: só `robots.txt`. Confirmação: A.
+
+| # | O quê | Nível | Estado |
+|---|---|---|---|
+| 1 | robots.txt | P | liberada |
+| 2 | texto por dispositivo (API pública, base citada só pelo br-eli-mcp) | B | bloqueada: caminho sem página oficial lida; fora do catálogo, pendência IL.2-b |
+
+```powershell
+python scripts/capturar_fixture.py --fonte-sonda normas_leg --sonda --saida C:/dev/fv14-sondas/normas_leg --chave normas_leg_robots --url "https://normas.leg.br/robots.txt"
+```
+
+Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
+
+Notas: A página oficial lida (notícia do Senado sobre o portal) dá o endereço, as fontes (Sigen, Legin) e "consultas detalhadas por versão", e não menciona API, download em massa nem texto por dispositivo. O caminho de API que o br-eli-mcp usa não é rota: o br-eli-mcp serve de referência de engenharia, não de fonte de URL oficial. Se o `robots.txt` responder 200 interpretável, o resto do host continua sem rota: a captura do texto por dispositivo só entra por documentação oficial lida ou sessão assistida (decisão 0067). A raiz do portal não é admitida pelo transporte.
+
+### camara_legislacao: Câmara dos Deputados: Legislação Informatizada (publicação original e texto publicado)
+
+Hosts e rotas do catálogo: `www.camara.leg.br`: `/legislacao`; `www2.camara.leg.br`: só `robots.txt`. Confirmação: A.
+
+| # | O quê | Nível | Estado |
+|---|---|---|---|
+| 1 | robots.txt do portal | P | liberada |
+| 2 | página de pesquisa de legislação | A | liberada |
+| 3 | robots.txt do host da Legislação Informatizada | P | liberada |
+| 4 | página de norma (publicação original, texto atualizado) | B | bloqueada: identificador da norma só sai da busca; fora do catálogo, pendência IL.2-b |
+
+```powershell
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_robots_portal --url "https://www.camara.leg.br/robots.txt"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_pesquisa --url "https://www.camara.leg.br/legislacao"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_robots_legin --url "https://www2.camara.leg.br/robots.txt"
+```
+
+Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
+
+Notas: As páginas lidas do host da Legislação Informatizada mostram "Publicação Original" e "Dados da Norma" por norma, com a origem da publicação (Boletim, Diário) e vide; o caminho tem slug com identificador numérico (por exemplo, `-norma-` e `-publicacaooriginal-`), e o da Lei 6.404/1976 não pôde ser obtido sem a busca do portal: não é rota. Não foi vista versão consolidada na página de dados lida: a sonda não deve presumi-la. O portal de Dados Abertos da Câmara não tem endpoint de legislação em página oficial lida. Termos de uso: link no rodapé, não lido.
+
+### dou: Imprensa Nacional: Diário Oficial da União (texto publicado)
+
+Hosts e rotas do catálogo: `www.in.gov.br`: só `robots.txt`. Confirmação: A.
+
+| # | O quê | Nível | Estado |
+|---|---|---|---|
+| 1 | robots.txt | P | liberada |
+| 2 | texto publicado no DOU (página de matéria) | B | bloqueada: sem rota em página oficial lida; fora do catálogo, pendência IL.2-b |
+| 3 | INLABS (inlabs.in.gov.br) | B | fora: exige cadastro e login; só sessão assistida (decisão 0067), nunca automatizada |
+
+```powershell
+python scripts/capturar_fixture.py --fonte-sonda dou --sonda --saida C:/dev/fv14-sondas/dou --chave dou_robots --url "https://www.in.gov.br/robots.txt"
+```
+
+Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
+
+Notas: O INLABS não tem comando: o acesso exige cadastro e login, e o instrumento nunca os automatiza; se o titular quiser a fonte, é sessão assistida (o humano entra, a ferramenta captura bytes rotulados `sessao_assistida`). O README oficial diz que o INLABS dá as edições completas em PDF e XML, livre e gratuito desde 01/01/2020, só dos últimos 4 meses (períodos anteriores nas coleções de Dados Abertos), e a página inicial do INLABS indicava manutenção e a "Base de Dados de Publicações do DOU" do portal da Imprensa Nacional: nenhuma das duas tem rota lida. A página de dados abertos do portal não pôde ser lida (a conexão caiu), então nenhuma rota do `www.in.gov.br` consta além do `robots.txt`.
 
 ## TJSP e TJDFT (conector existente)
 
