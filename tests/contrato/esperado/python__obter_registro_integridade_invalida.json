@@ -1,0 +1,31 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "obter_registro_integridade_invalida",
+    "commit": "fdceb0b",
+    "entrada": {
+      "run_id": "@run_id_corrompido"
+    },
+    "ferramenta": "obter_registro",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0-R, C12, rodada 3), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
+  },
+  "resposta": {
+    "confere_evidencias": null,
+    "confere_fundamento": null,
+    "criado_em": null,
+    "estado": null,
+    "evidencias": null,
+    "ferramenta": null,
+    "fundamento_temporal": null,
+    "integridade": {
+      "algoritmo": "hmac-sha256",
+      "confere": false,
+      "motivo": "ESTRUTURA_INVALIDA"
+    },
+    "parametros": null,
+    "politica": null,
+    "run_id": "<ulid>",
+    "status": "encontrada"
+  }
+}

@@ -131,7 +131,7 @@ def test_r2_c4_verificar_citacao_todo_estado_tem_os_dois_campos(verifica_populad
                 assert out["correspondencia_textual"] is None, (cit, data)
 
 
-def test_r2_c4_recusa_pelos_derivados_traz_os_campos_e_declara_a_nao_gravacao(verifica_populada, monkeypatch):
+def test_r2_c4_recusa_pelos_derivados_traz_os_campos_e_o_recibo(verifica_populada, monkeypatch):
     from freoa_verifica import service as modulo
 
     svc, _, _ = verifica_populada
@@ -143,10 +143,12 @@ def test_r2_c4_recusa_pelos_derivados_traz_os_campos_e_declara_a_nao_gravacao(ve
     for resp in (od, vc):
         assert resp["status"] == "indisponivel" and resp["reason_code"] == "ACERVO_DESATUALIZADO"
         assert resp["fundamento_temporal"] is None and resp["correspondencia_textual"] is None
-    for resp in (vc, vt):  # C11: nenhuma verificação recusada fica sem recibo ou declaração
-        assert resp["run_id"] is None
-        assert resp["registro"] == {"gravado": False, "motivo": "acervo_desatualizado"}
-    assert svc.conn.execute("SELECT COUNT(*) FROM run").fetchone()[0] == antes
+    for resp in (vc, vt):  # C11 (rodada 3): serviço gravável grava o recibo e devolve o `run_id`
+        assert resp["run_id"] and "registro" not in resp
+        reg = svc.obter_registro(resp["run_id"])
+        assert reg["integridade"]["confere"] is True
+        assert reg["estado"]["identity"] == {"status": "unavailable", "reason_code": "ACERVO_DESATUALIZADO"}
+    assert svc.conn.execute("SELECT COUNT(*) FROM run").fetchone()[0] == antes + 2
 
 
 def test_r2_c4_verificar_texto_embutida_e_decisoes_tem_os_campos(verifica_populada):
@@ -254,7 +256,7 @@ def test_r2_c6_recibo_da_situacao_para_cvm_bcb_e_cmn(svc160, autoridade, tipo, e
 # ----------------------------------------------------------------------------------------------
 
 def _adulterar_como_legado(conn, rid, *, apagar_selo=True):
-    """Mutante do parecer: apaga MAC e colunas novas, adultera o resultado, apaga o selo e a versão 19."""
+    """Mutante do parecer: apaga MAC e colunas novas, adultera o resultado, apaga o selo e a versão 17."""
     _sem_triggers(conn)
     conn.execute(
         "UPDATE run SET registro_mac=NULL, ferramenta=NULL, evidencias_compromissos=NULL, fundamento_compromisso=NULL,"
@@ -262,7 +264,7 @@ def _adulterar_como_legado(conn, rid, *, apagar_selo=True):
         (json.dumps({"temporal": {"status": "verified"}}), rid))
     if apagar_selo:
         conn.execute("DELETE FROM meta WHERE key IN (?,?)", (registro.META_LEGADO, registro.META_LEGADO_MAC))
-    conn.execute("DELETE FROM schema_version WHERE version=19")
+    conn.execute("DELETE FROM schema_version WHERE version=17")
     conn.commit()
 
 
@@ -274,8 +276,8 @@ def test_r2_c8_mutante_completo_do_parecer_reaplicar_a_migracao_nao_sela_o_adult
     assert svc.obter_registro(rid)["integridade"]["confere"] is True
     _adulterar_como_legado(svc.conn, rid)
     assert svc.obter_registro(rid)["integridade"]["confere"] is False
-    apply_migrations(svc.conn)  # reaplica a 019
-    assert svc.conn.execute("SELECT 1 FROM schema_version WHERE version=19").fetchone()
+    apply_migrations(svc.conn)  # reaplica a 017
+    assert svc.conn.execute("SELECT 1 FROM schema_version WHERE version=17").fetchone()
     r = svc.obter_registro(rid)
     assert r["integridade"]["confere"] is False
     assert r["estado"] is None  # o conteúdo adulterado não é publicado como se fosse o registro
@@ -351,7 +353,7 @@ def test_r2_c8_legado_anterior_continua_null_depois_de_reaplicar_a_migracao(tmp_
     chave.write_bytes(chave.read_bytes()[:32])  # chave de uma versão anterior: sem âncora
     registro._cache_chaves.clear()
     conn.execute("DELETE FROM meta WHERE key IN (?,?)", (registro.META_LEGADO, registro.META_LEGADO_MAC))
-    conn.execute("DELETE FROM schema_version WHERE version=19")
+    conn.execute("DELETE FROM schema_version WHERE version=17")
     conn.execute(
         "INSERT INTO run(id, created_at, request_hash, request_json, policy_version, result_json) VALUES (?,?,?,?,?,?)",
         ("LEGADO0000000000000000000B", "2026-01-01T00:00:00+00:00", "h", "{}", "1", "{}"))
@@ -361,7 +363,7 @@ def test_r2_c8_legado_anterior_continua_null_depois_de_reaplicar_a_migracao(tmp_
     conn.execute(
         "INSERT INTO run(id, created_at, request_hash, request_json, policy_version, result_json) VALUES (?,?,?,?,?,?)",
         ("ADULTERADO000000000000000C", "2026-11-03T00:00:00+00:00", "h", "{}", "1", "{}"))
-    conn.execute("DELETE FROM schema_version WHERE version=19")
+    conn.execute("DELETE FROM schema_version WHERE version=17")
     conn.execute("DELETE FROM meta WHERE key IN (?,?)", (registro.META_LEGADO, registro.META_LEGADO_MAC))
     conn.commit()
     apply_migrations(conn)

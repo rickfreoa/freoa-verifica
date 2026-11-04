@@ -122,6 +122,13 @@ def semear(svc) -> dict[str, str]:
     # Execução para caso de obter_registro
     run_res = svc.verificar_citacao(CITACAO_LSA, trecho=TRECHO_LSA)
     ids["run_id_valido"] = run_res["run_id"]
+    # Recibo adulterado (IL.0-R, rodada 3): `request_json` vira BLOB; a conferência responde integridade inválida.
+    corrompido = svc.verificar_citacao(CITACAO_LSA, trecho=TRECHO_LSA)["run_id"]
+    for nome in [r[0] for r in svc.conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='run'")]:
+        svc.conn.execute(f'DROP TRIGGER "{nome}"')
+    svc.conn.execute("UPDATE run SET request_json=X'7B7D' WHERE id=?", (corrompido,))
+    svc.conn.commit()
+    ids["run_id_corrompido"] = corrompido
 
     # Aviso de incidente de exemplo para listar_fontes cobrir os campos
     (Path(svc.home) / "avisos_incidente.json").write_text(
@@ -189,6 +196,8 @@ CASOS: list[tuple[str, str, dict[str, Any]]] = [
         "citacao": "Lei 6.404, art. 254-A", "trecho": TRECHO_LSA, "data": "2020-01-01"}),
     ("obter_registro_encontrada", "obter_registro", {"run_id": "@run_id_valido"}),
     ("obter_registro_inexistente", "obter_registro", {"run_id": "01M6H1Y11Y99K728HPNASE0000"}),
+    # IL.0-R, rodada 3 (C12): recuperação de recibo adulterado (integridade inválida, campos não autenticados nulos).
+    ("obter_registro_integridade_invalida", "obter_registro", {"run_id": "@run_id_corrompido"}),
 ]
 
 
@@ -425,19 +434,22 @@ CASOS_IL0R2 = frozenset({
     "verificar_citacao_fonte_indisponivel",
     "verificar_citacao_requer_conferencia",
 })
+# IL.0-R, rodada 3 (C12): caso gravado com o código do commit abaixo (o das correções C8 e C11 e da recuperação), offline.
+CASOS_IL0R3 = frozenset({"obter_registro_integridade_invalida"})
 COMMIT_IL0R = "3a3ba0b"
 COMMIT_IL0R2 = "8539bac"
+COMMIT_IL0R3 = "fdceb0b"
 COMMIT_1_4_0 = "7a3347a"
 VERSAO_1_4_0 = "1.4.0a1"
 VERSAO_DESTINO_1_4_0 = "1.4.0a2"
 
 
 def commit_do_caso(caso: str) -> str:
-    return COMMIT_IL0R2 if caso in CASOS_IL0R2 else COMMIT_IL0R if caso in CASOS_IL0R else COMMIT_1_4_0 if caso in CASOS_NOVOS_1_4_0 else COMMIT_1_2_0
+    return COMMIT_IL0R3 if caso in CASOS_IL0R3 else COMMIT_IL0R2 if caso in CASOS_IL0R2 else COMMIT_IL0R if caso in CASOS_IL0R else COMMIT_1_4_0 if caso in CASOS_NOVOS_1_4_0 else COMMIT_1_2_0
 
 
 def gravar(adaptador: str, caso: str, ferramenta: str, entrada: dict, resposta: dict) -> None:
-    is_il0r = caso in CASOS_IL0R or caso in CASOS_IL0R2
+    is_il0r = caso in CASOS_IL0R or caso in CASOS_IL0R2 or caso in CASOS_IL0R3
     is_novo = caso in CASOS_NOVOS_1_4_0 or is_il0r
     prov = {
         "adaptador": adaptador,
@@ -446,7 +458,7 @@ def gravar(adaptador: str, caso: str, ferramenta: str, entrada: dict, resposta: 
         "entrada": entrada,
         "ferramenta": ferramenta,
         "origem": (
-            "entrada sintética + acervo de teste local (decisão 0075 / IL.0" + ("-R, C12" + (", rodada 2" if caso in CASOS_IL0R2 else "") if is_il0r else "") + "), FV_OFFLINE=1, sem rede"
+            "entrada sintética + acervo de teste local (decisão 0075 / IL.0" + ("-R, C12" + (", rodada 3" if caso in CASOS_IL0R3 else ", rodada 2" if caso in CASOS_IL0R2 else "") if is_il0r else "") + "), FV_OFFLINE=1, sem rede"
             if is_novo
             else "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede"
         ),

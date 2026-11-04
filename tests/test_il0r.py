@@ -603,13 +603,13 @@ def test_c8_migracao_sela_home_com_chave_existente(tmp_path):
     chave.write_bytes(chave.read_bytes()[:32])  # chave de uma versão anterior à âncora (rodada 2)
     registro._cache_chaves.clear()
     conn.execute("DELETE FROM meta WHERE key IN (?,?)", (registro.META_LEGADO, registro.META_LEGADO_MAC))
-    conn.execute("DELETE FROM schema_version WHERE version=19")
+    conn.execute("DELETE FROM schema_version WHERE version=17")
     conn.execute(
         "INSERT INTO run(id, created_at, request_hash, request_json, policy_version, result_json) VALUES (?,?,?,?,?,?)",
         ("LEGADO0000000000000000000B", "2026-01-01T00:00:00+00:00", "h", "{}", "1", "{}"))
     conn.commit()
     conn.close()
-    conn = connect(caminho)  # reaplica a 019
+    conn = connect(caminho)  # reaplica a 017
     assert registro.legado_autenticado(conn, "LEGADO0000000000000000000B")
     assert not registro.legado_autenticado(conn, "OUTRO")
     conn.close()

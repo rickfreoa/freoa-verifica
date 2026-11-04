@@ -300,6 +300,10 @@ def _condicao_satisfeita(resposta: dict[str, Any], condicao: dict[str, Any] | No
         return True
     for campo, esperado in condicao.items():
         valores = _obter_caminho_val(resposta, campo)
+        if esperado == "@ausente":  # discriminante de variante: a forma só se aplica sem o campo (ex.: sem `status`)
+            if valores:
+                return False
+            continue
         if not valores:
             return False
         if esperado == "@nao_nulo":  # variante legítima: campo presente e não nulo (ex.: obtenção sem caminho)
@@ -379,7 +383,8 @@ def validar_resposta_consumidor(
 
     # 1. Caminhos e tipos por elemento aplicável
     caminhos_spec = spec.get("caminhos", {})
-    for caminho, def_caminho in caminhos_spec.items():
+    for chave, def_caminho in caminhos_spec.items():
+        caminho = chave.split("#", 1)[0]  # `caminho#variante`: o mesmo caminho com tipo e condição de outra variante
         if f"{ferramenta}:{caminho}" in DEPRECATED or h._isento(ferramenta, caminho, isentos):
             continue
 
@@ -863,8 +868,7 @@ def test_c12_recusa_pelos_derivados_satisfaz_o_contrato(ambiente, monkeypatch, a
     monkeypatch.setattr(modulo._derivados, "compativel", lambda conn: False)
     vc = _responder(ambiente, adaptador, "verificar_citacao", {"citacao": h.CITACAO_LSA, "trecho": h.TRECHO_LSA})
     od = _responder(ambiente, adaptador, "obter_dispositivo", {"citacao": h.CITACAO_LSA})
-    assert vc["status"] == "indisponivel" and vc["run_id"] is None
-    assert vc["registro"] == {"gravado": False, "motivo": "acervo_desatualizado"}
+    assert vc["status"] == "indisponivel" and vc["run_id"] and "registro" not in vc
     assert od["status"] == "indisponivel"
     assert not validar_resposta_consumidor("verificar_citacao", _spec("verificar_citacao"), vc, DEPRECATED), adaptador
     assert not validar_resposta_consumidor("obter_dispositivo", _spec("obter_dispositivo"), od, DEPRECATED), adaptador
@@ -892,3 +896,115 @@ def test_c12_todo_literal_de_obter_dispositivo_status_e_exercitado_ou_declarado(
     observados = {h.carregar("python", c[0])["resposta"]["status"] for c in h.CASOS if c[1] == "obter_dispositivo"}
     assert set(spec) == observados | nao and not (observados & nao)
     assert nao == {"unknown", "ambigua", "unavailable"}
+
+
+# ----------------------------------------------------------------------------------------------
+# IL.0-R, rodada 3 (C12): variantes por discriminante explícito; remoção de dimensão obrigatória reprova
+# ----------------------------------------------------------------------------------------------
+
+DIMENSOES = ("identity", "text", "temporal", "support")
+CASOS_VERIFICACAO = ("verificar_citacao_verified", "verificar_citacao_trecho_divergente",
+                     "verificar_citacao_obra_inexistente", "verificar_citacao_historica_riscada",
+                     "verificar_citacao_dispositivo_inexistente", "verificar_citacao_fonte_indisponivel",
+                     "verificar_citacao_requer_conferencia")
+
+
+def _verificacoes_reais(ambiente, adaptador):
+    return {c[0]: _responder(ambiente, adaptador, "verificar_citacao", c[2])
+            for c in h.CASOS if c[0] in CASOS_VERIFICACAO}
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_r3_toda_variante_legitima_de_verificar_citacao_satisfaz_o_contrato(ambiente, monkeypatch, adaptador):
+    from freoa_verifica import service as modulo
+
+    spec = _spec("verificar_citacao")
+    for caso, resp in _verificacoes_reais(ambiente, adaptador).items():
+        assert not validar_resposta_consumidor("verificar_citacao", spec, resp, DEPRECATED), (adaptador, caso)
+    monkeypatch.setattr(modulo._derivados, "compativel", lambda conn: False)  # recusa com recibo (writable)
+    recusa = _responder(ambiente, adaptador, "verificar_citacao", {"citacao": h.CITACAO_LSA, "trecho": h.TRECHO_LSA})
+    assert recusa["status"] == "indisponivel" and isinstance(recusa["run_id"], str)
+    assert not validar_resposta_consumidor("verificar_citacao", spec, recusa, DEPRECATED), adaptador
+    sem_motivo = {k: v for k, v in recusa.items() if k != "reason_code"}  # a recusa tem a sua forma obrigatória
+    assert any("reason_code" in e for e in validar_resposta_consumidor("verificar_citacao", spec, sem_motivo, DEPRECATED))
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_r3_remover_dimensao_obrigatoria_da_verificacao_reprova(ambiente, adaptador):
+    spec = _spec("verificar_citacao")
+    removiveis = [(d,) for d in DIMENSOES] + [("identity", "support"), ("text", "temporal"), DIMENSOES]
+    for caso, resp in _verificacoes_reais(ambiente, adaptador).items():
+        for remover in removiveis:  # inclusive as remoções combinadas que a condição recíproca antiga deixava passar
+            mutante = {k: v for k, v in copy.deepcopy(resp).items() if k not in remover}
+            erros = validar_resposta_consumidor("verificar_citacao", spec, mutante, DEPRECATED)
+            for d in remover:
+                assert any(f"caminho ausente: {d}.status" in e for e in erros), (adaptador, caso, remover, erros)
+        for d in DIMENSOES:  # `status` e `reason_code` de cada dimensão também são obrigatórios
+            for campo in ("status", "reason_code"):
+                mutante = copy.deepcopy(resp)
+                del mutante[d][campo]
+                erros = validar_resposta_consumidor("verificar_citacao", spec, mutante, DEPRECATED)
+                assert any(f"caminho ausente: {d}.{campo}" in e for e in erros), (adaptador, caso, d, campo)
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_r3_remocao_das_dimensoes_com_discriminante_de_recusa_exige_a_forma_da_recusa(ambiente, adaptador):
+    """Quem tira as dimensões e acrescenta `status: indisponivel` passa a ser uma recusa, e a recusa exige `reason_code`."""
+    spec = _spec("verificar_citacao")
+    resp = _verificacoes_reais(ambiente, adaptador)["verificar_citacao_verified"]
+    mutante = {k: v for k, v in copy.deepcopy(resp).items() if k not in DIMENSOES}
+    mutante["status"] = "indisponivel"
+    assert any("reason_code" in e for e in validar_resposta_consumidor("verificar_citacao", spec, mutante, DEPRECATED))
+    mutante["reason_code"] = "ACERVO_DESATUALIZADO"
+    assert not validar_resposta_consumidor("verificar_citacao", spec, mutante, DEPRECATED)
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_r3_obter_registro_integro_e_com_integridade_invalida_satisfazem_o_contrato(ambiente, adaptador):
+    spec = _spec("obter_registro")
+    integro = _responder(ambiente, adaptador, "obter_registro", {"run_id": "@run_id_valido"})
+    invalido = _responder(ambiente, adaptador, "obter_registro", {"run_id": "@run_id_corrompido"})
+    assert integro["integridade"]["confere"] is True and invalido["integridade"]["confere"] is False
+    assert invalido["status"] == "encontrada" and invalido["estado"] is None and invalido["parametros"] is None
+    for resp in (integro, invalido):
+        assert not validar_resposta_consumidor("obter_registro", spec, resp, DEPRECATED), (adaptador, resp)
+    inexistente = _responder(ambiente, adaptador, "obter_registro", {"run_id": "01M6H1Y11Y99K728HPNASE0000"})
+    assert not validar_resposta_consumidor("obter_registro", spec, inexistente, DEPRECATED)
+
+
+@pytest.mark.parametrize("adaptador", h.ADAPTADORES)
+def test_c12_r3_obter_registro_mutantes_reprovam(ambiente, adaptador):
+    spec = _spec("obter_registro")
+    integro = _responder(ambiente, adaptador, "obter_registro", {"run_id": "@run_id_valido"})
+    invalido = _responder(ambiente, adaptador, "obter_registro", {"run_id": "@run_id_corrompido"})
+
+    def erros(resp):
+        return validar_resposta_consumidor("obter_registro", spec, resp, DEPRECATED)
+
+    for campo in ("ferramenta", "criado_em", "politica", "parametros", "estado", "integridade"):
+        mutante = {k: v for k, v in copy.deepcopy(integro).items() if k != campo}  # remoção em recuperação íntegra
+        assert erros(mutante), (adaptador, campo)
+    mutante = copy.deepcopy(integro)
+    mutante["integridade"] = {"algoritmo": "hmac-sha256"}  # discriminante removido: a forma não pode "sumir"
+    assert any("integridade.confere" in e for e in erros(mutante))
+    # íntegra que perde o conteúdo, ou inválida que o traz, não é nenhuma das duas variantes
+    nulo = copy.deepcopy(integro)
+    nulo["estado"] = None
+    assert any("estado" in e for e in erros(nulo))
+    com_conteudo = copy.deepcopy(invalido)
+    com_conteudo["estado"] = {"identity": {"status": "verified", "reason_code": None}}
+    assert any("estado" in e for e in erros(com_conteudo))
+    sem_motivo = copy.deepcopy(invalido)
+    del sem_motivo["integridade"]["motivo"]
+    assert any("integridade.motivo" in e for e in erros(sem_motivo))
+    sem_campo = {k: v for k, v in copy.deepcopy(invalido).items() if k != "ferramenta"}
+    assert any("caminho ausente: ferramenta" in e for e in erros(sem_campo))
+
+
+def test_c12_r3_condicao_ausente_e_variante_so_se_aplicam_quando_declaradas():
+    spec = {"caminhos": {"a": {"tipo": "string", "condicao": {"status": "@ausente"}},
+                         "a#outra": {"tipo": "null", "condicao": {"status": "x"}}}}
+    assert not validar_resposta_consumidor("t", spec, {"a": "v"})
+    assert validar_resposta_consumidor("t", spec, {})  # sem `status`, `a` é obrigatório
+    assert not validar_resposta_consumidor("t", spec, {"status": "x", "a": None})  # variante "x": `a` nulo
+    assert validar_resposta_consumidor("t", spec, {"status": "x", "a": "v"})

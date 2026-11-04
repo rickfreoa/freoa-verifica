@@ -187,7 +187,7 @@ Entrada inválida (`EntradaInvalida`; REST: `problem+json` 422; MCP: erro de fer
 
 ### `obter_registro`
 
-`{status, run_id, ferramenta, criado_em, politica, parametros, estado: {identity, text, temporal, support}, evidencias, fundamento_temporal, integridade: {algoritmo: "hmac-sha256", confere: bool|null}, confere_evidencias: array|null, confere_fundamento: bool|null}` em `encontrada`; `{status, run_id}` em `inexistente` (decisão 0075). Campo persistido inválido ou malformado (JSON ilegível, tipo inadequado) ou MAC que não confere devolve `encontrada` com `integridade: {algoritmo, confere: false, motivo: "ESTRUTURA_INVALIDA" | "MAC_NAO_CONFERE"}` e `ferramenta`, `criado_em`, `politica`, `parametros`, `estado`, `evidencias`, `confere_evidencias` e `confere_fundamento` nulos: o conteúdo não autenticado não é publicado.
+`{status, run_id, ferramenta, criado_em, politica, parametros, estado: {identity, text, temporal, support}, evidencias, fundamento_temporal, integridade: {algoritmo: "hmac-sha256", confere: bool|null}, confere_evidencias: array|null, confere_fundamento: bool|null}` em `encontrada`; `{status, run_id}` em `inexistente` (decisão 0075). Campo persistido inválido ou malformado (JSON ilegível, tipo inadequado) ou MAC que não confere devolve `encontrada` com `integridade: {algoritmo, confere: false, motivo: `ESTRUTURA_INVALIDA` | `MAC_NAO_CONFERE`}` e `ferramenta`, `criado_em`, `politica`, `parametros`, `estado`, `evidencias`, `confere_evidencias` e `confere_fundamento` nulos: o conteúdo não autenticado não é publicado.
 
 Entrada: `run_id` (string), e opcionalmente `evidencias` (array de `{capture_id, sha256, url}`) e `fundamento_temporal` (object).
 Política e integridade:
