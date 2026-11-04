@@ -85,11 +85,41 @@ def test_catalogo_tem_exatamente_os_ids_da_especificacao_e_e_imutavel():
         assert f.confirmacao in ('A', 'B') and f.id in IDS and f.descricao and f.origem_hosts
 
 
+# `.leg.br` só nos hosts exatos do IL.2 (lista fixa aqui, independente do catálogo); as 16 fontes anteriores seguem
+# restritas a .jus.br e .gov.br.
+HOSTS_LEG_BR_IL2 = frozenset({"legis.senado.leg.br", "normas.leg.br", "www.camara.leg.br", "www2.camara.leg.br"})
+
+
+def _dominio_oficial(fid: str, host: str) -> bool:
+    if host.endswith((".jus.br", ".gov.br")):
+        return True
+    return fid in IDS_IL2 and host in HOSTS_LEG_BR_IL2
+
+
 def test_catalogo_sem_host_fora_de_dominio_oficial():
     for f in FONTES_SONDA.values():
         for host in f.hosts:
-            assert host.endswith((".jus.br", ".gov.br", ".leg.br")), (f.id, host)
+            assert _dominio_oficial(f.id, host), (f.id, host)
             assert host == host.lower() and "/" not in host and ":" not in host
+
+
+def test_dominio_leg_br_so_nos_hosts_exatos_do_il2_e_mutantes_sao_pegos():
+    antigas = [i for i in IDS if i not in IDS_IL2]
+    assert len(antigas) == 16
+    for fid in antigas:  # nenhuma fonte antiga tem host .leg.br
+        assert not any(h.endswith(".leg.br") for h in FONTES_SONDA[fid].hosts), fid
+    assert {h for fid in IDS_IL2 for h in FONTES_SONDA[fid].hosts if h.endswith(".leg.br")} == HOSTS_LEG_BR_IL2
+    # mutantes: .leg.br em fonte antiga (o do auditor: auditoria.leg.br no TST) e host .leg.br fora da lista no IL.2
+    assert not _dominio_oficial("tst", "auditoria.leg.br")
+    assert not any(_dominio_oficial(fid, "auditoria.leg.br") for fid in IDS)
+    assert not _dominio_oficial("senado_legislacao", "auditoria.leg.br")
+    assert not _dominio_oficial("tst", "legis.senado.leg.br")  # nem o host do IL.2 vale para fonte antiga
+    mutante = dataclasses.replace(
+        FONTES_SONDA["tst"], hosts=FONTES_SONDA["tst"].hosts | {"auditoria.leg.br"},
+        rotas={**FONTES_SONDA["tst"].rotas, "auditoria.leg.br": ()},
+        origem_hosts=FONTES_SONDA["tst"].origem_hosts + "; auditoria.leg.br=https://auditoria.leg.br/",
+    )
+    assert not all(_dominio_oficial(mutante.id, h) for h in mutante.hosts)
 
 
 def test_cada_host_tem_origem_oficial_e_nenhum_recusado_entra():
@@ -1262,20 +1292,92 @@ def test_il2_consulta_so_nas_rotas_declaradas_com_parametros(envios, tmp_path):
     assert len(envios) == 2
 
 
-def test_il2_mime_do_catalogo_json_e_xml():
-    for fid in ("senado_legislacao", "camara_legislacao", "normas_leg", "dou"):
-        assert "application/json" in FONTES_SONDA[fid].mimes
-        assert not {"application/xml", "text/xml", "application/pdf"} & FONTES_SONDA[fid].mimes, fid
-    assert {"application/xml", "text/xml", "application/json"} <= FONTES_SONDA["lexml"].mimes
-    assert "application/pdf" not in FONTES_SONDA["lexml"].mimes
+_BASE_MIMES = frozenset({"text/html", "application/json", "text/plain"})
+MIMES_IL2 = {  # conjunto esperado por fonte, fixado aqui, independente do catálogo
+    "senado_legislacao": _BASE_MIMES,
+    "lexml": _BASE_MIMES | {"application/xml", "text/xml"},
+    "normas_leg": _BASE_MIMES,
+    "camara_legislacao": _BASE_MIMES,
+    "dou": _BASE_MIMES,
+}
+HOSTS_IL2 = {fid: frozenset(r) for fid, r in ROTAS_IL2.items()}
 
 
-def test_il2_mimes_passados_ao_transporte_por_fonte(envios, tmp_path):
-    for fid, url in [("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/LEI/6404/1976.json"),
-                     ("lexml", "https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=a")]:
+def _divergencias_il2(fid: str, fonte: FonteSonda) -> list[str]:
+    """Compara a fonte com as constantes deste arquivo (igualdade, não inclusão); vazio = fiel."""
+    achados = []
+    if fonte.mimes != MIMES_IL2[fid]:
+        achados.append("mimes")
+    if fonte.hosts != HOSTS_IL2[fid]:
+        achados.append("hosts")
+    if {h: tuple(r) for h, r in fonte.rotas.items()} != ROTAS_IL2[fid]:
+        achados.append("rotas")
+    if {h: tuple(c) for h, c in fonte.consultas.items()} != CONSULTAS_IL2.get(fid, {}):
+        achados.append("consultas")
+    return achados
+
+
+@pytest.mark.parametrize("fid", IDS_IL2)
+def test_il2_mime_e_demais_atributos_iguais_as_constantes_do_teste(fid):
+    assert _divergencias_il2(fid, FONTES_SONDA[fid]) == []
+    assert FONTES_SONDA[fid].mimes == MIMES_IL2[fid]  # igualdade: nem a mais, nem a menos
+
+
+@pytest.mark.parametrize("fid", IDS_IL2)
+def test_il2_mutantes_de_mime_hosts_rotas_e_consulta_sao_rejeitados(fid):
+    f = FONTES_SONDA[fid]
+    host = sorted(f.hosts)[0]
+    mutantes = {
+        "mimes": [dataclasses.replace(f, mimes=f.mimes | {"application/octet-stream"}),
+                  dataclasses.replace(f, mimes=f.mimes | {"application/pdf"}),
+                  dataclasses.replace(f, mimes=frozenset(f.mimes - {"application/json"}))],
+        "hosts": [dataclasses.replace(f, hosts=f.hosts | {"extra.leg.br"}, rotas={**f.rotas, "extra.leg.br": ()},
+                                      origem_hosts=f.origem_hosts + "; extra.leg.br=https://extra.leg.br/")],
+        "rotas": [dataclasses.replace(f, rotas={**f.rotas, host: (*f.rotas[host], "/extra")})],
+        "consultas": [],
+    }
+    if f.consultas:  # retirar a consulta declarada diverge
+        mutantes["consultas"].append(dataclasses.replace(f, consultas={}))
+    com_rota = [h for h, r in f.rotas.items() if r and h not in f.consultas]
+    if com_rota:  # liberar consulta em rota que não a admite diverge
+        mutantes["consultas"].append(dataclasses.replace(
+            f, consultas={**f.consultas, com_rota[0]: f.rotas[com_rota[0]]}))
+    if fid == "lexml":  # única com XML: retirar o XML também diverge
+        mutantes["mimes"].append(dataclasses.replace(f, mimes=frozenset(f.mimes - {"text/xml"})))
+    for atributo, lista in mutantes.items():
+        for m in lista:
+            assert atributo in _divergencias_il2(fid, m), (fid, atributo)
+    # o MIME adicional (octet-stream) é acusado exatamente como "mimes"
+    assert _divergencias_il2(fid, mutantes["mimes"][0]) == ["mimes"]
+
+
+def test_il2_mutante_de_mime_chega_ao_transporte_e_o_teste_de_repasse_o_acusa(monkeypatch, envios, tmp_path):
+    from types import MappingProxyType
+
+    f = FONTES_SONDA["senado_legislacao"]
+    mutante = dataclasses.replace(f, mimes=f.mimes | {"application/octet-stream"})
+    monkeypatch.setattr(captura, "FONTES_SONDA", MappingProxyType({**FONTES_SONDA, f.id: mutante}))
+    captura.capturar(None, url="https://legis.senado.leg.br/dadosabertos/legislacao/LEI/6404/1976.json",
+                     destino=tmp_path, sonda=True, chave="mut", fonte_sonda=f.id)
+    assert envios[-1]["allowed_mimes"] != MIMES_IL2[f.id]  # a comparação com a constante o pega
+
+
+def _rota_de_cada_host(fid):
+    return [f"https://{h}{(rs or ('/robots.txt',))[0]}" for h, rs in sorted(ROTAS_IL2[fid].items())]
+
+
+@pytest.mark.parametrize("fid", IDS_IL2)
+def test_il2_mimes_hosts_e_caminhos_passados_ao_transporte_conferem_com_as_constantes(envios, tmp_path, fid):
+    for url in _rota_de_cada_host(fid):
         captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave=f"m{len(envios)}", fonte_sonda=fid)
-        assert envios[-1]["allowed_mimes"] == FONTES_SONDA[fid].mimes
-        assert envios[-1]["allowed_hosts"] == FONTES_SONDA[fid].hosts and envios[-1]["max_redirects"] == 0
+        visto = envios[-1]
+        if url.endswith("/robots.txt"):
+            assert visto["allowed_mimes"] == frozenset({"text/plain"})
+            assert visto["allowed_path_prefixes"] == {h: ("/robots.txt",) for h in HOSTS_IL2[fid]}
+        else:
+            assert visto["allowed_mimes"] == MIMES_IL2[fid]  # constante do teste, não o catálogo
+            assert visto["allowed_path_prefixes"] == {h: (rs or ("/robots.txt",)) for h, rs in ROTAS_IL2[fid].items()}
+        assert visto["allowed_hosts"] == HOSTS_IL2[fid] and visto["max_redirects"] == 0
 
 
 @pytest.mark.repositorio
