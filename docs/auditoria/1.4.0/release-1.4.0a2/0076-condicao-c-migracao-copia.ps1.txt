@@ -1,0 +1,15 @@
+# Condição (c) da decisão 0076: migração sobre CÓPIA do home 1.4.0a1 instalado, com o código do PR #26 (d2f3b7b).
+$orig = "<home>\AppData\Local\freoa-verifica"
+$copia = "<rel>\home-mig-a2"
+$log = "<supervisor>\migracao-copia.log"
+"inicio $(Get-Date -Format o)" | Out-File $log
+robocopy $orig $copia /MIR /XD staging blobs.bak-* /XF *.bak-* .fv.lock /NFL /NDL /NJH /NJS | Out-Null
+"robocopy=$LASTEXITCODE" | Out-File -Append $log
+$py = "<repo>\.venv\Scripts\python.exe"
+Set-Location <repo>
+"commit $(git rev-parse HEAD)" | Out-File -Append $log
+& $py -X utf8 <supervisor>\migracao-copia.py $copia *>> $log
+"py=$LASTEXITCODE" | Out-File -Append $log
+& $py -X utf8 -m freoa_verifica.cli --home $copia doctor --offline *>> $log
+"doctor=$LASTEXITCODE" | Out-File -Append $log
+"fim $(Get-Date -Format o)" | Out-File -Append $log

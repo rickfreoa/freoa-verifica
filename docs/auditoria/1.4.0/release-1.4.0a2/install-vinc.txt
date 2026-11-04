@@ -1,0 +1,13 @@
+Snapshot
+--------
+status: ok
+backup: <rel>\home-vinc-a2\verifica.sqlite3.bak-01M6K1VTS13R1ZWFDK53248K5A
+backup_blobs: None
+obras: 826
+capturas: 2069
+modo: anexacao
+vinculado: True
+snapshot_sha256: 8e2ad821ae78ace4b61a4a0957ac73ffb4ce4ba48408d7bd05efbec5f0bfff9e
+snapshot_derived_version: 5
+divergentes:
+autenticidade: Checksums demonstram integridade. `vinculado: true` significa que o sha256 do snapshot consta da lista embutida no pacote; a origem do pacote se prova pela attestation do wheel (`gh attestation verify`), conferida pelo instalador quando o GitHub CLI existe. N├úo h├í assinatura pr├│pria do snapshot.

@@ -1,0 +1,42 @@
+"""Abre a cÃ³pia do home 1.4.0a1 com o serviÃ§o novo (aplica migraÃ§Ãµes) e confere o legado.
+
+Antes de abrir: conta registros `run` e guarda o maior id. Depois: esquema, Ã¢ncora, e `obter_registro` de uma amostra de
+registros antigos (esperado: legado, `integridade.confere` nulo, sem exceÃ§Ã£o) e de um registro novo criado por
+`verificar_citacao` (esperado: `confere` verdadeiro).
+"""
+import json
+import sqlite3
+import sys
+from pathlib import Path
+
+home = Path(sys.argv[1])
+db = home / "verifica.sqlite3"
+c = sqlite3.connect(db)
+antes = c.execute("SELECT COUNT(*) FROM run").fetchone()[0]
+ids_antigos = [r[0] for r in c.execute("SELECT id FROM run ORDER BY created_at DESC LIMIT 5")]
+versao_antes = c.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] if c.execute(
+    "SELECT name FROM sqlite_master WHERE name='schema_version'").fetchone() else None
+c.close()
+print(json.dumps({"runs_antes": antes, "schema_antes": versao_antes, "amostra": len(ids_antigos)}))
+
+from freoa_verifica.service import Verifica as VerificaService  # noqa: E402
+
+svc = VerificaService(home=home)
+c = sqlite3.connect(db)
+versao_depois = c.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+depois = c.execute("SELECT COUNT(*) FROM run").fetchone()[0]
+c.close()
+res = {"schema_depois": versao_depois, "runs_depois": depois, "legado": []}
+for rid in ids_antigos:
+    r = svc.obter_registro(rid)
+    res["legado"].append({"status": r.get("status"), "integridade": r.get("integridade")})
+novo = svc.verificar_citacao("art. 1Âº da Lei 6.404/1976")
+rid_novo = novo.get("run_id")
+res["novo_run_id_presente"] = bool(rid_novo)
+if rid_novo:
+    res["novo"] = svc.obter_registro(rid_novo).get("integridade")
+print(json.dumps(res, ensure_ascii=False))
+ok = all(x["status"] == "encontrada" and (x["integridade"] or {}).get("confere") is None for x in res["legado"]) \
+    and (not rid_novo or (res.get("novo") or {}).get("confere") is True)
+print("RESULTADO", "OK" if ok else "FALHA")
+sys.exit(0 if ok else 1)

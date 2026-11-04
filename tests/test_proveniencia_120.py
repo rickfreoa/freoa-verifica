@@ -30,7 +30,10 @@ def test_published_pin():
          "versao_pacote_min": "1.3.0", "derived_version": 5},
         {"arquivo": "freoa-verifica-snapshot-20261028-1.4.0a1.tar.gz",
          "sha256": "ad090c341b5e95c606309bff84ef9a233e144d223bcb5c6a40a9076dc3d8fafa",
-         "versao_pacote_min": "1.4.0a1", "derived_version": 5}]
+         "versao_pacote_min": "1.4.0a1", "derived_version": 5},
+        {"arquivo": "freoa-verifica-snapshot-20261104-1.4.0a2.tar.gz",
+         "sha256": "8e2ad821ae78ace4b61a4a0957ac73ffb4ce4ba48408d7bd05efbec5f0bfff9e",
+         "versao_pacote_min": "1.4.0a2", "derived_version": 5}]
 
 
 @pytest.mark.parametrize("packed", [True, False])
