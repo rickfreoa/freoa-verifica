@@ -24,7 +24,11 @@ def test_rules_documented():
 
 
 def test_rcvm160_data_seleciona_riscada():
-    """data 2022-08-01 → redação riscada (original, início 2022-07-13)."""
+    """data 2022-08-01 → redação riscada (original, início 2022-07-13).
+
+    Decisão 0075: em consulta histórica sem fundamento, status vira unknown com
+    sem_fundamento_do_periodo, preservando a seleção da redação e o intervalo.
+    """
     prov = _rcvm160_inc16()
     res = select(prov, "2022-08-01", work_date=WORK_DATE_RCVM160)
     assert res.redaction_id is not None
@@ -33,7 +37,9 @@ def test_rcvm160_data_seleciona_riscada():
     assert res.interval is not None
     assert res.interval.start == WORK_DATE_RCVM160
     assert res.interval.end == "2022-11-29"
-    assert res.status == "verified"
+    assert res.status == "unknown"
+    assert res.reason == "sem_fundamento_do_periodo"
+    assert "sem_fundamento_do_periodo" in res.flags
 
 
 def test_rcvm160_data_seleciona_vigente():
@@ -199,8 +205,18 @@ def test_revogado():
             )
         ],
     )
-    res = select(prov, "2023-01-01", work_date="2010-01-01")
-    assert res.status == "revogado"
+    # Decisão 0075: consulta histórica sem fundamento vira unknown com sem_fundamento_do_periodo e revogacao_anotada
+    res_hist = select(prov, "2023-01-01", work_date="2010-01-01")
+    assert res_hist.status == "unknown"
+    assert res_hist.reason == "sem_fundamento_do_periodo"
+    assert "revogacao_anotada" in res_hist.flags
+    # Consulta corrente (sem data ou na data de hoje) continua revogado
+    from freoa_verifica.temporal import today_sp
+
+    res_corrente = select(prov, today_sp().isoformat(), work_date="2010-01-01")
+    assert res_corrente.status == "revogado"
+    res_sem_data = select(prov, None, work_date="2010-01-01")
+    assert res_sem_data.status == "revogado"
 
 
 def test_nao_existia():

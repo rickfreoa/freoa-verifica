@@ -1,0 +1,50 @@
+[
+  {
+    "porta": "L",
+    "escopo": "texto_publicado",
+    "estado": "nao_apurada",
+    "versao": null,
+    "manifesto": null,
+    "rotulo": "Porta L: texto publicado"
+  },
+  {
+    "porta": "L",
+    "escopo": "texto_consolidado_vigente",
+    "estado": "nao_apurada",
+    "versao": null,
+    "manifesto": null,
+    "rotulo": "Porta L: texto consolidado vigente"
+  },
+  {
+    "porta": "L",
+    "escopo": "redacao_em_data",
+    "estado": "nao_apurada",
+    "versao": null,
+    "manifesto": null,
+    "rotulo": "Porta L: redação em data"
+  },
+  {
+    "porta": "L",
+    "escopo": "anexos",
+    "estado": "nao_apurada",
+    "versao": null,
+    "manifesto": null,
+    "rotulo": "Porta L: anexos"
+  },
+  {
+    "porta": "L",
+    "escopo": "remissoes",
+    "estado": "nao_apurada",
+    "versao": null,
+    "manifesto": null,
+    "rotulo": "Porta L: remissões"
+  },
+  {
+    "porta": "stj_1_4_0",
+    "escopo": "stj",
+    "estado": "nao_apurada",
+    "versao": null,
+    "manifesto": null,
+    "rotulo": "STJ qualificado no escopo 1.4.0"
+  }
+]

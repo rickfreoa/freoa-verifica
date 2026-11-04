@@ -476,6 +476,17 @@ def select(
     if revoked_at is not None:
         end_d = _parse_iso(revoked_at)
         if end_d and target >= end_d:
+            if not current_query:
+                # 0075, §2.5: sem resolvedor de versões oficiais (IL.2) nenhuma data histórica tem fundamento.
+                return TemporalResult(
+                    status="unknown",
+                    redaction_id=None,
+                    interval=Interval(revoked_at, None),
+                    rules_applied=rules,
+                    flags=list(dict.fromkeys(gflags + ["sem_fundamento_do_periodo", "revogacao_anotada"])),
+                    needs_judgment=needs_judgment,
+                    reason="sem_fundamento_do_periodo",
+                )
             return TemporalResult(
                 status="revogado",
                 redaction_id=None,
@@ -504,15 +515,46 @@ def select(
     first_start = _parse_iso(dated[0].start) if dated[0].start else None
     if first_start and target < first_start:
         inclusion = dated[0].intro_annotation
-        proven = inclusion is not None and inclusion.kind == "incluido"
+        if current_query:
+            # Consulta corrente: semântica de 430e654 (0075, §2.4).
+            proven = inclusion is not None and inclusion.kind == "incluido"
+            return TemporalResult(
+                status="nao_existia" if proven else "unknown",
+                redaction_id=None,
+                interval=None,
+                rules_applied=rules,
+                flags=gflags,
+                needs_judgment=needs_judgment,
+                reason=None if proven else "HISTORICO_ANTERIOR_AUSENTE",
+            )
+        has_pending_judgment = (
+            needs_judgment
+            or "revogacao_parcial" in gflags
+            or any(a.kind in _JUDGMENT_KINDS or a.kind == "revogacao_parcial" for r in provision.redactions for a in r.annotations)
+        )
+        proven = (
+            inclusion is not None
+            and inclusion.kind == "incluido"
+            and not has_pending_judgment
+        )
+        if proven:
+            return TemporalResult(
+                status="nao_existia",
+                redaction_id=None,
+                interval=None,
+                rules_applied=rules,
+                flags=gflags,
+                needs_judgment=needs_judgment,
+                reason=None,
+            )
         return TemporalResult(
-            status="nao_existia" if proven else "unknown",
+            status="unknown",
             redaction_id=None,
             interval=None,
             rules_applied=rules,
-            flags=gflags,
+            flags=list(dict.fromkeys(gflags + ["sem_fundamento_do_periodo"])),
             needs_judgment=needs_judgment,
-            reason=None if proven else "HISTORICO_ANTERIOR_AUSENTE",
+            reason="sem_fundamento_do_periodo",
         )
 
     # Consulta atual: vigente_na_fonte se condições ok
@@ -639,6 +681,12 @@ def select(
     status = _status_verified_or_unknown(
         interval, flags=flags, needs_judgment=needs_judgment
     )
+    reason = None
+    if not current_query:
+        status = "unknown"
+        reason = "sem_fundamento_do_periodo"
+        if "sem_fundamento_do_periodo" not in flags:
+            flags.append("sem_fundamento_do_periodo")
     return TemporalResult(
         status=status,
         redaction_id=chosen.redaction_id,
@@ -646,4 +694,5 @@ def select(
         rules_applied=rules,
         flags=flags,
         needs_judgment=needs_judgment,
+        reason=reason,
     )

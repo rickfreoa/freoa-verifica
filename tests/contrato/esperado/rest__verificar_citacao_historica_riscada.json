@@ -1,0 +1,131 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "verificar_citacao_historica_riscada",
+    "commit": "7a3347a",
+    "entrada": {
+      "citacao": "art. 2º, XVI da Resolução CVM nº 160/2022",
+      "data": "2022-08-01",
+      "trecho": "pessoas vinculadas: controladores, diretos ou indiretos, ou administradores dos participantes do consórcio de distribuição, do emissor, do ofertante, bem como seus cônjuges ou companheiros, seus ascendentes, descendentes e colaterais até o 2o grau, e as demais pessoas vinculadas à emissão e à distribuição, conforme definidas na regulamentação da CVM que dispõe sobre normas e procedimentos a serem observados nas operações realizadas com valores mobiliários em mercados regulamentados;"
+    },
+    "ferramenta": "verificar_citacao",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a1",
+    "versao_destino": "1.4.0a2"
+  },
+  "resposta": {
+    "algo_versions": {
+      "citation": "citation-3",
+      "temporal": "temporal-1",
+      "textcmp": "textcmp-1",
+      "verify": "verify-r5-1"
+    },
+    "citation": {
+      "confidence": "exata",
+      "decision": null,
+      "flags": [],
+      "kind": "norma",
+      "path": "art2.inc16",
+      "raw": "art. 2º, XVI da Resolução CVM nº 160/2022",
+      "span": [
+        0,
+        41
+      ],
+      "work": {
+        "authority": "cvm",
+        "kind": "resolucao",
+        "number": "160",
+        "year": 2022
+      }
+    },
+    "correspondencia_textual": {
+      "origem": "rasura_compilada",
+      "redaction_id": "r0",
+      "resultado": "coincide",
+      "riscada": true
+    },
+    "fundamento_temporal": null,
+    "identity": {
+      "evidence": [
+        {
+          "acervo_ate": null,
+          "capture_id": "<ulid>",
+          "captured_at": "<instante>",
+          "esfera": "federal",
+          "fetched_at": "<instante>",
+          "natureza_texto": "consolidacao_oficial",
+          "path": "art2.inc16",
+          "procedencia": "nao_identificado",
+          "proveniencia": {
+            "interpretacao": "legado_sem_cabecalho"
+          },
+          "sha256": "abdacb19193642be33de9dc59212a2f8036e8c42d7e8b78acda9b1373ff22b57",
+          "source_kind": "resolucao_cvm",
+          "span": null,
+          "trecho_oficial": null,
+          "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.docx"
+        }
+      ],
+      "reason_code": "OBRA_E_CAMINHO_OK",
+      "status": "verified"
+    },
+    "proposicao": null,
+    "run_id": "<ulid>",
+    "support": {
+      "evidence": [],
+      "reason_code": "SUPPORT_NOT_IN_M3",
+      "status": "not_assessed"
+    },
+    "temporal": {
+      "evidence": [
+        {
+          "acervo_ate": null,
+          "capture_id": "<ulid>",
+          "captured_at": "<instante>",
+          "esfera": "federal",
+          "fetched_at": "<instante>",
+          "natureza_texto": "consolidacao_oficial",
+          "path": "art2.inc16",
+          "procedencia": "nao_identificado",
+          "proveniencia": {
+            "interpretacao": "legado_sem_cabecalho"
+          },
+          "sha256": "abdacb19193642be33de9dc59212a2f8036e8c42d7e8b78acda9b1373ff22b57",
+          "source_kind": "resolucao_cvm",
+          "span": null,
+          "trecho_oficial": null,
+          "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.docx"
+        }
+      ],
+      "reason_code": "sem_fundamento_do_periodo",
+      "status": "unknown"
+    },
+    "text": {
+      "evidence": [
+        {
+          "acervo_ate": null,
+          "capture_id": "<ulid>",
+          "captured_at": "<instante>",
+          "esfera": "federal",
+          "fetched_at": "<instante>",
+          "natureza_texto": "consolidacao_oficial",
+          "path": "art2.inc16",
+          "procedencia": "nao_identificado",
+          "proveniencia": {
+            "interpretacao": "legado_sem_cabecalho"
+          },
+          "sha256": "abdacb19193642be33de9dc59212a2f8036e8c42d7e8b78acda9b1373ff22b57",
+          "source_kind": "resolucao_cvm",
+          "span": [
+            0,
+            487
+          ],
+          "trecho_oficial": "pessoas vinculadas: controladores, diretos ou indiretos, ou administradores dos participantes do consórcio de distribuição, do emissor, do ofertante, bem como seus cônjuges ou companheiros, seus ascendentes, descendentes e colaterais até o 2o grau, e as demais pessoas vinculadas à emissão e à distribuição, conforme definidas na regulamentação da CVM que dispõe sobre normas e procedimentos a serem observados nas operações realizadas com valores mobiliários em mercados regulamentados;",
+          "url": "https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.docx"
+        }
+      ],
+      "reason_code": "sem_fundamento_do_periodo",
+      "status": "unknown"
+    }
+  }
+}

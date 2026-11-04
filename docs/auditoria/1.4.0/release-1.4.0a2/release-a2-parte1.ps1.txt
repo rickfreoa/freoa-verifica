@@ -1,0 +1,27 @@
+# Release 1.4.0a2, parte 1: pacote em venv limpo, candidato, S4, exportação, instalação experimental (docs/RELEASE.md passos 2 e 3).
+$ErrorActionPreference = "Continue"
+$repo = "<repo>"; $rel = "<rel>"; $out = "$rel\a2"
+New-Item -ItemType Directory -Force $out, "$out\snapshot" | Out-Null
+$et = "$out\etapas.txt"
+"inicio $(Get-Date -Format o)" | Out-File $et
+Set-Location $repo
+"commit $(git rev-parse HEAD)" | Out-File -Append $et
+if (Test-Path "$rel\venv-a2") { Remove-Item -Recurse -Force "$rel\venv-a2" }
+python -m venv "$rel\venv-a2"
+$py = "$rel\venv-a2\Scripts\python.exe"; $fv = "$rel\venv-a2\Scripts\fv.exe"
+& $py -m pip install -q --require-hashes -r requirements\ci.lock *> "$out\pip.log"; "pip_lock=$LASTEXITCODE" | Out-File -Append $et
+& $py -m pip install -q --no-deps . *>> "$out\pip.log"; "pip_pkg=$LASTEXITCODE" | Out-File -Append $et
+"versao $(& $fv --version 2>&1)" | Out-File -Append $et
+$cand = "$rel\candidato-a2"
+if (Test-Path $cand) { Remove-Item -Recurse -Force $cand }
+robocopy "$rel\candidato" $cand /MIR /NFL /NDL /NJH /NJS | Out-Null; "robocopy=$LASTEXITCODE" | Out-File -Append $et
+& $fv acervo conferir --home $cand --estrito --gravar-manifesto "$out\manifesto-1.4.0a2.json" *> "$out\conferir.log"; "conferir=$LASTEXITCODE" | Out-File -Append $et
+$snap = "$out\snapshot\freoa-verifica-snapshot-20261104-1.4.0a2.tar.gz"
+& $fv --home $cand snapshot export --arquivo-unico --saida $snap *> "$out\export.log"; "export=$LASTEXITCODE" | Out-File -Append $et
+$hexp = "$rel\home-exp-a2"; if (Test-Path $hexp) { Remove-Item -Recurse -Force $hexp }
+& $fv --home $hexp snapshot install --arquivo $snap --aceitar-nao-vinculado *> "$out\install-exp.log"; "install_exp=$LASTEXITCODE" | Out-File -Append $et
+& $fv acervo conferir --home $hexp --manifesto "$out\manifesto-1.4.0a2.json" --pos-instalacao --estrito *> "$out\conferir-pos.log"; "conferir_pos=$LASTEXITCODE" | Out-File -Append $et
+& $fv --home $hexp doctor --offline *> "$out\doctor-offline.log"; "doctor_offline=$LASTEXITCODE" | Out-File -Append $et
+"sha256 $((Get-FileHash $snap).Hash.ToLower())" | Out-File -Append $et
+"bytes $((Get-Item $snap).Length)" | Out-File -Append $et
+"fim $(Get-Date -Format o)" | Out-File -Append $et

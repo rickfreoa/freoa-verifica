@@ -1,0 +1,38 @@
+"""Compara duas saídas do comparativo_ouro na projeção do I1.4 (status, identidade, temporal, situação; buscas: status e top-5)."""
+import json
+import sys
+
+
+def carregar(p):
+    return {r["id"]: r for r in (json.loads(l) for l in open(p, encoding="utf-8") if l.strip())}
+
+
+def projecao(r):
+    v = r.get("verificacao") or {}
+    d = v.get("dimensoes") or {}
+    j = r.get("juris") or {}
+    return {
+        "status_v": v.get("status"),
+        "identity": (d.get("identity") or {}).get("status"),
+        "temporal": (d.get("temporal") or {}).get("status"),
+        "status_j": j.get("status"),
+        # O `id` de decisão é ULID gerado por home (volátil, docs/CONTRATO.md); compara-se a identidade do julgado.
+        "top5": [(i.get("tribunal"), i.get("classe_numero"), i.get("url_oficial")) for i in (j.get("top5") or [])],
+        "erro": bool(r.get("erro")),
+    }
+
+
+a, b = carregar(sys.argv[1]), carregar(sys.argv[2])
+iguais, difs = 0, []
+for k in sorted(set(a) | set(b)):
+    pa, pb = projecao(a.get(k, {})), projecao(b.get(k, {}))
+    if pa == pb:
+        iguais += 1
+    else:
+        difs.append((k, {c: (pa[c], pb[c]) for c in pa if pa[c] != pb[c]}))
+seg = sorted(r.get("segundos", 0) for r in b.values())
+p = lambda q: seg[min(len(seg) - 1, max(0, int(round(q * len(seg))) - 1))] if seg else None  # noqa: E731
+print(f"casos: {len(b)}; iguais na projeção: {iguais}; diferentes: {len(difs)}")
+for k, d in difs:
+    print("DIF", k, json.dumps(d, ensure_ascii=False))
+print(f"tempo por consulta: p50 {p(0.5)} s; p95 {p(0.95)} s; máximo {seg[-1] if seg else None} s")

@@ -25,11 +25,21 @@ CNJ_VALIDO = "0713166-62.2018.8.07.0000"
 CNJ_INVALIDO = "0710920-40.2025.8.07.0000"
 TRECHO_LSA = "A alienação, direta ou indireta, do controle de companhia aberta"
 CITACAO_LSA = "art. 254-A da Lei 6.404/76"
+CITACAO_160_ART1 = "art. 1º da Resolução CVM nº 160/2022"
+
+CITACAO_160 = "art. 2º, XVI da Resolução CVM nº 160/2022"
+TRECHO_160_RISCADO = (
+    "pessoas vinculadas: controladores, diretos ou indiretos, ou administradores dos participantes do consórcio "
+    "de distribuição, do emissor, do ofertante, bem como seus cônjuges ou companheiros, seus ascendentes, descendentes "
+    "e colaterais até o 2o grau, e as demais pessoas vinculadas à emissão e à distribuição, conforme definidas "
+    "na regulamentação da CVM que dispõe sobre normas e procedimentos a serem observados nas operações realizadas "
+    "com valores mobiliários em mercados regulamentados;"
+)
 
 # Voláteis documentados em docs/CONTRATO.md (seção "Voláteis"): o valor é trocado por marcador do mesmo
 # tipo; só a presença e o tipo contam.
 VOLATEIS_CHAVES = frozenset({
-    "fetched_at", "captured_at", "created_at", "data_captura", "ultima_atualizacao",  # instantes
+    "fetched_at", "captured_at", "created_at", "data_captura", "ultima_atualizacao", "criado_em",  # instantes
     "home", "caminho_arquivo", "db_path", "blob_path",  # caminhos de máquina (`path` é caminho de dispositivo: estável)
     "duracao_ms", "elapsed_ms", "latencia_ms",  # durações
     "run_id",  # identificador de execução
@@ -37,7 +47,10 @@ VOLATEIS_CHAVES = frozenset({
 # Chaves cujo conteúdo é hash ou saldo de execução, não do dado.
 VOLATEIS_HASH_CHAVES = frozenset({"run_hash", "execucao_sha256", "ultimo_health"})
 # Chaves que carregam estado enumerado: o conjunto de valores é parte do contrato.
-CHAVES_DE_ESTADO = frozenset({"status", "motivo", "modo_busca", "relacao", "parte_entregue"})
+CHAVES_DE_ESTADO = frozenset({
+    "status", "motivo", "modo_busca", "relacao", "parte_entregue", "politica",
+    "estado", "acao", "capacidade",
+})
 
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 _ULID = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
@@ -63,7 +76,12 @@ def indexar_decisao(svc, court, official, *, text, ementa="ementa oficial", kind
 
 
 def semear(svc) -> dict[str, str]:
-    """Decisões sintéticas: inteiro teor longo, só ementa, e identificador repetido em dois tribunais."""
+    """Decisões sintéticas e obras para casos de teste de contrato."""
+    from freoa_verifica import situacao
+    from freoa_verifica.aliases import WorkKey
+    from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
+    from tests.fixture_util import load_fixture
+
     ids = {}
     ids["stj_inteiro"] = indexar_decisao(
         svc, "STJ", "900001", text="Inteiro teor sintético do acórdão. " * 80, ementa="Ementa sintética do acordão.",
@@ -72,6 +90,59 @@ def semear(svc) -> dict[str, str]:
     indexar_decisao(svc, "STJ", "555", text="texto stj 555 " * 20, ementa="ementa stj 555")
     indexar_decisao(svc, "TCU", "555", text="texto tcu 555 " * 20, ementa="ementa tcu 555",
                     cls="Acórdão", organ="Plenário")
+
+    # Obra com redação riscada em data passada (RCVM 160)
+    body_160 = load_fixture("cvm_resol_160_consolid_docx")
+    doc_160 = parse_cvm_docx(body_160)
+    rw_160 = svc.indexar_obra(
+        source_id="cvm_normas",
+        work_key=WorkKey("cvm", "resolucao", "160", 2022),
+        document=doc_160,
+        body=body_160,
+        url="https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.docx",
+        fetched_at="2026-10-18T00:00:00Z",
+        work_date="2022-07-13",
+        label="Resolução CVM nº 160/2022",
+    )
+    # Obra declarada revogada pela página do ato: a consulta corrente é `revogado`; a histórica nunca converte (C1).
+    situacao.gravar(
+        svc.conn,
+        situacao.WorkStatus(
+            rw_160.work_id,
+            "revogada",
+            texto_oficial="Revogada pela página do ato (caso sintético do harness)",
+            data_efeito="2025-01-01",
+            captura_id=rw_160.capture_id,
+            sha256=rw_160.sha256,
+            lido_em="2026-10-18T00:00:00Z",
+        ),
+    )
+    ids["capture_160"] = rw_160.capture_id
+
+    # Execução para caso de obter_registro
+    run_res = svc.verificar_citacao(CITACAO_LSA, trecho=TRECHO_LSA)
+    ids["run_id_valido"] = run_res["run_id"]
+    # Recibo adulterado (IL.0-R, rodada 3): `request_json` vira BLOB; a conferência responde integridade inválida.
+    corrompido = svc.verificar_citacao(CITACAO_LSA, trecho=TRECHO_LSA)["run_id"]
+    for nome in [r[0] for r in svc.conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='run'")]:
+        svc.conn.execute(f'DROP TRIGGER "{nome}"')
+    svc.conn.execute("UPDATE run SET request_json=X'7B7D' WHERE id=?", (corrompido,))
+    svc.conn.commit()
+    ids["run_id_corrompido"] = corrompido
+
+    # Aviso de incidente de exemplo para listar_fontes cobrir os campos
+    (Path(svc.home) / "avisos_incidente.json").write_text(
+        json.dumps([{
+            "id": "AV-000",
+            "data": "2026-11-03",
+            "versoes_afetadas": ["1.4.0a1"],
+            "acao": "correcao",
+            "descricao": "Aviso de teste de contrato",
+            "referencia": "decisao 0075",
+        }]),
+        encoding="utf-8",
+    )
+
     return ids
 
 
@@ -105,6 +176,28 @@ CASOS: list[tuple[str, str, dict[str, Any]]] = [
     ("obter_evidencia", "obter_evidencia", {"capture_id": "@capture_lsa", "max_chars": 300}),
     ("obter_evidencia_inexistente", "obter_evidencia", {"capture_id": "capture-inexistente"}),
     ("listar_fontes", "listar_fontes", {}),
+    ("verificar_citacao_historica_riscada", "verificar_citacao", {
+        "citacao": CITACAO_160,
+        "trecho": TRECHO_160_RISCADO,
+        "data": "2022-08-01",
+    }),
+    ("obter_dispositivo_revogado_corrente", "obter_dispositivo", {"citacao": CITACAO_160_ART1}),
+    ("obter_dispositivo_nao_existia", "obter_dispositivo", {"citacao": CITACAO_LSA, "data": "1970-01-01"}),
+    ("obter_dispositivo_historica", "obter_dispositivo", {"citacao": CITACAO_160, "data": "2022-08-01"}),
+    ("obter_dispositivo_sem_caminho", "obter_dispositivo", {"citacao": "Lei 6.404/76"}),
+    # IL.0-R, rodada 2 (C12): variantes legítimas da fachada que o contrato do consumidor precisa aceitar.
+    ("obter_dispositivo_requer_conferencia", "obter_dispositivo", {"citacao": "Lei 6.404, art. 254-A"}),
+    ("obter_dispositivo_formato_invalido", "obter_dispositivo", {"citacao": "xyz"}),
+    ("obter_dispositivo_inexistente", "obter_dispositivo", {"work_id": "obra-inexistente"}),
+    ("obter_dispositivo_indisponivel", "obter_dispositivo", {"citacao": "art. 1 da Lei 8.666/93"}),
+    ("verificar_citacao_dispositivo_inexistente", "verificar_citacao", {"citacao": "art. 999 da Lei 6.404/76", "trecho": "trecho qualquer"}),
+    ("verificar_citacao_fonte_indisponivel", "verificar_citacao", {"citacao": "art. 1 da Lei 8.666/93"}),
+    ("verificar_citacao_requer_conferencia", "verificar_citacao", {
+        "citacao": "Lei 6.404, art. 254-A", "trecho": TRECHO_LSA, "data": "2020-01-01"}),
+    ("obter_registro_encontrada", "obter_registro", {"run_id": "@run_id_valido"}),
+    ("obter_registro_inexistente", "obter_registro", {"run_id": "01M6H1Y11Y99K728HPNASE0000"}),
+    # IL.0-R, rodada 3 (C12): recuperação de recibo adulterado (integridade inválida, campos não autenticados nulos).
+    ("obter_registro_integridade_invalida", "obter_registro", {"run_id": "@run_id_corrompido"}),
 ]
 
 
@@ -168,6 +261,12 @@ def chamar_rest(client, ferramenta: str, args: dict[str, Any]) -> dict:
         r = client.get(f"/v1/evidencias/{a.pop('capture_id')}", params=a)
     elif ferramenta == "listar_fontes":
         r = client.get("/v1/fontes")
+    elif ferramenta == "obter_registro":
+        run_id = a.pop("run_id")
+        if "evidencias" in a or "fundamento_temporal" in a:
+            r = client.post(f"/v1/registros/{run_id}/conferencia", json=a)
+        else:
+            r = client.get(f"/v1/registros/{run_id}", params=a)
     else:  # pragma: no cover
         raise KeyError(ferramenta)
     assert r.status_code == 200, (ferramenta, r.status_code, r.text)
@@ -313,13 +412,62 @@ def nome_arquivo(adaptador: str, caso: str) -> Path:
     return ESPERADO / f"{adaptador}__{caso}.json"
 
 
+CASOS_NOVOS_1_4_0 = frozenset({
+    "obter_registro_encontrada",
+    "obter_registro_inexistente",
+    "verificar_citacao_historica_riscada",
+})
+# IL.0-R (C12): casos gravados com o código do commit abaixo (o do núcleo C1 a C11), offline.
+CASOS_IL0R = frozenset({
+    "obter_dispositivo_revogado_corrente",
+    "obter_dispositivo_nao_existia",
+    "obter_dispositivo_historica",
+    "obter_dispositivo_sem_caminho",
+})
+# IL.0-R, rodada 2 (C12): casos gravados com o código do commit abaixo (o das correções C4, C6, C8 e C11), offline.
+CASOS_IL0R2 = frozenset({
+    "obter_dispositivo_requer_conferencia",
+    "obter_dispositivo_formato_invalido",
+    "obter_dispositivo_inexistente",
+    "obter_dispositivo_indisponivel",
+    "verificar_citacao_dispositivo_inexistente",
+    "verificar_citacao_fonte_indisponivel",
+    "verificar_citacao_requer_conferencia",
+})
+# IL.0-R, rodada 3 (C12): caso gravado com o código do commit abaixo (o das correções C8 e C11 e da recuperação), offline.
+CASOS_IL0R3 = frozenset({"obter_registro_integridade_invalida"})
+COMMIT_IL0R = "3a3ba0b"
+COMMIT_IL0R2 = "8539bac"
+COMMIT_IL0R3 = "fdceb0b"
+COMMIT_1_4_0 = "7a3347a"
+VERSAO_1_4_0 = "1.4.0a1"
+VERSAO_DESTINO_1_4_0 = "1.4.0a2"
+
+
+def commit_do_caso(caso: str) -> str:
+    return COMMIT_IL0R3 if caso in CASOS_IL0R3 else COMMIT_IL0R2 if caso in CASOS_IL0R2 else COMMIT_IL0R if caso in CASOS_IL0R else COMMIT_1_4_0 if caso in CASOS_NOVOS_1_4_0 else COMMIT_1_2_0
+
+
 def gravar(adaptador: str, caso: str, ferramenta: str, entrada: dict, resposta: dict) -> None:
+    is_il0r = caso in CASOS_IL0R or caso in CASOS_IL0R2 or caso in CASOS_IL0R3
+    is_novo = caso in CASOS_NOVOS_1_4_0 or is_il0r
+    prov = {
+        "adaptador": adaptador,
+        "caso": caso,
+        "commit": commit_do_caso(caso),
+        "entrada": entrada,
+        "ferramenta": ferramenta,
+        "origem": (
+            "entrada sintética + acervo de teste local (decisão 0075 / IL.0" + ("-R, C12" + (", rodada 3" if caso in CASOS_IL0R3 else ", rodada 2" if caso in CASOS_IL0R2 else "") if is_il0r else "") + "), FV_OFFLINE=1, sem rede"
+            if is_novo
+            else "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede"
+        ),
+        "versao": VERSAO_DESTINO_1_4_0 if is_il0r else VERSAO_1_4_0 if is_novo else "1.2.0",
+    }
+    if is_novo and not is_il0r:
+        prov["versao_destino"] = VERSAO_DESTINO_1_4_0
     doc = {
-        "_proveniencia": {
-            "commit": COMMIT_1_2_0, "versao": "1.2.0", "adaptador": adaptador, "caso": caso,
-            "ferramenta": ferramenta, "entrada": entrada,
-            "origem": "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede",
-        },
+        "_proveniencia": prov,
         "resposta": normalizar(resposta),
     }
     ESPERADO.mkdir(exist_ok=True)

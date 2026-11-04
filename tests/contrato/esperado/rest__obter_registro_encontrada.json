@@ -1,0 +1,54 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "obter_registro_encontrada",
+    "commit": "7a3347a",
+    "entrada": {
+      "run_id": "@run_id_valido"
+    },
+    "ferramenta": "obter_registro",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a1",
+    "versao_destino": "1.4.0a2"
+  },
+  "resposta": {
+    "confere_evidencias": null,
+    "confere_fundamento": null,
+    "criado_em": "<instante>",
+    "estado": {
+      "identity": {
+        "reason_code": "OBRA_E_CAMINHO_OK",
+        "status": "verified"
+      },
+      "support": {
+        "reason_code": "SUPPORT_NOT_IN_M3",
+        "status": "not_assessed"
+      },
+      "temporal": {
+        "reason_code": "R1,R2,R6,R4",
+        "status": "vigente_na_fonte"
+      },
+      "text": {
+        "reason_code": "TEXTO_OK",
+        "status": "verified"
+      }
+    },
+    "evidencias": null,
+    "ferramenta": "verificar_citacao",
+    "fundamento_temporal": null,
+    "integridade": {
+      "algoritmo": "hmac-sha256",
+      "confere": true
+    },
+    "parametros": {
+      "citacao_sha256": "hmac1:36c5f24adcf936ae3f61523749e7a2eda4c1143e4695736236dce31fc4c0cd0b",
+      "data_sha256": null,
+      "modo_sha256": "hmac1:c9087c7e939051dfae98abfdb73f85d436e848a77474cdee90af973a20c78867",
+      "registro": "sem_conteudo",
+      "trecho_sha256": "hmac1:0c84cac903c5a3eff9e65cf05af35243208bf93c4436f13aebff737958d42bb5"
+    },
+    "politica": "sem_conteudo",
+    "run_id": "<ulid>",
+    "status": "encontrada"
+  }
+}

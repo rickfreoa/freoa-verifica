@@ -1,0 +1,62 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "obter_dispositivo_nao_existia",
+    "commit": "3a3ba0b",
+    "entrada": {
+      "citacao": "art. 254-A da Lei 6.404/76",
+      "data": "1970-01-01"
+    },
+    "ferramenta": "obter_dispositivo",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0-R, C12), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
+  },
+  "resposta": {
+    "anotacoes": [
+      {
+        "act_date": null,
+        "act_ref": "Lei nº 10.303, de 2001",
+        "kind": "incluido",
+        "raw": "(Incluído pela Lei nº 10.303, de 2001)"
+      }
+    ],
+    "caminho": "art254-A",
+    "correspondencia_textual": null,
+    "evidencia": {
+      "acervo_ate": "2026-10-17",
+      "capture_id": "<ulid>",
+      "captured_at": "<instante>",
+      "esfera": "federal",
+      "fetched_at": "<instante>",
+      "natureza_texto": "consolidacao_oficial",
+      "procedencia": "captura_direta",
+      "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+      "source_kind": "lei",
+      "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+    },
+    "fundamento_temporal": null,
+    "redacao_anterior_ausente_na_fonte": false,
+    "redacoes_anteriores": [],
+    "situacao_obra": null,
+    "status": "encontrada",
+    "texto": null,
+    "texto_atual": {
+      "rotulo": "redação atual da fonte; não é a redação da data pedida",
+      "texto": "A alienação, direta ou indireta, do controle de companhia aberta somente poderá ser contratada sob a condição, suspensiva ou resolutiva, de que o adquirente se obrigue a fazer oferta pública de aquisição das ações com direito a voto de propriedade dos demais acionistas da companhia, de modo a lhes assegurar o preço no mínimo igual a 80% (oitenta por cento) do valor pago por ação com direito a voto, integrante do bloco de controle."
+    },
+    "truncado": false,
+    "vigencia": {
+      "flags": [],
+      "intervalo": null,
+      "reason_code": null,
+      "regras": [
+        "R1",
+        "R2",
+        "R6",
+        "R4"
+      ],
+      "status": "nao_existia"
+    },
+    "work_id": "<ulid>"
+  }
+}

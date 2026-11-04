@@ -1,0 +1,35 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "obter_dispositivo_sem_caminho",
+    "commit": "3a3ba0b",
+    "entrada": {
+      "citacao": "Lei 6.404/76"
+    },
+    "ferramenta": "obter_dispositivo",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0-R, C12), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
+  },
+  "resposta": {
+    "aviso": "informe caminho ou citação com dispositivo",
+    "caminho": null,
+    "correspondencia_textual": null,
+    "evidencia": {
+      "acervo_ate": "2026-10-17",
+      "capture_id": "<ulid>",
+      "captured_at": "<instante>",
+      "esfera": "federal",
+      "fetched_at": "<instante>",
+      "natureza_texto": "consolidacao_oficial",
+      "procedencia": "captura_direta",
+      "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+      "source_kind": "lei",
+      "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+    },
+    "fundamento_temporal": null,
+    "situacao_obra": null,
+    "status": "encontrada",
+    "texto": null,
+    "work_id": "<ulid>"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "_proveniencia": {
+    "adaptador": "rest",
+    "caso": "obter_registro_inexistente",
+    "commit": "7a3347a",
+    "entrada": {
+      "run_id": "01M6H1Y11Y99K728HPNASE0000"
+    },
+    "ferramenta": "obter_registro",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a1",
+    "versao_destino": "1.4.0a2"
+  },
+  "resposta": {
+    "run_id": "<ulid>",
+    "status": "inexistente"
+  }
+}

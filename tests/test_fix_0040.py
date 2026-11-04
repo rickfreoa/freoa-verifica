@@ -217,7 +217,7 @@ def test_a6_chave_apagada_com_historico_nao_e_regenerada(tmp_path):
     with Verifica(home=tmp_path) as svc:
         svc.verificar_citacao(CIT)
         imp = svc.conn.execute("SELECT value FROM meta WHERE key=?", (reg.META_IMPRESSAO,)).fetchone()[0]
-        assert imp == reg._impressao((tmp_path / "registro.key").read_bytes())
+        assert imp == reg._impressao((tmp_path / "registro.key").read_bytes()[:32])  # IL.0-R r2: depois dos 32 bytes da chave vem a âncora
     (tmp_path / "registro.key").unlink()
     with Verifica(home=tmp_path) as svc:
         with pytest.raises(RuntimeError, match="CHAVE_REGISTRO_AUSENTE"):

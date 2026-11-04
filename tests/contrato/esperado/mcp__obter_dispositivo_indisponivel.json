@@ -1,0 +1,19 @@
+{
+  "_proveniencia": {
+    "adaptador": "mcp",
+    "caso": "obter_dispositivo_indisponivel",
+    "commit": "8539bac",
+    "entrada": {
+      "citacao": "art. 1 da Lei 8.666/93"
+    },
+    "ferramenta": "obter_dispositivo",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0-R, C12, rodada 2), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
+  },
+  "resposta": {
+    "correspondencia_textual": null,
+    "fundamento_temporal": null,
+    "motivo": "COBERTURA",
+    "status": "indisponivel"
+  }
+}

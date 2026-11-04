@@ -638,11 +638,17 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
                     if old_id:
                         table_map[old_id] = existing["id"]
                     continue
-                col_list = ", ".join(columns)
-                placeholders = ",".join("?" for _ in columns)
+                colunas = columns
+                if table == "capture":
+                    # C6: captura incorporada pelo snapshot (inclusive em acervo misto) é `snapshot`; a tabela é
+                    # imutável (trigger), então a marca vai no INSERT. As capturas locais mantêm a sua.
+                    values["procedencia"] = "snapshot"
+                    colunas = columns + ("procedencia",)
+                col_list = ", ".join(colunas)
+                placeholders = ",".join("?" for _ in colunas)
                 modo = "OR REPLACE" if table == "parsed_document" and substituir else "OR IGNORE"
                 conn.execute(f"INSERT {modo} INTO main.{table}({col_list}) VALUES ({placeholders})",
-                             [values[c] for c in columns])
+                             [values[c] for c in colunas])
                 if table == "parsed_document":
                     substituidas.append(values["capture_id"])
                 if old_id:
@@ -1114,7 +1120,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
 
         svc._db_path = db_dst
         svc._clear_caches()
-        svc.conn = connect(db_dst)
+        svc.conn = connect(db_dst, operacional=True)
         # O manifesto de origem não pode autoafirmar vínculo com o wheel. Instalação é anexação:
         # um snapshot não vinculado anterior continua no banco, logo o "não vinculado" é permanente.
         vinculo = _vinculo_acumulado(svc.home, vinculo or {"vinculado": False}, banco_tinha_dados=banco_tinha_dados)
@@ -1161,7 +1167,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
             result["backup_blobs"] = str(backup_blobs)
         svc._clear_caches()
         try:
-            svc.conn = connect(db_dst)
+            svc.conn = connect(db_dst, operacional=True)
         except Exception as reopen_exc:  # noqa: BLE001
             result["reopen_error"] = str(reopen_exc)[:200]
         return result

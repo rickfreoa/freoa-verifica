@@ -1,5 +1,70 @@
 # Histórico de versões
 
+## 1.4.0a2 - 04/11/2026
+
+Pré-release do incremento IL.0 (emenda IL do plano 1.4.0 e decisão 0075). Correção da fronteira e estado temporal com data referida a D, tipagem de evidência em eixos, nova ferramenta `obter_registro` com conferência por HMAC, novos metadados em `listar_fontes` e contrato formal do consumidor FREOA.
+
+### IL.0-R, rodada 2
+
+- Campos aditivos (`fundamento_temporal`, `correspondencia_textual`) normalizados no último ponto antes da emissão em todo estado de `verificar_citacao` e `obter_dispositivo`, inclusive `formato_invalido`, `requer_conferencia`, `ambigua`, `indisponivel`, `inexistente`, `unknown` e a recusa pelos derivados incompatíveis; `correspondencia_textual` é nula depois de qualquer rebaixamento da identidade.
+- Evidência da situação cadastral pelo construtor comum, com o recibo da captura; `natureza_texto` deduzida do documento, não da autoridade.
+- Âncora do registro legado fora do banco (arquivo da chave do home; na conexão gerenciada em banco sem home, sem registro global); reaplicar a migração não a recompõe. `obter_registro` devolve integridade inválida, sem exceção, para qualquer coluna lida com tipo SQLite inesperado (BLOB, número), texto que não é UTF-8, JSON inválido ou âncora malformada.
+- IL.0-R, rodada 3: as migrações 17 a 19 do ramo (nunca incorporadas nem publicadas) viram a migração única 17 (`run`, `capture.procedencia` e selo do legado). Consolidação deliberada: nenhum banco real tem estado intermediário; o ponto de partida é o banco da `main` (versão 16), cujos registros viram legado autenticado.
+- A recusa por derivados incompatíveis em `verificar_citacao` e `verificar_texto` grava recibo e devolve `run_id` em serviço gravável.
+- Contrato do consumidor com variantes por discriminante: a verificação exige as quatro dimensões e seus `status`/`reason_code`; a recusa e a recuperação com integridade inválida têm forma própria.
+- Decisões, súmulas e processos dentro de `verificar_texto` e a recusa pelo gate de derivados têm recibo ou declaração de não gravação. Motivo `sem_fundamento_do_periodo` também em `verify.verificar` para revogação sem data.
+- Contrato do consumidor com todas as variantes legítimas da fachada.
+
+### Correção de estado com data referida a D (decisão 0075, seção 2)
+
+- Consulta com `data` referida a D anterior à data corrente ("consulta histórica") sem fundamento documental do período retorna `temporal.status == "unknown"` com `reason_code: "sem_fundamento_do_periodo"`. O texto riscado da compilada e a data de ato alterador não constituem fundamento temporal do período.
+- Em consulta histórica com trecho, `text.status` retorna `unknown` com `reason_code: "sem_fundamento_do_periodo"`. O resultado do confronto mecânico com as redações conhecidas é exposto no campo aditivo `correspondencia_textual` (`resultado`, `redaction_id`, `riscada`, `origem`), nunca no estado.
+- `nao_existia` é restrito a: (a) D anterior à data do próprio ato; (b) D anterior ao ato que incluiu o dispositivo quando a anotação for de inclusão sem questão de juízo pendente.
+- A regra prevalece em todas as portas de saída: `verificar_citacao`, `verificar_texto`, `obter_dispositivo` (`vigencia.status` e `vigencia.reason_code`). A situação declarada pela página do ato (`situacao_obra`) não rebaixa abstenção por falta de fundamento temporal em negativa.
+- `historico_dispositivo`: itens da linha do tempo ganham `limites_inferidos` (bool) e `fundamento_temporal`.
+
+### Eixos de evidência e metadados de defasagem (decisão 0075, seção 3.2)
+
+- Campos aditivos em `evidence[]` e `evidencia`:
+  - `captured_at`: instante da captura (estável para consumo por agentes).
+  - `acervo_ate`: data de corte do acervo congelado (`AAAA-MM-DD` em acervos locais como Planalto; `null` em fonte viva).
+  - `source_kind`: espécie normativa tipada (`lei`, `resolucao_cvm`, `resolucao_bcb`, etc. ou `nao_identificado`).
+  - `natureza_texto`: `publicacao_original`, `consolidacao_oficial`, `reconstrucao_mecanica` ou `nao_identificado`.
+  - `procedencia`: `captura_direta`, `snapshot`, `cadeia_de_alteracoes`, `sessao_assistida` ou `nao_identificado`.
+  - `esfera`: `federal`, `estadual`, `municipal` ou `nao_identificado`.
+
+### Qualificação e incidentes em `listar_fontes` (decisão 0075, seção 3.3)
+
+- `qualificacao`: lista de qualificações formais por porta e escopo (`porta`, `escopo`, `estado`, `versao`, `manifesto`, `rotulo`).
+- `avisos_incidente`: comunicados de incidentes conhecidos (`id`, `data`, `versoes_afetadas`, `acao`, `descricao`, `referencia`), unindo catálogo versionado e `<home>/avisos_incidente.json`.
+
+### Ferramenta `obter_registro` (decisão 0075, seção 3.4)
+
+- Nova ferramenta pública em Python, MCP e REST (`GET /v1/registros/{run_id}` e `POST /v1/registros/{run_id}/conferencia`).
+- Permite recuperar registro local de operações de verificação por `run_id`.
+- Em modo `sem_conteudo`, protege dados sensíveis através de compromissos HMAC (`hmac-sha256`) canônicos sobre tuplas de evidência e fundamento temporal, permitindo conferência por apresentação externa sem persistência em claro no banco local.
+- `registro_mac` garante a integridade de ponta a ponta do registro armazenado.
+
+### IL.0-R: correções do passe final do PR #25 (`docs/auditoria/1.4.0/il0r-especificacao.md`, C1 a C12)
+
+- C1: guarda histórica única. A situação cadastral (CVM, BCB, CMN; `revogada` e `cancelada`) nunca produz negativa para D diferente de hoje, qualquer que seja o estado intermediário (`unknown` com qualquer motivo, `not_assessed`, consulta sem dispositivo), com ou sem data de efeito, inclusive em consulta futura. A mesma guarda se repete na resposta final de `verificar_citacao`, `verificar_texto` e `obter_dispositivo`. Mantêm-se `nao_existia`, `ambiguous` e entradas inválidas.
+- C2: removido `fundamento_temporal` de `temporal.select` e de `verify.verificar` (sem resolvedor de versões oficiais, só no IL.2). O campo publicado é sempre `null`.
+- C3: a restrição de inclusão e de `redacao_dada` futuras vale só para consulta histórica; a corrente tem a semântica de `430e654`.
+- C4: `fundamento_temporal` e `correspondencia_textual` em todo ramo de `verificar_citacao` e `obter_dispositivo`; a correspondência é `null` sempre que a identidade final não for `verified`.
+- C5: em consulta histórica sem fundamento, `text.reason_code` é `sem_fundamento_do_periodo` também nos ramos de revogação.
+- C6: toda evidência capturada (normas e decisões) sai de um construtor único com os seis eixos. `procedencia` é persistida por captura (migração 17, coluna `capture.procedencia`): `captura_direta`, `snapshot` (instalação de snapshot, inclusive em acervo misto) ou `sessao_assistida`; captura anterior sem marca é `nao_identificado`.
+- C7: `acervo_ate` calculado na emissão, sem cache.
+- C8: o registro legado é o que o selo autenticado por HMAC do home lista (migração 17 e criação da chave); registro novo sem MAC dá `integridade.confere: false`.
+- C9: `obter_registro` não escreve no banco (leitura da chave separada da criação); funciona com `PRAGMA query_only=ON`.
+- C10: `obter_registro` entre as operações contadas.
+- C11: decisões, súmulas, processos e as saídas antecipadas com conclusão gravam recibo e devolvem `run_id`; em modo somente leitura a resposta traz `registro: {gravado: false, motivo: "somente_leitura"}`.
+- C12: `vigencia.status` do consumidor com os literais publicados (`vigente_na_fonte`, `unknown`, `revogado`, `nao_existia`, `ambiguous`) e quatro casos novos no harness (revogação corrente, inexistência documental, obtenção histórica, sem caminho).
+
+### Contrato do consumidor FREOA (decisão 0075, seção 3.5)
+
+- Especificação formal em `tests/contrato/consumidores/freoa.json` definindo os caminhos obrigatórios e estados esperados para `verificar_citacao`, `obter_dispositivo`, `listar_fontes` e `obter_registro`.
+- Teste de contrato `test_contrato_consumidor_freoa_satisfeito` validando conformidade em Python, MCP e REST.
+
 ## 1.4.0a1 — 28/10/2026
 
 Pré-release do incremento I1 do plano `docs/PLANO-1.4.0.md` (pipeline e preparação das fontes). Decisões 0067 a 0070. Registros em `docs/auditoria/1.4.0/`. O que a versão não entrega vem logo abaixo, e vale mais do que o resto desta seção.

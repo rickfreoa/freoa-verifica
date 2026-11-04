@@ -1,0 +1,16 @@
+# Release 1.4.0a2, parte 2: pacote com o digest, instalação vinculada em home vazio, S4 pós-instalação, doctor.
+$repo = "<repo>"; $rel = "<rel>"; $out = "$rel\a2"
+$et = "$out\vinculado.txt"
+"inicio $(Get-Date -Format o)" | Out-File $et
+Set-Location $repo
+"commit $(git rev-parse HEAD)" | Out-File -Append $et
+$py = "$rel\venv-a2\Scripts\python.exe"; $fv = "$rel\venv-a2\Scripts\fv.exe"
+& $py -m pip install -q --no-deps --force-reinstall . *> "$out\pip2.log"; "pip_pkg=$LASTEXITCODE" | Out-File -Append $et
+"versao $(& $fv --version 2>&1)" | Out-File -Append $et
+$snap = "$out\snapshot\freoa-verifica-snapshot-20261104-1.4.0a2.tar.gz"
+$hv = "$rel\home-vinc-a2"; if (Test-Path $hv) { Remove-Item -Recurse -Force $hv }
+& $fv --home $hv snapshot install --arquivo $snap *> "$out\install-vinc.log"; "install_vinc=$LASTEXITCODE" | Out-File -Append $et
+& $fv acervo conferir --home $hv --manifesto "$out\manifesto-1.4.0a2.json" --pos-instalacao --estrito *> "$out\conferir-vinc.log"; "conferir_vinc=$LASTEXITCODE" | Out-File -Append $et
+& $fv --home $hv doctor --offline *> "$out\doctor-vinc.log"; "doctor_vinc=$LASTEXITCODE" | Out-File -Append $et
+Select-String -Path "$out\install-vinc.log" -Pattern "vinculado" | % { $_.Line } | Out-File -Append $et
+"fim $(Get-Date -Format o)" | Out-File -Append $et

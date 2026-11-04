@@ -1,0 +1,14 @@
+inicio 2026-11-04T07:09:48.2980542-03:00
+commit 23c0c0a2e78a54789a9cf6eb007d8ac0fd0fe6d1
+pip_lock=0
+pip_pkg=0
+versao freoa-verifica 1.4.0a2
+robocopy=1
+conferir=0
+export=0
+install_exp=0
+conferir_pos=0
+doctor_offline=0
+sha256 8e2ad821ae78ace4b61a4a0957ac73ffb4ce4ba48408d7bd05efbec5f0bfff9e
+bytes 665630616
+fim 2026-11-04T07:17:14.3257810-03:00

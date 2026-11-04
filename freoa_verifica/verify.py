@@ -20,7 +20,12 @@ from freoa_verifica.parsers.model import (
     RevokedProvision,
 )
 from freoa_verifica.store import repo as store_repo
-from freoa_verifica.temporal import select as temporal_select
+from freoa_verifica.temporal import (
+    _is_current_query,
+    _parse_iso,
+    select as temporal_select,
+    today_sp,
+)
 from freoa_verifica.textcmp import ALGO_VERSION as TEXTCMP_VERSION
 from freoa_verifica.textcmp import compare
 from freoa_verifica.texto_resposta import ORIGEM_LEGADO
@@ -48,6 +53,16 @@ class Evidence:
     trecho_oficial: str | None = None
     fontes_consultadas: list[dict] | None = None  # experimental; só quando fonte anterior ficou indisponível (0058)
     proveniencia: dict | None = None  # experimental; só quando o texto vem de captura sem Content-Type (0065)
+    captured_at: str | None = None
+    acervo_ate: str | None = None
+    source_kind: str = "nao_identificado"
+    natureza_texto: str = "nao_identificado"
+    procedencia: str = "nao_identificado"
+    esfera: str = "nao_identificado"
+
+    def __post_init__(self) -> None:
+        if self.captured_at is None and self.fetched_at is not None:
+            self.captured_at = self.fetched_at
 
 
 @dataclass
@@ -66,6 +81,8 @@ class VerificationResult:
     algo_versions: dict[str, str] = field(default_factory=lambda: dict(ALGO_VERSIONS))
     citation: Citation | None = None
     run_id: str | None = None
+    fundamento_temporal: dict[str, Any] | None = None
+    correspondencia_textual: dict[str, Any] | None = None
 
 
 @dataclass
@@ -86,6 +103,9 @@ class ResolvedWork:
     caminhos_conhecidos: frozenset[str] = frozenset()  # dispositivos de qualquer captura canônica da obra (0034)
     fontes_consultadas: list[dict] = field(default_factory=list)  # fontes anteriores sem resposta na captura (0058)
     proveniencia: dict | None = None  # experimental; `{interpretacao: "legado_sem_cabecalho"}` (0065)
+    source_id: str | None = None
+    acervo_ate: str | None = None
+    procedencia_tipo: str = "nao_identificado"
 
 
 class Resolver(Protocol):
@@ -145,20 +165,112 @@ class MemoryResolver:
         return None
 
 
+_SOURCE_KINDS = frozenset({
+    "lei", "lei_complementar", "decreto", "decreto_lei", "medida_provisoria",
+    "emenda_constitucional", "constituicao", "resolucao_cvm", "instrucao_cvm",
+    "parecer_orientacao_cvm", "resolucao_cmn", "resolucao_bcb", "circular_bcb",
+})
+
+
+def _inferir_source_kind(wk: WorkKey | None) -> str:
+    if wk is None:
+        return "nao_identificado"
+    auth = (wk.authority or "").lower()
+    kind = (wk.kind or "").lower()
+    if auth == "federal":
+        if kind in ("lei", "lei_complementar", "decreto", "decreto_lei", "medida_provisoria", "emenda_constitucional", "constituicao"):
+            return kind
+    elif auth == "cvm":
+        if kind in ("resolucao", "resolucao_cvm"):
+            return "resolucao_cvm"
+        if kind in ("instrucao", "instrucao_cvm"):
+            return "instrucao_cvm"
+        if kind in ("parecer_orientacao", "parecer_orientacao_cvm"):
+            return "parecer_orientacao_cvm"
+    elif auth == "cmn":
+        if kind in ("resolucao", "resolucao_cmn"):
+            return "resolucao_cmn"
+    elif auth == "bcb":
+        if kind in ("resolucao", "resolucao_bcb"):
+            return "resolucao_bcb"
+        if kind in ("circular", "circular_bcb"):
+            return "circular_bcb"
+    if kind in _SOURCE_KINDS:
+        return kind
+    return "nao_identificado"
+
+
+# Perfis cujo parser só aceita o formato consolidado oficial (docstrings de `parsers/planalto.py` e `parsers/cvm_docx.py`).
+# A autoridade da obra não demonstra consolidação (IL.0-R, C6/0075 §3.2): metadados do Senado, HTML/PDF da CVM e o
+# JSON do BCB não sustentam a natureza e ficam `nao_identificado`.
+_NATUREZA_POR_PERFIL = {"planalto": "consolidacao_oficial", "cvm_docx": "consolidacao_oficial"}
+
+
+def _inferir_natureza_texto(rw: ResolvedWork) -> str:
+    """Natureza pelo documento capturado (perfil do parser) e nunca pela autoridade; sem texto parseado, não há natureza."""
+    doc = rw.document
+    if doc is None or not getattr(doc, "provisions", None):
+        return "nao_identificado"
+    return _NATUREZA_POR_PERFIL.get(getattr(doc, "profile", "") or "", "nao_identificado")
+
+
+def _inferir_esfera(wk: WorkKey | None) -> str:
+    if wk is None:
+        return "nao_identificado"
+    auth = (wk.authority or "").lower()
+    if auth in ("federal", "senado", "cvm", "bcb", "cmn", "stf", "stj"):
+        return "federal"
+    return "nao_identificado"
+
+
+def _inferir_procedencia(rw: ResolvedWork) -> str:
+    if hasattr(rw, "procedencia_tipo") and rw.procedencia_tipo:
+        return rw.procedencia_tipo
+    return "nao_identificado"
+
+
+_PROCEDENCIAS = frozenset({"captura_direta", "snapshot", "cadeia_de_alteracoes", "sessao_assistida", "nao_identificado"})
+
+
+def campos_evidencia(capture_id: str | None, sha256: str | None, url: str | None, fetched_at: str | None, *,
+                     source_kind: str = "nao_identificado", natureza_texto: str = "nao_identificado",
+                     procedencia: str | None = None, esfera: str = "nao_identificado",
+                     acervo_ate: str | None = None) -> dict[str, Any]:
+    """Construtor único da evidência capturada publicada (0075, §3.2; IL.0-R, C6): os quatro campos
+    de captura e os seis eixos. Normas, decisões, `verificar_citacao` e `obter_dispositivo` passam por aqui."""
+    return {
+        "capture_id": capture_id,
+        "sha256": sha256,
+        "url": url,
+        "fetched_at": fetched_at,
+        "captured_at": fetched_at,
+        "acervo_ate": acervo_ate,
+        "source_kind": source_kind or "nao_identificado",
+        "natureza_texto": natureza_texto or "nao_identificado",
+        "procedencia": procedencia if procedencia in _PROCEDENCIAS else "nao_identificado",
+        "esfera": esfera or "nao_identificado",
+    }
+
+
+def campos_evidencia_obra(rw: ResolvedWork, acervo_ate: str | None) -> dict[str, Any]:
+    return campos_evidencia(
+        rw.capture_id, rw.sha256, rw.url, rw.fetched_at,
+        source_kind=_inferir_source_kind(rw.work_key), natureza_texto=_inferir_natureza_texto(rw),
+        procedencia=_inferir_procedencia(rw), esfera=_inferir_esfera(rw.work_key), acervo_ate=acervo_ate,
+    )
+
+
 def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, span=None) -> Evidence:
     t = trecho
     if t and len(t) > _MAX_TRECHO:
         t = t[:_MAX_TRECHO]
     return Evidence(
-        capture_id=rw.capture_id,
-        sha256=rw.sha256,
-        url=rw.url,
-        fetched_at=rw.fetched_at,
         path=path,
         span=span,
         trecho_oficial=t,
         fontes_consultadas=rw.fontes_consultadas or None,
         proveniencia=rw.proveniencia,
+        **campos_evidencia_obra(rw, rw.acervo_ate),
     )
 
 
@@ -261,6 +373,95 @@ def _search_text_in_work(
     return None
 
 
+def _calcular_correspondencia_textual(
+    prov: Provision | None,
+    trecho: str | None,
+    modo: str,
+    temporal_res: Any | None,
+    is_historical: bool,
+    identity_status: str,
+) -> dict[str, Any] | None:
+    if not is_historical or trecho is None or identity_status != "verified" or prov is None:
+        return None
+
+    # Se há redação selecionada pelo temporal:
+    red = _redaction_by_id(prov, temporal_res.redaction_id) if (temporal_res and temporal_res.redaction_id) else None
+
+    if red is not None:
+        cmp = compare(trecho, red.text, modo)
+        if cmp.status == "match":
+            return {
+                "resultado": "coincide",
+                "redaction_id": temporal_res.redaction_id,
+                "riscada": bool(red.struck),
+                "origem": "rasura_compilada" if (red.struck or red.superseded_without_strike) else "redacao_atual",
+            }
+        # Se não casou com a selecionada, procura coincidência exata em todas as redações (ex.: trecho de outra redação)
+        for other in prov.redactions:
+            if other is red:
+                continue
+            cmp_other = compare(trecho, other.text, modo, exact_only=True)
+            if cmp_other.status == "match":
+                return {
+                    "resultado": "coincide",
+                    "redaction_id": f"r{other.order}",
+                    "riscada": bool(other.struck),
+                    "origem": "rasura_compilada" if (other.struck or other.superseded_without_strike) else "redacao_atual",
+                }
+        if cmp.status == "partial":
+            return {
+                "resultado": "parcial",
+                "redaction_id": temporal_res.redaction_id,
+                "riscada": bool(red.struck),
+                "origem": "rasura_compilada" if (red.struck or red.superseded_without_strike) else "redacao_atual",
+            }
+        return {
+            "resultado": "diverge",
+            "redaction_id": temporal_res.redaction_id,
+            "riscada": bool(red.struck),
+            "origem": "rasura_compilada" if (red.struck or red.superseded_without_strike) else "redacao_atual",
+        }
+
+    # Sem redação selecionada: procurar coincidência exata em todas as redações
+    for r in prov.redactions:
+        cmp_r = compare(trecho, r.text, modo, exact_only=True)
+        if cmp_r.status == "match":
+            return {
+                "resultado": "coincide",
+                "redaction_id": f"r{r.order}",
+                "riscada": bool(r.struck),
+                "origem": "rasura_compilada" if (r.struck or r.superseded_without_strike) else "redacao_atual",
+            }
+
+    # Se não coincide exatamente com nenhuma:
+    vigente = _current_redaction(prov)
+    if vigente is not None:
+        cmp_v = compare(trecho, vigente.text, modo)
+        if cmp_v.status == "partial":
+            return {
+                "resultado": "parcial",
+                "redaction_id": f"r{vigente.order}",
+                "riscada": bool(vigente.struck),
+                "origem": "rasura_compilada" if (vigente.struck or vigente.superseded_without_strike) else "redacao_atual",
+            }
+
+    return {
+        "resultado": "diverge",
+        "redaction_id": None,
+        "riscada": None,
+        "origem": "redacao_atual",
+    }
+
+
+def _sem_fundamento_historico(temporal_res, data: str | None) -> bool:
+    """C5: consulta histórica (D válida e diferente de hoje) sem fundamento validado (hoje nunca há, IL.2). Mantêm-se
+    `nao_existia`, `ambiguous` e data inválida, que têm motivo próprio."""
+    if temporal_res is None or _parse_iso(data) is None or _is_current_query(data, today_sp()):
+        return False
+    return (temporal_res.status not in ("nao_existia", "ambiguous")
+            and "data_consulta_invalida" not in temporal_res.flags)
+
+
 def verificar(
     citacao: str,
     trecho: str | None = None,
@@ -280,6 +481,9 @@ def verificar(
         raise ValueError("resolver é obrigatório")
     if not persistir:
         repo = None
+
+    today = today_sp()
+    is_historical = not _is_current_query(data, today)
 
     cite = parse_one(citacao)
     if _path is not None:
@@ -451,8 +655,11 @@ def verificar(
                 fetched_at=rw.fetched_at,
             )
             temporal_dim = _map_temporal(temporal_res, rw, path)
+            # 0075, §2.2 e C5: a abstenção histórica por falta de fundamento prevalece sobre o motivo de revogação,
+            # com ou sem data de revogação (condição histórica, não o motivo intermediário do temporal).
             text_dim = (
-                Dimension("unknown", "DISPOSITIVO_REVOGADO")
+                Dimension("unknown", "sem_fundamento_do_periodo"
+                          if _sem_fundamento_historico(temporal_res, data) else "DISPOSITIVO_REVOGADO")
                 if trecho is not None
                 else Dimension("not_assessed", "SEM_TRECHO")
             )
@@ -504,12 +711,18 @@ def verificar(
     elif prov is None:
         text_dim = (Dimension("not_found", "SEM_DISPOSITIVO") if identity.status == "not_found"
                     else Dimension("unknown", identity.reason_code))
-    elif temporal_res and temporal_res.status in ("revogado", "nao_existia", "ambiguous"):
-        text_dim = Dimension("unknown", temporal_res.reason or temporal_res.status.upper())
+    elif temporal_res and (temporal_res.status in ("revogado", "nao_existia", "ambiguous") or "revogacao_anotada" in temporal_res.flags):
+        if _sem_fundamento_historico(temporal_res, data):
+            # C5: motivo da abstenção histórica antes dos tratamentos de revogação.
+            reason = "sem_fundamento_do_periodo"
+        else:
+            reason = "REVOGADO" if "revogacao_anotada" in temporal_res.flags else (temporal_res.reason or temporal_res.status.upper())
+        text_dim = Dimension("unknown", reason)
     elif temporal_res and temporal_res.reason in {"INICIO_SUCESSOR_DESCONHECIDO", "CAPTURA_DATA_INVALIDA"}:
         text_dim = Dimension("unknown", temporal_res.reason)
     elif (temporal_res and not temporal_res.redaction_id
-          and temporal_res.status not in ("verified", "vigente_na_fonte")):
+          and temporal_res.status not in ("verified", "vigente_na_fonte")
+          and "sem_fundamento_do_periodo" not in temporal_res.flags):
         # C3: sem redação selecionada para a data pedida, não confrontar a atual.
         text_dim = Dimension("unknown", temporal_res.reason or "HISTORICO_ANTERIOR_AUSENTE")
     else:
@@ -520,7 +733,7 @@ def verificar(
         if red is None:
             text_dim = Dimension("not_found", "SEM_REDACAO")
         elif red.superseded_without_strike and (
-            temporal_res is None or temporal_res.status not in {"verified", "vigente_na_fonte"}
+            temporal_res is None or (temporal_res.status not in {"verified", "vigente_na_fonte"} and "sem_fundamento_do_periodo" not in temporal_res.flags)
         ):
             # Não afirmar texto sobre redação superada sem rasura fora de verified
             text_dim = Dimension(
@@ -541,16 +754,21 @@ def verificar(
             elif cmp.status == "match":
                 if uncertain:
                     text_dim = Dimension("unknown", "UNCERTAIN_CONTINUATION", [ev])
+                elif is_historical:
+                    text_dim = Dimension("unknown", "sem_fundamento_do_periodo", [ev])
                 else:
                     text_dim = Dimension("verified", "TEXTO_OK", [ev])
             elif cmp.status == "partial":
-                text_dim = Dimension(
-                    "divergent",
-                    "TEXTO_PARCIAL",
-                    [ev],
-                )
-                text_dim.evidence[0].trecho_oficial = red.text[:_MAX_TRECHO]
-                text_dim.reason_code = "TEXTO_PARCIAL"
+                if is_historical:
+                    text_dim = Dimension("unknown", "sem_fundamento_do_periodo", [ev])
+                else:
+                    text_dim = Dimension(
+                        "divergent",
+                        "TEXTO_PARCIAL",
+                        [ev],
+                    )
+                    text_dim.evidence[0].trecho_oficial = red.text[:_MAX_TRECHO]
+                    text_dim.reason_code = "TEXTO_PARCIAL"
             else:
                 other_hit = None
                 for r2 in prov.redactions:
@@ -561,38 +779,74 @@ def verificar(
                         other_hit = r2
                         break
                 if other_hit is not None:
-                    text_dim = Dimension(
-                        "divergent",
-                        "TRECHO_DE_OUTRA_REDACAO",
-                        [
-                            ev,
-                            _ev_from_resolved(
-                                rw,
-                                path,
-                                other_hit.text,
-                            ),
-                        ],
-                    )
-                else:
-                    elsewhere = _search_text_in_work(rw.document, trecho, modo, path)
-                    if elsewhere:
+                    if is_historical:
                         text_dim = Dimension(
-                            "divergent",
-                            "TRECHO_EM_OUTRO_DISPOSITIVO",
+                            "unknown",
+                            "sem_fundamento_do_periodo",
                             [
                                 ev,
-                                _ev_from_resolved(rw, elsewhere[0], None),
+                                _ev_from_resolved(
+                                    rw,
+                                    path,
+                                    other_hit.text,
+                                ),
                             ],
                         )
                     else:
-                        text_dim = Dimension("divergent", "TEXTO_DIVERGENTE", [ev])
+                        text_dim = Dimension(
+                            "divergent",
+                            "TRECHO_DE_OUTRA_REDACAO",
+                            [
+                                ev,
+                                _ev_from_resolved(
+                                    rw,
+                                    path,
+                                    other_hit.text,
+                                ),
+                            ],
+                        )
+                else:
+                    elsewhere = _search_text_in_work(rw.document, trecho, modo, path)
+                    if elsewhere:
+                        if is_historical:
+                            text_dim = Dimension(
+                                "unknown",
+                                "sem_fundamento_do_periodo",
+                                [
+                                    ev,
+                                    _ev_from_resolved(rw, elsewhere[0], None),
+                                ],
+                            )
+                        else:
+                            text_dim = Dimension(
+                                "divergent",
+                                "TRECHO_EM_OUTRO_DISPOSITIVO",
+                                [
+                                    ev,
+                                    _ev_from_resolved(rw, elsewhere[0], None),
+                                ],
+                            )
+                    else:
+                        if is_historical:
+                            text_dim = Dimension("unknown", "sem_fundamento_do_periodo", [ev])
+                        else:
+                            text_dim = Dimension("divergent", "TEXTO_DIVERGENTE", [ev])
 
+    corr_textual = _calcular_correspondencia_textual(
+        prov=prov,
+        trecho=trecho,
+        modo=modo,
+        temporal_res=temporal_res,
+        is_historical=is_historical,
+        identity_status=identity.status,
+    )
     result = VerificationResult(
         identity=identity,
         text=text_dim,
         temporal=temporal_dim,
         support=support,
         citation=cite,
+        correspondencia_textual=corr_textual,
     )
     return _persist(repo, citacao, trecho, data, modo, result)
 
@@ -632,6 +886,8 @@ def _result_to_json(result: VerificationResult) -> dict[str, Any]:
         "temporal": dim(result.temporal),
         "support": dim(result.support),
         "algo_versions": result.algo_versions,
+        "fundamento_temporal": result.fundamento_temporal,
+        "correspondencia_textual": result.correspondencia_textual,
     }
     if result.citation is not None:
         c = result.citation
@@ -661,7 +917,8 @@ def _persist(
     return result
 
 
-def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any]) -> str:
+def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any], *,
+                        ferramenta: str = "verificar_citacao") -> str:
     """Grava o recibo (C4): chamado só depois da finalização, com a conclusão devolvida.
 
     Política `sem_conteudo` (C5): só hashes, política e dimensões; sem citação, trecho nem evidência.
@@ -692,10 +949,80 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
     else:
         result_json = json.dumps(resultado, ensure_ascii=False, sort_keys=True)
     run_id = new_ulid()
+    created_at = datetime.now(timezone.utc).isoformat()
+
+    # Evidências únicas (todas as dimensões, na ordem)
+    # Não criar compromisso para evidência sem capture_id, sha256 e url (decisão 0075 / parecer Codex r1)
+    evidencias_unicas: list[dict[str, Any]] = []
+    vistos_ev: set[tuple[Any, Any, Any]] = set()
+    for d in ("identity", "text", "temporal", "support"):
+        for ev in (resultado.get(d) or {}).get("evidence") or []:
+            if isinstance(ev, dict):
+                cid = ev.get("capture_id")
+                sha = ev.get("sha256")
+                url = ev.get("url")
+                if cid and sha and url:
+                    tup_key = (cid, sha, url)
+                    if tup_key not in vistos_ev:
+                        vistos_ev.add(tup_key)
+                        evidencias_unicas.append({
+                            "capture_id": cid,
+                            "sha256": sha,
+                            "url": url,
+                        })
+
+    compromissos_ev = [
+        hmac_entrada(conn, "evidencia", json.dumps(item, ensure_ascii=False, sort_keys=True))
+        for item in evidencias_unicas
+    ]
+    evidencias_compromissos = json.dumps(compromissos_ev, ensure_ascii=False, sort_keys=True)
+    if politica_atual.get() == "sem_conteudo":
+        evidencias_claro = None
+    else:
+        evidencias_claro = json.dumps(evidencias_unicas, ensure_ascii=False, sort_keys=True)
+
+    ft = resultado.get("fundamento_temporal")
+    if ft is not None:
+        ft_canon = json.dumps(ft, ensure_ascii=False, sort_keys=True)
+        fundamento_compromisso = hmac_entrada(conn, "fundamento_temporal", ft_canon)
+        fundamento_claro = ft_canon if politica_atual.get() != "sem_conteudo" else None
+    else:
+        fundamento_compromisso = None
+        fundamento_claro = None
+
+    doc_mac = {
+        "id": run_id,
+        "ferramenta": ferramenta,
+        "created_at": created_at,
+        "request_hash": request_hash,
+        "request_json": request_json,
+        "result_json": result_json,
+        "evidencias_compromissos": evidencias_compromissos,
+        "fundamento_compromisso": fundamento_compromisso,
+        "evidencias_claro": evidencias_claro,
+        "fundamento_claro": fundamento_claro,
+    }
+    registro_mac = hmac_entrada(conn, "registro", json.dumps(doc_mac, ensure_ascii=False, sort_keys=True))
+
     conn.execute(
-        "INSERT INTO run(id, request_hash, request_json, policy_version, result_json) "
-        "VALUES (?,?,?,?,?)",
-        (run_id, request_hash, request_json, POLICY_VERSION, result_json),
+        "INSERT INTO run("
+        "id, ferramenta, created_at, request_hash, request_json, policy_version, result_json, "
+        "evidencias_compromissos, fundamento_compromisso, evidencias_claro, fundamento_claro, registro_mac"
+        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            run_id,
+            ferramenta,
+            created_at,
+            request_hash,
+            request_json,
+            POLICY_VERSION,
+            result_json,
+            evidencias_compromissos,
+            fundamento_compromisso,
+            evidencias_claro,
+            fundamento_claro,
+            registro_mac,
+        ),
     )
     conn.commit()
     return run_id
@@ -792,6 +1119,11 @@ def populate_from_parsed(
             from freoa_verifica.connectors.base import Unavailable
             raise Unavailable("orcamento")
 
+    acervo_ate = None
+    if source_id == "planalto":
+        row_c = conn.execute("SELECT MAX(fetched_at) FROM capture WHERE source_id='planalto' AND fetched_at IS NOT NULL").fetchone()
+        acervo_ate = str(row_c[0])[:10] if (row_c and row_c[0]) else None
+
     return ResolvedWork(
         work_id=work_id,
         work_key=work_key,
@@ -806,4 +1138,9 @@ def populate_from_parsed(
         proveniencia=({"interpretacao": ORIGEM_LEGADO} if conn.execute(
             "SELECT origem_da_codificacao FROM capture WHERE id=?", (capture_id,)).fetchone()[0] == ORIGEM_LEGADO
             else None),
+        source_id=source_id,
+        acervo_ate=acervo_ate,
+        # C6: a marca persistida da captura (a existente prevalece sobre a regravação idêntica).
+        procedencia_tipo=(conn.execute("SELECT procedencia FROM capture WHERE id=?", (capture_id,)).fetchone()[0]
+                          or "nao_identificado"),
     )

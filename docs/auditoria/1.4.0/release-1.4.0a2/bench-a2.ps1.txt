@@ -1,0 +1,9 @@
+$rel = "<rel>"; $out = "$rel\a2"
+$env:FV_HOME = "$rel\home-vinc-a2"
+Set-Location <repo>
+"inicio $(Get-Date -Format o)" | Out-File -Encoding utf8 "$out\bench-etapas.txt"
+& "$rel\venv-a2\Scripts\python.exe" -X utf8 scripts\comparativo_ouro.py docs\auditoria\comparativo-120\gold.jsonl "$out\bench-freoa_raw.jsonl" *> "$out\bench-console.txt"
+"bench=$LASTEXITCODE" | Out-File -Append -Encoding utf8 "$out\bench-etapas.txt"
+& "$rel\venv-a2\Scripts\python.exe" -X utf8 <supervisor>\comparar-bench.py docs\auditoria\1.4.0\release-1.4.0a1\bench-freoa_raw.jsonl "$out\bench-freoa_raw.jsonl" *> "$out\bench-comparacao.txt"
+"comparacao=$LASTEXITCODE" | Out-File -Append -Encoding utf8 "$out\bench-etapas.txt"
+"fim $(Get-Date -Format o)" | Out-File -Append -Encoding utf8 "$out\bench-etapas.txt"

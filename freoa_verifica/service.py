@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import inspect
 import json
 import logging
@@ -50,6 +51,7 @@ from freoa_verifica.parsers.model import (
 )
 from freoa_verifica.store import blobs, repo
 from freoa_verifica.store.db import connect, data_home
+from freoa_verifica.temporal import _parse_iso, today_sp
 from freoa_verifica.temporal import select as temporal_select
 from freoa_verifica.texto_resposta import (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO, content_type_do_response,
                                            interpretar_legado_padrao)
@@ -61,6 +63,9 @@ from freoa_verifica.verify import (
     SourceUnavailable,
     _current_redaction,
     _find_provision,
+    _inferir_esfera,
+    campos_evidencia,
+    campos_evidencia_obra,
     _redaction_by_id,
     _result_to_json,
     persistir_resultado,
@@ -85,6 +90,45 @@ from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E4
 _LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
 # Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
 _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
+
+
+_NEGATIVAS_DA_SITUACAO = frozenset({"REVOGADO", "DISPOSITIVO_REVOGADO", situacao.REVOGADO_NA_FONTE})
+
+
+def _historica(data: str | None) -> bool:
+    """D válida e diferente de hoje (America/Sao_Paulo): consulta histórica, passada ou futura."""
+    d = _parse_iso(data) if data else None
+    return d is not None and d != today_sp()
+
+
+def _guarda_historica(out: dict[str, Any], data: str | None) -> None:
+    """C1: sem fundamento validado (hoje nunca há, IL.2) nenhum estado final para D afirma `verified`,
+    `divergent` ou revogação. Mantêm-se `nao_existia`, `ambiguous` e entradas inválidas."""
+    if not _historica(data):
+        return
+    temporal = out.get("temporal") or {}
+    if (temporal.get("status") in ("verified", "vigente_na_fonte", "divergent")
+            or temporal.get("reason_code") in _NEGATIVAS_DA_SITUACAO):
+        out["temporal"] = {**temporal, "status": "unknown", "reason_code": "sem_fundamento_do_periodo"}
+    texto = out.get("text") or {}
+    if texto.get("status") in ("verified", "divergent") or (
+            texto.get("reason_code") in _NEGATIVAS_DA_SITUACAO and (out.get("temporal") or {}).get("status") != "not_found"):
+        out["text"] = {**texto, "status": "unknown", "reason_code": "sem_fundamento_do_periodo"}
+
+
+def _normalizar_aditivos(out: dict[str, Any]) -> dict[str, Any]:
+    """C4: `fundamento_temporal` e `correspondencia_textual` presentes em toda resposta de verificação e de obtenção.
+
+    `fundamento_temporal` é sempre nulo (sem resolvedor de versões oficiais, IL.2); `correspondencia_textual` só
+    sobrevive com a identidade FINAL `verified`. Chamado no último ponto antes da persistência e da emissão, depois de
+    todos os rebaixamentos e decoradores."""
+    ident = out.get("identity")
+    out["fundamento_temporal"] = None
+    if not (isinstance(ident, dict) and ident.get("status") == "verified"):
+        out["correspondencia_textual"] = None
+    else:
+        out.setdefault("correspondencia_textual", None)
+    return out
 
 
 class _InterpretacaoIndisponivel(Exception):
@@ -423,7 +467,7 @@ class Verifica:
             from freoa_verifica.registro import recuperar_purga
 
             recuperar_purga(self.home)  # purga interrompida entre os dois renames
-            boot = connect(self._db_path)
+            boot = connect(self._db_path, operacional=True)
             boot.close()
         self._uso = None  # marca de uso do home entre processos (trava.py, A1)
         if self.home.is_dir():
@@ -675,6 +719,12 @@ class Verifica:
             canonica = self._rebuild_from_db(work_key, _exact=True)
             rw = canonica if isinstance(canonica, ResolvedWork) else rw
         self._resolver.add(rw)
+        if source_id == "planalto":
+            corte = self._acervo_ate_planalto()
+            for w in self._resolver.works.values():
+                if w.source_id == "planalto" or (w.source_id is None and (w.work_key.authority == "federal" or w.document.profile == "planalto")):
+                    w.acervo_ate = corte
+            rw.acervo_ate = corte
         if work_key.year <= 0:
             with self.conn:
                 self.conn.execute("INSERT OR IGNORE INTO work_year_issue(work_id,reason,capture_id) VALUES (?,?,?)",
@@ -731,6 +781,10 @@ class Verifica:
         if declared is None and doc.profile in {"planalto","cvm_docx","cvm_pdf","cvm_html","bcb_json","senado_norma"}:
             raise SourceUnavailable("IDENTIDADE_NAO_DECLARADA")
         wk = WorkKey(row["authority"], row["kind"], row["number"], int(row["year"]))
+        source_id = cap.get("source_id") if cap else None
+        acervo_ate = None
+        if source_id == "planalto" or (source_id is None and (row["authority"] == "federal" or doc.profile == "planalto")):
+            acervo_ate = self._acervo_ate_planalto()
         rw = ResolvedWork(
             work_id=work_id,
             work_key=wk,
@@ -745,8 +799,23 @@ class Verifica:
             persisted_incomplete=incomplete,
             caminhos_conhecidos=frozenset(conhecidos),
             proveniencia=_proveniencia(cap, saved),
+            source_id=source_id,
+            acervo_ate=acervo_ate,
+            procedencia_tipo=(cap.get("procedencia") if cap else None) or "nao_identificado",
         )
         return rw
+
+    def _acervo_ate_planalto(self) -> str | None:
+        # C7: calculado na emissão, sem cache; vale também para alteração do acervo por outro processo.
+        row = self.conn.execute(
+            "SELECT MAX(fetched_at) FROM capture WHERE source_id='planalto' AND fetched_at IS NOT NULL"
+        ).fetchone()
+        return str(row[0])[:10] if (row and row[0]) else None
+
+    def _evidencia_dispositivo(self, rw: ResolvedWork) -> dict[str, Any]:
+        is_planalto = (rw.source_id == "planalto" or (rw.source_id is None and (rw.work_key.authority == "federal" or rw.document.profile == "planalto")))
+        acervo_ate = self._acervo_ate_planalto() if is_planalto else None
+        return campos_evidencia_obra(rw, acervo_ate)
 
     def reparar_anos(self) -> dict:
         """Repara projeção de identidade a partir de modelos de capturas autenticadas.
@@ -1342,6 +1411,17 @@ class Verifica:
         caminho: str | None = None,
         data: str | None = None,
     ) -> dict[str, Any]:
+        out = self._obter_dispositivo(citacao, work_id, caminho, data)
+        vig = out.get("vigencia")
+        if isinstance(vig, dict) and _historica(data) and (
+                vig.get("status") in ("verified", "vigente_na_fonte", "revogado")
+                or vig.get("reason_code") in _NEGATIVAS_DA_SITUACAO):
+            # C1: guarda histórica final (obter_dispositivo não tem trecho nem identidade a rebaixar).
+            out["vigencia"] = {**vig, "status": "unknown", "reason_code": "sem_fundamento_do_periodo"}
+        return out
+
+    def _obter_dispositivo(self, citacao: str | None, work_id: str | None, caminho: str | None,
+                           data: str | None) -> dict[str, Any]:
         rw: ResolvedWork | None = None
         path = caminho
         if citacao:
@@ -1389,12 +1469,7 @@ class Verifica:
                 "caminho": None,
                 "texto": None,
                 "aviso": "informe caminho ou citação com dispositivo",
-                "evidencia": {
-                    "capture_id": rw.capture_id,
-                    "url": rw.url,
-                    "fetched_at": rw.fetched_at,
-                    "sha256": rw.sha256,
-                },
+                "evidencia": self._evidencia_dispositivo(rw),
                 **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
             }
         if rw.persisted_incomplete:
@@ -1464,12 +1539,9 @@ class Verifica:
             },
             "redacoes_anteriores": anteriores,
             "anotacoes": anotacoes,
-            "evidencia": {
-                "capture_id": rw.capture_id,
-                "url": rw.url,
-                "fetched_at": rw.fetched_at,
-                "sha256": rw.sha256,
-            },
+            "fundamento_temporal": None,
+            "correspondencia_textual": None,
+            "evidencia": self._evidencia_dispositivo(rw),
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
         }
 
@@ -1523,6 +1595,8 @@ class Verifica:
                     "flags": fl,
                     "riscada": d.redaction.struck,
                     "trecho": _truncate(d.redaction.text, 160)[0],
+                    "limites_inferidos": bool(d.redaction.annotations or fim is not None),
+                    "fundamento_temporal": None,
                 }
             )
         eventos = []
@@ -1613,7 +1687,7 @@ class Verifica:
                     "proposicao": proposicao,
                     "run_id": None,
                     "citation": _citation_to_dict(cite),
-                }, _cite or cite, citacao, trecho, data, modo, gravar=False, em_texto=_cite is not None)
+                }, _cite or cite, citacao, trecho, data, modo, em_texto=_cite is not None)
             if isinstance(resolved, ResolvedWork) and not resolved.capture_id:
                 return self._finalizar({
                     "identity": {
@@ -1639,7 +1713,7 @@ class Verifica:
                     "proposicao": proposicao,
                     "run_id": None,
                     "citation": _citation_to_dict(cite),
-                }, _cite or cite, citacao, trecho, data, modo, gravar=False, em_texto=_cite is not None)
+                }, _cite or cite, citacao, trecho, data, modo, em_texto=_cite is not None)
 
         result = verificar(
             citacao,
@@ -1710,20 +1784,23 @@ class Verifica:
                 "identity": {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
                 "conferencia": self._bloco_conferencia(cite)}
 
-    def _verificar_decisao_avulsa(self, cite: Citation, citacao: str, trecho, data, modo, proposicao) -> dict[str, Any]:
-        """Decisão ou súmula citada sozinha: mesma confirmação de `verificar_texto` (auditoria comparativa 1.2.0).
-        Identidade confirmada só com documento oficial capturado; confronto textual de decisão não é feito."""
+    def _decisao_bruta(self, cite: Citation, judgment_date=None) -> tuple[str, dict | None]:
+        """Confirmação de decisão, súmula ou processo (status do acervo e evidência pelo construtor único)."""
         if cite.kind == "processo":
-            status, evidencia = self._confirm_cnj(cite)
+            status, evidencia = self._confirm_cnj(cite, judgment_date=judgment_date)
         else:
-            status, evidencia = self._confirm_decision(cite.decision)
+            status, evidencia = self._confirm_decision(cite.decision, judgment_date=judgment_date)
+        return status, self._ev_captura(evidencia, court=getattr(cite.decision, "court", None))
+
+    @staticmethod
+    def _decisao_para_verificacao(cite: Citation, status: str, evidencia: dict | None, trecho, proposicao) -> dict[str, Any]:
         ident = {
             "encontrada": ("verified", "DECISAO_CONFIRMADA_NA_CAPTURA"),
             "processo_confirmado": ("verified", "PROCESSO_CONFIRMADO_MAIS_DE_UM_REGISTRO"),
             "nao_confirmado_no_acervo": ("unknown", "NAO_CONFIRMADO_NO_ACERVO"),
             "indisponivel": ("unavailable", "EVIDENCIA_INDISPONIVEL"),
         }.get(status, ("unknown", str(status).upper()))
-        out = {
+        return {
             "identity": {"status": ident[0], "reason_code": ident[1],
                          "evidence": [evidencia] if ident[0] == "verified" and evidencia else [],
                          **({"cobertura": evidencia.get("cobertura")} if isinstance(evidencia, dict) and "cobertura" in evidencia else {})},
@@ -1733,7 +1810,13 @@ class Verifica:
             "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED", "evidence": []},
             "proposicao": proposicao, "run_id": None, "citation": _citation_to_dict(cite),
         }
-        return self._finalizar(out, cite, citacao, trecho, data, modo, gravar=False)
+
+    def _verificar_decisao_avulsa(self, cite: Citation, citacao: str, trecho, data, modo, proposicao) -> dict[str, Any]:
+        """Decisão ou súmula citada sozinha: mesma confirmação de `verificar_texto` (auditoria comparativa 1.2.0).
+        Identidade confirmada só com documento oficial capturado; confronto textual de decisão não é feito."""
+        status, evidencia = self._decisao_bruta(cite)
+        out = self._decisao_para_verificacao(cite, status, evidencia, trecho, proposicao)
+        return self._finalizar(out, cite, citacao, trecho, data, modo)
 
     def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
                    trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
@@ -1774,6 +1857,8 @@ class Verifica:
             out["identity"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
             out["text"] = {"status": "not_assessed", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
             out["temporal"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
+        # C1 (0075, §2, itens 1, 5 e 6): guarda histórica na saída, defesa em profundidade da guarda da situação.
+        _guarda_historica(out, data)
         # Nunca verified sem capture_id correspondente.
         for dim_name in ("identity", "text", "temporal"):
             dim = out.get(dim_name) or {}
@@ -1803,9 +1888,21 @@ class Verifica:
             "reason_code": out.get("support", {}).get("reason_code") or "SUPPORT_NOT_ASSESSED",
             "evidence": out.get("support", {}).get("evidence") or [],
         }
-        if gravar and not self._read_only:
-            recibo = {k: v for k, v in out.items() if k not in ("run_id", "proposicao")}
-            out["run_id"] = persistir_resultado(self.conn, citacao, trecho, data, modo, recibo)
+        # Recalcular acervo_ate nas evidências emitidas caso seja Planalto
+        corte_planalto = self._acervo_ate_planalto()
+        for dim_name in ("identity", "text", "temporal", "support"):
+            for ev in (out.get(dim_name) or {}).get("evidence") or []:
+                if isinstance(ev, dict) and (ev.get("acervo_ate") is not None or (ev.get("url") or "").startswith("https://www.planalto.gov.br")):
+                    ev["acervo_ate"] = corte_planalto
+        # C4: campos aditivos no ponto único, depois de TODOS os rebaixamentos (inclusive ausência de captura e falha de
+        # autenticação) e imediatamente antes da persistência e da emissão.
+        _normalizar_aditivos(out)
+        if gravar:
+            if self._read_only:
+                out["registro"] = {"gravado": False, "motivo": "somente_leitura"}  # C11: modo declarado
+            else:
+                recibo = {k: v for k, v in out.items() if k not in ("run_id", "proposicao")}
+                out["run_id"] = persistir_resultado(self.conn, citacao, trecho, data, modo, recibo)
         return out
 
     def _authenticate_capture(self, capture_id):
@@ -1862,9 +1959,12 @@ class Verifica:
         class _Adapter:
             def resolve(self, work: WorkKey):
                 resolved = outer._resolve(work, strict=True)
+                corte = outer._acervo_ate_planalto()
                 for item in resolved if isinstance(resolved, list) else [resolved]:
                     if isinstance(item, ResolvedWork) and item.capture_id:
                         outer._authenticate_capture(item.capture_id)
+                        if item.source_id == "planalto" or (item.source_id is None and (item.work_key.authority == "federal" or item.document.profile == "planalto")):
+                            item.acervo_ate = corte
                 return resolved
 
         return _Adapter()
@@ -1893,13 +1993,17 @@ class Verifica:
             verif: dict[str, Any] | None = None
             next_start = min([c.span[0] for c in cites if c.span[0] >= cite.span[1]] or [len(texto)])
             trecho = self._trecho_apos_aspas(texto[:next_start], cite.span[1])
-            if cite.kind == "processo":
-                status, evidencia = self._confirm_cnj(cite, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
+            if cite.kind == "processo" or (cite.work is None and cite.decision is not None):
+                # C11: processo, decisão e súmula passam pelo mesmo caminho de registro das verificações avulsas
+                # (recibo recuperável ou modo somente leitura declarado), com o contexto da data de julgamento do texto.
+                status, evidencia = self._decisao_bruta(
+                    cite, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
+                verif = self._finalizar(self._decisao_para_verificacao(cite, status, evidencia, trecho, None),
+                                        cite, cite.raw, trecho, data, "literal", em_texto=True)
+                if verif["identity"].get("status") != "verified" and status in ("encontrada", "processo_confirmado"):
+                    status = "indisponivel"  # a autenticação da evidência rebaixou a identidade
             elif cite.work is None and cite.decision is None:
                 status = "formato_invalido"
-            elif cite.work is None and cite.decision is not None:
-                # Reconhecimento só sintático — nunca "encontrada".
-                status, evidencia = self._confirm_decision(cite.decision, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
             else:
                 verif = self.verificar_citacao(cite.raw, trecho=trecho, data=data, modo="literal", _path=cite.path, _cite=cite)
                 identity = verif.get("identity", {})
@@ -1942,6 +2046,8 @@ class Verifica:
                     "aspas_nao_associadas": trecho is None and any(ch in texto[cite.span[1]:next_start] for ch in ('"', "'", '“', '«', '‘')),
                     "trecho_conferido": trecho,
                     "verificacao": verif,
+                    "fundamento_temporal": None,
+                    "correspondencia_textual": (verif or {}).get("correspondencia_textual"),
                     "evidencia": evidencia,
                     "parseada": _citation_to_dict(cite),
                 }
@@ -1997,9 +2103,23 @@ class Verifica:
                 return "indisponivel", None, rows
         except (OSError, ValueError, blobs.BlobError):
             return "indisponivel", None, rows
-        return ("processo_confirmado" if multiple else "encontrada"), {"capture_id": doc["capture_id"], "sha256": doc["capture_sha"],
-                              "url": doc["url"], "fetched_at": doc["fetched_at"],
-                              **({"uf_citada_nao_conferida": key.uf.upper()} if uf_nao_conferida else {})}, rows
+        return ("processo_confirmado" if multiple else "encontrada"), self._ev_captura({
+            "capture_id": doc["capture_id"], "sha256": doc["capture_sha"], "url": doc["url"], "fetched_at": doc["fetched_at"],
+            **({"uf_citada_nao_conferida": key.uf.upper()} if uf_nao_conferida else {})}, court=rows[0]["court"]), rows
+
+    def _ev_captura(self, ev: dict | None, *, court: str | None = None) -> dict | None:
+        """C6: evidência de decisão/processo pelo construtor único, com a procedência persistida da captura."""
+        if not isinstance(ev, dict) or not ev.get("capture_id"):
+            return ev
+        cap = self.conn.execute("SELECT source_id, procedencia FROM capture WHERE id=?", (ev["capture_id"],)).fetchone()
+        planalto = bool(cap and cap["source_id"] == "planalto")
+        ev.update(campos_evidencia(
+            ev["capture_id"], ev.get("sha256"), ev.get("url"), ev.get("fetched_at"),
+            esfera=_inferir_esfera(WorkKey(court.lower(), "", "", 0)) if court else "nao_identificado",
+            procedencia=cap["procedencia"] if cap else None,
+            acervo_ate=self._acervo_ate_planalto() if planalto else None,
+        ))
+        return ev
 
     @staticmethod
     def _decision_context_date(text):
@@ -3126,6 +3246,141 @@ class Verifica:
             vivo = True  # captura sob demanda na fonte oficial
         return ("ambos" if n and vivo else "acervo" if n else "ao_vivo" if vivo else "nenhuma"), recorte
 
+    def obter_registro(
+        self,
+        run_id: str,
+        evidencias: list[dict[str, Any]] | None = None,
+        fundamento_temporal: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Registro local da operação de verificação (decisão 0075, 3.4)."""
+        from freoa_verifica.registro import hmac_entrada as _hmac, legado_autenticado
+
+        def hmac_entrada(conn, campo, valor, *, leitura=True):
+            # C9: leitura da chave sem escrita; chave ilegível ou ausente não confere (nunca levanta).
+            try:
+                return _hmac(conn, campo, valor, leitura=leitura)
+            except (RuntimeError, ValueError, TypeError, OSError):  # OSError: acesso negado, pasta no lugar, falha de leitura
+                return None
+
+        def invalido(run, motivo):
+            return {
+                "status": "encontrada",
+                "run_id": run,
+                "ferramenta": None,
+                "criado_em": None,
+                "politica": None,
+                "parametros": None,
+                "estado": None,
+                "evidencias": None,
+                "fundamento_temporal": None,
+                "integridade": {"algoritmo": "hmac-sha256", "confere": False, "motivo": motivo},
+                "confere_evidencias": None,
+                "confere_fundamento": None,
+            }
+
+        if not run_id or not isinstance(run_id, str):
+            return {"status": "inexistente", "run_id": run_id}
+
+        try:
+            row = self.conn.execute("SELECT * FROM run WHERE id=?", (run_id,)).fetchone()
+        except sqlite3.OperationalError as exc:
+            if "decode" not in str(exc).lower():  # texto que não é UTF-8 na linha: adulteração, não falha de acesso
+                raise
+            existe = self.conn.execute("SELECT 1 FROM run WHERE id=?", (run_id,)).fetchone()
+            return invalido(run_id, "ESTRUTURA_INVALIDA") if existe else {"status": "inexistente", "run_id": run_id}
+        if row is None:
+            return {"status": "inexistente", "run_id": run_id}
+
+        # Tipo SQLite e estrutura de TODAS as colunas lidas, antes de qualquer serialização ou acesso: o que não é
+        # texto (ou nulo) ou é JSON inválido vira resposta controlada de integridade inválida, sem montar o documento do
+        # MAC a partir de conteúdo não confiável.
+        campos = _campos_do_registro(row)
+        if campos is None:
+            return invalido(run_id, "ESTRUTURA_INVALIDA")
+        confere_mac: bool | None = None
+        if row["registro_mac"] is None:
+            # C8: `null` (legado) só para o que a âncora autenticada lista; novo sem MAC não confere.
+            confere_mac = None if legado_autenticado(self.conn, row["id"]) else False
+        else:
+            doc_mac = {c: row[c] for c in _COLUNAS_DO_MAC}
+            recalculado = hmac_entrada(self.conn, "registro", json.dumps(doc_mac, ensure_ascii=False, sort_keys=True))
+            confere_mac = bool(recalculado is not None and hmac.compare_digest(
+                row["registro_mac"].encode("utf-8"), recalculado.encode("utf-8")))
+
+        if confere_mac is False:
+            return invalido(row["id"], "MAC_NAO_CONFERE")
+        res_json, req_json = campos["result"], campos["request"]
+
+        if row["evidencias_claro"] is not None:
+            politica = "completo"
+        elif res_json.get("registro") == "sem_conteudo" or req_json.get("registro") == "sem_conteudo":
+            politica = "sem_conteudo"
+        else:
+            politica = "completo"
+
+        parametros = req_json
+
+        estado = {
+            d: {
+                "status": (res_json.get(d) or {}).get("status"),
+                "reason_code": (res_json.get(d) or {}).get("reason_code"),
+            }
+            for d in ("identity", "text", "temporal", "support")
+        }
+
+        if politica == "completo":
+            evidencias_out = campos["evidencias_claro"]
+            fundamento_out = campos["fundamento_claro"]
+        else:
+            evidencias_out = None
+            fundamento_out = None
+
+        confere_evidencias = None
+        if evidencias is not None:
+            compromissos = set(campos["compromissos"])
+            confere_evidencias = []
+            for e in evidencias:
+                if not isinstance(e, dict) or not (e.get("capture_id") and e.get("sha256") and e.get("url")):
+                    confere_evidencias.append({
+                        "capture_id": e.get("capture_id") if isinstance(e, dict) else None,
+                        "confere": False,
+                    })
+                    continue
+                tup = {
+                    "capture_id": e.get("capture_id"),
+                    "sha256": e.get("sha256"),
+                    "url": e.get("url"),
+                }
+                h = hmac_entrada(self.conn, "evidencia", json.dumps(tup, ensure_ascii=False, sort_keys=True))
+                confere_evidencias.append({
+                    "capture_id": e.get("capture_id"),
+                    "confere": bool(h in compromissos),
+                })
+
+        confere_fundamento = None
+        if fundamento_temporal is not None:
+            ft_canon = json.dumps(fundamento_temporal, ensure_ascii=False, sort_keys=True)
+            h_ft = hmac_entrada(self.conn, "fundamento_temporal", ft_canon)
+            confere_fundamento = bool(row["fundamento_compromisso"] is not None and h_ft == row["fundamento_compromisso"])
+
+        return {
+            "status": "encontrada",
+            "run_id": row["id"],
+            "ferramenta": row["ferramenta"] or "verificar_citacao",
+            "criado_em": row["created_at"],
+            "politica": politica,
+            "parametros": parametros,
+            "estado": estado,
+            "evidencias": evidencias_out,
+            "fundamento_temporal": fundamento_out,
+            "integridade": {
+                "algoritmo": "hmac-sha256",
+                "confere": confere_mac,
+            },
+            "confere_evidencias": confere_evidencias,
+            "confere_fundamento": confere_fundamento,
+        }
+
     def listar_fontes(self) -> dict[str, Any]:
         fontes = []
         for cid, cls in registry().items():
@@ -3158,7 +3413,68 @@ class Verifica:
                     "circuito": circuit,
                 }
             )
-        return {"fontes": fontes, "total": len(fontes), "contrato": CONTRATO_VERSAO}
+        return {
+            "fontes": fontes,
+            "total": len(fontes),
+            "contrato": CONTRATO_VERSAO,
+            "qualificacao": self._carregar_qualificacao(),
+            "avisos_incidente": self._carregar_avisos_incidente(),
+        }
+
+    def _carregar_qualificacao(self) -> list[dict[str, Any]]:
+        try:
+            from importlib.resources import files
+            raw = files("freoa_verifica").joinpath("data/qualificacao.json").read_text(encoding="utf-8")
+            return json.loads(raw)
+        except (OSError, ValueError, TypeError):
+            _log.warning("falha ao carregar qualificacao.json", exc_info=True)
+            return []
+
+    def _carregar_avisos_incidente(self) -> list[dict[str, Any]]:
+        avisos: list[dict[str, Any]] = []
+        try:
+            from importlib.resources import files
+            raw = files("freoa_verifica").joinpath("data/avisos_incidente.json").read_text(encoding="utf-8")
+            avisos.extend(json.loads(raw))
+        except (OSError, ValueError, TypeError):
+            _log.warning("falha ao carregar avisos_incidente.json do pacote", exc_info=True)
+
+        if self.home:
+            home_avisos_path = Path(self.home) / "avisos_incidente.json"
+            if home_avisos_path.is_file():
+                try:
+                    conteudo = json.loads(home_avisos_path.read_text(encoding="utf-8"))
+                    if isinstance(conteudo, list):
+                        for item in conteudo:
+                            if self._validar_aviso_incidente(item):
+                                avisos.append(item)
+                            else:
+                                _log.warning("aviso de incidente invalido descartado: %r", item)
+                    else:
+                        _log.warning("<home>/avisos_incidente.json deve ser uma lista JSON")
+                except (OSError, ValueError, TypeError):
+                    _log.warning("falha ao ler <home>/avisos_incidente.json", exc_info=True)
+        return avisos
+
+    @staticmethod
+    def _validar_aviso_incidente(item: Any) -> bool:
+        if not isinstance(item, dict):
+            return False
+        if not isinstance(item.get("id"), str) or not item["id"]:
+            return False
+        if not isinstance(item.get("data"), str) or not item["data"]:
+            return False
+        if not isinstance(item.get("versoes_afetadas"), list) or not all(
+            isinstance(v, str) for v in item["versoes_afetadas"]
+        ):
+            return False
+        if item.get("acao") not in ("retirada", "correcao"):
+            return False
+        if not isinstance(item.get("descricao"), str):
+            return False
+        if not isinstance(item.get("referencia"), str):
+            return False
+        return True
 
     def sincronizar(
         self,
@@ -3368,10 +3684,85 @@ _CARAS = frozenset({
     "buscar_normas_cvm", "buscar_normas_bcb",
 })
 _CONTADAS = _CARAS | frozenset({
-    "obter_evidencia", "listar_fontes", "doctor", "sincronizar", "bench", "snapshot_export",
+    "obter_evidencia", "obter_registro", "listar_fontes", "doctor", "sincronizar", "bench", "snapshot_export",
     "snapshot_info", "indexar_obra", "reparar_anos", "reprocessar_capturas",
     "restaurar_identidades_validadas", "reparar_identidades",
 })
+
+
+def _json_tipado(valor: Any, tipo: type | tuple, vazio: Any) -> tuple[bool, Any]:
+    """(ok, valor) de uma coluna JSON persistida: ausente/vazia vale `vazio`; inválida ou de outro tipo, não ok."""
+    if valor is None or valor == "":
+        return True, vazio
+    try:
+        lido = json.loads(valor)
+    except (ValueError, TypeError, RecursionError):
+        return False, None
+    return (True, lido) if isinstance(lido, tipo) else (False, None)
+
+
+_COLUNAS_DO_MAC = ("id", "ferramenta", "created_at", "request_hash", "request_json", "result_json",
+                   "evidencias_compromissos", "fundamento_compromisso", "evidencias_claro", "fundamento_claro")
+_COLUNAS_DO_REGISTRO = _COLUNAS_DO_MAC + ("registro_mac",)
+_OBRIGATORIAS_DO_REGISTRO = ("id", "created_at", "request_hash", "request_json")
+
+
+def _campos_do_registro(row) -> dict[str, Any] | None:
+    """Estrutura validada das colunas de `run` lidas pela conferência; `None` se qualquer uma tem tipo SQLite
+    inesperado (BLOB, inteiro, real), falta, ou carrega JSON inválido ou malformado."""
+    for coluna in _COLUNAS_DO_REGISTRO:
+        valor = row[coluna]
+        if valor is None and coluna in _OBRIGATORIAS_DO_REGISTRO:
+            return None
+        if valor is not None and not isinstance(valor, str):
+            return None
+    ok_res, res = _json_tipado(row["result_json"], dict, {})
+    ok_req, req = _json_tipado(row["request_json"], dict, {})
+    ok_ev, ev = _json_tipado(row["evidencias_claro"], list, [])
+    ok_ft, ft = _json_tipado(row["fundamento_claro"], dict, None)
+    ok_co, co = _json_tipado(row["evidencias_compromissos"], list, [])
+    if not (ok_res and ok_req and ok_ev and ok_ft and ok_co):
+        return None
+    if not all(isinstance(e, dict) for e in ev) or not all(isinstance(c, str) for c in co):
+        return None
+    if any(res.get(d) is not None and not isinstance(res[d], dict) for d in ("identity", "text", "temporal", "support")):
+        return None
+    return {"result": res, "request": req, "evidencias_claro": ev,
+            "fundamento_claro": ft, "compromissos": co}
+
+
+_COM_ADITIVOS = frozenset({"obter_dispositivo", "verificar_citacao"})
+_COM_RECIBO = frozenset({"verificar_citacao", "verificar_texto"})
+
+
+def _final_da_fachada(nome: str, out: Any) -> Any:
+    """Último ponto antes da emissão de toda operação da fachada (Python, MCP e REST): campos aditivos de C4 em todo
+    estado de `obter_dispositivo` e `verificar_citacao` (inclusive `formato_invalido`, `indisponivel`, `unknown` e a
+    recusa pelos derivados)."""
+    if isinstance(out, dict) and nome in _COM_ADITIVOS:
+        _normalizar_aditivos(out)
+    return out
+
+
+def _recibo_da_recusa(self, nome: str, out: dict[str, Any], entrada: dict[str, Any]) -> dict[str, Any]:
+    """C11: a recusa por derivados incompatíveis é conclusão de verificação (`indisponivel/ACERVO_DESATUALIZADO`).
+    Em serviço gravável grava o recibo, com a política de minimização vigente, e devolve o `run_id`; em somente leitura
+    declara o modo, como o restante da finalização. Independe da compatibilidade dos derivados (só toca `run`)."""
+    if nome not in _COM_RECIBO or not isinstance(out, dict):
+        return out
+    if self._read_only:
+        out.update(run_id=None, registro={"gravado": False, "motivo": "somente_leitura"})
+        return out
+    indisponivel = {"status": "unavailable", "reason_code": out.get("reason_code")}
+    recibo = {**{k: v for k, v in out.items() if k != "acervo_incompleto"},
+              "identity": dict(indisponivel), "text": {"status": "not_assessed", "reason_code": out.get("reason_code")},
+              "temporal": {"status": "unknown", "reason_code": out.get("reason_code")},
+              "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED"}}
+    texto = nome == "verificar_texto"
+    out["run_id"] = persistir_resultado(
+        self.conn, entrada["texto" if texto else "citacao"], None if texto else entrada.get("trecho"),
+        entrada.get("data"), "literal" if texto else entrada.get("modo", "literal"), recibo, ferramenta=nome)
+    return out
 
 
 def _guardar(fn):
@@ -3394,8 +3785,9 @@ def _guardar(fn):
             # tem identidade efetiva e bloqueio por host; aninhadas compartilham a da chamada externa.
             with self._operacao(caro), da_chamada():
                 if fn.__name__ in _DEPENDENTES and not _derivados.compativel(self.conn):
-                    return _derivados.indisponivel(self.acervo_status())
-                out = fn(self, *args, **kwargs)
+                    recusa = _derivados.indisponivel(self.acervo_status())
+                    return _final_da_fachada(fn.__name__, _recibo_da_recusa(self, fn.__name__, recusa, entrada))
+                out = _final_da_fachada(fn.__name__, fn(self, *args, **kwargs))
                 if externa and self.exigir_acervo and isinstance(out, dict):
                     aviso = self.acervo_status()
                     if aviso:

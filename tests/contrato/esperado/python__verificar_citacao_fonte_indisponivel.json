@@ -1,0 +1,57 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "verificar_citacao_fonte_indisponivel",
+    "commit": "8539bac",
+    "entrada": {
+      "citacao": "art. 1 da Lei 8.666/93"
+    },
+    "ferramenta": "verificar_citacao",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0-R, C12, rodada 2), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
+  },
+  "resposta": {
+    "citation": {
+      "confidence": "exata",
+      "decision": null,
+      "flags": [],
+      "kind": "norma",
+      "path": "art1",
+      "raw": "art. 1 da Lei 8.666/93",
+      "span": [
+        0,
+        22
+      ],
+      "work": {
+        "authority": "federal",
+        "kind": "lei",
+        "number": "8666",
+        "year": 1993
+      }
+    },
+    "correspondencia_textual": null,
+    "fundamento_temporal": null,
+    "identity": {
+      "evidence": [],
+      "reason_code": "COBERTURA",
+      "status": "unavailable"
+    },
+    "proposicao": null,
+    "run_id": "<ulid>",
+    "support": {
+      "evidence": [],
+      "reason_code": "SUPPORT_NOT_ASSESSED",
+      "status": "not_assessed"
+    },
+    "temporal": {
+      "evidence": [],
+      "reason_code": "FONTE_INDISPONIVEL",
+      "status": "not_assessed"
+    },
+    "text": {
+      "evidence": [],
+      "reason_code": "FONTE_INDISPONIVEL",
+      "status": "not_assessed"
+    }
+  }
+}

@@ -1,0 +1,496 @@
+{
+  "consumidor": "freoa",
+  "versao_minima": "1.4.0a2",
+  "ferramentas": {
+    "verificar_citacao": {
+      "caminhos": {
+        "identity.status": {
+          "tipo": "string",
+          "condicao": {
+            "status": "@ausente"
+          }
+        },
+        "text.status": {
+          "tipo": "string",
+          "condicao": {
+            "status": "@ausente"
+          }
+        },
+        "temporal.status": {
+          "tipo": "string",
+          "condicao": {
+            "status": "@ausente"
+          }
+        },
+        "support.status": {
+          "tipo": "string",
+          "condicao": {
+            "status": "@ausente"
+          }
+        },
+        "identity.reason_code": {
+          "tipo": "string|null",
+          "condicao": {
+            "status": "@ausente"
+          }
+        },
+        "text.reason_code": {
+          "tipo": "string|null",
+          "condicao": {
+            "status": "@ausente"
+          }
+        },
+        "temporal.reason_code": {
+          "tipo": "string|null",
+          "condicao": {
+            "status": "@ausente"
+          }
+        },
+        "support.reason_code": {
+          "tipo": "string|null",
+          "condicao": {
+            "status": "@ausente"
+          }
+        },
+        "identity.evidence[].capture_id": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].fetched_at": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].sha256": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].url": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].captured_at": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].acervo_ate": {
+          "tipo": "string|null",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].source_kind": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].natureza_texto": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].procedencia": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "identity.evidence[].esfera": {
+          "tipo": "string",
+          "condicao": {
+            "identity.status": "verified"
+          }
+        },
+        "fundamento_temporal": "object|null",
+        "correspondencia_textual": "object|null",
+        "run_id": "string|null",
+        "reason_code": {
+          "tipo": "string",
+          "condicao": {
+            "status": "indisponivel"
+          }
+        }
+      },
+      "estados": {
+        "status": [
+          "indisponivel"
+        ],
+        "identity.status": [
+          "verified",
+          "not_found",
+          "unavailable",
+          "unknown",
+          "ambiguous"
+        ],
+        "text.status": [
+          "verified",
+          "divergent",
+          "not_found",
+          "not_assessed",
+          "unknown",
+          "unavailable"
+        ],
+        "temporal.status": [
+          "verified",
+          "vigente_na_fonte",
+          "unknown",
+          "divergent",
+          "not_found",
+          "not_assessed",
+          "ambiguous",
+          "unavailable"
+        ],
+        "support.status": [
+          "not_assessed",
+          "verified",
+          "unknown"
+        ]
+      }
+    },
+    "obter_dispositivo": {
+      "caminhos": {
+        "status": "string",
+        "caminho": {
+          "tipo": "string|null",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "texto": {
+          "tipo": "string|null",
+          "condicao": {
+            "status": "encontrada",
+            "caminho": "@nao_nulo"
+          }
+        },
+        "texto_atual": {
+          "tipo": "object|null",
+          "condicao": {
+            "status": "encontrada",
+            "caminho": "@nao_nulo"
+          }
+        },
+        "vigencia.status": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada",
+            "caminho": "@nao_nulo"
+          }
+        },
+        "vigencia.reason_code": {
+          "tipo": "string|null",
+          "condicao": {
+            "status": "encontrada",
+            "caminho": "@nao_nulo"
+          }
+        },
+        "evidencia.capture_id": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.fetched_at": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.sha256": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.url": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.captured_at": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.acervo_ate": {
+          "tipo": "string|null",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.source_kind": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.natureza_texto": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.procedencia": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "evidencia.esfera": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "fundamento_temporal": "object|null",
+        "correspondencia_textual": "object|null"
+      },
+      "estados": {
+        "status": [
+          "encontrada",
+          "inexistente",
+          "indisponivel",
+          "unknown",
+          "formato_invalido",
+          "requer_conferencia",
+          "ambigua",
+          "unavailable"
+        ],
+        "vigencia.status": [
+          "vigente_na_fonte",
+          "unknown",
+          "revogado",
+          "nao_existia",
+          "ambiguous"
+        ]
+      }
+    },
+    "listar_fontes": {
+      "caminhos": {
+        "fontes[].id": "string",
+        "fontes[].autoridade": "string",
+        "fontes[].capacidade": "string",
+        "qualificacao[].porta": "string",
+        "qualificacao[].escopo": "string",
+        "qualificacao[].estado": "string",
+        "qualificacao[].rotulo": "string",
+        "avisos_incidente[].id": "string",
+        "avisos_incidente[].data": "string",
+        "avisos_incidente[].acao": "string"
+      },
+      "estados": {
+        "fontes[].capacidade": [
+          "acervo",
+          "ao_vivo",
+          "ambos",
+          "nenhuma"
+        ],
+        "qualificacao[].estado": [
+          "aprovada",
+          "reprovada",
+          "nao_apurada",
+          "suspensa"
+        ],
+        "avisos_incidente[].acao": [
+          "retirada",
+          "correcao"
+        ]
+      }
+    },
+    "obter_registro": {
+      "caminhos": {
+        "status": "string",
+        "run_id": "string",
+        "ferramenta": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              true,
+              null
+            ]
+          }
+        },
+        "ferramenta#integridade_invalida": {
+          "tipo": "null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              false
+            ]
+          }
+        },
+        "criado_em": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              true,
+              null
+            ]
+          }
+        },
+        "criado_em#integridade_invalida": {
+          "tipo": "null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              false
+            ]
+          }
+        },
+        "politica": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              true,
+              null
+            ]
+          }
+        },
+        "politica#integridade_invalida": {
+          "tipo": "null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              false
+            ]
+          }
+        },
+        "parametros": {
+          "tipo": "object",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              true,
+              null
+            ]
+          }
+        },
+        "parametros#integridade_invalida": {
+          "tipo": "null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              false
+            ]
+          }
+        },
+        "estado": {
+          "tipo": "object",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              true,
+              null
+            ]
+          }
+        },
+        "estado#integridade_invalida": {
+          "tipo": "null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              false
+            ]
+          }
+        },
+        "evidencias": {
+          "tipo": "array|null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              true,
+              null
+            ]
+          }
+        },
+        "evidencias#integridade_invalida": {
+          "tipo": "null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              false
+            ]
+          }
+        },
+        "fundamento_temporal": {
+          "tipo": "object|null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              true,
+              null
+            ]
+          }
+        },
+        "fundamento_temporal#integridade_invalida": {
+          "tipo": "null",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              false
+            ]
+          }
+        },
+        "integridade.confere": {
+          "tipo": "bool|null",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "integridade.algoritmo": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "integridade.motivo": {
+          "tipo": "string",
+          "condicao": {
+            "status": "encontrada",
+            "integridade.confere": [
+              false
+            ]
+          }
+        },
+        "confere_evidencias": {
+          "tipo": "array|null",
+          "condicao": {
+            "status": "encontrada"
+          }
+        },
+        "confere_fundamento": {
+          "tipo": "bool|null",
+          "condicao": {
+            "status": "encontrada"
+          }
+        }
+      },
+      "estados": {
+        "status": [
+          "encontrada",
+          "inexistente"
+        ],
+        "politica": [
+          "completo",
+          "sem_conteudo"
+        ]
+      }
+    }
+  }
+}

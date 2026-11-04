@@ -1,0 +1,157 @@
+{
+  "_proveniencia": {
+    "adaptador": "python",
+    "caso": "verificar_citacao_requer_conferencia",
+    "commit": "8539bac",
+    "entrada": {
+      "citacao": "Lei 6.404, art. 254-A",
+      "data": "2020-01-01",
+      "trecho": "A alienação, direta ou indireta, do controle de companhia aberta"
+    },
+    "ferramenta": "verificar_citacao",
+    "origem": "entrada sintética + acervo de teste local (decisão 0075 / IL.0-R, C12, rodada 2), FV_OFFLINE=1, sem rede",
+    "versao": "1.4.0a2"
+  },
+  "resposta": {
+    "algo_versions": {
+      "citation": "citation-3",
+      "temporal": "temporal-1",
+      "textcmp": "textcmp-1",
+      "verify": "verify-r5-1"
+    },
+    "citation": {
+      "confidence": "provavel",
+      "decision": null,
+      "flags": [
+        "sem_ano",
+        "so_sem_ano"
+      ],
+      "kind": "norma",
+      "path": "art254-A",
+      "raw": "Lei 6.404, art. 254-A",
+      "span": [
+        0,
+        21
+      ],
+      "work": {
+        "authority": "federal",
+        "kind": "lei",
+        "number": "6404",
+        "year": 0
+      }
+    },
+    "conferencia": {
+      "alternativas": [
+        "norma sem dispositivo",
+        "dispositivo de outro referente"
+      ],
+      "confronto_proposto": {
+        "identity": {
+          "evidence": [
+            {
+              "acervo_ate": "2026-10-17",
+              "capture_id": "<ulid>",
+              "captured_at": "<instante>",
+              "esfera": "federal",
+              "fetched_at": "<instante>",
+              "natureza_texto": "consolidacao_oficial",
+              "path": "art254-A",
+              "procedencia": "captura_direta",
+              "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+              "source_kind": "lei",
+              "span": null,
+              "trecho_oficial": null,
+              "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+            }
+          ],
+          "reason_code": "OBRA_E_CAMINHO_OK",
+          "status": "verified"
+        },
+        "temporal": {
+          "evidence": [
+            {
+              "acervo_ate": "2026-10-17",
+              "capture_id": "<ulid>",
+              "captured_at": "<instante>",
+              "esfera": "federal",
+              "fetched_at": "<instante>",
+              "natureza_texto": "consolidacao_oficial",
+              "path": "art254-A",
+              "procedencia": "captura_direta",
+              "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+              "source_kind": "lei",
+              "span": null,
+              "trecho_oficial": null,
+              "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+            }
+          ],
+          "reason_code": "HISTORICO_ANTERIOR_AUSENTE",
+          "status": "unknown"
+        },
+        "text": {
+          "evidence": [],
+          "reason_code": "HISTORICO_ANTERIOR_AUSENTE",
+          "status": "unknown"
+        }
+      },
+      "evidencia_disponivel": {
+        "acervo_ate": "2026-10-17",
+        "capture_id": "<ulid>",
+        "captured_at": "<instante>",
+        "esfera": "federal",
+        "fetched_at": "<instante>",
+        "natureza_texto": "consolidacao_oficial",
+        "path": "art254-A",
+        "procedencia": "captura_direta",
+        "sha256": "ae0112c8e2ffc09a6ef5b171a1463a45e45cbd589934ec2d36569cdf70aeff5f",
+        "source_kind": "lei",
+        "span": null,
+        "trecho_oficial": null,
+        "url": "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
+      },
+      "interpretacao_preferida": "norma+dispositivo",
+      "interpretacao_proposta": {
+        "confidence": "provavel",
+        "decision": null,
+        "flags": [
+          "sem_ano",
+          "so_sem_ano"
+        ],
+        "kind": "norma",
+        "path": "art254-A",
+        "raw": "Lei 6.404, art. 254-A",
+        "span": [
+          0,
+          21
+        ],
+        "work": {
+          "authority": "federal",
+          "kind": "lei",
+          "number": "6404",
+          "year": 0
+        }
+      }
+    },
+    "correspondencia_textual": null,
+    "fundamento_temporal": null,
+    "identity": {
+      "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA",
+      "status": "unknown"
+    },
+    "proposicao": null,
+    "run_id": "<ulid>",
+    "support": {
+      "evidence": [],
+      "reason_code": "SUPPORT_NOT_IN_M3",
+      "status": "not_assessed"
+    },
+    "temporal": {
+      "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA",
+      "status": "unknown"
+    },
+    "text": {
+      "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA",
+      "status": "not_assessed"
+    }
+  }
+}

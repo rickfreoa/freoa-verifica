@@ -1,0 +1,10 @@
+inicio 2026-11-04T07:31:30.8210268-03:00
+commit 4ae0b34427ccbae9d2b908b22cd4e0acae3456a4
+pip_pkg=0
+versao freoa-verifica 1.4.0a2
+install_vinc=0
+conferir_vinc=0
+doctor_vinc=0
+vinculado: True
+autenticidade: Checksums demonstram integridade. `vinculado: true` significa que o sha256 do snapshot consta da lista embutida no pacote; a origem do pacote se prova pela attestation do wheel (`gh attestation verify`), conferida pelo instalador quando o GitHub CLI existe. N├úo h├í assinatura pr├│pria do snapshot.
+fim 2026-11-04T07:34:48.2553640-03:00

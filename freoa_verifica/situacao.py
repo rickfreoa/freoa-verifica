@@ -39,6 +39,7 @@ class WorkStatus:
     sha256: str | None = None
     lido_em: str | None = None
     url: str | None = None  # da captura; não é coluna
+    recibo: dict | None = None  # campos da evidência pelo construtor comum, lidos da captura; não é coluna
 
 
 # ----------------------------------------------------------------------
@@ -89,10 +90,29 @@ def carregar(conn: sqlite3.Connection | None, rw: Any, home: Any = None) -> Work
         # Captura de situação adulterada ou ausente: a conclusão temporal não pode apoiar-se nela.
         if rw.work_key.authority in AUTORIDADES_COM_SITUACAO and not _autentico(conn, ws, home):
             return WorkStatus(rw.work_id, "ilegivel", "captura_de_situacao_nao_autentica")
-        return ws
+        return replace(ws, recibo=_recibo_da_captura(conn, ws, rw))
     if rw.work_key.authority in AUTORIDADES_COM_SITUACAO:
         return WorkStatus(rw.work_id, "ilegivel", "situacao_nao_lida")
     return None
+
+
+def _recibo_da_captura(conn: sqlite3.Connection, ws: WorkStatus, rw: Any) -> dict | None:
+    """C6: a evidência da situação nasce do recibo da captura (`capture`), pelo construtor comum de `verify`:
+    `captured_at` é o instante da captura (`capture.fetched_at`), nunca o `lido_em` da leitura da situação;
+    procedência persistida; tipo e esfera pela obra; natureza só quando a captura é a mesma do texto da obra."""
+    if not ws.captura_id:
+        return None
+    from freoa_verifica.verify import _inferir_esfera, _inferir_natureza_texto, _inferir_source_kind, campos_evidencia
+
+    cap = conn.execute("SELECT fetched_at, procedencia FROM capture WHERE id=?", (ws.captura_id,)).fetchone()
+    if cap is None:
+        return None
+    mesma = getattr(rw, "capture_id", None) == ws.captura_id
+    return campos_evidencia(
+        ws.captura_id, ws.sha256, ws.url, cap["fetched_at"],
+        source_kind=_inferir_source_kind(rw.work_key), natureza_texto=_inferir_natureza_texto(rw) if mesma else "nao_identificado",
+        procedencia=cap["procedencia"], esfera=_inferir_esfera(rw.work_key),
+    )
 
 
 def resumo(ws: WorkStatus | None) -> dict[str, Any] | None:
@@ -361,22 +381,32 @@ def _iso(value: str | None) -> date | None:
         return None
 
 
+def consulta_historica(d: date | None, hoje: date) -> bool:
+    """D diferente de hoje (passada ou futura). Sem D válida não há consulta histórica a decidir aqui."""
+    return d is not None and d != hoje
+
+
 def _desatualizada(ws: WorkStatus, hoje: date) -> bool:
     lido = _iso(ws.lido_em)
     return lido is None or (hoje - lido).days > MAX_IDADE_DIAS
 
 
 def _decidir(cur: str, ws: WorkStatus | None, data: str | None, hoje: date) -> tuple[str, str] | None:
-    """cur: bom (verified/vigente_na_fonte) | revogado | preservar | unknown | nao_avaliado.
+    """cur: bom (verified/vigente_na_fonte) | revogado | preservar | unknown | nao_avaliado | sem_fundamento_do_periodo.
 
     Devolve (acao, motivo) com acao em revogado|unknown|flag, ou None (sem efeito).
     """
-    if ws is None or ws.situacao in ("nao_aplicavel",) or cur in ("revogado", "preservar"):
+    if ws is None or ws.situacao in ("nao_aplicavel",) or cur in ("revogado", "preservar", "sem_fundamento_do_periodo"):
         return None
     d = hoje if data is None else _iso(data)
     if d is None:
         return None
     if ws.situacao in ("revogada", "cancelada"):
+        # C1 (0075, §2, itens 1, 5 e 6): guarda histórica única. Para D diferente de hoje, sem fundamento
+        # validado, a situação cadastral (o que a página declara hoje) nunca produz conclusão, seja qual
+        # for o estado intermediário (unknown, not_assessed, ausência de dispositivo). Cobre os dois ramos.
+        if consulta_historica(d, hoje):
+            return None
         efeito = _iso(ws.data_efeito)
         if efeito is not None:
             return ("revogado", REVOGADO_NA_FONTE) if d >= efeito else ("flag", POSTERIOR)
@@ -393,10 +423,10 @@ def _decidir(cur: str, ws: WorkStatus | None, data: str | None, hoje: date) -> t
 
 
 def _evidencia(ws: WorkStatus):
-    from freoa_verifica.verify import Evidence
+    from freoa_verifica.verify import Evidence, campos_evidencia
 
-    return Evidence(capture_id=ws.captura_id, sha256=ws.sha256, url=ws.url, fetched_at=ws.lido_em,
-                    trecho_oficial=(ws.texto_oficial or "")[:1500] or None)
+    campos = ws.recibo or campos_evidencia(ws.captura_id, ws.sha256, ws.url, None)
+    return Evidence(trecho_oficial=(ws.texto_oficial or "")[:1500] or None, **campos)
 
 
 def aplicar_situacao(temporal_dim, status: WorkStatus | None, data: str | None, hoje: date | None = None):
@@ -405,7 +435,9 @@ def aplicar_situacao(temporal_dim, status: WorkStatus | None, data: str | None, 
 
     hoje = hoje or today_sp()
     s, r = temporal_dim.status, temporal_dim.reason_code or ""
-    if s in ("verified", "vigente_na_fonte"):
+    if r == "sem_fundamento_do_periodo":
+        cur = "sem_fundamento_do_periodo"
+    elif s in ("verified", "vigente_na_fonte"):
         cur = "bom"
     elif (s == "divergent" and r.startswith("REVOGADO")) or r == REVOGADO_NA_FONTE:
         cur = "revogado"
@@ -447,8 +479,13 @@ def aplicar_situacao_tr(tr, status: WorkStatus | None, data: str | None, hoje: d
     from freoa_verifica.temporal import today_sp
 
     hoje = hoje or today_sp()
-    cur = {"verified": "bom", "vigente_na_fonte": "bom", "revogado": "revogado", "nao_existia": "preservar",
-           "ambiguous": "preservar"}.get(tr.status, "unknown")
+    r = getattr(tr, "reason", None) or ""
+    flags = getattr(tr, "flags", [])
+    if r == "sem_fundamento_do_periodo" or "sem_fundamento_do_periodo" in flags:
+        cur = "sem_fundamento_do_periodo"
+    else:
+        cur = {"verified": "bom", "vigente_na_fonte": "bom", "revogado": "revogado", "nao_existia": "preservar",
+               "ambiguous": "preservar"}.get(tr.status, "unknown")
     acao = _decidir(cur, status, data, hoje)
     if acao is None:
         return tr
