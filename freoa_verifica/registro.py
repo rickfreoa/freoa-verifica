@@ -92,7 +92,7 @@ def chave_do_home(home: Path, conn: sqlite3.Connection | None = None) -> bytes:
 
     Criação: grava em arquivo temporário no mesmo diretório (sincronizado) e `os.link` para o nome
     final; EEXIST (outro processo ganhou) lê o existente. Nunca existe estado de 0 byte. Com `conn`,
-    a impressão digital (sha256, 16 hex) fica em `meta`; chave ausente com runs `hmac1:` ou impressão
+    a impressão digital (sha256, 16 hex) fica em `meta`; a criação nunca fixa o legado (C8: quem fixa é a migração do home operacional); chave ausente com runs `hmac1:` ou impressão
     em `meta` é erro CHAVE_REGISTRO_AUSENTE (não se regenera em silêncio). Cache por home no processo,
     revalidado por stat (arquivo apagado, trocado ou corrompido não passa despercebido).
     Windows: o modo POSIX não se aplica; a proteção vem da ACL herdada da pasta do perfil.
@@ -104,9 +104,7 @@ def chave_do_home(home: Path, conn: sqlite3.Connection | None = None) -> bytes:
             return em_cache[0]
     except FileNotFoundError:
         pass
-    criada = False
     if not caminho.exists():
-        criada = True
         if _chave_ausente_com_historico(conn):
             raise RuntimeError(
                 f"CHAVE_REGISTRO_AUSENTE: {caminho} sumiu mas o home tem registros com HMAC; "
@@ -127,11 +125,6 @@ def chave_do_home(home: Path, conn: sqlite3.Connection | None = None) -> bytes:
     if conn is not None:
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_IMPRESSAO, _impressao(chave)))
     _cache_chaves[str(caminho)] = (chave, _assinatura(caminho))
-    if conn is not None and criada:
-        try:
-            selar_legado(conn)  # C8: os registros sem MAC que já existem são os legados; os futuros terão MAC
-        except OSError:
-            pass  # sem âncora gravada, nenhum registro sem MAC passa por legado (falha fechada)
     return chave
 
 

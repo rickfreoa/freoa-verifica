@@ -612,21 +612,24 @@ def test_0075_obter_registro_integridade_adulterada(svc_160):
     assert reg["integridade"]["confere"] is False
 
 
-def test_0075_obter_registro_legado_sem_mac(tmp_path):
+def test_0075_obter_registro_legado_sem_mac(tmp_path, monkeypatch):
     """3.4: registro legado sem registro_mac dá integridade.confere = null."""
-    s = Verifica(home=tmp_path)
+    from freoa_verifica.store import db as dbmod
+
     run_id = "01LEGADO000000000000000000"
-    s.conn.execute(
+    todas = dbmod._migration_files()
+    with monkeypatch.context() as m:  # home da `main` (esquema 16), com o registro que a `main` gravou
+        m.setattr(dbmod, "_migration_files", lambda: [x for x in todas if x[0] <= 16])
+        conn = dbmod.connect(tmp_path / "verifica.sqlite3")
+    conn.execute(
         "INSERT INTO run (id, request_hash, request_json, policy_version, created_at, result_json) "
         "VALUES (?,?,?,?,?,?)",
         (run_id, "hash", '{"citacao": "art 1"}', "verify-r5-1", "2026-01-01T00:00:00Z", '{"identity": {"status": "verified"}}'),
     )
-    s.conn.commit()
-    # IL.0-R, C8: o legado é o que o selo autenticado lista; o selo nasce com a chave do home.
-    from freoa_verifica import registro
-
-    registro.chave_do_home(tmp_path, s.conn)
-    s.conn.commit()
+    conn.commit()
+    conn.close()
+    # IL.0-R, C8: o legado é o que o selo autenticado lista; o selo nasce na migração do home operacional.
+    s = Verifica(home=tmp_path)
 
     reg = s.obter_registro(run_id)
     assert reg["status"] == "encontrada"

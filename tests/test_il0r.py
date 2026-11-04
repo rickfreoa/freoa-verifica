@@ -247,14 +247,14 @@ def _provisoes_de_inclusao_futura() -> list[Provision]:
     inc = Annotation(kind="incluido", raw="Incluído pela Lei 99", act_ref="Lei 99", act_date=futuro)
     notas = [Annotation(kind=k, raw=k) for k in ("vide", "vigencia", "producao_efeitos", "veto")]
     dada = Annotation(kind="redacao_dada", raw="Redação dada pela Lei 99", act_ref="Lei 99", act_date=futuro)
-    out = [Provision(path="p-inc", label="a", scope="norma", redactions=[Redaction(0, "t", False, [inc])])]
+    out = [Provision(path="p-inc", label="a", scope="norma", redactions=[Redaction(text="t", struck=False, order=0, annotations=[inc])])]
     for n in notas:
         out.append(Provision(path=f"p-inc-{n.kind}", label="a", scope="norma",
-                             redactions=[Redaction(0, "t", False, [inc, n])]))
-    out.append(Provision(path="p-dada", label="a", scope="norma", redactions=[Redaction(0, "t", False, [dada])]))
+                             redactions=[Redaction(text="t", struck=False, order=0, annotations=[inc, n])]))
+    out.append(Provision(path="p-dada", label="a", scope="norma", redactions=[Redaction(text="t", struck=False, order=0, annotations=[dada])]))
     for n in notas:
         out.append(Provision(path=f"p-dada-{n.kind}", label="a", scope="norma",
-                             redactions=[Redaction(0, "t", False, [dada, n])]))
+                             redactions=[Redaction(text="t", struck=False, order=0, annotations=[dada, n])]))
     return out
 
 
@@ -578,15 +578,24 @@ def test_c8_mutante_forjar_id_no_selo_nao_vale(verifica_populada):
 
 
 def test_c8_registro_legado_anterior_a_migracao_continua_null(tmp_path, monkeypatch):
-    """Home anterior à 1.4.0a2: o legado sem MAC é selado quando a chave nasce e segue `confere: null`."""
+    """Home anterior à 1.4.0a2 (esquema 16, sem chave): a migração do home operacional cria a chave e sela o legado."""
+    from freoa_verifica.store import db as dbmod
+
+    todas = dbmod._migration_files()
+    with monkeypatch.context() as m:
+        m.setattr(dbmod, "_migration_files", lambda: [x for x in todas if x[0] <= 16])
+        conn = dbmod.connect(tmp_path / "verifica.sqlite3")
+    conn.execute(
+        "INSERT INTO run(id, created_at, request_hash, request_json, policy_version, result_json) VALUES (?,?,?,?,?,?)",
+        ("LEGADO0000000000000000000A", "2026-01-01T00:00:00+00:00", "h", "{}", "1", json.dumps({
+            "identity": {"status": "verified"}})))
+    conn.commit()
+    conn.close()
+    assert not (tmp_path / registro.ARQUIVO_CHAVE).exists()
     with Verifica(home=tmp_path) as svc:
-        svc.conn.execute(
-            "INSERT INTO run(id, created_at, request_hash, request_json, policy_version, result_json) VALUES (?,?,?,?,?,?)",
-            ("LEGADO0000000000000000000A", "2026-01-01T00:00:00+00:00", "h", "{}", "1", json.dumps({
-                "identity": {"status": "verified"}})))
-        svc.conn.commit()
-        assert not (tmp_path / registro.ARQUIVO_CHAVE).exists()
-        novo = svc.verificar_citacao("Lei inventada 99.999/2099")["run_id"]  # cria a chave e sela o legado
+        assert (tmp_path / registro.ARQUIVO_CHAVE).exists()  # criada e selada na migração, antes de qualquer verificação
+        assert svc.obter_registro("LEGADO0000000000000000000A")["integridade"]["confere"] is None
+        novo = svc.verificar_citacao("Lei inventada 99.999/2099")["run_id"]
         assert svc.obter_registro("LEGADO0000000000000000000A")["integridade"]["confere"] is None
         assert svc.obter_registro(novo)["integridade"]["confere"] is True
 

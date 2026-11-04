@@ -1120,7 +1120,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
 
         svc._db_path = db_dst
         svc._clear_caches()
-        svc.conn = connect(db_dst)
+        svc.conn = connect(db_dst, operacional=True)
         # O manifesto de origem não pode autoafirmar vínculo com o wheel. Instalação é anexação:
         # um snapshot não vinculado anterior continua no banco, logo o "não vinculado" é permanente.
         vinculo = _vinculo_acumulado(svc.home, vinculo or {"vinculado": False}, banco_tinha_dados=banco_tinha_dados)
@@ -1167,7 +1167,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
             result["backup_blobs"] = str(backup_blobs)
         svc._clear_caches()
         try:
-            svc.conn = connect(db_dst)
+            svc.conn = connect(db_dst, operacional=True)
         except Exception as reopen_exc:  # noqa: BLE001
             result["reopen_error"] = str(reopen_exc)[:200]
         return result

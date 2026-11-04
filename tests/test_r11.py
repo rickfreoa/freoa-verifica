@@ -147,10 +147,10 @@ def test_install_failure_preserves_all_local_evidence(tmp_path, monkeypatch, mod
             monkeypatch.setattr(target, "_clear_caches", clear)
         elif stage == "reopen":
             original = snapshot.connect
-            def connect(path):
+            def connect(path, **kw):
                 if Path(path) == target._db_path and not calls:
                     fail()
-                return original(path)
+                return original(path, **kw)
             monkeypatch.setattr(snapshot, "connect", connect)
         result = snapshot.install_snapshot(target, origin, aceitar_nao_vinculado=True)
         assert calls == [stage]

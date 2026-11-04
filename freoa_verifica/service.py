@@ -467,7 +467,7 @@ class Verifica:
             from freoa_verifica.registro import recuperar_purga
 
             recuperar_purga(self.home)  # purga interrompida entre os dois renames
-            boot = connect(self._db_path)
+            boot = connect(self._db_path, operacional=True)
             boot.close()
         self._uso = None  # marca de uso do home entre processos (trava.py, A1)
         if self.home.is_dir():
@@ -3259,7 +3259,7 @@ class Verifica:
             # C9: leitura da chave sem escrita; chave ilegível ou ausente não confere (nunca levanta).
             try:
                 return _hmac(conn, campo, valor, leitura=leitura)
-            except (RuntimeError, ValueError, TypeError):
+            except (RuntimeError, ValueError, TypeError, OSError):  # OSError: acesso negado, pasta no lugar, falha de leitura
                 return None
 
         def invalido(run, motivo):

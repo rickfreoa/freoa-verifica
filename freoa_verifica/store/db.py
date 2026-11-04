@@ -119,9 +119,14 @@ class ConexaoFV(sqlite3.Connection):
         super().close()
 
 
-def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000, check_same_thread: bool = True) -> sqlite3.Connection:
-    """Abre SQLite com foreign_keys, WAL e migrações aplicadas."""
+def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000, check_same_thread: bool = True,
+            operacional: bool = False) -> sqlite3.Connection:
+    """Abre SQLite com foreign_keys, WAL e migrações aplicadas.
+
+    `operacional=True` (home padrão e inicialização do `Verifica`): a migração cria a chave do home, se faltar, e fixa o
+    legado (C8). Exportação e staging abrem com o padrão `False`: sem chave, sem selo."""
     if path is None:
+        operacional = True
         home = data_home()
         home.mkdir(parents=True, exist_ok=True)
         path = home / "verifica.sqlite3"
@@ -131,6 +136,7 @@ def connect(path: Path | str | None = None, *, busy_timeout_ms: int = 30_000, ch
     conn = sqlite3.connect(str(path), timeout=busy_timeout_ms / 1000, check_same_thread=check_same_thread,
                            factory=ConexaoFV)
     conn.row_factory = sqlite3.Row
+    conn._fv_operacional = operacional
     conn.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=WAL")
