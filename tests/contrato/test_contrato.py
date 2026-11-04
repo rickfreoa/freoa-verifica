@@ -56,7 +56,7 @@ def test_resposta_compativel_com_a_congelada(ambiente, request, adaptador, caso,
         h.gravar(adaptador, caso, ferramenta, args, atual)
         return
     congelado = h.carregar(adaptador, caso)
-    esperado_commit = h.COMMIT_1_4_0 if caso in h.CASOS_NOVOS_1_4_0 else h.COMMIT_1_2_0
+    esperado_commit = h.commit_do_caso(caso)
     assert congelado["_proveniencia"]["commit"] == esperado_commit
     assert congelado["_proveniencia"]["adaptador"] == adaptador
     erros = h.incompatibilidades(ferramenta, congelado["resposta"], h.normalizar(atual), DEPRECATED | EXPERIMENTAL)
@@ -302,7 +302,10 @@ def _condicao_satisfeita(resposta: dict[str, Any], condicao: dict[str, Any] | No
         valores = _obter_caminho_val(resposta, campo)
         if not valores:
             return False
-        if isinstance(esperado, list):
+        if esperado == "@nao_nulo":  # variante legítima: campo presente e não nulo (ex.: obtenção sem caminho)
+            if not any(v is not None for v in valores):
+                return False
+        elif isinstance(esperado, list):
             if not any(v in esperado for v in valores):
                 return False
         else:
@@ -484,7 +487,13 @@ def test_contrato_consumidor_freoa_satisfeito(ambiente, adaptador):
             "verificar_citacao_obra_inexistente",
             "verificar_citacao_historica_riscada",
         ],
-        "obter_dispositivo": ["obter_dispositivo"],
+        "obter_dispositivo": [
+            "obter_dispositivo",
+            "obter_dispositivo_revogado_corrente",
+            "obter_dispositivo_nao_existia",
+            "obter_dispositivo_historica",
+            "obter_dispositivo_sem_caminho",
+        ],
         "listar_fontes": ["listar_fontes"],
         "obter_registro": ["obter_registro_encontrada", "obter_registro_inexistente"],
     }
@@ -695,13 +704,54 @@ def test_contrato_consumidor_freoa_nao_exercitados_valido():
     contrato_consumidor = json.loads(FREOA_JSON.read_text(encoding="utf-8"))
     nao_exercitados = json.loads(FREOA_NAO_EXERCITADOS_JSON.read_text(encoding="utf-8"))
     assert isinstance(nao_exercitados, list)
-    assert len(nao_exercitados) == 23
+    # IL.0-R, C12: 23 -> 19 (quatro literais de `vigencia.status` passaram a ser exercitados ou saíram do contrato,
+    # e `ambiguous` ganhou motivo próprio). Alteração do arquivo do consumidor sujeita a auditoria.
+    assert len(nao_exercitados) == 19
+    motivos = {"sem caso no harness; cobertura pendente do IL.0b",
+               "sem caso no harness; dispositivo ambíguo exige fixture própria (IL.0-R, C12)"}
     for item in nao_exercitados:
         assert set(item.keys()) == {"ferramenta", "caminho", "literal", "motivo"}
-        assert item["motivo"] == "sem caso no harness; cobertura pendente do IL.0b"
+        assert item["motivo"] in motivos
         ferr = item["ferramenta"]
         cam = item["caminho"]
         lit = item["literal"]
         spec = contrato_consumidor["ferramentas"][ferr]
         assert cam in spec["estados"], f"{cam} não está em estados de {ferr}"
         assert lit in spec["estados"][cam], f"{lit} não está em estados de {ferr}:{cam}"
+
+
+def test_gate_vigencia_status_publicado_esta_no_contrato_do_consumidor():
+    """IL.0-R, C12: os literais que `obter_dispositivo` publica (congelados) estão em `vigencia.status` do consumidor."""
+    spec = json.loads(FREOA_JSON.read_text(encoding="utf-8"))["ferramentas"]["obter_dispositivo"]
+    casos = ("obter_dispositivo", "obter_dispositivo_revogado_corrente", "obter_dispositivo_nao_existia",
+             "obter_dispositivo_historica", "obter_dispositivo_sem_caminho")
+    respostas = [h.carregar("python", c)["resposta"] for c in casos]
+    for r in respostas[1:]:  # o primeiro é o congelado da 1.2.0, anterior aos eixos de evidência
+        assert not validar_resposta_consumidor("obter_dispositivo", spec, r, DEPRECATED), r["status"]
+    observados = {r["vigencia"]["status"] for r in respostas if r.get("vigencia")}
+    assert {"revogado", "nao_existia", "unknown", "vigente_na_fonte"} <= observados
+    assert observados <= set(spec["estados"]["vigencia.status"])
+    sem_caminho = h.carregar("python", "obter_dispositivo_sem_caminho")["resposta"]
+    assert sem_caminho["caminho"] is None and "vigencia" not in sem_caminho
+
+
+@pytest.mark.parametrize("literal", ["divergent", "not_found", "verified"])
+def test_gate_mutante_literal_nunca_publicado_em_vigencia_reprova(literal):
+    """Os literais errados do passe final (`divergent`, `not_found`, `verified`) não voltam em silêncio."""
+    spec = copy.deepcopy(json.loads(FREOA_JSON.read_text(encoding="utf-8"))["ferramentas"]["obter_dispositivo"])
+    spec["estados"]["vigencia.status"].append(literal)
+    casos = ("obter_dispositivo", "obter_dispositivo_revogado_corrente", "obter_dispositivo_nao_existia",
+             "obter_dispositivo_historica", "obter_dispositivo_sem_caminho")
+    respostas = [h.carregar("python", c)["resposta"] for c in casos]
+    erros = conferir_literais_observados("obter_dispositivo", spec, respostas, DEPRECATED)
+    assert any(literal in e and "não foi observado" in e for e in erros), erros
+
+
+def test_gate_mutante_resposta_com_literal_fora_do_contrato_reprova():
+    spec = json.loads(FREOA_JSON.read_text(encoding="utf-8"))["ferramentas"]["obter_dispositivo"]
+    resp = copy.deepcopy(h.carregar("python", "obter_dispositivo_revogado_corrente")["resposta"])
+    spec_antigo = copy.deepcopy(spec)
+    spec_antigo["estados"]["vigencia.status"] = ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found",
+                                                  "ambiguous"]  # lista errada do passe final
+    erros = validar_resposta_consumidor("obter_dispositivo", spec_antigo, resp, DEPRECATED)
+    assert any("revogado" in e for e in erros), erros

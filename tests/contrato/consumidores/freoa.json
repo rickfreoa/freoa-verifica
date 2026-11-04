@@ -67,24 +67,24 @@
       "caminhos": {
         "status": "string",
         "caminho": {
-          "tipo": "string",
+          "tipo": "string|null",
           "condicao": {"status": "encontrada"}
         },
         "texto": {
           "tipo": "string|null",
-          "condicao": {"status": "encontrada"}
+          "condicao": {"status": "encontrada", "caminho": "@nao_nulo"}
         },
         "texto_atual": {
           "tipo": "object|null",
-          "condicao": {"status": "encontrada"}
+          "condicao": {"status": "encontrada", "caminho": "@nao_nulo"}
         },
         "vigencia.status": {
           "tipo": "string",
-          "condicao": {"status": "encontrada"}
+          "condicao": {"status": "encontrada", "caminho": "@nao_nulo"}
         },
         "vigencia.reason_code": {
           "tipo": "string|null",
-          "condicao": {"status": "encontrada"}
+          "condicao": {"status": "encontrada", "caminho": "@nao_nulo"}
         },
         "evidencia.capture_id": {
           "tipo": "string",
@@ -137,7 +137,7 @@
       },
       "estados": {
         "status": ["encontrada", "inexistente", "indisponivel", "unknown", "formato_invalido"],
-        "vigencia.status": ["verified", "vigente_na_fonte", "unknown", "divergent", "not_found", "ambiguous"]
+        "vigencia.status": ["vigente_na_fonte", "unknown", "revogado", "nao_existia", "ambiguous"]
       }
     },
     "listar_fontes": {

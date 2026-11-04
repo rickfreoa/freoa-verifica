@@ -25,6 +25,7 @@ CNJ_VALIDO = "0713166-62.2018.8.07.0000"
 CNJ_INVALIDO = "0710920-40.2025.8.07.0000"
 TRECHO_LSA = "A alienação, direta ou indireta, do controle de companhia aberta"
 CITACAO_LSA = "art. 254-A da Lei 6.404/76"
+CITACAO_160_ART1 = "art. 1º da Resolução CVM nº 160/2022"
 
 CITACAO_160 = "art. 2º, XVI da Resolução CVM nº 160/2022"
 TRECHO_160_RISCADO = (
@@ -103,11 +104,14 @@ def semear(svc) -> dict[str, str]:
         work_date="2022-07-13",
         label="Resolução CVM nº 160/2022",
     )
+    # Obra declarada revogada pela página do ato: a consulta corrente é `revogado`; a histórica nunca converte (C1).
     situacao.gravar(
         svc.conn,
         situacao.WorkStatus(
             rw_160.work_id,
-            "vigente_declarada",
+            "revogada",
+            texto_oficial="Revogada pela página do ato (caso sintético do harness)",
+            data_efeito="2025-01-01",
             captura_id=rw_160.capture_id,
             sha256=rw_160.sha256,
             lido_em="2026-10-18T00:00:00Z",
@@ -170,6 +174,10 @@ CASOS: list[tuple[str, str, dict[str, Any]]] = [
         "trecho": TRECHO_160_RISCADO,
         "data": "2022-08-01",
     }),
+    ("obter_dispositivo_revogado_corrente", "obter_dispositivo", {"citacao": CITACAO_160_ART1}),
+    ("obter_dispositivo_nao_existia", "obter_dispositivo", {"citacao": CITACAO_LSA, "data": "1970-01-01"}),
+    ("obter_dispositivo_historica", "obter_dispositivo", {"citacao": CITACAO_160, "data": "2022-08-01"}),
+    ("obter_dispositivo_sem_caminho", "obter_dispositivo", {"citacao": "Lei 6.404/76"}),
     ("obter_registro_encontrada", "obter_registro", {"run_id": "@run_id_valido"}),
     ("obter_registro_inexistente", "obter_registro", {"run_id": "01M6H1Y11Y99K728HPNASE0000"}),
 ]
@@ -391,27 +399,40 @@ CASOS_NOVOS_1_4_0 = frozenset({
     "obter_registro_inexistente",
     "verificar_citacao_historica_riscada",
 })
+# IL.0-R (C12): casos gravados com o código do commit abaixo (o do núcleo C1 a C11), offline.
+CASOS_IL0R = frozenset({
+    "obter_dispositivo_revogado_corrente",
+    "obter_dispositivo_nao_existia",
+    "obter_dispositivo_historica",
+    "obter_dispositivo_sem_caminho",
+})
+COMMIT_IL0R = "3a3ba0b"
 COMMIT_1_4_0 = "7a3347a"
 VERSAO_1_4_0 = "1.4.0a1"
 VERSAO_DESTINO_1_4_0 = "1.4.0a2"
 
 
+def commit_do_caso(caso: str) -> str:
+    return COMMIT_IL0R if caso in CASOS_IL0R else COMMIT_1_4_0 if caso in CASOS_NOVOS_1_4_0 else COMMIT_1_2_0
+
+
 def gravar(adaptador: str, caso: str, ferramenta: str, entrada: dict, resposta: dict) -> None:
-    is_novo = caso in CASOS_NOVOS_1_4_0
+    is_il0r = caso in CASOS_IL0R
+    is_novo = caso in CASOS_NOVOS_1_4_0 or is_il0r
     prov = {
         "adaptador": adaptador,
         "caso": caso,
-        "commit": COMMIT_1_4_0 if is_novo else COMMIT_1_2_0,
+        "commit": commit_do_caso(caso),
         "entrada": entrada,
         "ferramenta": ferramenta,
         "origem": (
-            "entrada sintética + acervo de teste local (decisão 0075 / IL.0), FV_OFFLINE=1, sem rede"
+            "entrada sintética + acervo de teste local (decisão 0075 / IL.0" + ("-R, C12" if is_il0r else "") + "), FV_OFFLINE=1, sem rede"
             if is_novo
             else "entrada sintética + acervo de teste local, FV_OFFLINE=1, sem rede"
         ),
-        "versao": VERSAO_1_4_0 if is_novo else "1.2.0",
+        "versao": VERSAO_DESTINO_1_4_0 if is_il0r else VERSAO_1_4_0 if is_novo else "1.2.0",
     }
-    if is_novo:
+    if is_novo and not is_il0r:
         prov["versao_destino"] = VERSAO_DESTINO_1_4_0
     doc = {
         "_proveniencia": prov,

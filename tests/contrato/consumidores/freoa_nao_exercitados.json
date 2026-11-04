@@ -80,32 +80,8 @@
   {
     "ferramenta": "obter_dispositivo",
     "caminho": "vigencia.status",
-    "literal": "verified",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
-  },
-  {
-    "ferramenta": "obter_dispositivo",
-    "caminho": "vigencia.status",
-    "literal": "unknown",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
-  },
-  {
-    "ferramenta": "obter_dispositivo",
-    "caminho": "vigencia.status",
-    "literal": "divergent",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
-  },
-  {
-    "ferramenta": "obter_dispositivo",
-    "caminho": "vigencia.status",
-    "literal": "not_found",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
-  },
-  {
-    "ferramenta": "obter_dispositivo",
-    "caminho": "vigencia.status",
     "literal": "ambiguous",
-    "motivo": "sem caso no harness; cobertura pendente do IL.0b"
+    "motivo": "sem caso no harness; dispositivo ambíguo exige fixture própria (IL.0-R, C12)"
   },
   {
     "ferramenta": "listar_fontes",
