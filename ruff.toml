@@ -11,3 +11,6 @@ ignore = ["TRY003", "TRY004", "TRY300", "TRY301"]
 "tests/**" = ["F811", "S608", "S101", "S603", "S607", "S108", "S105", "S106", "S311", "TRY002", "TRY003", "BLE001"]
 # Script de CI: lê o JUnit gerado pelo próprio job e chama `gh` com argumentos fixos.
 "scripts/saude_fontes.py" = ["S314", "S603"]
+# Porta L congelada por hash (il1-congelamento.md): os bytes não podem mudar; testes do validador seguem a regra de tests/.
+"scripts/porta_l/test_validador.py" = ["F811", "S101", "S603", "S607", "S108", "TRY002", "TRY003", "BLE001"]
+"scripts/porta_l/validar_gabaritos_porta_l.py" = ["F841"]

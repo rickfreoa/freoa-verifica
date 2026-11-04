@@ -1,0 +1,131 @@
+{
+  "situacoes": {
+    "lsa_156": {
+      "casos": [
+        "L-a-010"
+      ],
+      "evento": "Lei 6.404/1976, art. 156: redação original (DOU de 17/12/1976), nunca alterada; norma grande (mais de 300 artigos). Âncora: publicação original (Câmara) e compilada (Câmara), art. 156 inteiro com caput e §§ 1º e 2º.",
+      "esperado": "(a) obter_dispositivo(versao=\"publicacao_original\") devolve o texto da publicação original, igual ao gabarito (caput e §§ 1º e 2º), sem a rubrica do art. 157."
+    },
+    "lsa_254a": {
+      "casos": [
+        "L-b-012"
+      ],
+      "evento": "Lei 10.303/2001 incluiu o art. 254-A na Lei 6.404/1976 (31/10/2001), com o § 5º vetado. Âncora: compilada da Câmara (texto consolidado integral) e publicação da Lei 10.303.",
+      "esperado": "(b) obter_dispositivo devolve o texto consolidado integral do art. 254-A (caput, §§ 1º a 4º e § 5º \"(VETADO)\"), igual ao gabarito, sem truncamento."
+    },
+    "lsa_289": {
+      "casos": [
+        "L-a-001"
+      ],
+      "evento": "Lei 6.404/1976, art. 289: redação original (1976, caput e §§ 1º a 6º) e histórico de alterações pelas fontes gravadas (Lei 9.457/1997: caput, § 1º e § 6º; Lei 10.303/2001: § 7º; Lei 13.818/2019: caput, em vigor em 1º/1/2022; MP 892/2019: art. 289 integral, com vigência encerrada em 4/12/2019). Âncora: publicação original da LSA (caso L-a-001).",
+      "esperado": "(a) obter_dispositivo(versao=\"publicacao_original\") devolve o texto da publicação original do art. 289, igual ao gabarito (caput e §§ 1º a 6º)."
+    },
+    "cc_421": {
+      "casos": [
+        "L-b-004",
+        "L-c-008"
+      ],
+      "evento": "Código Civil, art. 421: caput e parágrafo único dados pela Lei 13.874/2019 (parágrafo único acrescido antes pela MP 881/2019); redação original de 2002 com só o caput. Âncora: compilada (Câmara) e publicação original do CC.",
+      "esperado": "(b) texto consolidado integral, com o parágrafo único, sem truncamento; (c) nao_existia_em_D em 1/6/2001 (anterior à obra)."
+    },
+    "cc_1031": {
+      "casos": [
+        "L-a-003",
+        "L-b-005"
+      ],
+      "evento": "Código Civil, art. 1.031, caput e §§ 1º e 2º: redação original de 2002, sem alteração. Âncora: publicação original e compilada (Câmara).",
+      "esperado": "(a) texto da publicação original; (b) texto consolidado igual ao original."
+    },
+    "ctn_185": {
+      "casos": [
+        "L-a-002",
+        "L-c-002",
+        "L-c-003"
+      ],
+      "evento": "CTN, art. 185: redação original de 1966 (\"em fase de execução\") e redação da LC 118/2005. Âncora: publicação original do CTN, publicação da LC 118 (Câmara) e compilada.",
+      "esperado": "(a) texto original; (c) verificado_para_D em 1/3/1990 (redação original), rejeitando 1/1/2006 (redação da LC 118); e em 1/3/2006 (redação da LC 118, publicação da LC), rejeitando 1/3/1990."
+    },
+    "rasura": {
+      "casos": [
+        "L-c-007",
+        "L-c-012"
+      ],
+      "evento": "L-c-007: Lei 13.709/2018 (LGPD), art. 29: a compilada do Planalto (acervo congelado) traz riscadas, ao lado do dispositivo, as duas redações anteriores (a original de 14/8/2018 e a da MP 869/2018), e a redação vigente em D é a da Lei 13.853/2019, publicada inteira no DOU de 9/7/2019 (art. 2º da lei). L-c-012: Lei 6.404/1976, art. 279: a mesma compilada mostra riscada a redação do caput dada pela MP 449/2008 (vigente de 4/12/2008 a 27/5/2009), período em que cai D = 15/1/2009.",
+      "esperado": "L-c-007: D = 1/6/2022: verificado_para_D com o texto da redação vigente (não riscada), fundamentado na publicação integral da Lei 13.853 (fonte consultada); o texto riscado não é o gabarito e a data mutante 15/1/2018 (anterior à obra) não o verifica. L-c-012: D dentro do período da redação riscada: nao_verificado_para_D (sem_fundamento_do_periodo), porque nem a MP 449 nem a Lei 11.941 republicam o art. 279 inteiro."
+    },
+    "sem_rasura": {
+      "casos": [
+        "L-c-002",
+        "L-c-001"
+      ],
+      "evento": "L-c-002: CTN, art. 185, na publicação original (Câmara): em D = 1/3/1990 vigorava a redação original (\"em fase de execução\"), distinta da dada depois pela LC 118/2005, e a fonte do caso não traz texto riscado junto do dispositivo. L-c-001: Lei 6.404/1976, art. 14, na publicação original, sem texto riscado e sem alteração entre a publicação e D.",
+      "esperado": "L-c-002: D = 1/3/1990: verificado_para_D sem rasura, com a redação original do art. 185, rejeitando 1/1/2006 (redação da LC 118). L-c-001: D = 1/6/1990: verificado_para_D sem rasura, com fundamento na publicação original."
+    },
+    "revogacao": {
+      "casos": [
+        "L-b-009"
+      ],
+      "evento": "Lei 6.404/1976, art. 254: revogado pela Lei 9.457/1997 (anotação \"Revogado pela Lei nº 9.457, de 5/5/1997\" na compilada da Câmara).",
+      "esperado": "(b) obter_dispositivo devolve status encontrada e vigencia.status == \"revogado\"; nenhum texto vigente."
+    },
+    "mp_reeditada": {
+      "casos": [
+        "L-a-006",
+        "L-c-006"
+      ],
+      "evento": "Medida Provisória 2.170-36, de 23/8/2001: reedição (sufixo -36), com publicação própria no DOU de 24/8/2001, distinta da publicação da medida provisória original e das reedições anteriores; art. 5º (capitalização de juros).",
+      "esperado": "(a) texto da publicação da reedição; (c) verificado_para_D em 15/1/2002, rejeitando 1/1/2001 (anterior à reedição)."
+    },
+    "mp_convertida": {
+      "casos": [
+        "L-c-004",
+        "L-c-005",
+        "L-a-007"
+      ],
+      "evento": "MP 881/2019 (30/4/2019), convertida na Lei 13.874/2019 (20/9/2019). Art. 2º: três incisos na MP; quatro incisos e parágrafo único na lei.",
+      "esperado": "(c) texto da MP verificado em 1/6/2019 (a data mutante 15/4/2019 é anterior à MP); texto da lei verificado em 15/10/2019 (a data mutante 1/6/2019 é anterior à lei). A conversão é documentada pela página da Lei 13.874 no Planalto (\"Conversão da Medida Provisória nº 881, de 2019\", acervo congelado) e pela publicação da MP, ambas fontes consultadas do caso da lei."
+    },
+    "anexo": {
+      "casos": [
+        "L-d-002",
+        "L-d-003",
+        "L-d-004",
+        "L-d-005",
+        "L-d-006",
+        "L-d-007",
+        "L-d-008",
+        "L-d-009",
+        "L-d-010"
+      ],
+      "evento": "Anexo II (quadro demonstrativo dos cargos em comissão e das funções de confiança) de nove decretos de estrutura regimental de 2023, cada um publicado sob a rubrica ANEXO II no PDF da compilada da Câmara; recorte do anexo inteiro, até a rubrica do Anexo III do mesmo ato (destino do mutante renumerado).",
+      "esperado": "(d) obter_dispositivo(citação do anexo) devolve encontrada e o texto do anexo inteiro, igual ao gabarito; o mutante pede o anexo III do mesmo decreto, que existe e tem texto diferente."
+    },
+    "remissao": {
+      "casos": [
+        "L-e-001",
+        "L-e-003",
+        "L-e-004",
+        "L-e-005",
+        "L-e-006",
+        "L-e-007",
+        "L-e-008",
+        "L-e-009",
+        "L-e-010",
+        "L-e-011",
+        "L-e-012"
+      ],
+      "evento": "Dispositivos com remissões expressas a artigos, incisos e parágrafos, da própria obra e de outras (Código Civil, Constituição Federal).",
+      "esperado": "(e) o conjunto dos alvos com resolvida:true é exatamente o conjunto de `alvos` do caso, no caminho mais profundo, sem faltantes nem excedentes."
+    },
+    "data_anterior_a_publicacao": {
+      "casos": [
+        "L-c-008",
+        "L-c-009",
+        "L-c-010"
+      ],
+      "evento": "D anterior à data da obra (CC, 10/1/2002) ou à data do ato que incluiu o dispositivo (Lei 10.303/2001 para o art. 116-A; LC 118/2005 para o art. 185-A), com anotação só de inclusão.",
+      "esperado": "(c) nao_existia_em_D: temporal.status == \"not_found\" com reason_code NAO_EXISTIA e text.status != \"verified\"."
+    }
+  }
+}
