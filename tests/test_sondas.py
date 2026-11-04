@@ -26,7 +26,9 @@ from tests.test_transport import _fast_guards, _wire_local
 IDS = (
     "tst", "stf_acordaos", "bnp", "djen", "cjf_unificada", "trf1", "trf2", "trf3",
     "tjac", "tjal", "tjam", "tjms", "tjrj", "tjmg", "tjrs", "tjpr",
+    "senado_legislacao", "lexml", "normas_leg", "camara_legislacao", "dou",
 )
+IDS_IL2 = ("senado_legislacao", "lexml", "normas_leg", "camara_legislacao", "dou")
 CORPO = b'{"ok":true}'
 
 
@@ -86,7 +88,7 @@ def test_catalogo_tem_exatamente_os_ids_da_especificacao_e_e_imutavel():
 def test_catalogo_sem_host_fora_de_dominio_oficial():
     for f in FONTES_SONDA.values():
         for host in f.hosts:
-            assert host.endswith((".jus.br", ".gov.br")), (f.id, host)
+            assert host.endswith((".jus.br", ".gov.br", ".leg.br")), (f.id, host)
             assert host == host.lower() and "/" not in host and ":" not in host
 
 
@@ -118,6 +120,7 @@ def test_escopo_de_caminho_consistente_sem_host_livre():
         ("tst", "consultadocumento.tst.jus.br"),
         ("cjf_unificada", "jurisprudencia.cjf.jus.br"), ("trf1", "jurisprudencia.cjf.jus.br"),
         ("trf1", "arquivo.trf1.jus.br"), ("trf2", "jurisprudencia.trf2.jus.br"),
+        ("normas_leg", "normas.leg.br"), ("camara_legislacao", "www2.camara.leg.br"), ("dou", "www.in.gov.br"),
     }
 
 
@@ -1059,7 +1062,7 @@ def test_rota_exata_e_consulta_so_na_rota_declarada_com_parametros(envios, tmp_p
     assert [e["url"] for e in envios][-1].startswith("https://esaj.tjac.jus.br/cjsg/resultadoCompleta.do?")
     assert len(envios) == 4
     assert FONTES_SONDA["tjac"].consultas == {"esaj.tjac.jus.br": ("/cjsg/resultadoCompleta.do",)}
-    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac"]
+    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac", "senado_legislacao", "lexml"]
 
 
 def test_catalogo_so_tem_caminho_exato_sem_prefixo_nem_segmento_proibido():
@@ -1162,3 +1165,137 @@ def test_tjrs_robots_primeiro_no_roteiro_e_decisao_na_auditoria():
     assert "UA do produto" in secao and "Disallow" in secao and "não recusa ao produto" in secao
     audit = (raiz / "docs/auditoria/1.4.0/s0-instrumento.md").read_text(encoding="utf-8")
     assert "TJRS de volta ao catálogo em nível B" in audit
+
+
+# --- IL.2-a: catálogo e roteiro das rotas de legislação ----------------------------------------------------
+
+ROTAS_IL2 = {
+    "senado_legislacao": {"legis.senado.leg.br": ("/dadosabertos/legislacao/urn.json", "/dadosabertos/legislacao/lista.json",
+                                                  "/dadosabertos/legislacao/LEI/6404/1976.json")},
+    "lexml": {"www.lexml.gov.br": ("/busca/SRU",)},
+    "normas_leg": {"normas.leg.br": ()},
+    "camara_legislacao": {"www.camara.leg.br": ("/legislacao",), "www2.camara.leg.br": ()},
+    "dou": {"www.in.gov.br": ()},
+}
+CONSULTAS_IL2 = {
+    "senado_legislacao": {"legis.senado.leg.br": ("/dadosabertos/legislacao/urn.json", "/dadosabertos/legislacao/lista.json")},
+    "lexml": {"www.lexml.gov.br": ("/busca/SRU",)},
+}
+URN_LSA = "urn%3Alex%3Abr%3Afederal%3Alei%3A1976-12-15%3B6404"
+
+
+def test_il2_allowlist_exata_de_hosts_rotas_e_consultas():
+    for fid in IDS_IL2:
+        f = FONTES_SONDA[fid]
+        assert {h: tuple(r) for h, r in f.rotas.items()} == ROTAS_IL2[fid], fid
+        assert {h: tuple(c) for h, c in f.consultas.items()} == CONSULTAS_IL2.get(fid, {}), fid
+        assert f.confirmacao == "A" and not f.hosts_b, fid
+    assert {h for fid in IDS_IL2 for h in FONTES_SONDA[fid].hosts} == {
+        "legis.senado.leg.br", "www.lexml.gov.br", "normas.leg.br", "www.camara.leg.br", "www2.camara.leg.br",
+        "www.in.gov.br",
+    }
+
+
+def test_il2_nivel_a_so_com_pagina_oficial_lida_e_nada_de_terceiros_como_origem():
+    for fid in IDS_IL2:
+        f = FONTES_SONDA[fid]
+        baixo = f.origem_hosts.lower()
+        assert not any(t in baixo for t in ("br-eli", "pypi", "glama", "matematicsolutions")), fid
+        for host in f.hosts:
+            assert f"{host}=https://" in f.origem_hosts, (fid, host)
+    # caminho só de busca ou de projeto de terceiros (nível B) não entra no catálogo
+    todas = {r for fid in IDS_IL2 for rs in FONTES_SONDA[fid].rotas.values() for r in rs}
+    assert not any(p in r for r in todas for p in ("/api/public", "/legin/", "/web/dou", "/norma/"))
+    assert "pendência IL.2-b" in FONTES_SONDA["normas_leg"].nota and "br-eli-mcp" in FONTES_SONDA["normas_leg"].nota
+
+
+def test_il2_inlabs_e_hosts_sem_endpoint_oficial_recusados_e_fora_do_catalogo():
+    catalogados = {h for f in FONTES_SONDA.values() for h in f.hosts}
+    for h in ("inlabs.in.gov.br", "dadosabertos.camara.leg.br", "projeto.lexml.gov.br", "www12.senado.leg.br"):
+        assert h in HOSTS_RECUSADOS and h not in catalogados, h
+    assert "login" in HOSTS_RECUSADOS["inlabs.in.gov.br"] and "sessão assistida" in HOSTS_RECUSADOS["inlabs.in.gov.br"]
+
+
+@pytest.mark.parametrize("fid,url", [
+    ("senado_legislacao", f"https://legis.senado.leg.br/dadosabertos/legislacao/urn.json?urn={URN_LSA}"),
+    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/lista.json?tipo=LEI&numero=6404&ano=1976"),
+    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/LEI/6404/1976.json"),
+    ("lexml", f"https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=urn+%3D+%22{URN_LSA}%22"),
+    ("camara_legislacao", "https://www.camara.leg.br/legislacao"),
+])
+def test_il2_rota_documentada_vai_ao_transporte(envios, tmp_path, fid, url):
+    reg = captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="s", fonte_sonda=fid)
+    assert not reg.unavailable and envios[0]["url"] == url and envios[0]["method"] == "GET"
+
+
+@pytest.mark.parametrize("fid,url", [
+    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/urn"),  # sem a extensão do catálogo
+    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/urn.json/x"),
+    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/535485.json"),  # rota por código
+    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/LEI/6404/1976.json?v=3"),  # sem consulta
+    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/tiposNorma"),
+    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/processo.json"),
+    ("senado_legislacao", "https://legis.senado.leg.br/norma/535485/publicacao/15711526"),
+    ("lexml", "https://www.lexml.gov.br/busca/SRU/"),
+    ("lexml", "https://www.lexml.gov.br/urn/urn:lex:br:federal:lei:1976-12-15;6404"),  # resolvedor: sem página oficial
+    ("lexml", "https://projeto.lexml.gov.br/documentacao"),
+    ("normas_leg", "https://normas.leg.br/api/public/norma"),  # caminho só do br-eli-mcp
+    ("normas_leg", "https://normas.leg.br/busca?q=lei+6404"),
+    ("camara_legislacao", "https://www.camara.leg.br/legislacao?x=1"),
+    ("camara_legislacao", "https://www.camara.leg.br/legislacao/pesquisa-avancada"),
+    ("camara_legislacao", "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-540445-norma-pl.html"),
+    ("camara_legislacao", "https://dadosabertos.camara.leg.br/api/v2/proposicoes"),
+    ("dou", "https://www.in.gov.br/web/dou"),
+    ("dou", "https://inlabs.in.gov.br/index.php"),
+    ("dou", "https://inlabs.in.gov.br/robots.txt"),
+])
+def test_il2_caminho_nao_documentado_host_recusado_e_login_recusados_antes_da_rede(envios, tmp_path, fid, url):
+    with pytest.raises(ValueError, match="fora da allowlist da fonte-sonda"):
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="s", fonte_sonda=fid)
+    assert envios == [] and not any(tmp_path.iterdir())
+
+
+def test_il2_consulta_so_nas_rotas_declaradas_com_parametros(envios, tmp_path):
+    for fid, url in [("lexml", "https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=a"),
+                     ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/urn.json?urn=x")]:
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave=f"k{len(envios)}", fonte_sonda=fid)
+    assert len(envios) == 2
+
+
+def test_il2_mime_do_catalogo_json_e_xml():
+    for fid in ("senado_legislacao", "camara_legislacao", "normas_leg", "dou"):
+        assert "application/json" in FONTES_SONDA[fid].mimes
+        assert not {"application/xml", "text/xml", "application/pdf"} & FONTES_SONDA[fid].mimes, fid
+    assert {"application/xml", "text/xml", "application/json"} <= FONTES_SONDA["lexml"].mimes
+    assert "application/pdf" not in FONTES_SONDA["lexml"].mimes
+
+
+def test_il2_mimes_passados_ao_transporte_por_fonte(envios, tmp_path):
+    for fid, url in [("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/LEI/6404/1976.json"),
+                     ("lexml", "https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=a")]:
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave=f"m{len(envios)}", fonte_sonda=fid)
+        assert envios[-1]["allowed_mimes"] == FONTES_SONDA[fid].mimes
+        assert envios[-1]["allowed_hosts"] == FONTES_SONDA[fid].hosts and envios[-1]["max_redirects"] == 0
+
+
+@pytest.mark.repositorio
+def test_il2_roteiro_tem_secao_e_robots_primeiro_para_cada_fonte():
+    texto = ROTEIRO.read_text(encoding="utf-8")
+    for fid in IDS_IL2:
+        assert f"### {fid}:" in texto, fid
+    por_fonte = {fid: [c for c in _comandos_do_roteiro() if c[1] == fid] for fid in IDS_IL2}
+    for fid, cmds in por_fonte.items():
+        assert cmds and cmds[0][4].endswith("/robots.txt") and not any(c[5] for c in cmds), fid  # nenhum host B
+    # a consulta neutra e os dois casos das capacidades c e d
+    urls = " ".join(c[4] for c in por_fonte["senado_legislacao"] + por_fonte["lexml"])
+    assert "1976-12-15%3B6404" in urls and "2006-12-14%3B123" in urls and "2019-04-30%3B881" in urls
+
+
+@pytest.mark.repositorio
+def test_il2_roteiro_inlabs_so_como_sessao_assistida_e_b_sem_comando():
+    texto = ROTEIRO.read_text(encoding="utf-8")
+    secao = texto[texto.index("### dou:"):texto.index("## TJSP e TJDFT")]
+    assert "inlabs.in.gov.br" in secao and "sessão assistida" in secao and "nunca automatizada" in secao
+    assert not any("inlabs" in ln for ln in secao.splitlines() if ln.startswith("python "))
+    assert "decisão 0067" in secao
+    assert all("inlabs" not in c[4] for c in _comandos_do_roteiro() if c[4])
