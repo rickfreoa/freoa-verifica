@@ -115,6 +115,21 @@ def _guarda_historica(out: dict[str, Any], data: str | None) -> None:
         out["text"] = {**texto, "status": "unknown", "reason_code": "sem_fundamento_do_periodo"}
 
 
+def _normalizar_aditivos(out: dict[str, Any]) -> dict[str, Any]:
+    """C4: `fundamento_temporal` e `correspondencia_textual` presentes em toda resposta de verificação e de obtenção.
+
+    `fundamento_temporal` é sempre nulo (sem resolvedor de versões oficiais, IL.2); `correspondencia_textual` só
+    sobrevive com a identidade FINAL `verified`. Chamado no último ponto antes da persistência e da emissão, depois de
+    todos os rebaixamentos e decoradores."""
+    ident = out.get("identity")
+    out["fundamento_temporal"] = None
+    if not (isinstance(ident, dict) and ident.get("status") == "verified"):
+        out["correspondencia_textual"] = None
+    else:
+        out.setdefault("correspondencia_textual", None)
+    return out
+
+
 class _InterpretacaoIndisponivel(Exception):
     """Captura sem os dados que reproduzem a interpretação original do corpo (F-22, decisão 0064)."""
 
@@ -1396,11 +1411,6 @@ class Verifica:
         data: str | None = None,
     ) -> dict[str, Any]:
         out = self._obter_dispositivo(citacao, work_id, caminho, data)
-        # C4: campos aditivos em todo ramo `encontrada` (com ou sem caminho), `null` quando inaplicáveis (hoje
-        # sempre). O status negativo continua só `{status, ...}` (docs/CONTRATO.md).
-        if out.get("status") == "encontrada":
-            out["fundamento_temporal"] = None
-            out["correspondencia_textual"] = None
         vig = out.get("vigencia")
         if isinstance(vig, dict) and _historica(data) and (
                 vig.get("status") in ("verified", "vigente_na_fonte", "revogado")
@@ -1773,21 +1783,23 @@ class Verifica:
                 "identity": {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"},
                 "conferencia": self._bloco_conferencia(cite)}
 
-    def _verificar_decisao_avulsa(self, cite: Citation, citacao: str, trecho, data, modo, proposicao) -> dict[str, Any]:
-        """Decisão ou súmula citada sozinha: mesma confirmação de `verificar_texto` (auditoria comparativa 1.2.0).
-        Identidade confirmada só com documento oficial capturado; confronto textual de decisão não é feito."""
+    def _decisao_bruta(self, cite: Citation, judgment_date=None) -> tuple[str, dict | None]:
+        """Confirmação de decisão, súmula ou processo (status do acervo e evidência pelo construtor único)."""
         if cite.kind == "processo":
-            status, evidencia = self._confirm_cnj(cite)
+            status, evidencia = self._confirm_cnj(cite, judgment_date=judgment_date)
         else:
-            status, evidencia = self._confirm_decision(cite.decision)
-        evidencia = self._ev_captura(evidencia, court=getattr(cite.decision, "court", None))
+            status, evidencia = self._confirm_decision(cite.decision, judgment_date=judgment_date)
+        return status, self._ev_captura(evidencia, court=getattr(cite.decision, "court", None))
+
+    @staticmethod
+    def _decisao_para_verificacao(cite: Citation, status: str, evidencia: dict | None, trecho, proposicao) -> dict[str, Any]:
         ident = {
             "encontrada": ("verified", "DECISAO_CONFIRMADA_NA_CAPTURA"),
             "processo_confirmado": ("verified", "PROCESSO_CONFIRMADO_MAIS_DE_UM_REGISTRO"),
             "nao_confirmado_no_acervo": ("unknown", "NAO_CONFIRMADO_NO_ACERVO"),
             "indisponivel": ("unavailable", "EVIDENCIA_INDISPONIVEL"),
         }.get(status, ("unknown", str(status).upper()))
-        out = {
+        return {
             "identity": {"status": ident[0], "reason_code": ident[1],
                          "evidence": [evidencia] if ident[0] == "verified" and evidencia else [],
                          **({"cobertura": evidencia.get("cobertura")} if isinstance(evidencia, dict) and "cobertura" in evidencia else {})},
@@ -1797,12 +1809,17 @@ class Verifica:
             "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED", "evidence": []},
             "proposicao": proposicao, "run_id": None, "citation": _citation_to_dict(cite),
         }
+
+    def _verificar_decisao_avulsa(self, cite: Citation, citacao: str, trecho, data, modo, proposicao) -> dict[str, Any]:
+        """Decisão ou súmula citada sozinha: mesma confirmação de `verificar_texto` (auditoria comparativa 1.2.0).
+        Identidade confirmada só com documento oficial capturado; confronto textual de decisão não é feito."""
+        status, evidencia = self._decisao_bruta(cite)
+        out = self._decisao_para_verificacao(cite, status, evidencia, trecho, proposicao)
         return self._finalizar(out, cite, citacao, trecho, data, modo)
 
     def _finalizar(self, out: dict[str, Any], cite: Citation | None, citacao: str,
                    trecho: str | None, data: str | None, modo: str, *, gravar: bool = True, em_texto: bool = False) -> dict[str, Any]:
         """C4 (decisão 0027): todos os rebaixamentos, nesta ordem, e só então o recibo."""
-        out.setdefault("correspondencia_textual", None)
         if cite is not None and self._promover_sem_ano(cite):
             out["citation"] = _citation_to_dict(cite)
         # C1: negativa de dispositivo só com pode_negar.
@@ -1841,10 +1858,6 @@ class Verifica:
             out["temporal"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
         # C1 (0075, §2, itens 1, 5 e 6): guarda histórica na saída, defesa em profundidade da guarda da situação.
         _guarda_historica(out, data)
-        # C4: campos aditivos depois de todos os rebaixamentos (ponto único de finalização).
-        out["fundamento_temporal"] = None  # sem resolvedor de versões oficiais (IL.2), sempre nulo
-        if out["identity"].get("status") != "verified":
-            out["correspondencia_textual"] = None
         # Nunca verified sem capture_id correspondente.
         for dim_name in ("identity", "text", "temporal"):
             dim = out.get(dim_name) or {}
@@ -1880,6 +1893,9 @@ class Verifica:
             for ev in (out.get(dim_name) or {}).get("evidence") or []:
                 if isinstance(ev, dict) and (ev.get("acervo_ate") is not None or (ev.get("url") or "").startswith("https://www.planalto.gov.br")):
                     ev["acervo_ate"] = corte_planalto
+        # C4: campos aditivos no ponto único, depois de TODOS os rebaixamentos (inclusive ausência de captura e falha de
+        # autenticação) e imediatamente antes da persistência e da emissão.
+        _normalizar_aditivos(out)
         if gravar:
             if self._read_only:
                 out["registro"] = {"gravado": False, "motivo": "somente_leitura"}  # C11: modo declarado
@@ -1976,15 +1992,17 @@ class Verifica:
             verif: dict[str, Any] | None = None
             next_start = min([c.span[0] for c in cites if c.span[0] >= cite.span[1]] or [len(texto)])
             trecho = self._trecho_apos_aspas(texto[:next_start], cite.span[1])
-            if cite.kind == "processo":
-                status, evidencia = self._confirm_cnj(cite, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
-                evidencia = self._ev_captura(evidencia)
+            if cite.kind == "processo" or (cite.work is None and cite.decision is not None):
+                # C11: processo, decisão e súmula passam pelo mesmo caminho de registro das verificações avulsas
+                # (recibo recuperável ou modo somente leitura declarado), com o contexto da data de julgamento do texto.
+                status, evidencia = self._decisao_bruta(
+                    cite, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
+                verif = self._finalizar(self._decisao_para_verificacao(cite, status, evidencia, trecho, None),
+                                        cite, cite.raw, trecho, data, "literal", em_texto=True)
+                if verif["identity"].get("status") != "verified" and status in ("encontrada", "processo_confirmado"):
+                    status = "indisponivel"  # a autenticação da evidência rebaixou a identidade
             elif cite.work is None and cite.decision is None:
                 status = "formato_invalido"
-            elif cite.work is None and cite.decision is not None:
-                # Reconhecimento só sintático — nunca "encontrada".
-                status, evidencia = self._confirm_decision(cite.decision, judgment_date=self._decision_context_date(texto[cite.span[1]:cite.span[1]+240]))
-                evidencia = self._ev_captura(evidencia, court=getattr(cite.decision, "court", None))
             else:
                 verif = self.verificar_citacao(cite.raw, trecho=trecho, data=data, modo="literal", _path=cite.path, _cite=cite)
                 identity = verif.get("identity", {})
@@ -2027,6 +2045,8 @@ class Verifica:
                     "aspas_nao_associadas": trecho is None and any(ch in texto[cite.span[1]:next_start] for ch in ('"', "'", '“', '«', '‘')),
                     "trecho_conferido": trecho,
                     "verificacao": verif,
+                    "fundamento_temporal": None,
+                    "correspondencia_textual": (verif or {}).get("correspondencia_textual"),
                     "evidencia": evidencia,
                     "parseada": _citation_to_dict(cite),
                 }
@@ -3248,9 +3268,12 @@ class Verifica:
         if row is None:
             return {"status": "inexistente", "run_id": run_id}
 
+        # Estrutura de TODOS os campos persistidos antes de qualquer acesso: JSON inválido ou tipo inadequado vira
+        # resposta controlada de integridade inválida, e o que não é autêntico não monta a resposta.
+        campos = _campos_do_registro(row)
         confere_mac: bool | None = None
         if row["registro_mac"] is None:
-            # C8: `null` (legado) só para o que o selo autenticado da migração lista; novo sem MAC não confere.
+            # C8: `null` (legado) só para o que a âncora autenticada lista; novo sem MAC não confere.
             confere_mac = None if legado_autenticado(self.conn, row["id"]) else False
         else:
             doc_mac = {
@@ -3268,8 +3291,26 @@ class Verifica:
             recalculado = hmac_entrada(self.conn, "registro", json.dumps(doc_mac, ensure_ascii=False, sort_keys=True))
             confere_mac = bool(row["registro_mac"] == recalculado)
 
-        res_json = json.loads(row["result_json"]) if row["result_json"] else {}
-        req_json = json.loads(row["request_json"]) if row["request_json"] else {}
+        if campos is None or confere_mac is False:
+            return {
+                "status": "encontrada",
+                "run_id": row["id"],
+                "ferramenta": None,
+                "criado_em": None,
+                "politica": None,
+                "parametros": None,
+                "estado": None,
+                "evidencias": None,
+                "fundamento_temporal": None,
+                "integridade": {
+                    "algoritmo": "hmac-sha256",
+                    "confere": False,
+                    "motivo": "ESTRUTURA_INVALIDA" if campos is None else "MAC_NAO_CONFERE",
+                },
+                "confere_evidencias": None,
+                "confere_fundamento": None,
+            }
+        res_json, req_json = campos["result"], campos["request"]
 
         if row["evidencias_claro"] is not None:
             politica = "completo"
@@ -3289,15 +3330,15 @@ class Verifica:
         }
 
         if politica == "completo":
-            evidencias_out = json.loads(row["evidencias_claro"]) if row["evidencias_claro"] else []
-            fundamento_out = json.loads(row["fundamento_claro"]) if row["fundamento_claro"] else None
+            evidencias_out = campos["evidencias_claro"]
+            fundamento_out = campos["fundamento_claro"]
         else:
             evidencias_out = None
             fundamento_out = None
 
         confere_evidencias = None
         if evidencias is not None:
-            compromissos = set(json.loads(row["evidencias_compromissos"])) if row["evidencias_compromissos"] else set()
+            compromissos = set(campos["compromissos"])
             confere_evidencias = []
             for e in evidencias:
                 if not isinstance(e, dict) or not (e.get("capture_id") and e.get("sha256") and e.get("url")):
@@ -3650,6 +3691,52 @@ _CONTADAS = _CARAS | frozenset({
 })
 
 
+def _json_tipado(valor: Any, tipo: type | tuple, vazio: Any) -> tuple[bool, Any]:
+    """(ok, valor) de uma coluna JSON persistida: ausente/vazia vale `vazio`; inválida ou de outro tipo, não ok."""
+    if valor is None or valor == "":
+        return True, vazio
+    try:
+        lido = json.loads(valor)
+    except (ValueError, TypeError, RecursionError):
+        return False, None
+    return (True, lido) if isinstance(lido, tipo) else (False, None)
+
+
+def _campos_do_registro(row) -> dict[str, Any] | None:
+    """Estrutura validada das colunas JSON de `run`; `None` se qualquer uma é inválida ou malformada."""
+    ok_res, res = _json_tipado(row["result_json"], dict, {})
+    ok_req, req = _json_tipado(row["request_json"], dict, {})
+    ok_ev, ev = _json_tipado(row["evidencias_claro"], list, [])
+    ok_ft, ft = _json_tipado(row["fundamento_claro"], dict, None)
+    ok_co, co = _json_tipado(row["evidencias_compromissos"], list, [])
+    if not (ok_res and ok_req and ok_ev and ok_ft and ok_co):
+        return None
+    if not all(isinstance(e, dict) for e in ev) or not all(isinstance(c, str) for c in co):
+        return None
+    if any(res.get(d) is not None and not isinstance(res[d], dict) for d in ("identity", "text", "temporal", "support")):
+        return None
+    return {"result": res, "request": req, "evidencias_claro": ev,
+            "fundamento_claro": ft, "compromissos": co}
+
+
+_COM_ADITIVOS = frozenset({"obter_dispositivo", "verificar_citacao"})
+_COM_RECIBO = frozenset({"verificar_citacao", "verificar_texto"})
+
+
+def _final_da_fachada(nome: str, out: Any, *, recusa: bool = False) -> Any:
+    """Último ponto antes da emissão de toda operação da fachada (Python, MCP e REST): campos aditivos de C4 em todo
+    estado de `obter_dispositivo` e `verificar_citacao` (inclusive `formato_invalido`, `indisponivel`, `unknown` e a
+    recusa pelos derivados) e, na recusa, a declaração de que nada foi gravado (C11)."""
+    if not isinstance(out, dict):
+        return out
+    if nome in _COM_ADITIVOS:
+        _normalizar_aditivos(out)
+    if recusa and nome in _COM_RECIBO:
+        out.setdefault("run_id", None)
+        out.setdefault("registro", {"gravado": False, "motivo": "acervo_desatualizado"})
+    return out
+
+
 def _guardar(fn):
     sig = inspect.signature(fn)
     caro = fn.__name__ in _CARAS
@@ -3670,8 +3757,8 @@ def _guardar(fn):
             # tem identidade efetiva e bloqueio por host; aninhadas compartilham a da chamada externa.
             with self._operacao(caro), da_chamada():
                 if fn.__name__ in _DEPENDENTES and not _derivados.compativel(self.conn):
-                    return _derivados.indisponivel(self.acervo_status())
-                out = fn(self, *args, **kwargs)
+                    return _final_da_fachada(fn.__name__, _derivados.indisponivel(self.acervo_status()), recusa=True)
+                out = _final_da_fachada(fn.__name__, fn(self, *args, **kwargs))
                 if externa and self.exigir_acervo and isinstance(out, dict):
                     aviso = self.acervo_status()
                     if aviso:

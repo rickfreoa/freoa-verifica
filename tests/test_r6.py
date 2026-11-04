@@ -151,7 +151,10 @@ def test_auxiliary_facades_authenticate(populated, attack, monkeypatch):
         for svc in [s,fresh]:
             for name,params in calls:
                 result=getattr(svc,name)(**params)
-                assert result=={'status':'unavailable','motivo':expected,'reason_code':expected}
+                esperado={'status':'unavailable','motivo':expected,'reason_code':expected}
+                if name=='obter_dispositivo':  # IL.0-R r2 (C4): campos aditivos em todo estado
+                    esperado.update(fundamento_temporal=None,correspondencia_textual=None)
+                assert result==esperado
         for svc in [s,fresh]:  # busca: itens com evidência inválida viram candidatos não indexados
             r=svc.buscar_legislacao('principal')
             assert r['status']=='parcial' and r['itens']

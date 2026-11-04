@@ -348,9 +348,10 @@ def test_c4_obter_dispositivo_todo_ramo_encontrada_tem_os_campos(verifica_popula
         assert s["status"] == "encontrada"
         assert "fundamento_temporal" in s and s["fundamento_temporal"] is None
         assert "correspondencia_textual" in s and s["correspondencia_textual"] is None
-    # o status negativo segue mínimo (docs/CONTRATO.md)
+    # rodada 2 (C4): os campos também estão nos status negativos, com `null` (docs/CONTRATO.md)
     for neg in (svc.obter_dispositivo(citacao="Lei inventada 99.999/2099"), svc.obter_dispositivo(work_id="inexistente")):
-        assert neg["status"] != "encontrada" and "fundamento_temporal" not in neg
+        assert neg["status"] != "encontrada"
+        assert neg["fundamento_temporal"] is None and neg["correspondencia_textual"] is None
 
 
 # ----------------------------------------------------------------------------------------------
@@ -598,6 +599,9 @@ def test_c8_migracao_sela_home_com_chave_existente(tmp_path):
     caminho = tmp_path / "verifica.sqlite3"
     conn = connect(caminho)
     registro.chave_do_home(tmp_path, conn)  # home com chave e sem selo
+    chave = tmp_path / registro.ARQUIVO_CHAVE
+    chave.write_bytes(chave.read_bytes()[:32])  # chave de uma versão anterior à âncora (rodada 2)
+    registro._cache_chaves.clear()
     conn.execute("DELETE FROM meta WHERE key IN (?,?)", (registro.META_LEGADO, registro.META_LEGADO_MAC))
     conn.execute("DELETE FROM schema_version WHERE version=19")
     conn.execute(

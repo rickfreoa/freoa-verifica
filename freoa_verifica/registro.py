@@ -56,6 +56,17 @@ def _chave_ausente_com_historico(conn: sqlite3.Connection | None) -> bool:
     return conn.execute("SELECT 1 FROM run WHERE request_hash LIKE 'hmac1:%' LIMIT 1").fetchone() is not None
 
 
+_TAG_ANCORA = b"\nlegado1:"  # arquivo da chave: 32 bytes, opcionalmente seguidos da âncora do legado (C8)
+
+
+def _separar_chave(dados: bytes, caminho: Path) -> tuple[bytes, bytes]:
+    """Chave (32 bytes) e o resto do arquivo (âncora do legado, vazio nos homes sem ela)."""
+    chave, resto = dados[:32], dados[32:]
+    if len(chave) != 32 or (resto and not resto.startswith(_TAG_ANCORA)):
+        raise RuntimeError(f"{caminho} corrompida (esperado 32 bytes); remova-a ciente de que hashes antigos deixam de casar")
+    return chave, resto
+
+
 def ler_chave_do_home(home: Path) -> bytes:
     """Só leitura da chave (IL.0-R, C9): nunca cria o arquivo nem escreve no banco; ausente é erro.
 
@@ -67,12 +78,11 @@ def ler_chave_do_home(home: Path) -> bytes:
         em_cache = _cache_chaves.get(str(caminho))
         if em_cache and em_cache[1] == _assinatura(caminho):
             return em_cache[0]
-        chave = caminho.read_bytes()
+        dados = caminho.read_bytes()
         assinatura = _assinatura(caminho)
     except FileNotFoundError:
         raise RuntimeError(f"CHAVE_REGISTRO_AUSENTE: {caminho}") from None
-    if len(chave) != 32:
-        raise RuntimeError(f"{caminho} corrompida (esperado 32 bytes)")
+    chave, _ = _separar_chave(dados, caminho)
     _cache_chaves[str(caminho)] = (chave, assinatura)
     return chave
 
@@ -113,14 +123,15 @@ def chave_do_home(home: Path, conn: sqlite3.Connection | None = None) -> bytes:
             pass
         finally:
             tmp.unlink(missing_ok=True)
-    chave = caminho.read_bytes()
-    if len(chave) != 32:
-        raise RuntimeError(f"{caminho} corrompida (esperado 32 bytes); remova-a ciente de que hashes antigos deixam de casar")
+    chave, _ = _separar_chave(caminho.read_bytes(), caminho)
     if conn is not None:
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_IMPRESSAO, _impressao(chave)))
     _cache_chaves[str(caminho)] = (chave, _assinatura(caminho))
     if conn is not None and criada:
-        selar_legado(conn)  # C8: os registros sem MAC que já existem são os legados; os futuros terão MAC
+        try:
+            selar_legado(conn)  # C8: os registros sem MAC que já existem são os legados; os futuros terão MAC
+        except OSError:
+            pass  # sem âncora gravada, nenhum registro sem MAC passa por legado (falha fechada)
     return chave
 
 
@@ -280,36 +291,87 @@ def purgar(home: Path, antes: str, apagar_original: bool = False) -> dict[str, A
 
 META_LEGADO = "registro_legado_ids"
 META_LEGADO_MAC = "registro_legado_mac"
+_ancoras_efemeras: dict[int, tuple[sqlite3.Connection, str, str]] = {}  # banco sem home: a âncora vive no processo
 
 
 def _canon_legado(ids: list[str]) -> str:
     return json.dumps(sorted(ids), ensure_ascii=False)
 
 
+def _ancora_ler(conn: sqlite3.Connection) -> tuple[str, str] | None:
+    """Âncora do conjunto legado, guardada FORA do banco: no arquivo da chave do home (trailer) ou, em banco sem home,
+    na memória do processo. Quem altera o banco sem a chave não a apaga nem a recria. `None`: sem âncora."""
+    home = _home_da_conexao(conn)
+    if home is None:
+        achada = _ancoras_efemeras.get(id(conn))
+        return (achada[1], achada[2]) if achada and achada[0] is conn else None
+    try:
+        _, resto = _separar_chave((home / ARQUIVO_CHAVE).read_bytes(), home / ARQUIVO_CHAVE)
+        if not resto:
+            return None
+        doc = json.loads(resto[len(_TAG_ANCORA):])
+        return (doc["ids"], doc["mac"]) if isinstance(doc["ids"], str) and isinstance(doc["mac"], str) else ("", "")
+    except (OSError, RuntimeError):
+        return None
+    except (ValueError, KeyError, TypeError):
+        return ("", "")  # trailer presente e ilegível: existe âncora, e ela não autentica nada
+
+
+def _ancora_gravar(conn: sqlite3.Connection, canon: str, mac: str) -> None:
+    home = _home_da_conexao(conn)
+    if home is None:
+        _ancoras_efemeras[id(conn)] = (conn, canon, mac)
+        return
+    caminho = home / ARQUIVO_CHAVE
+    chave, _ = _separar_chave(caminho.read_bytes(), caminho)
+    trailer = _TAG_ANCORA + json.dumps({"ids": canon, "mac": mac}, ensure_ascii=False).encode("utf-8")
+    tmp = caminho.with_name(f"{ARQUIVO_CHAVE}.{secrets.token_hex(8)}.tmp")
+    fd = os.open(str(tmp), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(chave + trailer)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, caminho)
+    finally:
+        tmp.unlink(missing_ok=True)
+    _cache_chaves.pop(str(caminho), None)
+
+
+def _fronteira_estabelecida(conn: sqlite3.Connection) -> bool:
+    """Indício, no banco, de que o legado já foi fixado: espelho do selo ou qualquer registro com MAC."""
+    if conn.execute("SELECT 1 FROM meta WHERE key IN (?,?)", (META_LEGADO, META_LEGADO_MAC)).fetchone():
+        return True
+    return conn.execute("SELECT 1 FROM run WHERE registro_mac IS NOT NULL LIMIT 1").fetchone() is not None
+
+
 def selar_legado(conn: sqlite3.Connection) -> bool:
-    """Grava, autenticado por HMAC do home, o conjunto dos `run.id` sem MAC existentes agora (anteriores à
-    1.4.0a2). Só sela uma vez: com o selo presente não faz nada. Devolve se selou."""
-    if conn.execute("SELECT 1 FROM meta WHERE key=?", (META_LEGADO,)).fetchone():
+    """Fixa, na âncora fora do banco e autenticado por HMAC do home, o conjunto dos `run.id` sem MAC existentes agora
+    (anteriores à 1.4.0a2). Só fixa uma vez: com âncora presente não faz nada, e sem âncora mas com indício de que a
+    fronteira já foi estabelecida (selo ou MAC no banco) FALHA FECHADO: não recompõe o conjunto a partir de um banco
+    que pode ter sido adulterado (reaplicar a migração não reabre o legado). Devolve se fixou."""
+    if _ancora_ler(conn) is not None or _fronteira_estabelecida(conn):
         return False
     ids = [r[0] for r in conn.execute("SELECT id FROM run WHERE registro_mac IS NULL")]
     canon = _canon_legado(ids)
     mac = hmac_entrada(conn, "registro_legado", canon)
-    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_LEGADO, canon))
+    _ancora_gravar(conn, canon, mac)
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_LEGADO, canon))  # espelho: indício
     conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)", (META_LEGADO_MAC, mac))
     return True
 
 
 def legado_autenticado(conn: sqlite3.Connection, run_id: str) -> bool:
-    """O registro é legado só se o selo autenticado o lista; selo ausente, adulterado ou ilegível: não.
+    """O registro é legado só se a âncora autenticada o lista; âncora ausente, adulterada ou ilegível: não.
 
-    Não depende de nenhuma coluna da própria linha (apagáveis por quem não tem a chave)."""
-    canon = conn.execute("SELECT value FROM meta WHERE key=?", (META_LEGADO,)).fetchone()
-    mac = conn.execute("SELECT value FROM meta WHERE key=?", (META_LEGADO_MAC,)).fetchone()
-    if canon is None or mac is None:
+    Não depende de nenhuma coluna da própria linha nem de `meta` (apagáveis ou forjáveis por quem não tem a chave)."""
+    ancora = _ancora_ler(conn)
+    if ancora is None:
         return False
+    canon, mac = ancora
     try:
-        esperado = hmac_entrada(conn, "registro_legado", canon[0], leitura=True)
-        ids = json.loads(canon[0])
+        esperado = hmac_entrada(conn, "registro_legado", canon, leitura=True)
+        ids = json.loads(canon)
     except (RuntimeError, ValueError, OSError):
         return False
-    return hmac.compare_digest(esperado, mac[0]) and run_id in set(ids)
+    return hmac.compare_digest(esperado, mac) and isinstance(ids, list) and run_id in set(ids)

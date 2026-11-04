@@ -74,7 +74,7 @@ Mapa de adaptadores:
 | `url` | string | não | URL oficial |
 | `acervo_ate` | string | sim | data `AAAA-MM-DD` do corte do acervo congelado da fonte (hoje só `planalto`: última captura da fonte no acervo instalado); `null` em fonte viva |
 | `source_kind` | string | não | espécie do ato: `lei`, `lei_complementar`, `decreto`, `decreto_lei`, `medida_provisoria`, `emenda_constitucional`, `constituicao`, `resolucao_cvm`, `instrucao_cvm`, `parecer_orientacao_cvm`, `resolucao_cmn`, `resolucao_bcb`, `circular_bcb` (aberto) ou `nao_identificado` |
-| `natureza_texto` | string | não | `publicacao_original`, `consolidacao_oficial`, `reconstrucao_mecanica` ou `nao_identificado` |
+| `natureza_texto` | string | não | `publicacao_original`, `consolidacao_oficial`, `reconstrucao_mecanica` ou `nao_identificado`; vem do documento capturado (perfil do parser consolidado: Planalto e DOCX da CVM), nunca da autoridade da obra |
 | `procedencia` | string | não | `captura_direta`, `snapshot`, `cadeia_de_alteracoes`, `sessao_assistida` ou `nao_identificado` |
 | `esfera` | string | não | `federal`, `estadual`, `municipal` ou `nao_identificado` (metadado) |
 | `path` | string | sim | caminho canônico do dispositivo |
@@ -113,11 +113,11 @@ Mapa de adaptadores:
 
 ### `verificar_citacao`
 
-`{algo_versions: object, citation: object|ausente, identity, text, temporal, support, proposicao: string|null, run_id: string, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `citation` ausente quando a citação não é reconhecida. `proposicao` ecoa a entrada (nunca avaliada: `support.status` é sempre `not_assessed`). `run_id` é volátil. Citação provável pode trazer `conferencia` (object) e rebaixamento das dimensões. `fundamento_temporal` (`{tipo, capture_id, url, sha256, data}`) vem `null` sem fundamento do período ou em consulta corrente. `correspondencia_textual` (`{resultado: "coincide"|"parcial"|"diverge", redaction_id, riscada, origem}`) só vem preenchido em consulta histórica com trecho e identidade verificada (decisão 0075).
+`{algo_versions: object, citation: object|ausente, identity, text, temporal, support, proposicao: string|null, run_id: string|null, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `citation` ausente quando a citação não é reconhecida. `run_id` é `null` no modo somente leitura (com `registro: {gravado: false, motivo: "somente_leitura"}`) e na recusa pelos derivados incompatíveis, que devolve `{status: "indisponivel", reason_code: "ACERVO_DESATUALIZADO", run_id: null, registro: {gravado: false, motivo: "acervo_desatualizado"}, fundamento_temporal: null, correspondencia_textual: null}` sem as dimensões. `fundamento_temporal` e `correspondencia_textual` vêm em TODA resposta, `null` quando inaplicáveis; a correspondência é nula sempre que a identidade final não é `verified` (inclusive depois de rebaixamento por ausência de captura ou falha de autenticação). Dimensões podem sair `unavailable` por esse rebaixamento (`identity`, `text`, `temporal`); `text.status` também pode ser `not_found` (dispositivo inexistente). `proposicao` ecoa a entrada (nunca avaliada: `support.status` é sempre `not_assessed`). `run_id` é volátil. Citação provável pode trazer `conferencia` (object) e rebaixamento das dimensões. `fundamento_temporal` (`{tipo, capture_id, url, sha256, data}`) vem `null` sem fundamento do período ou em consulta corrente. `correspondencia_textual` (`{resultado: "coincide"|"parcial"|"diverge", redaction_id, riscada, origem}`) só vem preenchido em consulta histórica com trecho e identidade verificada (decisão 0075).
 
 ### `verificar_texto`
 
-`{citacoes: array, total: number, total_detectado: number, total_processado: number, truncado: bool, texto_tamanho: number, data: string|null, referencias_nao_resolvidas: array}`. Cada citação: `citacao`, `span`, `kind`, `confidence`, `conferencia` (object|null), `caminho` (string|null), `status` (estado da citação), `identity` (dimensão), `text` (dimensão), `evidencia` (evidência|null), `aspas_nao_associadas` (bool), `trecho_conferido` (string|null), `parseada` (citação parseada), `verificacao` (resposta completa de `verificar_citacao`|null). Em MCP, texto acima de 100.000 caracteres devolve `{status:"erro", motivo:"texto_excede_limite", limite, citacoes:[], total:0}` (ver inconsistência 6).
+`{citacoes: array, total: number, total_detectado: number, total_processado: number, truncado: bool, texto_tamanho: number, data: string|null, referencias_nao_resolvidas: array}`. Cada citação: `citacao`, `span`, `kind`, `confidence`, `fundamento_temporal` (sempre `null`), `correspondencia_textual` (a de `verificacao`, ou `null`), `conferencia` (object|null), `caminho` (string|null), `status` (estado da citação), `identity` (dimensão), `text` (dimensão), `evidencia` (evidência|null), `aspas_nao_associadas` (bool), `trecho_conferido` (string|null), `parseada` (citação parseada), `verificacao` (resposta completa de `verificar_citacao`, com `run_id` recuperável por `obter_registro`; decisões, súmulas e processos reconhecidos no texto também têm `verificacao` e recibo, ou a declaração de modo somente leitura; `null` só para citação sem conclusão). Na recusa pelos derivados incompatíveis devolve `{status: "indisponivel", reason_code: "ACERVO_DESATUALIZADO", run_id: null, registro: {gravado: false, motivo: "acervo_desatualizado"}}`. Em MCP, texto acima de 100.000 caracteres devolve `{status:"erro", motivo:"texto_excede_limite", limite, citacoes:[], total:0}` (ver inconsistência 6).
 
 ### `resolver_citacao`
 
@@ -125,7 +125,7 @@ Mapa de adaptadores:
 
 ### `obter_dispositivo`
 
-`{status, work_id, caminho, texto: string, texto_atual: string|null, truncado: bool, evidencia, vigencia: {status, regras: array, flags: array, intervalo: {inicio, fim}, reason_code}, anotacoes: array, redacoes_anteriores: array, redacao_anterior_ausente_na_fonte: bool, situacao_obra: object|null, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `status` negativo devolve só `{status, ...}` (`{"status":"inexistente"}` ou com `motivo`); `fundamento_temporal` e `correspondencia_textual` vêm em todo ramo `encontrada` (com ou sem caminho), `null` quando inaplicáveis. `vigencia.status` publica `vigente_na_fonte`, `unknown`, `revogado`, `nao_existia` ou `ambiguous`; sem caminho (`caminho: null`) não há `texto` nem `vigencia`.
+`{status, work_id, caminho, texto: string, texto_atual: string|null, truncado: bool, evidencia, vigencia: {status, regras: array, flags: array, intervalo: {inicio, fim}, reason_code}, anotacoes: array, redacoes_anteriores: array, redacao_anterior_ausente_na_fonte: bool, situacao_obra: object|null, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `status` publica `encontrada`, `inexistente`, `indisponivel`, `ambigua` (`candidatos`), `requer_conferencia` (`identity`, `conferencia`), `formato_invalido`, `unknown` (`reason_code`) e `unavailable` (`motivo`, `reason_code`, falha de autenticação da evidência); `fundamento_temporal` e `correspondencia_textual` vêm em TODO estado (inclusive a recusa pelos derivados incompatíveis), sempre `null` hoje. `vigencia.status` publica `vigente_na_fonte`, `unknown`, `revogado`, `nao_existia` ou `ambiguous`; sem caminho (`caminho: null`) não há `texto` nem `vigencia`.
 
 ### `historico_dispositivo`
 
@@ -187,11 +187,11 @@ Entrada inválida (`EntradaInvalida`; REST: `problem+json` 422; MCP: erro de fer
 
 ### `obter_registro`
 
-`{status, run_id, ferramenta, criado_em, politica, parametros, estado: {identity, text, temporal, support}, evidencias, fundamento_temporal, integridade: {algoritmo: "hmac-sha256", confere: bool|null}, confere_evidencias: array|null, confere_fundamento: bool|null}` em `encontrada`; `{status, run_id}` em `inexistente` (decisão 0075).
+`{status, run_id, ferramenta, criado_em, politica, parametros, estado: {identity, text, temporal, support}, evidencias, fundamento_temporal, integridade: {algoritmo: "hmac-sha256", confere: bool|null}, confere_evidencias: array|null, confere_fundamento: bool|null}` em `encontrada`; `{status, run_id}` em `inexistente` (decisão 0075). Campo persistido inválido ou malformado (JSON ilegível, tipo inadequado) ou MAC que não confere devolve `encontrada` com `integridade: {algoritmo, confere: false, motivo: "ESTRUTURA_INVALIDA" | "MAC_NAO_CONFERE"}` e `ferramenta`, `criado_em`, `politica`, `parametros`, `estado`, `evidencias`, `confere_evidencias` e `confere_fundamento` nulos: o conteúdo não autenticado não é publicado.
 
 Entrada: `run_id` (string), e opcionalmente `evidencias` (array de `{capture_id, sha256, url}`) e `fundamento_temporal` (object).
 Política e integridade:
-- `integridade.confere` é `null` só para registro anterior à 1.4.0a2 listado no selo autenticado por HMAC do home; registro sem MAC fora do selo dá `false`. A conferência é leitura pura: funciona em home somente leitura.
+- `integridade.confere` é `null` só para registro anterior à 1.4.0a2 listado na âncora autenticada por HMAC do home, guardada fora do banco (arquivo da chave do home; memória do processo em banco sem home), nunca recomposta a partir de um banco que possa ter sido adulterado; registro sem MAC fora do selo dá `false`. A conferência é leitura pura: funciona em home somente leitura.
 - Sob política `completo`: os parâmetros, evidências e fundamento temporal são armazenados em claro; `integridade.confere` valida o HMAC do registro completo com a chave do home.
 - Sob política `sem_conteudo`: dados sensíveis são armazenados apenas como compromissos HMAC canônicos; `evidencias` e `fundamento_temporal` são devolvidos como `null`. Se apresentados na chamada, `confere_evidencias` e `confere_fundamento` confrontam os itens apresentados contra os compromissos gravados, conferindo a autenticidade sem expor o conteúdo armazenado.
 
@@ -213,7 +213,7 @@ Campos de estado fechado: o conjunto de literais abaixo é parte do contrato. O 
 | `ambigua` | mais de uma obra casa a citação (`resolver_citacao`, `verificar_texto`) |
 | `ambiguous` | mais de um registro casa o identificador (`obter_decisao`); ver inconsistência 1 |
 | `unknown` | regra não decide; juízo a cargo de quem consulta |
-| `requer_conferencia` | citação provável, só conferível por quem consulta (`verificar_texto`) |
+| `requer_conferencia` | citação provável, só conferível por quem consulta (`verificar_texto`, `obter_dispositivo`) |
 | `formato_invalido` | entrada reconhecida mas inválida (dígito verificador de CNJ; citação malformada) |
 | `nao_confirmado_no_acervo` | não achado no acervo local; ausência não demonstra inexistência |
 | `nao_encontrado_no_acervo` | idem, em `obter_decisao` |

@@ -22,6 +22,7 @@ from freoa_verifica.parsers.model import (
 from freoa_verifica.store import repo as store_repo
 from freoa_verifica.temporal import (
     _is_current_query,
+    _parse_iso,
     select as temporal_select,
     today_sp,
 )
@@ -199,14 +200,18 @@ def _inferir_source_kind(wk: WorkKey | None) -> str:
     return "nao_identificado"
 
 
+# Perfis cujo parser só aceita o formato consolidado oficial (docstrings de `parsers/planalto.py` e `parsers/cvm_docx.py`).
+# A autoridade da obra não demonstra consolidação (IL.0-R, C6/0075 §3.2): metadados do Senado, HTML/PDF da CVM e o
+# JSON do BCB não sustentam a natureza e ficam `nao_identificado`.
+_NATUREZA_POR_PERFIL = {"planalto": "consolidacao_oficial", "cvm_docx": "consolidacao_oficial"}
+
+
 def _inferir_natureza_texto(rw: ResolvedWork) -> str:
-    profile = getattr(rw.document, "profile", "") or ""
-    auth = (rw.work_key.authority or "").lower() if rw.work_key else ""
-    if profile == "planalto" or auth == "federal":
-        return "consolidacao_oficial"
-    if auth == "cvm" or profile.startswith("cvm"):
-        return "consolidacao_oficial"
-    return "nao_identificado"
+    """Natureza pelo documento capturado (perfil do parser) e nunca pela autoridade; sem texto parseado, não há natureza."""
+    doc = rw.document
+    if doc is None or not getattr(doc, "provisions", None):
+        return "nao_identificado"
+    return _NATUREZA_POR_PERFIL.get(getattr(doc, "profile", "") or "", "nao_identificado")
 
 
 def _inferir_esfera(wk: WorkKey | None) -> str:
@@ -448,6 +453,15 @@ def _calcular_correspondencia_textual(
     }
 
 
+def _sem_fundamento_historico(temporal_res, data: str | None) -> bool:
+    """C5: consulta histórica (D válida e diferente de hoje) sem fundamento validado (hoje nunca há, IL.2). Mantêm-se
+    `nao_existia`, `ambiguous` e data inválida, que têm motivo próprio."""
+    if temporal_res is None or _parse_iso(data) is None or _is_current_query(data, today_sp()):
+        return False
+    return (temporal_res.status not in ("nao_existia", "ambiguous")
+            and "data_consulta_invalida" not in temporal_res.flags)
+
+
 def verificar(
     citacao: str,
     trecho: str | None = None,
@@ -641,10 +655,11 @@ def verificar(
                 fetched_at=rw.fetched_at,
             )
             temporal_dim = _map_temporal(temporal_res, rw, path)
-            # 0075, §2.2: abstenção histórica por falta de fundamento prevalece sobre o motivo de revogação.
+            # 0075, §2.2 e C5: a abstenção histórica por falta de fundamento prevalece sobre o motivo de revogação,
+            # com ou sem data de revogação (condição histórica, não o motivo intermediário do temporal).
             text_dim = (
                 Dimension("unknown", "sem_fundamento_do_periodo"
-                          if temporal_res.reason == "sem_fundamento_do_periodo" else "DISPOSITIVO_REVOGADO")
+                          if _sem_fundamento_historico(temporal_res, data) else "DISPOSITIVO_REVOGADO")
                 if trecho is not None
                 else Dimension("not_assessed", "SEM_TRECHO")
             )
@@ -697,7 +712,7 @@ def verificar(
         text_dim = (Dimension("not_found", "SEM_DISPOSITIVO") if identity.status == "not_found"
                     else Dimension("unknown", identity.reason_code))
     elif temporal_res and (temporal_res.status in ("revogado", "nao_existia", "ambiguous") or "revogacao_anotada" in temporal_res.flags):
-        if temporal_res.reason == "sem_fundamento_do_periodo":
+        if _sem_fundamento_historico(temporal_res, data):
             # C5: motivo da abstenção histórica antes dos tratamentos de revogação.
             reason = "sem_fundamento_do_periodo"
         else:

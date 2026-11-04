@@ -4,6 +4,14 @@
 
 Pré-release do incremento IL.0 (emenda IL do plano 1.4.0 e decisão 0075). Correção da fronteira e estado temporal com data referida a D, tipagem de evidência em eixos, nova ferramenta `obter_registro` com conferência por HMAC, novos metadados em `listar_fontes` e contrato formal do consumidor FREOA.
 
+### IL.0-R, rodada 2
+
+- Campos aditivos (`fundamento_temporal`, `correspondencia_textual`) normalizados no último ponto antes da emissão em todo estado de `verificar_citacao` e `obter_dispositivo`, inclusive `formato_invalido`, `requer_conferencia`, `ambigua`, `indisponivel`, `inexistente`, `unknown` e a recusa pelos derivados incompatíveis; `correspondencia_textual` é nula depois de qualquer rebaixamento da identidade.
+- Evidência da situação cadastral pelo construtor comum, com o recibo da captura; `natureza_texto` deduzida do documento, não da autoridade.
+- Âncora do registro legado fora do banco (arquivo da chave do home); reaplicar a migração 019 não a recompõe. `obter_registro` devolve integridade inválida, sem exceção, para campo persistido malformado.
+- Decisões, súmulas e processos dentro de `verificar_texto` e a recusa pelo gate de derivados têm recibo ou declaração de não gravação. Motivo `sem_fundamento_do_periodo` também em `verify.verificar` para revogação sem data.
+- Contrato do consumidor com todas as variantes legítimas da fachada.
+
 ### Correção de estado com data referida a D (decisão 0075, seção 2)
 
 - Consulta com `data` referida a D anterior à data corrente ("consulta histórica") sem fundamento documental do período retorna `temporal.status == "unknown"` com `reason_code: "sem_fundamento_do_periodo"`. O texto riscado da compilada e a data de ato alterador não constituem fundamento temporal do período.
