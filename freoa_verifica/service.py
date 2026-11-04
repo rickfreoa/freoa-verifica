@@ -1396,9 +1396,11 @@ class Verifica:
         data: str | None = None,
     ) -> dict[str, Any]:
         out = self._obter_dispositivo(citacao, work_id, caminho, data)
-        # C4: campos aditivos em todos os ramos, `null` quando inaplicáveis (hoje sempre).
-        out["fundamento_temporal"] = None
-        out["correspondencia_textual"] = None
+        # C4: campos aditivos em todo ramo `encontrada` (com ou sem caminho), `null` quando inaplicáveis (hoje
+        # sempre). O status negativo continua só `{status, ...}` (docs/CONTRATO.md).
+        if out.get("status") == "encontrada":
+            out["fundamento_temporal"] = None
+            out["correspondencia_textual"] = None
         vig = out.get("vigencia")
         if isinstance(vig, dict) and _historica(data) and (
                 vig.get("status") in ("verified", "vigente_na_fonte", "revogado")

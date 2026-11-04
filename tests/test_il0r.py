@@ -334,22 +334,23 @@ def test_c4_campos_presentes_em_todo_ramo_de_verificar_citacao(verifica_populada
                 assert out["correspondencia_textual"] is None, (cit, data)
 
 
-def test_c4_obter_dispositivo_todos_os_ramos_tem_os_campos(verifica_populada):
+def test_c4_obter_dispositivo_todo_ramo_encontrada_tem_os_campos(verifica_populada):
     svc, rw, _ = verifica_populada
-    saidas = [
+    encontradas = [
         svc.obter_dispositivo(citacao="Lei 6.404/76"),  # sem caminho
         svc.obter_dispositivo(work_id=rw.work_id),  # sem caminho, por work_id
         svc.obter_dispositivo(citacao="art. 254-A da Lei 6.404/76"),
         svc.obter_dispositivo(citacao="art. 254-A da Lei 6.404/76", data="2020-01-01"),
-        svc.obter_dispositivo(citacao="art. 9999 da Lei 6.404/76"),
-        svc.obter_dispositivo(citacao="Lei inventada 99.999/2099"),
-        svc.obter_dispositivo(citacao="texto sem citação"),
-        svc.obter_dispositivo(work_id="inexistente"),
+        svc.obter_dispositivo(citacao="art. 254-A da Lei 6.404/76", data="1970-01-01"),  # nao_existia
     ]
-    assert saidas[0]["status"] == "encontrada" and saidas[0]["caminho"] is None
-    for s in saidas:
-        assert "fundamento_temporal" in s and s["fundamento_temporal"] is None, s["status"]
-        assert "correspondencia_textual" in s and s["correspondencia_textual"] is None, s["status"]
+    assert encontradas[0]["caminho"] is None and encontradas[1]["caminho"] is None
+    for s in encontradas:
+        assert s["status"] == "encontrada"
+        assert "fundamento_temporal" in s and s["fundamento_temporal"] is None
+        assert "correspondencia_textual" in s and s["correspondencia_textual"] is None
+    # o status negativo segue mínimo (docs/CONTRATO.md)
+    for neg in (svc.obter_dispositivo(citacao="Lei inventada 99.999/2099"), svc.obter_dispositivo(work_id="inexistente")):
+        assert neg["status"] != "encontrada" and "fundamento_temporal" not in neg
 
 
 # ----------------------------------------------------------------------------------------------

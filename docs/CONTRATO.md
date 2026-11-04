@@ -125,7 +125,7 @@ Mapa de adaptadores:
 
 ### `obter_dispositivo`
 
-`{status, work_id, caminho, texto: string, texto_atual: string|null, truncado: bool, evidencia, vigencia: {status, regras: array, flags: array, intervalo: {inicio, fim}, reason_code}, anotacoes: array, redacoes_anteriores: array, redacao_anterior_ausente_na_fonte: bool, situacao_obra: object|null, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `status` negativo devolve só `{status, ...}` (`{"status":"inexistente"}` ou com `motivo`); `fundamento_temporal` e `correspondencia_textual` vêm em todo ramo, `null` quando inaplicáveis. `vigencia.status` publica `vigente_na_fonte`, `unknown`, `revogado`, `nao_existia` ou `ambiguous`; sem caminho (`caminho: null`) não há `texto` nem `vigencia`.
+`{status, work_id, caminho, texto: string, texto_atual: string|null, truncado: bool, evidencia, vigencia: {status, regras: array, flags: array, intervalo: {inicio, fim}, reason_code}, anotacoes: array, redacoes_anteriores: array, redacao_anterior_ausente_na_fonte: bool, situacao_obra: object|null, fundamento_temporal: object|null, correspondencia_textual: object|null}`. `status` negativo devolve só `{status, ...}` (`{"status":"inexistente"}` ou com `motivo`); `fundamento_temporal` e `correspondencia_textual` vêm em todo ramo `encontrada` (com ou sem caminho), `null` quando inaplicáveis. `vigencia.status` publica `vigente_na_fonte`, `unknown`, `revogado`, `nao_existia` ou `ambiguous`; sem caminho (`caminho: null`) não há `texto` nem `vigencia`.
 
 ### `historico_dispositivo`
 
