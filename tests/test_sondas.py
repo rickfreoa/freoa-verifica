@@ -1208,10 +1208,27 @@ NORMAS_CAMARA = (
     ('lei13874', '/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html', 62896, 'c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d'),
 )
 
+# IL.2-b.3: constantes extraídas das capturas, sem derivação do catálogo.
+TEXTOS_CAMARA = (
+    ('atualizado_lei6404', '/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html', 'lei6404', '882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13'),
+    ('original_lei6404', '/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html', 'lei6404', '882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13'),
+    ('mp881_lei6404', '/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html', 'lei6404', '882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13'),
+    ('atualizado_lc123', '/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html', 'lc123', '04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0'),
+    ('original_lc123', '/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html', 'lc123', '04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0'),
+    ('anexo_lc123', '/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf', 'lc123', '04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0'),
+    ('atualizado_lei13874', '/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html', 'lei13874', '01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3'),
+    ('original_lei13874', '/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html', 'lei13874', '01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3'),
+)
+CAPTURAS_NORMAS_CAMARA = (
+    ('lei6404', 85675, '882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13'),
+    ('lc123', 74769, '04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0'),
+    ('lei13874', 53481, '01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3'),
+)
+
 ROTAS_IL2 = {
     "lexml": {"www.lexml.gov.br": ()},
     "normas_leg": {"normas.leg.br": ()},
-    "camara_legislacao": {"www.camara.leg.br": ("/legislacao", "/legislacao/busca"), "www2.camara.leg.br": tuple(p for _, p, _, _ in NORMAS_CAMARA)},
+    "camara_legislacao": {"www.camara.leg.br": ("/legislacao", "/legislacao/busca"), "www2.camara.leg.br": tuple(p for _, p, _, _ in NORMAS_CAMARA + TEXTOS_CAMARA)},
 }
 CONSULTAS_IL2 = {"camara_legislacao": {"www.camara.leg.br": ("/legislacao/busca",)}}
 
@@ -1295,7 +1312,7 @@ _BASE_MIMES = frozenset({"text/html", "application/json", "text/plain"})
 MIMES_IL2 = {  # conjunto esperado por fonte, fixado aqui, independente do catálogo
     "lexml": _BASE_MIMES | {"application/xml", "text/xml"},
     "normas_leg": _BASE_MIMES,
-    "camara_legislacao": _BASE_MIMES,
+    "camara_legislacao": _BASE_MIMES | {"application/pdf"},
 }
 HOSTS_IL2 = {fid: frozenset(r) for fid, r in ROTAS_IL2.items()}
 
@@ -1326,7 +1343,7 @@ def test_il2_mutantes_de_mime_hosts_rotas_e_consulta_sao_rejeitados(fid):
     host = sorted(f.hosts)[0]
     mutantes = {
         "mimes": [dataclasses.replace(f, mimes=f.mimes | {"application/octet-stream"}),
-                  dataclasses.replace(f, mimes=f.mimes | {"application/pdf"}),
+                  dataclasses.replace(f, mimes=f.mimes ^ {"application/pdf"}),
                   dataclasses.replace(f, mimes=frozenset(f.mimes - {"application/json"}))],
         "hosts": [dataclasses.replace(f, hosts=f.hosts | {"extra.leg.br"}, rotas={**f.rotas, "extra.leg.br": ()},
                                       origem_hosts=f.origem_hosts + "; extra.leg.br=https://extra.leg.br/")],
@@ -1428,14 +1445,14 @@ def test_il2_barreiras_reais_recusadas_por_fonte_e_por_host_antes_da_rede(envios
 def test_il2_evidencias_locais_integras_e_sanitizadas():
     base = ROTEIRO.parent / "auditoria/1.4.0/il2a-sondas"
     registros = sorted(base.rglob("*.captura.json"))
-    assert len(registros) == 10
+    assert len(registros) == 13
     corpos = set()
     for registro in registros:
         texto = registro.read_text(encoding="utf-8")
         assert not re.search(r"(?<![A-Za-z])[A-Za-z]:[\\/]", texto)
         r = json.loads(texto)
         assert r["fonte_sonda"] == registro.parent.name
-        assert r["capturado_em"].startswith("2026-11-05" if registro.stem.startswith("camara_legislacao_busca_") else "2026-11-04") and r["sonda"] is True
+        assert r["capturado_em"].startswith("2026-11-05" if registro.stem.startswith(("camara_legislacao_busca_", "camara_legislacao_norma_")) else "2026-11-04") and r["sonda"] is True
         if r["unavailable"]:
             assert r["motivo"] == "http_403" and r["categoria"] == "recusa_identificado"
             assert r["evidencia"]["status"] == 403 and r["arquivo"] is None
@@ -1444,6 +1461,14 @@ def test_il2_evidencias_locais_integras_e_sanitizadas():
             data = corpo.read_bytes()
             assert len(data) == r["bytes"] and hashlib.sha256(data).hexdigest() == r["sha256"]
             corpos.add(corpo)
+        elif registro.stem.startswith("camara_legislacao_norma_"):
+            key, size, sha = next(c for c in CAPTURAS_NORMAS_CAMARA
+                                  if registro.name == f"camara_legislacao_norma_{c[0]}.captura.json")
+            assert r["status"] == 200 and r["content_type"] == "text/html"
+            assert (r["bytes"], r["sha256"]) == (size, sha)
+            assert r["url"] == r["url_final"] == "https://www2.camara.leg.br" + next(c[1] for c in NORMAS_CAMARA if c[0] == key)
+            assert r["arquivo"] == f"camara_legislacao_norma_{key}.html"
+            assert not (registro.parent / r["arquivo"]).exists()
         elif registro.stem.startswith("camara_legislacao_busca_"):
             caso = next(c for c in NORMAS_CAMARA if registro.name == f"camara_legislacao_busca_{c[0]}.captura.json")
             assert r["status"] == 200 and r["content_type"] == "text/html"
@@ -1641,7 +1666,7 @@ def test_il2b2_roteiro_exato_e_repasse_ao_transporte(envios, tmp_path):
         assert enviado["allowed_path_prefixes"] == ROTAS_IL2[fid]
         assert enviado["max_redirects"] == 0
     texto = ROTEIRO.read_text(encoding="utf-8")
-    assert "só entram no IL.2-b.3, depois de capturados" in texto
+    assert "IL.2-b.3: links relativos resolvidos" in texto
 
 
 @pytest.mark.parametrize("caso", NORMAS_CAMARA)
@@ -1654,8 +1679,8 @@ def test_il2b2_variantes_recusadas_antes_do_transporte(envios, tmp_path, caso, v
     elif variante == "id":
         path = path.replace("-norma-pl.html", "0-norma-pl.html")
     elif variante in ("publicacao", "atualizado", "anexo"):
-        path = path.replace("-norma-pl.html", {"publicacao": "-publicacaooriginal-1-pl.html",
-                            "atualizado": "-textoatualizado-pl.html", "anexo": "-anexo-pl.pdf"}[variante])
+        path = path.replace("-norma-pl.html", {"publicacao": "-publicacaooriginal-999999-pl.html",
+                            "atualizado": "-textoatualizado-pl.html", "anexo": "-anexo-inexistente-pl.pdf"}[variante])
     elif variante == "prefixo":
         path = "/legin/"
     else:
@@ -1733,3 +1758,112 @@ def test_il2b2_robots_preservado_e_mutantes_de_disallow():
     for regra in ("/legin/", "/*norma-pl.html$", *(p for _, p, _, _ in NORMAS_CAMARA)):
         with pytest.raises(AssertionError):
             _conferir_robots_normas(texto + f"\nDisallow: {regra}\n")
+
+
+def _conferir_textos_camara(comandos):
+    esperados = {f"camara_legislacao_textos_{k}": "https://www2.camara.leg.br" + p
+                 for k, p, _, _ in TEXTOS_CAMARA}
+    assert len(comandos) == 8 and {c[3] for c in comandos} == set(esperados)
+    for _, fid, destino, chave, url, bloqueado in comandos:
+        assert fid == "camara_legislacao" and not bloqueado
+        # O parser do roteiro já exige o prefixo C:/dev/fv14-sondas/ e devolve só a pasta.
+        assert destino == "camara_legislacao"
+        assert url == esperados[chave]
+
+
+@pytest.mark.repositorio
+def test_il2b3_roteiro_e_repasse_independentes(envios, tmp_path):
+    comandos = [c for c in _comandos_do_roteiro() if c[3].startswith("camara_legislacao_textos_")]
+    _conferir_textos_camara(comandos)
+    for _, fid, _, chave, url, _ in comandos:
+        reg = captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave=chave, fonte_sonda=fid)
+        enviado = envios[-1]
+        assert not reg.unavailable and reg.confirmacao_host == "A"
+        assert enviado["url"] == url and enviado["method"] == "GET" and enviado["body"] is None
+        assert enviado["allowed_hosts"] == HOSTS_IL2[fid]
+        assert enviado["allowed_mimes"] == MIMES_IL2[fid]
+        assert enviado["allowed_path_prefixes"] == ROTAS_IL2[fid]
+        assert enviado["max_redirects"] == 0
+
+
+@pytest.mark.parametrize("caso", TEXTOS_CAMARA)
+@pytest.mark.parametrize("variante", ["?x=1", "/", ".bak", "/extra", "host", "id"])
+def test_il2b3_variantes_recusadas(envios, tmp_path, caso, variante):
+    host, path = "www2.camara.leg.br", caso[1]
+    if variante == "host":
+        host = "www.camara.leg.br"
+    elif variante == "id":
+        path = path.replace("-pl.", "0-pl.").replace("-pe.", "0-pe.")
+    else:
+        path += variante
+    with pytest.raises(ValueError, match="fora da allowlist da fonte-sonda"):
+        captura.capturar(None, url=f"https://{host}{path}", destino=tmp_path,
+                         sonda=True, chave="t", fonte_sonda="camara_legislacao")
+    assert not envios and not any(tmp_path.iterdir())
+
+
+def _conferir_proveniencia_textos(fonte):
+    assert fonte.confirmacao == "A" and not fonte.hosts_b
+    for _, path, key, sha in TEXTOS_CAMARA:
+        assert f"{path} publicado em camara_legislacao_norma_{key}.html, SHA-256 {sha}" in fonte.origem_hosts
+
+
+@pytest.mark.parametrize("caso", TEXTOS_CAMARA)
+def test_il2b3_mutantes_catalogo_e_proveniencia(caso):
+    f = FONTES_SONDA["camara_legislacao"]
+    assert _divergencias_il2(f.id, f) == []
+    _conferir_proveniencia_textos(f)
+    _, path, key, sha = caso
+    rotas = f.rotas["www2.camara.leg.br"]
+    for caminhos in (tuple(p for p in rotas if p != path), (*rotas, "/legin/"),
+                     tuple(p + ".bak" if p == path else p for p in rotas)):
+        m = dataclasses.replace(f, rotas={**f.rotas, "www2.camara.leg.br": caminhos})
+        assert _divergencias_il2(f.id, m) == ["rotas"]
+    m = dataclasses.replace(f, consultas={**f.consultas, "www2.camara.leg.br": (path,)})
+    assert _divergencias_il2(f.id, m) == ["consultas"]
+    for valor in (path, f"camara_legislacao_norma_{key}.html", sha):
+        with pytest.raises(AssertionError):
+            _conferir_proveniencia_textos(dataclasses.replace(f, origem_hosts=f.origem_hosts.replace(valor, "ausente")))
+
+
+@pytest.mark.repositorio
+@pytest.mark.parametrize("variante", ["host", "query", "id", "prefixo", "chave", "destino", "remocao"])
+def test_il2b3_mutantes_roteiro(variante):
+    comandos = [c for c in _comandos_do_roteiro() if c[3].startswith("camara_legislacao_textos_")]
+    _conferir_textos_camara(comandos)
+    if variante == "remocao":
+        comandos = comandos[:-1]
+    else:
+        c = list(comandos[0])
+        if variante == "chave":
+            c[3] += "_errada"
+        elif variante == "destino":
+            c[2] = "tests/fixtures"
+        else:
+            c[4] = {"host": c[4].replace("www2.", "www."), "query": c[4] + "?x=1",
+                    "id": c[4].replace("368447", "540445"),
+                    "prefixo": "https://www2.camara.leg.br/legin/"}[variante]
+        comandos[0] = tuple(c)
+    with pytest.raises(AssertionError):
+        _conferir_textos_camara(comandos)
+
+
+def _conferir_robots_textos(texto):
+    assert [l.lower() for l in texto.splitlines() if l.lower().startswith("user-agent:")] == ["user-agent: *"]
+    regras = [l.split(":", 1)[1].strip() for l in texto.splitlines() if l.lower().startswith("disallow:")]
+    for _, path, _, _ in TEXTOS_CAMARA:
+        for regra in regras:
+            if regra:
+                padrao = "^" + re.escape(regra.rstrip("$")).replace(r"\*", ".*") + ("$" if regra.endswith("$") else "")
+                assert not re.match(padrao, path), (regra, path)
+
+
+@pytest.mark.repositorio
+def test_il2b3_robots_e_mutantes():
+    data = (ROTEIRO.parent / "auditoria/1.4.0/il2a-sondas/camara_legislacao/camara_legislacao_robots_legin.txt").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f"
+    texto = data.decode("utf-8")
+    _conferir_robots_textos(texto)
+    for regra in ("/legin/", "/*normaatualizada*", "/*anexo-pl.pdf$", *(p for _, p, _, _ in TEXTOS_CAMARA)):
+        with pytest.raises(AssertionError):
+            _conferir_robots_textos(texto + f"\nDisallow: {regra}\n")

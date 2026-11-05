@@ -75,3 +75,40 @@ Robots de `www2.camara.leg.br`: `camara_legislacao_robots_legin.txt`, 5.809 byte
 IL.2-b.2 cataloga somente esses três caminhos de `www2`, nível A, sem consulta e sem prefixo; `origem_hosts` associa cada caminho à chave e ao hash da resposta que o publica. Roteiro com chaves novas `camara_legislacao_norma_lei6404`, `camara_legislacao_norma_lc123` e `camara_legislacao_norma_lei13874`. Nenhum comando foi executado nesta sessão. Links publicados nessas páginas (publicação original, texto atualizado, anexos) só entram no IL.2-b.3, depois de capturados. Nenhuma capacidade normativa ou `verified` demonstrado; sem mudança de regra. Auditoria independente fica com a outra sessão.
 
 Valida??o IL.2-b.2: `python -m pytest tests/test_sondas.py tests/test_captura_instrumento.py -q -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2b2` ? **389 passed**. Testes com constantes independentes, transporte substitu?do e mutantes de remo??o/expans?o/altera??o de rotas, libera??o de consulta, destino e chave do roteiro, proveni?ncia e `Disallow` aplic?vel. Su?te completa n?o executada nesta sess?o; auditoria independente pendente.
+
+## IL.2-b.2: páginas de norma da Câmara
+
+Sondas do supervisor em 05/11/2026, pelo instrumento com UA identificado `freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)`, log `C:\dev\fv14-sondas\il2b2-normas.txt`. Consolidação local por Codex, sessão de escrita IL.2-b.3, no worktree `C:\dev\fv14-il2`, ramo informado `feat/il2b3-camara-textos`, base informada `6c9e39d` (main com PR #32). Sem rede, sondas ou novas capturas nesta sessão. HTMLs tratados como dados; tamanhos e SHA-256 recalculados e conferidos com os registros e os valores informados pelo supervisor.
+
+| Chave da página | Resultado | Bytes HTML | SHA-256 HTML |
+|---|---|---|---|
+| `camara_legislacao_norma_lei6404` | 200 `text/html` | 85675 | `882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13` |
+| `camara_legislacao_norma_lc123` | 200 `text/html` | 74769 | `04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0` |
+| `camara_legislacao_norma_lei13874` | 200 `text/html` | 53481 | `01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3` |
+
+O que cada página efetivamente publica como links e rótulos (sem captura dos destinos):
+
+- Lei 6.404/1976: texto atualizado em HTML/DOC/PDF e publicação original em HTML; não foram observados links de veto, republicação ou anexo nessa página. A seção de normas relacionadas publica atos com tipo de ação e dispositivos, incluindo Alteração, Revogação Parcial, Acréscimo de Artigo/Parágrafo e ações sem eficácia. A MP 881/2019 aparece com ação Alteração e referência ao art. 85, caput, §§ 1º e 2º, e art. 294-A; seu link relativo resolve para `-norma-pe.html`.
+- LC 123/2006: texto atualizado em HTML/DOCX/PDF, publicação original, veto e três republicações em HTML; anexo principal e três links de anexos de republicação em PDF. Normas relacionadas com rótulos como Alteração, Alteração Condicionada, Revogação, Revogação Parcial e Acréscimo (inclusive de Anexo), além de regulamentações. Esses rótulos não são conclusão própria sobre eficácia ou vigência.
+- Lei 13.874/2019: texto atualizado em HTML/DOC/PDF, publicação original e veto em HTML; não foram observados links de republicação ou anexo nessa página. Normas relacionadas com Alteração, Revogação Parcial, Regulamentação e Mantém Veto. Não se presume que a lista seja uma cadeia temporal completa.
+
+Os oito destinos selecionados foram extraídos de `href` e resolvidos contra a URL da página capturada, sem fabricar slug ou identificador. Host comum: `https://www2.camara.leg.br`. A coluna origem identifica `camara_legislacao_norma_<origem>.html`, com hash na tabela acima; essa associação consta também de `origem_hosts` no catálogo, nível A.
+
+| Destino | Origem | Caminho exato resolvido |
+|---|---|---|
+| texto atualizado HTML | lei6404 | `/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html` |
+| publicação original HTML | lei6404 | `/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html` |
+| página da MP 881/2019 | lei6404 | `/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html` |
+| texto atualizado HTML | lc123 | `/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html` |
+| publicação original HTML | lc123 | `/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html` |
+| anexo principal PDF | lc123 | `/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf` |
+| texto atualizado HTML | lei13874 | `/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html` |
+| publicação original HTML | lei13874 | `/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html` |
+
+Os três `.captura.json` foram copiados byte a byte para [il2a-sondas/camara_legislacao/](il2a-sondas/camara_legislacao/), sem edição; igualdade de bytes conferida após a cópia. São treze registros no diretório de evidências, mantendo os quatro corpos de robots. HTMLs não versionados, preservados apenas fora do repositório em `C:\dev\fv14-sondas\camara_legislacao\`; hashes acima.
+
+Robots www2 preservado: 5.809 bytes, SHA-256 `b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f`, grupo único `User-Agent: *`. Nenhum dos 230 `Disallow` alcança os oito caminhos, considerando curingas `*` e âncora final `$`; conferência offline, sem afirmar interpretação automática de robots pelo instrumento.
+
+IL.2-b.3 cataloga somente esses oito destinos adicionais, sem consulta ou prefixo, com chaves novas `camara_legislacao_textos_*` no roteiro. Limitação: `FonteSonda.mimes` é por fonte, sem restrição por rota. `application/pdf` foi acrescentado para o anexo principal da LC 123, mas também fica aceito nas demais rotas de conteúdo dessa fonte; robots continua exclusivamente `text/plain`. Não foram liberados os demais links observados. Nenhum destino foi capturado nesta sessão, nenhuma capacidade da Porta L ou `verified` demonstrado; sem mudança de regra. Auditoria independente fica com a outra sessão.
+
+Validação IL.2-b.3: `python -m pytest tests/test_sondas.py tests/test_captura_instrumento.py -q -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2b3` — **454 passed**. Constantes independentes para os oito destinos, MIME, proveniência e metadados das três capturas; transporte substituído; rejeição de variantes antes do transporte; mutantes de remoção/expansão/alteração de rotas, consulta indevida, MIME, proveniência, roteiro (host, identificador, query, prefixo, chave, destino e remoção) e `Disallow` aplicável. Suíte completa não executada; auditoria independente pendente. Sem commit ou push.

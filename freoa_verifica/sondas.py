@@ -213,6 +213,14 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
             "/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
             "/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
             "/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+            "/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html",
+            "/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+            "/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+            "/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html",
+            "/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html",
+            "/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf",
+            "/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+            "/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
         )},
        "www.camara.leg.br=https://www.camara.leg.br/legislacao (captura de 04/11/2026, "
        "camara_legislacao_pesquisa.html, SHA-256 2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1; "
@@ -224,7 +232,16 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
        "SHA-256 9bd90cfad8c6c0fed23f589a24e90e1cb1ee415c824c76034d9e36cb470aedb8; "
        "/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html publicado em camara_legislacao_busca_lei13874.html, "
        "SHA-256 c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d; "
+       "/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html publicado em camara_legislacao_norma_lei6404.html, SHA-256 882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13; "
+       "/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html publicado em camara_legislacao_norma_lei6404.html, SHA-256 882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13; "
+       "/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html publicado em camara_legislacao_norma_lei6404.html, SHA-256 882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13; "
+       "/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html publicado em camara_legislacao_norma_lc123.html, SHA-256 04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0; "
+       "/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html publicado em camara_legislacao_norma_lc123.html, SHA-256 04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0; "
+       "/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf publicado em camara_legislacao_norma_lc123.html, SHA-256 04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0; "
+       "/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html publicado em camara_legislacao_norma_lei13874.html, SHA-256 01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3; "
+       "/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html publicado em camara_legislacao_norma_lei13874.html, SHA-256 01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3; "
        "registros em docs/auditoria/1.4.0/il2a-sondas/camara_legislacao/)",
+       mimes=_MIMES_PDF,
        consultas={"www.camara.leg.br": ("/legislacao/busca",)},
        nota="nível A nos dois hosts; /legislacao/busca nível A pela captura de /legislacao: método GET implícito "
             "(atributo method ausente); campos abrangencia, tipo, numero, ano, geral. Valores publicados: "
@@ -232,8 +249,11 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
             "consultas declara rotas que aceitam query; não valida nomes ou valores dos parâmetros. "
             "IL.2-b.2: três páginas de norma em www2, nível A, caminhos exatos sem consulta nem prefixo, "
             "publicados nas respostas capturadas das buscas. Nenhum Disallow do robots de www2 capturado as alcança. "
-            "Links publicados nessas páginas (publicação original, texto atualizado, anexos) só entram no IL.2-b.3, "
-            "depois de capturados; nenhum texto ou capacidade normativa demonstrado. "
+            "IL.2-b.3: oito links exatos publicados nas capturas das normas (seis HTMLs de texto, "
+            "anexo PDF da LC 123 e norma da MP 881); nenhum Disallow capturado os alcança. "
+            "Limitação: MIME por fonte, sem restrição por rota; application/pdf acrescentado pelo anexo, "
+            "mas aceito nas demais rotas de conteúdo da fonte. Robots continua só text/plain. "
+            "Destinos ainda não capturados; nenhuma capacidade normativa demonstrada. "
             "O portal de Dados Abertos da Câmara (dadosabertos.camara.leg.br) não documenta "
             "endpoint de legislação: em HOSTS_RECUSADOS. Termos de uso: link 'Termos de uso e política de privacidade' "
             "no rodapé, não lido; nenhuma licença explícita no conteúdo."),
