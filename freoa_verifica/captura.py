@@ -26,7 +26,7 @@ from freoa_verifica.connectors.base import Unavailable, registry, sob_guarda
 from freoa_verifica.connectors.challenge import map_transport_error
 from freoa_verifica.connectors.httputil import connector_fetch, form_body, ua_header
 from freoa_verifica.identidade_http import MODO_IDENTIFICADO, USER_AGENT_IDENTIFICADO
-from freoa_verifica.sondas import FONTES_BARRADAS, FONTES_SONDA, prefixos_por_host
+from freoa_verifica.sondas import FONTES_BARRADAS, FONTES_SONDA, HOSTS_RECUSADOS, prefixos_por_host
 from freoa_verifica.transport import BlockedHost, HTTPStatusError, Session, validate_reference
 
 UA_IDENTIFICADO = USER_AGENT_IDENTIFICADO
@@ -234,9 +234,19 @@ def _planejar_sonda(
 
 @sob_guarda  # etapas da mesma captura: identidade efetiva e bloqueio por host (garantia estrutural 1, FIX18)
 def _buscar(plano: dict[str, Any], ua_modo: str):
+    # Só as recusas das fontes barradas: HOSTS_RECUSADOS também contém pendências documentais
+    # de outras fontes, cujo tratamento próprio (por exemplo, nível B) permanece intacto.
+    barrados = {h: motivo for h, motivo in HOSTS_RECUSADOS.items() if motivo in FONTES_BARRADAS.values()}
+    # Valida TODAS as etapas antes do primeiro pedido, inclusive planos de consulta e captura sem sonda.
+    for etapa in plano["etapas"]:
+        host, _ = validate_reference(etapa["url"], plano["hosts"])
+        if host in barrados:
+            raise ValueError(f"host barrado {host}, sem captura: {barrados[host]}")
+    # A mesma barreira vale para destinos de redirecionamento, validados pelo transporte comum.
+    hosts = frozenset(h for h in plano["hosts"] if h not in barrados)
     sessao = Session() if plano.get("sessao") else None
     kw: dict[str, Any] = {
-        "hosts": plano["hosts"], "path_prefixes": plano["path_prefixes"], "mimes": plano["mimes"],
+        "hosts": hosts, "path_prefixes": plano["path_prefixes"], "mimes": plano["mimes"],
         "user_agent": plano["user_agent"], "timeout": 60.0,
         "repeticao": 0,  # a captura faz exatamente um pedido por etapa: o transporte não repete 502/503/504
     }
@@ -331,6 +341,9 @@ def capturar(
 
     Nunca sobrescreve evidência: se `<chave>.captura.json` (ou o corpo) já existe no destino, recusa; com `chave`
     explícita a recusa vem antes da rede.
+
+    Hosts das fontes em `FONTES_BARRADAS` são recusados em qualquer captura, inclusive por alias de
+    conector, com `sonda=False`, em todas as etapas e como destinos de redirecionamento.
 
     Tudo é validado antes da rede: conector ou fonte-sonda, modo de UA, `chave`, URL e destino. Com `sonda`, o
     destino não pode ser o repositório nem ficar dentro dele.

@@ -1,0 +1,29 @@
+{
+ "conector": null,
+ "versao": "1.4.0a2",
+ "url": "https://www.lexml.gov.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-04T22:13:06.194822+00:00",
+ "sonda": true,
+ "fonte_sonda": "lexml",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www.lexml.gov.br/robots.txt",
+ "status": 200,
+ "content_type": "text/plain",
+ "cabecalhos": {
+  "content-length": "589",
+  "content-type": "text/plain",
+  "date": "Wed, 04 Nov 2026 22:13:06 GMT",
+  "last-modified": "Tue, 20 Oct 2026 18:25:50 GMT"
+ },
+ "sha256": "782e16063216f816846add69f56d7943d4defa4c19219c9a3630c77f3d58be5f",
+ "bytes": 589,
+ "arquivo": "lexml_robots.txt"
+}

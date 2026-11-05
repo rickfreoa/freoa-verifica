@@ -5,7 +5,7 @@
 | Ferramenta / modelo | Claude Code (Agent SDK), Claude Sonnet 5.5 (`claude-sonnet-5-5`) |
 | Ramo / base | `feat/il2-sondas` sobre `main` 3686cdb |
 | Escopo | catálogo `freoa_verifica/sondas.py` (5 fontes), roteiro em `docs/S0-SONDAS.md`, testes em `tests/test_sondas.py`. Sem adaptador, sem conector, sem `registry()`, sem acesso ao vivo pelo produto |
-| Leituras | 04/11/2026, pela ferramenta de pesquisa do agente (WebFetch/WebSearch), não pelo produto nem pelo instrumento; não valem como sonda. Nenhuma sonda foi executada |
+| Leituras | 04/11/2026, pela ferramenta de pesquisa do agente (WebFetch/WebSearch), não pelo produto nem pelo instrumento; não valem como sonda. Nenhuma sonda havia sido executada nesta etapa de documentação; resultados posteriores na seção "Resultado das sondas" |
 
 Este documento diz o que a documentação oficial lida **promete**. O que só a resposta de cada rota mostra (campos, texto por dispositivo, anexos, vigência) fica em aberto até a sonda do supervisor. Capacidades da matriz da Porta L (`il1-matriz-porta-l.md`, seção 1): (a) texto publicado; (b) consolidado vigente; (c) redação em data D; (d) anexos; (e) remissões.
 
@@ -61,3 +61,18 @@ Termos não lidos não são afirmados: ficam como pendência do titular antes de
 - Casos da sonda: Lei 6.404/1976 (consulta neutra), Lei Complementar 123/2006 (lei com anexos, capacidade d) e MP 881/2019 convertida na Lei 13.874/2019 (capacidade c). A escolha das duas últimas e as datas das URN são de conhecimento do autor, não conferidas em página oficial lida.
 - Pendência IL.2-b: texto por dispositivo no normas.leg.br, página de norma da Câmara e texto publicado no DOU, que só entram por documentação oficial lida ou sessão assistida.
 - Novo no catálogo: sufixo `.leg.br` na checagem de domínio oficial dos testes e `_MIMES_XML` para o SRU.
+
+
+## Resultado das sondas
+
+Em 04/11/2026, o supervisor executou pelo instrumento as sondas descritas no [registro IL.2-a](il2a-sondas.md), com UA `freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)`. A tabela de rotas acima registra o estado anterior às sondas; o estado atual é:
+
+| Fonte | Evidência | Consequência no catálogo / roteiro |
+|---|---|---|
+| `senado_legislacao` | robots 403, `http_403`, `recusa_identificado` | Fonte e host barrados antes do transporte na CLI e API, inclusive alias `senado`, com ou sem sonda e ambos os modos de UA; robots.txt, todas as etapas e destinos de redirecionamento; sem nova tentativa |
+| `dou` | robots 403, `http_403`, `recusa_identificado` | Mesma barreira global do instrumento; nenhum conector atual admite o host; confirmação de host B não libera a fonte; sem nova tentativa |
+| `lexml` | robots 200; `Disallow: /busca/` | `/busca/SRU` retirada e não sondada; só robots. `Allow: /urn` e `/sru` não documenta endpoint; página oficial lida e `Crawl-delay: 5` pendentes IL.2-b (instrumento sem interpretação do intervalo) |
+| `normas_leg` | robots 200, `Allow: /` | Continua só robots, sem rota documentada de conteúdo |
+| `camara_legislacao` | robots 200 nos dois hosts; `/legislacao` 200 HTML, 59.842 bytes | Mantida só página de entrada e robots; formulário `/legislacao/busca`, `/legislacao/pesquisa-avancada` e coleções www2 observados, sem sondar ou catalogar novas rotas |
+
+Os sete registros e quatro corpos de robots estão em [il2a-sondas/](il2a-sondas/), sem caminhos de máquina. HTML da Câmara não versionado; SHA-256: `2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1`. Nenhuma captura deste lote demonstra rota viva para (a) texto publicado, (b) consolidado vigente, (c) redação em data D, (d) anexos ou (e) remissões resolvidas. Isso não é apuração da Porta L nem conclusão sobre outras fontes ou acervo instalado. Nenhum acesso de rede foi executado na consolidação dos registros.

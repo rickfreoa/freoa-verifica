@@ -190,31 +190,17 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
        "portal.tjpr.jus.br=https://www.tjpr.jus.br/jurisprudencia (link https://portal.tjpr.jus.br/jurisprudencia/)",
        nota="nível A; " + _S0B.strip()),
     # --- IL.2 (emenda IL, seção 5): rotas de legislação. Leitura das páginas oficiais pela ferramenta do agente em 04/11/2026
-    # (não é sonda); nenhuma rota foi pedida pelo instrumento.
-    _f("senado_legislacao", "Senado Federal: Dados Abertos Legislativos, serviço de legislação (identificação, URN, vide)",
-       {"legis.senado.leg.br": ("/dadosabertos/legislacao/urn.json", "/dadosabertos/legislacao/lista.json",
-                                "/dadosabertos/legislacao/LEI/6404/1976.json")},
-       "legis.senado.leg.br=https://legis.senado.leg.br/dadosabertos/v3/api-docs (especificação OpenAPI do próprio serviço, "
-       "lida; catálogo em https://www12.senado.leg.br/dados-abertos/conjuntos?portal=Legislativo&grupo=legislacao)",
-       consultas={"legis.senado.leg.br": ("/dadosabertos/legislacao/urn.json", "/dadosabertos/legislacao/lista.json")},
-       nota="nível A (caminhos da especificação OpenAPI oficial: /legislacao/urn?urn=, /legislacao/lista com tipo, numero e "
-            "ano, /legislacao/{tipo}/{numdata}/{anoseq}; formato por extensão `.json`, também documentada); os valores "
-            "(URN LEX, sigla LEI, norma) são inferência: linha T. A especificação não descreve os campos da resposta nem "
-            "diz se há atos alteradores além dos `vide`: só a sonda mostra. Sem POST, sem autenticação. A especificação "
-            "avisa que mais de 10 requisições por segundo recebem 429 e que 503 ocorre em alta demanda: uma requisição por "
-            "comando. Termos: a página de dados abertos diz só 'licença que permita sua livre utilização'; a Política de "
-            "uso do portal do Senado foi apenas citada, não lida."),
+    # (não é sonda). Resultados de 04/11/2026 em docs/auditoria/1.4.0/il2a-sondas.md.
     _f("lexml", "LexML Brasil: busca SRU (URN, identificação)",
-       {"www.lexml.gov.br": ("/busca/SRU",)},
+       {"www.lexml.gov.br": ()},
        "www.lexml.gov.br=https://www12.senado.leg.br/dados-abertos/legislativo/legislacao/acervo-do-portal-lexml "
        "(página oficial lida: API LexML por URL, padrão SRU, resposta XML; o link 'exemplo de utilização' leva a "
        "www.lexml.gov.br/busca/SRU)",
-       mimes=_MIMES_XML, consultas={"www.lexml.gov.br": ("/busca/SRU",)},
-       nota="nível A no host e no caminho /busca/SRU (o exemplo oficial usa http: a sonda exige https, a resposta diz se "
-            "o host o serve); o índice `urn` e o valor da consulta são inferência do exemplo oficial (query=urn = "
-            "\"senado.federal pls 2008\"): linha T. A página oficial de documentação do webservice redireciona ao padrão "
-            "SRU da Library of Congress e não traz endereço nem índices do LexML: documentação própria do LexML não "
-            "lida. Resolvedor de URN do LexML: nenhuma página oficial lida, fora do catálogo (" + _IL2B.strip() + ")"),
+       mimes=_MIMES_XML,
+       nota="04/11/2026: robots.txt 200 text/plain; User-Agent: * proíbe /busca/, portanto /busca/SRU foi retirada "
+            "e não sondada. Allow: /urn e /sru (minúsculo) não documenta endpoints: sem página oficial lida, "
+            "pendência IL.2-b. Crawl-delay: 5; o instrumento não interpreta esse intervalo: pendência IL.2-b, "
+            "sem novas sondas nesta entrega. Só robots.txt no catálogo."),
     _f("normas_leg", "normas.leg.br: portal de normas da legislação federal (Congresso Nacional)",
        {"normas.leg.br": ()},
        "normas.leg.br=https://www12.senado.leg.br/noticias/materias/2025/11/13/senado-ganha-premio-pela-criacao-do-portal-normas-leg.br "
@@ -232,21 +218,17 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
             "robots.txt em www2. O portal de Dados Abertos da Câmara (dadosabertos.camara.leg.br) não documenta "
             "endpoint de legislação: em HOSTS_RECUSADOS. Termos de uso: link 'Termos de uso e política de privacidade' "
             "no rodapé, não lido; nenhuma licença explícita no conteúdo."),
-    _f("dou", "Imprensa Nacional: Diário Oficial da União (texto publicado)",
-       {"www.in.gov.br": ()},
-       "www.in.gov.br=https://github.com/Imprensa-Nacional (organização oficial; indica https://www.in.gov.br como site)",
-       nota="nível A só no host; nenhuma rota de texto publicado consta de página oficial lida (a página de dados abertos "
-            "do portal não pôde ser lida: " + _IL2B.strip() + " só robots.txt). INLABS (inlabs.in.gov.br) fica fora: "
-            "exige cadastro e login, o que só pode ser sessão assistida (decisão 0067), nunca automatizada; a página "
-            "inicial estava em manutenção e indica a 'Base de Dados de Publicações do DOU' no portal da Imprensa Nacional. "
-            "O README oficial do INLABS diz acesso livre e gratuito desde 01/01/2020, PDF e XML das edições completas, "
-            "só os últimos 4 meses na ferramenta."),
 ]))
 
 # fonte-sonda barrada: id -> motivo. Fora do catálogo; o instrumento a recusa antes da rede.
-FONTES_BARRADAS: Mapping[str, str] = MappingProxyType({})
+FONTES_BARRADAS: Mapping[str, str] = MappingProxyType({
+    "senado_legislacao": "04/11/2026: robots.txt de legis.senado.leg.br: unavailable(http_403), recusa_identificado; barreira, sem nova tentativa",
+    "dou": "04/11/2026: robots.txt de www.in.gov.br: unavailable(http_403), recusa_identificado; barreira, sem nova tentativa",
+})
 
 HOSTS_RECUSADOS: Mapping[str, str] = MappingProxyType({
+    "legis.senado.leg.br": FONTES_BARRADAS["senado_legislacao"],
+    "www.in.gov.br": FONTES_BARRADAS["dou"],
     "jurisprudencia.trf1.jus.br": "não consta de página oficial lida; o TRF1 publica a pesquisa no CJF",
     "jurisprudencia.trf3.jus.br": "não consta de página oficial lida; o TRF3 publica em web.trf3.jus.br",
     "juris.trf2.jus.br": "apenas resultado de busca, sem página oficial lida",
