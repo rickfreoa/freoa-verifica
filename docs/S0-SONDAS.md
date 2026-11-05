@@ -359,7 +359,7 @@ Notas: Formulário e resultado da pesquisa pública não constam de página ofic
 
 ### senado_legislacao: Senado Federal: Dados Abertos Legislativos
 
-Resultado em 04/11/2026: robots.txt de `legis.senado.leg.br` respondeu 403: `unavailable(http_403)`, categoria `recusa_identificado`. Barreira registrada; fonte e host recusados antes da rede. Nenhum outro comando do host foi executado. Sem comandos executáveis, inclusive robots.txt; as rotas de identificação, URN e lista foram retiradas do catálogo.
+Resultado em 04/11/2026: robots.txt de `legis.senado.leg.br` respondeu 403: `unavailable(http_403)`, categoria `recusa_identificado`. Barreira registrada; fonte e host recusados antes do transporte em toda entrada do instrumento: CLI e API, por fonte-sonda ou alias de conector (`senado`), com ou sem sonda e em ambos os modos de UA, inclusive robots.txt, todas as etapas e destinos de redirecionamento. A confirmação de host B não remove a barreira. Nenhum outro comando do host foi executado. Sem comandos executáveis, inclusive robots.txt; as rotas de identificação, URN e lista foram retiradas do catálogo.
 
 ### lexml: LexML Brasil: busca SRU (URN, identificação)
 

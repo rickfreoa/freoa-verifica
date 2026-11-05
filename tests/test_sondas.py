@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import dataclasses
 import hashlib
 import importlib.util
@@ -1440,3 +1441,82 @@ def test_il2_evidencias_locais_integras_e_sanitizadas():
     lexml = (base / "lexml/lexml_robots.txt").read_text(encoding="utf-8")
     assert "Disallow: /busca/" in lexml and "Crawl-delay: 5" in lexml
     assert "Allow: /urn" in lexml and "Allow: /sru" in lexml
+
+
+# B1: a recusa pertence ao instrumento inteiro, inclusive aliases e captura de fixture.
+ROTAS_SENADO_BARRADAS = (
+    "/robots.txt", "/dadosabertos/legislacao/lista", "/sigen/api/catalogo/basico", "/norma/123",
+)
+
+
+@pytest.fixture
+def transporte_proibido(monkeypatch):
+    def sentinela(*args, **kwargs):
+        pytest.fail("host barrado chegou ao transporte")
+    monkeypatch.setattr(httputil, "transport_fetch", sentinela)
+
+
+@pytest.mark.parametrize("rota", ROTAS_SENADO_BARRADAS)
+@pytest.mark.parametrize("ua", ["conector", "identificado"])
+@pytest.mark.parametrize("sonda", [False, True])
+def test_b1_senado_api_recusa_alias_sem_transporte(transporte_proibido, tmp_path, rota, ua, sonda):
+    with pytest.raises(ValueError, match="host barrado.*legis.senado.leg.br"):
+        captura.capturar("senado", url=f"https://legis.senado.leg.br{rota}",
+                         destino=tmp_path, sonda=sonda, user_agent=ua, chave="b1")
+    assert not any(tmp_path.iterdir())
+
+
+@pytest.mark.repositorio
+@pytest.mark.parametrize("rota", ROTAS_SENADO_BARRADAS)
+@pytest.mark.parametrize("ua", ["conector", "identificado"])
+@pytest.mark.parametrize("sonda", [False, True])
+def test_b1_senado_cli_recusa_alias_sem_transporte(transporte_proibido, tmp_path, capsys, monkeypatch, rota, ua, sonda):
+    cli = _cli()
+    # Temporário herdável: Python 3.14 usa ACL privada incompatível com o token restrito Windows.
+    destino = tmp_path / "captura"
+    destino.mkdir()
+    monkeypatch.setattr(cli.tempfile, "TemporaryDirectory", lambda: contextlib.nullcontext(destino))
+    argv = ["--conector", "senado", "--url", f"https://legis.senado.leg.br{rota}",
+            "--user-agent", ua, "--chave", "b1"]
+    if sonda:
+        argv += ["--sonda", "--saida", str(tmp_path)]
+    assert cli.main(argv) == 2
+    assert "host barrado legis.senado.leg.br" in capsys.readouterr().err
+    assert not any(destino.iterdir())
+    assert set(tmp_path.iterdir()) == {destino}
+
+
+@pytest.mark.parametrize("rota", ["/robots.txt", "/consulta"])
+def test_b1_dou_sem_alias_em_conector_e_recusado_na_api(transporte_proibido, tmp_path, rota):
+    assert all("www.in.gov.br" not in c.hosts for c in registry().values())
+    with pytest.raises(ValueError, match="barrada, sem sonda"):
+        captura.capturar(None, fonte_sonda="dou", url=f"https://www.in.gov.br{rota}",
+                         destino=tmp_path, sonda=True)
+    for conector in registry():
+        with pytest.raises(ValueError):
+            captura.capturar(conector, url=f"https://www.in.gov.br{rota}", destino=tmp_path, sonda=False)
+    assert not any(tmp_path.iterdir())
+
+
+def test_b1_allowlist_de_captura_exclui_host_barrado_para_redirecionamento(envios):
+    # Plano controlado para isolar a política do instrumento das rotas do conector.
+    captura._buscar({
+        "hosts": registry()["senado"].hosts, "path_prefixes": {"normas.leg.br": ("/api/",)},
+        "mimes": frozenset({"application/json"}), "user_agent": registry()["senado"].user_agent,
+        "etapas": [{"url": "https://normas.leg.br/api/teste", "metodo": "GET", "body": None, "headers": {}}],
+    }, "conector")
+    assert envios[-1]["allowed_hosts"] == frozenset({"normas.leg.br"})
+    assert registry()["senado"].hosts == frozenset({"normas.leg.br", "legis.senado.leg.br"})
+
+
+def test_b1_consulta_valida_todas_as_etapas_antes_do_primeiro_pedido(transporte_proibido, monkeypatch, tmp_path):
+    def plano(consulta):
+        return {
+            "url": "https://normas.leg.br/api/teste", "metodo": "GET", "parametros": consulta,
+            "etapas": [{"url": url, "metodo": "GET", "body": None, "headers": {}} for url in (
+                "https://normas.leg.br/api/teste", "https://legis.senado.leg.br/dadosabertos/legislacao/lista")],
+        }
+    monkeypatch.setitem(captura._CONSULTAS, "senado", plano)
+    with pytest.raises(ValueError, match="host barrado.*legis.senado.leg.br"):
+        captura.capturar("senado", consulta={}, destino=tmp_path, sonda=False)
+    assert not any(tmp_path.iterdir())

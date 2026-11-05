@@ -35,7 +35,7 @@ SHA-256 do HTML da Câmara conforme captura: `2735440e8cc2c54f71b610af8b0dd38fcb
 
 ## Aplicação do roteiro e pendências IL.2-b
 
-- Senado e DOU saem de `FONTES_SONDA`, entram em `FONTES_BARRADAS` com motivo e data, e seus hosts entram em `HOSTS_RECUSADOS`. Suas seções do roteiro não têm comandos executáveis. A confirmação do titular para host B não remove essas barreiras.
+- Senado e DOU saem de `FONTES_SONDA`, entram em `FONTES_BARRADAS` com motivo e data, e seus hosts entram em `HOSTS_RECUSADOS`. Suas seções do roteiro não têm comandos executáveis. A recusa por host vale antes do transporte em toda entrada da CLI e da API: fonte-sonda, alias de conector (inclusive `senado`), com ou sem sonda e ambos os modos de UA; inclui robots.txt, todas as etapas de consulta e destinos de redirecionamento. Nenhum conector atual admite o host do DOU. A confirmação do titular para host B não remove essas barreiras. O filtro pertence ao instrumento de captura; conectores do serviço e transporte permanecem inalterados.
 - LexML permanece só com robots no catálogo. `/busca/SRU` sai de `rotas` e `consultas`; não foi pedida. `/urn` e `/sru` aparecem no robots, mas não têm página oficial lida que documente endpoints. Não foram promovidas ao catálogo e não houve descoberta fora do instrumento.
 - O instrumento não interpreta `Crawl-delay`. O intervalo de 5 segundos é pendência IL.2-b para futuras sondas; não se afirma enforcement automático. Nenhuma nova requisição foi feita nesta entrega.
 - `Allow: /` no normas.leg.br não documenta rota de texto nem API: continua só robots.

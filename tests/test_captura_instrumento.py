@@ -127,12 +127,17 @@ def test_inventario_exige_fixture_descrita(envios, tmp_path):
 @pytest.mark.repositorio
 def test_cli_modo_fixture_preserva_registro(envios, tmp_path, monkeypatch):
     import importlib.util
+    from contextlib import nullcontext
 
     spec = importlib.util.spec_from_file_location(
         "capturar_fixture", Path(captura.__file__).resolve().parents[1] / "scripts" / "capturar_fixture.py"
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    # Herda a ACL do pytest; TemporaryDirectory do Python 3.14 usa ACL privada no Windows.
+    temporario = tmp_path / "captura"
+    temporario.mkdir()
+    monkeypatch.setattr(cli.tempfile, "TemporaryDirectory", lambda: nullcontext(temporario))
     fx = _fx(tmp_path)
     monkeypatch.setattr(cli, "FIXTURES", fx)
     assert cli.main(["--conector", "tjdft", "--chave", "tjdft_c", "--consulta", json.dumps(CONSULTA)]) == 0
@@ -263,6 +268,12 @@ def _urls_permitidas():
 @pytest.mark.parametrize("cid,url", _urls_permitidas())
 def test_get_simples_usa_allowlist_limites_e_ua_do_conector(envios, tmp_path, cid, url):
     classe = registry()[cid]
+    if cid == "senado":
+        assert url == "https://legis.senado.leg.br/dadosabertos/"
+        with pytest.raises(ValueError, match="host barrado legis.senado.leg.br"):
+            captura.capturar(cid, url=url, destino=tmp_path, sonda=True, chave="g")
+        assert envios == [] and not any(tmp_path.iterdir())
+        return
     reg = captura.capturar(cid, url=url, destino=tmp_path, sonda=True, chave="g")
     assert not reg.unavailable and reg.metodo == "GET" and reg.parametros is None
     visto = envios[0]

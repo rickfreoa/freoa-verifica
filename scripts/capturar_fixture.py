@@ -11,6 +11,8 @@ Exemplo:
         --url https://esaj.tjac.jus.br/robots.txt
 (`--fonte-sonda`: fonte oficial ainda sem conector, do catálogo `freoa_verifica.sondas`; só com `--sonda` e `--url`.
 Host de nível B do catálogo é recusado salvo `--confirmado-por-titular`; nunca se sobrescreve um `.captura.json`.)
+Hosts de fontes em FONTES_BARRADAS são recusados antes do transporte em ambos os modos (sonda e fixture),
+inclusive por --conector e com qualquer modo de UA; a confirmação de host B não remove essa barreira.
 """
 
 from __future__ import annotations

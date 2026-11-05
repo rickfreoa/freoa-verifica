@@ -69,8 +69,8 @@ Em 04/11/2026, o supervisor executou pelo instrumento as sondas descritas no [re
 
 | Fonte | Evidência | Consequência no catálogo / roteiro |
 |---|---|---|
-| `senado_legislacao` | robots 403, `http_403`, `recusa_identificado` | Fonte barrada e host recusado, sem comandos executáveis nem nova tentativa |
-| `dou` | robots 403, `http_403`, `recusa_identificado` | Fonte barrada e host recusado, sem comandos executáveis nem nova tentativa |
+| `senado_legislacao` | robots 403, `http_403`, `recusa_identificado` | Fonte e host barrados antes do transporte na CLI e API, inclusive alias `senado`, com ou sem sonda e ambos os modos de UA; robots.txt, todas as etapas e destinos de redirecionamento; sem nova tentativa |
+| `dou` | robots 403, `http_403`, `recusa_identificado` | Mesma barreira global do instrumento; nenhum conector atual admite o host; confirmação de host B não libera a fonte; sem nova tentativa |
 | `lexml` | robots 200; `Disallow: /busca/` | `/busca/SRU` retirada e não sondada; só robots. `Allow: /urn` e `/sru` não documenta endpoint; página oficial lida e `Crawl-delay: 5` pendentes IL.2-b (instrumento sem interpretação do intervalo) |
 | `normas_leg` | robots 200, `Allow: /` | Continua só robots, sem rota documentada de conteúdo |
 | `camara_legislacao` | robots 200 nos dois hosts; `/legislacao` 200 HTML, 59.842 bytes | Mantida só página de entrada e robots; formulário `/legislacao/busca`, `/legislacao/pesquisa-avancada` e coleções www2 observados, sem sondar ou catalogar novas rotas |
