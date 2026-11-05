@@ -394,20 +394,33 @@ Notas: A página oficial lida (notícia do Senado sobre o portal) dá o endereç
 
 ### camara_legislacao: Câmara dos Deputados: Legislação Informatizada (publicação original e texto publicado)
 
-Hosts e rotas do catálogo: `www.camara.leg.br`: `/legislacao`; `www2.camara.leg.br`: só `robots.txt`. Confirmação: A.
+Hosts e rotas do catálogo: `www.camara.leg.br`: `/legislacao`, `/legislacao/busca` (com consulta); `www2.camara.leg.br`: só `robots.txt`. Confirmação: A.
 
 | # | O quê | Nível | Estado |
 |---|---|---|---|
 | 1 | robots.txt do portal | P | liberada |
 | 2 | página de pesquisa de legislação | A | liberada |
 | 3 | robots.txt do host da Legislação Informatizada | P | liberada |
-| 4 | página de norma (publicação original, texto atualizado) | B | bloqueada: identificador da norma só sai da busca; fora do catálogo, pendência IL.2-b |
+| 4 | página de norma (publicação original, texto atualizado) | B | bloqueada: identificador da norma só sai da busca; fora do catálogo, pendência IL.2-b.2 |
+| 5 | busca da Lei 6.404/1976, LC 123/2006 e Lei 13.874/2019 pelo formulário | A | preparada para IL.2-b.2; não executada nesta entrega |
 
 ```powershell
 python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_robots_portal --url "https://www.camara.leg.br/robots.txt"
 python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_pesquisa --url "https://www.camara.leg.br/legislacao"
 python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_robots_legin --url "https://www2.camara.leg.br/robots.txt"
 ```
+
+Formulário conferido no HTML de 04/11/2026 (`camara_legislacao_pesquisa.html`, SHA-256 `2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1`), capturado de `https://www.camara.leg.br/legislacao`: `method` ausente, portanto **GET implícito**; `action="https://www.camara.leg.br/legislacao/busca"`. Campos publicados: `abrangencia`, `tipo` (seleção múltipla), `numero`, `ano`, `geral` (assunto). Valores abaixo: `Legislação Federal`, `Lei Ordinária` e `Lei Complementar`, conforme o formulário; números sem ponto e `geral` vazio. Nível A para a rota e os nomes dos campos. No catálogo, `confirmacao="A"` indica o nível e `origem_hosts` registra a página capturada e o hash; `consultas` libera query na rota, sem validar nomes ou valores de parâmetros.
+
+Comandos novos para IL.2-b.2, **não executados em IL.2-b.1**. Os três comandos anteriores são histórico das capturas já existentes, não devem ser repetidos. Antes das buscas, ler os registros preservados dos robots dos dois hosts e aplicar a regra de parada; após qualquer recusa, não executar os comandos seguintes. As chaves abaixo são novas e distintas:
+
+```powershell
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_busca_lei6404 --url "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=6404&ano=1976&geral="
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_busca_lc123 --url "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral="
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_busca_lei13874 --url "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral="
+```
+
+Páginas de norma em `www2.camara.leg.br` só entram no catálogo depois que a resposta capturada da busca publicar seus endereços exatos (IL.2-b.2). Endereços vistos fora da captura são nível B, sem comando nem promoção ao catálogo. Pesquisa avançada e coleções continuam fora do catálogo. A autorização da rota de busca não demonstra texto, consolidação, anexos, vigência ou qualquer capacidade da Porta L.
 
 Perguntas: (1) alcançável a partir do IP brasileiro? (2) barreira, e de que categoria? (3) formato da página e do resultado? (4) contagem total utilizável para volume, exata ou cota inferior? (5) campos pesquisados: ementa, metadados, inteiro teor?
 

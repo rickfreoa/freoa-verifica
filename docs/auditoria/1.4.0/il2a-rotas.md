@@ -76,3 +76,14 @@ Em 04/11/2026, o supervisor executou pelo instrumento as sondas descritas no [re
 | `camara_legislacao` | robots 200 nos dois hosts; `/legislacao` 200 HTML, 59.842 bytes | Mantida só página de entrada e robots; formulário `/legislacao/busca`, `/legislacao/pesquisa-avancada` e coleções www2 observados, sem sondar ou catalogar novas rotas |
 
 Os sete registros e quatro corpos de robots estão em [il2a-sondas/](il2a-sondas/), sem caminhos de máquina. HTML da Câmara não versionado; SHA-256: `2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1`. Nenhuma captura deste lote demonstra rota viva para (a) texto publicado, (b) consolidado vigente, (c) redação em data D, (d) anexos ou (e) remissões resolvidas. Isso não é apuração da Porta L nem conclusão sobre outras fontes ou acervo instalado. Nenhum acesso de rede foi executado na consolidação dos registros.
+
+
+## IL.2-b — IL.2-b.1: formulário de busca da Câmara
+
+Codex, sessão de escrita, 05/11/2026, ramo `feat/il2b-camara-busca`, base informada `1687c6b`. Leitura apenas local do HTML capturado em 04/11 de `https://www.camara.leg.br/legislacao`, arquivo `camara_legislacao_pesquisa.html`; SHA-256 recalculado e conferido: `2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1`. Conteúdo tratado como dado; sem rede, sonda ou nova captura.
+
+O formulário `form-legislacao` omite `method` (GET implícito), publica `action="https://www.camara.leg.br/legislacao/busca"` e os campos `abrangencia`, `tipo` (múltiplo), `numero`, `ano`, `geral`. A seleção federal publica `Legislação Federal`, `Lei Ordinária` e `Lei Complementar`. Catalogada apenas `/legislacao/busca`, nível A, com consulta habilitada; `confirmacao="A"` e proveniência em `origem_hosts` apontando à página e ao hash. A estrutura existente de `consultas` autoriza query por rota; não valida nomes ou valores dos parâmetros. Os comandos do roteiro usam exatamente os nomes publicados, com números sem pontuação e assunto vazio.
+
+Roteiro preparado para Lei 6.404/1976, LC 123/2006 e Lei 13.874/2019, com chaves novas, leitura prévia dos robots preservados e parada após recusa. Páginas de norma em `www2.camara.leg.br` dependem dos endereços publicados na resposta capturada da busca (IL.2-b.2); endereços vistos fora da captura são nível B. Pesquisa avançada, coleções e páginas de norma não foram catalogadas. Nenhuma capacidade normativa, resultado de busca ou `verified` demonstrado.
+
+Testes: constantes independentes para hosts, rotas, consultas e MIME; transporte substituído para os três GETs; rejeição de variantes de caminho/host antes do transporte; mutantes de expansão/remoção de rotas e consultas, MIME, host e nomes dos campos no roteiro. Comando de validação: `python -m pytest tests/test_sondas.py tests/test_captura_instrumento.py -q -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2b1`. Auditoria independente e eventual avanço do marco ficam com a outra sessão e o supervisor.

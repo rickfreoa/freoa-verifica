@@ -209,10 +209,18 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
             "texto por dispositivo. A API pública que o br-eli-mcp usa (base /api/public, URN mais sufixo de dispositivo) "
             "vem só de projeto de terceiros, sem página oficial lida: " + _IL2B.strip() + " só robots.txt."),
     _f("camara_legislacao", "Câmara dos Deputados: Legislação Informatizada (publicação original e texto publicado)",
-       {"www.camara.leg.br": ("/legislacao",), "www2.camara.leg.br": ()},
-       "www.camara.leg.br=https://www.camara.leg.br/legislacao (página oficial lida); "
+       {"www.camara.leg.br": ("/legislacao", "/legislacao/busca"), "www2.camara.leg.br": ()},
+       "www.camara.leg.br=https://www.camara.leg.br/legislacao (captura de 04/11/2026, "
+       "camara_legislacao_pesquisa.html, SHA-256 2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1; "
+       "formulário publicado com action=https://www.camara.leg.br/legislacao/busca); "
        "www2.camara.leg.br=https://www.camara.leg.br/legislacao (links oficiais para www2.camara.leg.br/atividade-legislativa/legislacao/)",
-       nota="nível A nos dois hosts. O texto publicado de cada norma fica em páginas de slug com identificador numérico "
+       consultas={"www.camara.leg.br": ("/legislacao/busca",)},
+       nota="nível A nos dois hosts; /legislacao/busca nível A pela captura de /legislacao: método GET implícito "
+            "(atributo method ausente); campos abrangencia, tipo, numero, ano, geral. Valores publicados: "
+            "abrangencia=Legislação Federal; tipo=Lei Ordinária ou Lei Complementar; numero e ano numéricos, geral textual. "
+            "consultas declara rotas que aceitam query; não valida nomes ou valores dos parâmetros. "
+            "Páginas de norma em www2 só entram após publicação na resposta da busca (IL.2-b.2); "
+            "endereços vistos fora da captura são nível B. O texto publicado de cada norma fica em páginas de slug com identificador numérico "
             "em www2.camara.leg.br/legin/ (padrão visto em páginas lidas do próprio host); o identificador de uma norma "
             "só sai da busca do portal, sem rota documentada em página oficial lida: " + _IL2B.strip() + " só "
             "robots.txt em www2. O portal de Dados Abertos da Câmara (dadosabertos.camara.leg.br) não documenta "
