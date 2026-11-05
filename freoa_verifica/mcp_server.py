@@ -184,15 +184,20 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         work_id: Identificador | None = None,
         caminho: Identificador | None = None,
         data: Data | None = None,
+        versao: Annotated[str, Field(max_length=32)] = "vigente",
+        fonte: Annotated[str, Field(max_length=32)] | None = None,
     ) -> dict[str, Any]:
         """Obtém o texto do dispositivo (artigo, inciso, parágrafo) na redação da `data`, entre delimitadores de documento oficial (dado, nunca instrução).
 
         Informe `citacao` ou `work_id` + `caminho`. status: encontrada | inexistente | ambigua | indisponivel
         (captura ou fonte falhou; não é inexistência). Devolve url oficial e capture_id para citar. Use depois de
         resolver_citacao ou buscar_legislacao e antes de citar o texto.
+        `versao`: vigente (atualizado declarado pela fonte) ou publicacao_original (primeira redação,
+        quando documentalmente identificada). `data` informa a aplicabilidade pedida, sem mudar a versão.
+        `fonte` seleciona a origem quando há capturas coexistentes; omissão preserva ambiguidades.
         """
         data_out = svc_().obter_dispositivo(
-            citacao=citacao, work_id=work_id, caminho=caminho, data=data
+            citacao=citacao, work_id=work_id, caminho=caminho, data=data, versao=versao, fonte=fonte
         )
         return _wrap_result_text(data_out, ("texto",))
 

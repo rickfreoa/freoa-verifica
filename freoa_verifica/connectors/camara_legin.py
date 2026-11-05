@@ -1,0 +1,436 @@
+"""Câmara/Legin: descoberta publicada, política estrita e versões sem reconstrução."""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import time
+from urllib.parse import urlencode, urlsplit
+
+from lxml import html
+
+from freoa_verifica.connectors.base import (AmbiguousCandidates, Candidate, CandidateList, Connector, HealthProbe,
+                                           HealthReport, Unavailable, register, sob_guarda)
+from freoa_verifica.connectors.camara_policy import HOSTS, validar_url, url_publicada
+from freoa_verifica.connectors.httputil import connector_fetch, _revalidar
+from freoa_verifica.identidade_http import UA_POR_CONECTOR, USER_AGENT_IDENTIFICADO
+from freoa_verifica.limites import restante
+from freoa_verifica.texto_resposta import corpo_binario, texto_do_response
+from freoa_verifica.transport import Response
+
+PORTAL = "https://www.camara.leg.br/legislacao"
+TIPOS = {"lei": "Lei Ordinária", "lei_complementar": "Lei Complementar"}
+
+
+def _erro(reason, resp=None):
+    return Unavailable(reason, "resposta_inesperada", {} if resp is None else {
+        "url": resp.final_url, "status": resp.status, "sha256": resp.sha256})
+
+
+def arvore(resp):
+    if len(resp.body) > 30 * 1024**2:
+        raise _erro("corpo_excedido", resp)
+    try:
+        return html.fromstring(texto_do_response(resp))
+    except (ValueError, TypeError) as exc:
+        raise _erro("html_nao_reconhecido", resp) from exc
+
+
+def compacto(el):
+    return " ".join("".join(el.itertext()).split())
+
+
+def politica_robots(texto: str, caminho: str) -> tuple[bool, float]:
+    """Grupos mais específicos, maior correspondência e Allow no empate; sem permissão implícita."""
+    groups, agents, rules, delay = [], [], [], 0.0
+    seen_rule = False
+    for original in texto.splitlines():
+        line = original.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if ":" not in line:
+            raise ValueError("robots_inconclusivo")
+        key, value = (v.strip() for v in line.split(":", 1))
+        key = key.lower()
+        if key == "user-agent":
+            if not value:
+                raise ValueError("robots_inconclusivo")
+            if seen_rule:
+                groups.append((agents, rules, delay))
+                agents, rules, delay, seen_rule = [], [], 0.0, False
+            agents.append(value.lower())
+        elif key in {"allow", "disallow", "crawl-delay"}:
+            if not agents:
+                raise ValueError("robots_inconclusivo")
+            seen_rule = True
+            if key == "crawl-delay":
+                delay = float(value)
+                if not 0 <= delay <= 3600:
+                    raise ValueError("robots_inconclusivo")
+            elif value:
+                if not value.startswith("/"):
+                    raise ValueError("robots_inconclusivo")
+                rules.append((key, value))
+        elif key != "sitemap":
+            raise ValueError("robots_diretiva_nao_suportada")
+    if agents:
+        groups.append((agents, rules, delay))
+    product = USER_AGENT_IDENTIFICADO.split("/", 1)[0].lower()
+    applicable = [(max((len(a) if a != "*" else 0 for a in aa if a == "*" or a in product), default=-1), rr, dd)
+                  for aa, rr, dd in groups]
+    specificity = max((g[0] for g in applicable), default=-1)
+    if specificity < 0:
+        raise ValueError("robots_sem_grupo_aplicavel")
+    selected = [g for g in applicable if g[0] == specificity]
+    matches = []
+    for _, rr, _ in selected:
+        for action, pattern in rr:
+            terminal = pattern.endswith("$")
+            expr = "^" + re.escape(pattern[:-1] if terminal else pattern).replace(r"\*", ".*") + ("$" if terminal else "")
+            if re.search(expr, caminho):
+                matches.append((len(pattern.replace("*", "").rstrip("$")), action == "allow"))
+    return (max(matches)[1] if matches else True), max(g[2] for g in selected)
+
+
+def inventario(resp: Response) -> dict:
+    info = validar_url(resp.final_url)
+    if info["recurso"] != "norma":
+        raise _erro("pagina_nao_e_norma", resp)
+    tree = arvore(resp)
+    content = tree.xpath('//*[@id="content"]')
+    if len(content) != 1 or "Legislação Informatizada - Dados da Norma" not in compacto(content[0]):
+        raise _erro("pagina_norma_nao_reconhecida", resp)
+    root = content[0]
+    titles = [compacto(e) for e in root.xpath('.//h1|.//h2')]
+    title = next((t for t in titles if re.match(r"(?:LEI|MEDIDA|DECRETO)", t)), "")
+    if not title:
+        raise _erro("identidade_nao_declarada", resp)
+    resources = []
+    for a in root.xpath('.//a[@href]'):
+        label, href = compacto(a), a.get("href")
+        url = url_publicada(resp.final_url, href)
+        if not label or "/legin/" not in url:
+            continue
+        try:
+            dest = validar_url(url)
+            admitted, reason = True, None
+        except ValueError:
+            dest, admitted, reason = {}, False, "formato_ou_rota_nao_demonstrados"
+        role = dest.get("recurso", "fora_admissao")
+        if role in {"atualizado", "original", "anexo"} and any(dest.get(k) != info[k] for k in ("id", "familia", "numero", "ano")):
+            admitted, reason = False, "versao_de_outra_norma"
+        # Rótulo e posição são dados, não autorização para execução.
+        expected = {"atualizado": "Texto Atualizado", "original": "Publicação Original", "anexo": "Anexo"}
+        if role in expected and expected[role] not in label:
+            admitted, reason = False, "rotulo_incompativel"
+        relation = re.search(r" - \(([^)]+)\)\.\s*(.*)", label)
+        publication = None
+        if role == "original":
+            parent = a.getparent()
+            for _ in range(4):
+                if parent is None:
+                    break
+                pubtext = compacto(parent)
+                pubmatch = re.search(r"(Diário Oficial[^\n]*?)\s*-\s*(\d{1,2})/(\d{1,2})/(\d{4}), Página\s+(\d+)\s*\(Publicação Original\)", pubtext)
+                if pubmatch:
+                    from datetime import date
+                    publication = {"data": date(int(pubmatch[4]), int(pubmatch[3]), int(pubmatch[2])).isoformat(),
+                                   "veiculo": pubmatch[1], "pagina": pubmatch[5], "raw": pubmatch[0]}
+                    break
+                parent = parent.getparent()
+        resources.append({"rotulo": label, "href": href, "url": url, "recurso": role,
+                          "admitido": admitted, "obtido": False, "motivo": reason or "nao_obtido",
+                          "ordem_na_fonte": len(resources),
+                          "acao": relation[1] if relation else None,
+                          "publicacao": publication,
+                          "dispositivo_atingido": relation[2] if relation else None,
+                          "origem": {"url": resp.final_url, "sha256": resp.sha256}})
+    return {"titulo": title, "recursos": resources, "cadeia_completa": False,
+            "pagina": {"url": resp.final_url, "sha256": resp.sha256, "fetched_at": resp.fetched_at}}
+
+
+@register
+class CamaraLeginConnector(Connector):
+    id = "camara_legin"
+    authority = "Câmara dos Deputados / Legislação Informatizada"
+    hosts = HOSTS
+    path_prefixes = {"www.camara.leg.br": ("/legislacao", "/robots.txt"),
+                     "www2.camara.leg.br": ("/legin/fed/", "/robots.txt")}
+    mimes = frozenset({"text/html", "application/pdf", "text/plain"})
+    user_agent = UA_POR_CONECTOR["camara_legin"]
+    coverage = {"colecoes": ["leis", "leis complementares"], "busca_textual": False,
+                "inteiro_teor": True, "ementa": True, "periodo": "perfis demonstrados; sem exaustividade",
+                "atualizacao": "sob demanda; licença e política pendentes", "qualificacao": "nao_apurada"}
+
+    def __init__(self):
+        self.paginas = {}
+        self.links = {}
+        self.inventarios = {}
+        self.politicas = []
+        self._last_request = {}
+
+    def _validar_response(self, resp, url):
+        try:
+            route = validar_url(url)
+            validar_url(resp.final_url)
+        except ValueError as exc:
+            raise _erro("url_resposta_nao_admitida", resp) from exc
+        if resp.url != url or resp.final_url != url or resp.redirects or resp.status != 200:
+            raise _erro("resposta_camara_invalida", resp)
+        if hashlib.sha256(resp.body).hexdigest() != resp.sha256:
+            raise _erro("hash_captura_divergente", resp)
+        _revalidar(resp, url, hosts=self.hosts, path_prefixes=self.path_prefixes,
+                   mimes=frozenset({route["mime"]}), max_redirects=0, max_bytes=30 * 1024**2)
+
+    def _admitir(self, url):
+        try:
+            return self._admitir_url(url)
+        except ValueError as exc:
+            raise Unavailable(str(exc)) from exc
+
+    def _admitir_url(self, url):
+        route = validar_url(url)
+        if route["recurso"] not in {"robots", "portal", "busca"}:
+            origin = self.links.get(url)
+            if origin is None:
+                raise ValueError("vinculo_descoberta_ausente")
+            source, href, label = origin
+            self._validar_response(source, source.final_url)
+            if not label or url_publicada(source.final_url, href) != url:
+                raise ValueError("vinculo_descoberta_invalido")
+            if not any(a.get("href") == href and compacto(a) == label for a in arvore(source).xpath('//a[@href]')):
+                raise ValueError("link_nao_publicado")
+        return route
+
+    @sob_guarda
+    def _obter_recurso(self, url):
+        try:
+            route = self._admitir(url)  # antes inclusive do robots e do cache
+        except ValueError as exc:
+            raise Unavailable(str(exc)) from exc
+        if route["recurso"] != "robots":
+            host = urlsplit(url).netloc
+            robot = self._obter_recurso(f"https://{host}/robots.txt")
+            try:
+                parts = urlsplit(url)
+                target = parts.path + ("?" + parts.query if parts.query else "")
+                allowed, delay = politica_robots(texto_do_response(robot), target)
+            except (ValueError, OverflowError) as exc:
+                raise Unavailable("robots_inconclusivo", evidencia={"url": robot.url, "sha256": robot.sha256}) from exc
+            self.politicas.append({"url": url, "permitido": allowed, "robots_url": robot.url,
+                                   "sha256": robot.sha256, "fetched_at": robot.fetched_at})
+            if not allowed:
+                raise Unavailable("robots_proibido", evidencia=self.politicas[-1])
+            wait = delay - (time.monotonic() - self._last_request.get(host, float("-inf")))
+            if wait > 0:
+                if wait > min(restante(60), 60):
+                    raise Unavailable("orcamento")
+                time.sleep(wait)
+        resp = connector_fetch(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
+                               mimes=frozenset({route["mime"]}), user_agent=self.user_agent,
+                               max_redirects=0, repeticao=0, max_bytes=30 * 1024**2, timeout=60)
+        self._last_request[urlsplit(url).netloc] = time.monotonic()
+        self._validar_response(resp, url)
+        self.paginas[url] = resp
+        return resp
+
+    def search(self, q: str, **filtros):
+        from freoa_verifica.citation import parse_one
+        cite = parse_one(q)
+        key = cite.work if cite else None
+        if not key or key.authority != "federal" or key.kind not in TIPOS or not key.year:
+            raise Unavailable("busca_camara_exige_identidade")
+        url = PORTAL + "/busca?" + urlencode({"abrangencia": "Legislação Federal", "tipo": TIPOS[key.kind],
+                                             "numero": key.number, "ano": key.year, "geral": ""})
+        resp = self._obter_recurso(url)
+        tree = arvore(resp)
+        if "Exibindo resultados de" not in compacto(tree):
+            raise _erro("busca_sem_estrutura_reconhecida", resp)
+        candidates = []
+        seen = set()
+        for a in tree.xpath('//a[@href]'):
+            target = url_publicada(resp.final_url, a.get("href"))
+            try:
+                info = validar_url(target)
+            except ValueError:
+                continue
+            if info["recurso"] != "norma" or not compacto(a):
+                continue
+            if target in seen:
+                continue
+            seen.add(target)
+            self.links[target] = (resp, a.get("href"), compacto(a))
+            candidates.append(Candidate(self.id, f"{info['familia']}:{info['numero']}:{info['ano']}",
+                                        compacto(a), target, metadata={"pagina_busca": resp.sha256}))
+        if not candidates:
+            raise _erro("busca_sem_marcador_zero_validado", resp)
+        return CandidateList(candidates, total=None)
+
+    def resolve(self, key):
+        from freoa_verifica.aliases import WorkKey
+        from freoa_verifica.identity import validate_identity
+        from freoa_verifica.parsers.model import ParsedDocument
+        kind = key.get("kind") or {"LEI": "lei", "LCP": "lei_complementar"}.get(key.get("tipo"))
+        number, year = key.get("number", key.get("numero")), key.get("year", key.get("ano"))
+        if kind not in TIPOS or not number or not year:
+            raise Unavailable("especie_busca_nao_demonstrada")
+        wk = WorkKey("federal", kind, str(number), int(year))
+        name = "Lei Complementar" if kind == "lei_complementar" else "Lei"
+        found = self.search(f"{name} {number}/{year}")
+        matches = []
+        for cand in found:
+            page = self._obter_recurso(cand.url)
+            inv = inventario(page)
+            doc = ParsedDocument("camara_norma", "1", inv["titulo"], None, "")
+            try:
+                if validate_identity(wk, doc) is None:
+                    continue
+            except ValueError:
+                continue
+            self.inventarios[cand.url] = inv
+            self._descobrir(page, inv)
+            matches.append(Candidate(self.id, cand.key, inv["titulo"], cand.url,
+                                     metadata={"inventario": inv, "versao": "vigente"}))
+        if len(matches) > 1:
+            raise AmbiguousCandidates(matches)
+        if not matches:
+            raise Unavailable("identidade_nao_confirmada")
+        return matches[0]
+
+    def _descobrir(self, page, inv):
+        for r in inv["recursos"]:
+            if r["admitido"]:
+                self.links[r["url"]] = (page, r["href"], r["rotulo"])
+
+    def fetch(self, candidate):
+        version = candidate.metadata.get("versao", "vigente")
+        if version not in {"vigente", "publicacao_original"}:
+            raise ValueError("versao_invalida")
+        self._admitir(candidate.url)
+        inv = self.inventarios.get(candidate.url)
+        if inv is None:
+            raise Unavailable("pagina_norma_nao_capturada")
+        role = "atualizado" if version == "vigente" else "original"
+        choices = [r for r in inv["recursos"] if r["recurso"] == role and r["admitido"]]
+        if len(choices) != 1:
+            raise Unavailable("versao_ausente_ou_ambigua")
+        return self._obter_recurso(choices[0]["url"])
+
+    def parse(self, resp):
+        from freoa_verifica.parsers.isolated import parse_ou_indisponivel
+        self._admitir(resp.final_url)
+        self._validar_response(resp, resp.final_url)
+        route = validar_url(resp.final_url)
+        if route["recurso"] == "anexo":
+            try:
+                return parse_ou_indisponivel("camara_anexo", corpo_binario(resp), 60)
+            except Unavailable as exc:
+                raise _erro("pdf_nao_processado", resp) from exc
+        if route["recurso"] not in {"atualizado", "original"}:
+            raise _erro("recurso_nao_e_texto_normativo", resp)
+        try:
+            doc = parse_ou_indisponivel("camara_legin", texto_do_response(resp), 120, base_url=resp.final_url)
+        except Unavailable as exc:
+            if any(error in exc.reason for error in ("AttributeError", "NameError", "TypeError")):
+                raise Unavailable("falha_parser_camara", "regressao", {"url": resp.url, "sha256": resp.sha256}) from exc
+            raise _erro("html_nao_processado", resp) from exc
+        if not doc.provisions:
+            raise _erro("texto_normativo_nao_reconhecido", resp)
+        # A epígrafe pode faltar no atualizado. Identidade só pelo vínculo exato à página capturada.
+        from freoa_verifica.parsers.model import EditorialBlock
+        source = self.links[resp.final_url][0]
+        inv = self.inventarios.get(source.final_url) or inventario(source)
+        from freoa_verifica.identity import declared_identity
+        page_doc = type(doc)("camara_norma", "1", inv["titulo"], None, "")
+        text_key, _ = declared_identity(doc)
+        page_key, _ = declared_identity(page_doc)
+        if page_key is None or (text_key is not None and text_key != page_key):
+            raise _erro("identidade_texto_divergente", resp)
+        family = {"lei": "lei", "lei_complementar": "leicom"}.get(page_key.kind)
+        if (route["familia"], route["numero"], route["ano"]) != (family, page_key.number, page_key.year):
+            raise _erro("identidade_slug_divergente", resp)
+        doc.title = inv["titulo"]
+        inv = {**inv, "descoberta": []}
+        cursor = resp.final_url
+        visited = set()
+        while cursor in self.links:
+            if cursor in visited:
+                raise _erro("ciclo_descoberta", resp)
+            visited.add(cursor)
+            page, href, label = self.links[cursor]
+            inv["descoberta"].append({"url": cursor, "origem_url": page.final_url,
+                                       "origem_sha256": page.sha256, "href": href, "rotulo": label})
+            cursor = page.final_url
+        if validar_url(cursor)["recurso"] not in {"busca", "portal"}:
+            raise _erro("descoberta_sem_raiz", resp)
+        doc.editorial_blocks.append(EditorialBlock(json.dumps(inv, ensure_ascii=False, sort_keys=True), (0, 0),
+                                                   "camara_inventario"))
+        return doc
+
+    @sob_guarda
+    def fetch_anexo(self, candidate):
+        self._admitir(candidate.url)
+        inv = self.inventarios.get(candidate.url)
+        if inv is None:
+            raise Unavailable("pagina_norma_nao_capturada")
+        choices = [r for r in inv["recursos"] if r["recurso"] == "anexo" and r["admitido"]]
+        if len(choices) != 1:
+            raise Unavailable("anexo_nao_identificado")
+        return self._obter_recurso(choices[0]["url"])
+
+    @sob_guarda
+    def capturar_relacoes(self, candidate, *, limite=8):
+        """Obtenção limitada: página relacionada → original publicada; nunca segue sua lista de relações.
+
+        Deduplica obtenções, não ações. A lista visível nunca é certificado de completude.
+        Campos privados do retorno destinam-se à persistência pelo serviço.
+        """
+        if type(limite) is not int or not 0 <= limite <= 32:
+            raise ValueError("limite_relacoes_invalido")
+        self._admitir(candidate.url)
+        inv = self.inventarios.get(candidate.url)
+        if inv is None:
+            raise Unavailable("pagina_norma_nao_capturada")
+        cached, remaining = {}, limite
+        materials, pending, failures = [], [], []
+        for relation in inv["recursos"]:
+            if not relation["acao"]:
+                continue
+            url = relation["url"]
+            if url not in cached:
+                if url == candidate.url:
+                    cached[url] = {"pendencia": "ciclo_documental"}
+                elif not relation["admitido"]:
+                    cached[url] = {"pendencia": relation["motivo"]}
+                elif remaining == 0:
+                    cached[url] = {"pendencia": "limite_relacoes"}
+                else:
+                    remaining -= 1
+                    try:
+                        page = self._obter_recurso(url)
+                        own = inventario(page)
+                        self.inventarios[url] = own
+                        self._descobrir(page, own)
+                        original = [r for r in own["recursos"] if r["recurso"] == "original" and r["admitido"]]
+                        if len(original) != 1:
+                            cached[url] = {"pendencia": "publicacao_original_sem_perfil_ou_ausente"}
+                        else:
+                            resp = self._obter_recurso(original[0]["url"])
+                            doc = self.parse(resp)
+                            cached[url] = {"resposta": resp, "documento": doc, "publicacao": original[0]["publicacao"]}
+                            if any(r["url"] == candidate.url and r["acao"] for r in own["recursos"]):
+                                pending.append({"motivo": "ciclo_documental_na_lista_relacionada", "url": url})
+                    except Unavailable as exc:
+                        failure = {"url": url, "motivo": exc.reason, "categoria": exc.categoria, **exc.classificacao()}
+                        cached[url] = {"pendencia": "recurso_indisponivel", "falha": failure}
+                        failures.append(failure)
+            material = {"relacao": relation, **cached[url]}
+            materials.append(material)
+            if material.get("pendencia"):
+                pending.append({"motivo": material["pendencia"], "url": url})
+        pending.append({"motivo": "completude_da_lista_nao_demonstrada", "url": candidate.url})
+        return {"materiais": materials, "pendencias": pending, "indisponibilidades": failures, "cadeia_completa": False}
+
+    def health(self):
+        # Termos/licença ainda pendentes; não transformar robots em capacidade aprovada.
+        return HealthReport(self.id, (HealthProbe("documento", "unavailable", "ativacao_ao_vivo_pendente"),))

@@ -32,6 +32,7 @@ from freoa_verifica.courts import normalize_court
 from freoa_verifica.search import buscar_and_or, consulta_fts, normalize_fts_query
 from freoa_verifica.connectors.guarda import BLOQUEIAM_A_FONTE, GuardaExecucao, da_chamada
 from freoa_verifica.connectors.base import (
+    AmbiguousCandidates,
     Candidate,
     ParsedDecision,
     Unavailable,
@@ -61,6 +62,7 @@ from freoa_verifica.verify import (
     MemoryResolver,
     ResolvedWork,
     SourceUnavailable,
+    SourceAmbiguous,
     _current_redaction,
     _find_provision,
     _inferir_esfera,
@@ -87,7 +89,7 @@ _ESPERA_CLOSE = 30.0
 
 from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E402,F401
 
-_LEGIS_CONNECTORS = ("planalto", "cvm_normas", "bcb", "senado")
+_LEGIS_CONNECTORS = ("planalto", "camara_legin", "cvm_normas", "bcb", "senado")
 # Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
 _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
 
@@ -124,6 +126,10 @@ def _normalizar_aditivos(out: dict[str, Any]) -> dict[str, Any]:
     todos os rebaixamentos e decoradores."""
     ident = out.get("identity")
     out["fundamento_temporal"] = None
+    out.setdefault("ultima_versao_oficial_anterior", None)
+    out.setdefault("cadeia_alteracoes", [])
+    out.setdefault("cadeia_completa", False)
+    out.setdefault("pendencias_temporais", [])
     if not (isinstance(ident, dict) and ident.get("status") == "verified"):
         out["correspondencia_textual"] = None
     else:
@@ -735,7 +741,7 @@ class Verifica:
     # Resolver sob demanda
     # ------------------------------------------------------------------
 
-    def _rebuild_from_db(self, work: WorkKey, *, _exact=False) -> ResolvedWork | list[ResolvedWork] | None:
+    def _rebuild_from_db(self, work: WorkKey, *, _exact=False, _capture_id=None) -> ResolvedWork | list[ResolvedWork] | None:
         if not self._read_only and self.conn.execute("SELECT 1 FROM work WHERE authority=? AND kind=? AND number=? AND year=0",
                              (work.authority, work.kind, work.number)).fetchone():
             self.reparar_anos()
@@ -754,6 +760,10 @@ class Verifica:
         _, perdas, conhecidos = repo.avaliar_monotonia(self.conn, work_id)  # 0034
         rebaixadas = {d["capture_id"] for d in perdas}
         # captura canônica mais recente: nem candidata ao vivo nem rebaixada por perda estrutural
+        if _capture_id is not None:
+            caps = [c for c in caps if c["id"] == _capture_id]
+        else:
+            caps = [c for c in caps if c.get("profile") != "camara_original"]
         cap = next((c for c in caps if not c.get("candidato_ao_vivo") and c["id"] not in rebaixadas),
                    caps[0] if caps else None)
         saved = repo.get_parsed_document(self.conn, cap["id"]) if cap else None
@@ -801,9 +811,99 @@ class Verifica:
             proveniencia=_proveniencia(cap, saved),
             source_id=source_id,
             acervo_ate=acervo_ate,
+            fontes_consultadas=([{"fonte": "camara_legin", "resultado": "acervo", "motivo": None, "categoria": None}]
+                               if source_id == "camara_legin" else []),
             procedencia_tipo=(cap.get("procedencia") if cap else None) or "nao_identificado",
         )
+        if source_id == "camara_legin":
+            self._revalidar_camara(rw)
         return rw
+
+    def _revalidar_camara(self, rw):
+        """Releitura não amplia a política: corpo, página de origem e href recuperáveis."""
+        from freoa_verifica.connectors.camara_policy import validar_url, url_publicada
+        from freoa_verifica.connectors.camara_legin import arvore, compacto
+        try:
+            route = validar_url(rw.url)
+            self._authenticate_capture(rw.capture_id)
+            inv = next(json.loads(b.text) for b in rw.document.editorial_blocks if b.kind == "camara_inventario")
+            origin = inv["pagina"]
+            origin_route = validar_url(origin["url"])
+            if origin_route["recurso"] != "norma" or any(origin_route[k] != route[k] for k in ("id", "familia", "numero", "ano")):
+                raise ValueError("pagina_de_outra_obra")
+            page = self.conn.execute("SELECT * FROM capture WHERE url=? AND sha256=? AND source_id='camara_legin'",
+                                     (origin["url"], origin["sha256"])).fetchone()
+            if page is None:
+                raise ValueError("pagina_norma_ausente")
+            self._authenticate_capture(page["id"])
+            raw = blobs.get_blob(page["sha256"], home=self.home)
+            response = Response(page["url"], page["url"], 200, {}, raw, page["sha256"], page["fetched_at"], [],
+                                "text/html", content_type=page["content_type"] or "text/html")
+            matches = [r for r in inv["recursos"] if r["url"] == rw.url and r["admitido"]]
+            if len(matches) != 1 or route["recurso"] not in {"atualizado", "original"}:
+                raise ValueError("vinculo_invalido")
+            link = matches[0]
+            if not any(url_publicada(origin["url"], a.get("href")) == rw.url and compacto(a) == link["rotulo"]
+                       for a in arvore(response).xpath('//a[@href]')):
+                raise ValueError("link_nao_publicado")
+            cursor = rw.url
+            visited = set()
+            for edge in inv.get("descoberta", []):
+                if edge["url"] != cursor or cursor in visited:
+                    raise ValueError("cadeia_descoberta_invalida")
+                visited.add(cursor)
+                validar_url(cursor)
+                validar_url(edge["origem_url"])
+                cap = self.conn.execute("SELECT * FROM capture WHERE url=? AND sha256=? AND source_id='camara_legin'",
+                                        (edge["origem_url"], edge["origem_sha256"])).fetchone()
+                if cap is None:
+                    raise ValueError("origem_descoberta_ausente")
+                self._authenticate_capture(cap["id"])
+                body = blobs.get_blob(cap["sha256"], home=self.home)
+                source = Response(cap["url"], cap["url"], 200, {}, body, cap["sha256"], cap["fetched_at"], [],
+                                  "text/html", content_type=cap["content_type"] or "text/html")
+                if not any(a.get("href") == edge["href"] and compacto(a) == edge["rotulo"]
+                           and url_publicada(source.url, a.get("href")) == cursor
+                           for a in arvore(source).xpath('//a[@href]')):
+                    raise ValueError("href_descoberta_invalido")
+                cursor = source.url
+            if validar_url(cursor)["recurso"] not in {"busca", "portal"}:
+                raise ValueError("descoberta_sem_raiz")
+        except (ValueError, TypeError, KeyError, StopIteration, OSError) as exc:
+            raise SourceUnavailable("camara_releitura_sem_vinculo_validado") from exc
+
+    def _selecionar_camara(self, work, versao="vigente", fonte=None):
+        """Seleção por fonte/versão de capturas coexistentes; nunca pelo último cache em memória."""
+        rows = self.conn.execute("SELECT id, year FROM work WHERE authority=? AND kind=? AND number=? AND (year=? OR ?=0)",
+                                 (work.authority, work.kind, work.number, work.year, work.year)).fetchall()
+        if not rows:
+            return None
+        if len(rows) > 1:
+            if fonte is None and versao == "vigente" and not any(
+                any(c.get("source_id") == "camara_legin" for c in repo.captures_for_work(self.conn, r["id"])) for r in rows
+            ):
+                return None  # conservar a resolução legada quando não há captura Câmara
+            raise SourceAmbiguous([{"work_id": r["id"], "kind": work.kind, "number": work.number, "year": r["year"]}
+                                   for r in rows])
+        caps = repo.captures_for_work(self.conn, rows[0]["id"])
+        if not any(c.get("source_id") == "camara_legin" for c in caps) and fonte is None and versao == "vigente":
+            return None
+        selected = {}
+        for c in caps:
+            if fonte and c["source_id"] != fonte:
+                continue
+            if c["source_id"] == "camara_legin":
+                profile = "camara_original" if versao == "publicacao_original" else "camara_atualizado"
+                if c.get("profile") != profile:
+                    continue
+            elif versao != "vigente":
+                continue
+            selected.setdefault(c["source_id"], c)
+        if not selected:
+            raise SourceUnavailable("versao_nao_capturada")
+        exact_work = WorkKey(work.authority, work.kind, work.number, int(rows[0]["year"]))
+        result = [self._rebuild_from_db(exact_work, _exact=True, _capture_id=c["id"]) for c in selected.values()]
+        return result[0] if len(result) == 1 else result
 
     def _acervo_ate_planalto(self) -> str | None:
         # C7: calculado na emissão, sem cache; vale também para alteração do acervo por outro processo.
@@ -1008,7 +1108,7 @@ class Verifica:
     def _offline(self) -> bool:
         return self._read_only or os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
 
-    def _capture_work(self, work: WorkKey, requested_work_date=None) -> ResolvedWork | list[ResolvedWork] | None:
+    def _capture_work(self, work: WorkKey, requested_work_date=None, *, versao="vigente") -> ResolvedWork | list[ResolvedWork] | None:
         if self._offline():
             return None
         key = {
@@ -1026,7 +1126,7 @@ class Verifica:
         elif work.authority in {"bcb", "cmn"}:
             order = ["bcb"]
         elif work.authority == "federal":
-            order = ["planalto", "senado"]
+            order = ["camara_legin"]
         else:
             order = list(_LEGIS_CONNECTORS)
 
@@ -1039,6 +1139,8 @@ class Verifica:
                 if cand is None:
                     consultadas.append({"fonte": cid, "resultado": "ausente", "motivo": None, "categoria": None})
                     continue
+                if cid == "camara_legin":
+                    cand = replace(cand, metadata={**cand.metadata, "versao": versao})
                 resp = conn_obj.fetch(cand)
                 parsed = conn_obj.parse(resp)
                 if isinstance(parsed, ParsedDecision):
@@ -1055,11 +1157,18 @@ class Verifica:
                     url=resp.final_url or resp.url,
                     fetched_at=resp.fetched_at,
                     label=label,
+                    work_date=declared_identity(parsed)[1] if cid == "camara_legin" else None,
                 )
+                if cid == "camara_legin":
+                    for page in conn_obj.paginas.values():
+                        repo.save_capture(self.conn, page, cid, home=self.home)
+                    consultadas.append({"fonte": cid, "resultado": "capturada", "motivo": None, "categoria": None})
                 if cid == "cvm_normas":  # C2: página do ato sempre capturada como evidência de situação
                     situacao.registrar_cvm(self.conn, self.home, conn_obj, cand, rw_novo)
                 rw_novo.fontes_consultadas = consultadas
                 return rw_novo
+            except AmbiguousCandidates as exc:
+                raise SourceAmbiguous([asdict(c) for c in exc.candidates]) from exc
             except IdentityMismatch:
                 raise
             except Unavailable as exc:
@@ -1067,7 +1176,8 @@ class Verifica:
                 # fontes_consultadas; dentro da mesma fonte só ausência explícita autoriza (decisão 0058).
                 errors.append(f"{cid}:{exc.reason}")
                 consultadas.append({"fonte": cid, "resultado": "indisponivel", "motivo": exc.reason,
-                                    "categoria": exc.categoria})
+                                    "categoria": exc.categoria,
+                                    **({"evidencia_indisponibilidade": exc.evidencia} if exc.evidencia else {})})
             except Exception as exc:  # noqa: BLE001 — captura sob demanda
                 errors.append(f"{cid}:{type(exc).__name__}")
                 consultadas.append({"fonte": cid, "resultado": "erro", "motivo": type(exc).__name__,
@@ -1077,8 +1187,27 @@ class Verifica:
             raise SourceUnavailable(";".join(errors[:3]), consultadas)
         return None
 
-    def _resolve(self, work: WorkKey, requested_work_date=None, *, strict: bool = False) -> ResolvedWork | list[ResolvedWork] | None:
+    def _resolve(self, work: WorkKey, requested_work_date=None, *, strict: bool = False,
+                 versao="vigente", fonte=None) -> ResolvedWork | list[ResolvedWork] | None:
         """strict: obra ausente do acervo sem poder consultar a fonte é lacuna de cobertura, não negativa (A2)."""
+        if work.authority == "federal":
+            try:
+                selected = self._selecionar_camara(work, versao, fonte)
+            except SourceUnavailable as exc:
+                if exc.reason != "versao_nao_capturada" or self._offline():
+                    raise
+                selected = self._capture_work(work, requested_work_date, versao=versao)
+            if selected is not None:
+                if isinstance(selected, ResolvedWork):
+                    validate_identity(work, selected.document, requested_work_date)
+                return selected
+            if fonte is not None and fonte != "camara_legin":
+                raise SourceUnavailable("fonte_selecionada_nao_capturada")
+            if versao != "vigente" or fonte == "camara_legin":
+                got = self._capture_work(work, requested_work_date, versao=versao)
+                if got is None:
+                    raise SourceUnavailable("versao_nao_capturada")
+                return got
         hit = self._resolver.resolve(work)
         if isinstance(hit, ResolvedWork):
             declared = validate_identity(work, hit.document, requested_work_date or hit.work_date)
@@ -1410,8 +1539,15 @@ class Verifica:
         work_id: str | None = None,
         caminho: str | None = None,
         data: str | None = None,
+        versao: str = "vigente",
+        fonte: str | None = None,
     ) -> dict[str, Any]:
-        out = self._obter_dispositivo(citacao, work_id, caminho, data)
+        if versao not in {"vigente", "publicacao_original"}:
+            return {"status": "formato_invalido", "motivo": "versao_invalida", "versao": versao}
+        if fonte is not None and fonte not in registry():
+            return {"status": "formato_invalido", "motivo": "fonte_invalida", "versao": versao}
+        out = self._obter_dispositivo(citacao, work_id, caminho, data, versao, fonte)
+        out["versao"] = versao
         vig = out.get("vigencia")
         if isinstance(vig, dict) and _historica(data) and (
                 vig.get("status") in ("verified", "vigente_na_fonte", "revogado")
@@ -1421,7 +1557,7 @@ class Verifica:
         return out
 
     def _obter_dispositivo(self, citacao: str | None, work_id: str | None, caminho: str | None,
-                           data: str | None) -> dict[str, Any]:
+                           data: str | None, versao="vigente", fonte=None) -> dict[str, Any]:
         rw: ResolvedWork | None = None
         path = caminho
         if citacao:
@@ -1431,7 +1567,7 @@ class Verifica:
             if cite and cite.work:
                 path = path or cite.path
                 try:
-                    resolved = self._resolve(cite.work, strict=True)
+                    resolved = self._resolve(cite.work, strict=True, versao=versao, fonte=fonte)
                 except SourceUnavailable as exc:
                     return {"status": "indisponivel", "motivo": exc.reason}
                 if isinstance(resolved, list):
@@ -1441,7 +1577,9 @@ class Verifica:
                 return {"status": "formato_invalido"}
         if rw is None and work_id:
             for cached in self._resolver.works.values():
-                if cached.work_id == work_id:
+                if (cached.work_id == work_id and cached.source_id != "camara_legin" and versao == "vigente" and fonte is None
+                        and not self.conn.execute("SELECT 1 FROM parsed_document p JOIN capture c ON c.id=p.capture_id "
+                                                  "WHERE p.work_id=? AND c.source_id='camara_legin' LIMIT 1", (work_id,)).fetchone()):
                     rw = cached
                     break
             if rw is None:
@@ -1452,14 +1590,22 @@ class Verifica:
                 if row:
                     try:
                         resolved = self._resolve(
-                            WorkKey(row["authority"], row["kind"], row["number"], int(row["year"]))
+                            WorkKey(row["authority"], row["kind"], row["number"], int(row["year"])), versao=versao, fonte=fonte
                         )
                         if isinstance(resolved, ResolvedWork):
                             rw = resolved
+                        elif isinstance(resolved, list):
+                            return {"status": "ambigua", "candidatos": [r.work_id for r in resolved]}
                     except SourceUnavailable as exc:
                         return {"status": "indisponivel", "motivo": exc.reason}
         if rw is None:
             return {"status": "inexistente"}
+        if fonte is not None and rw.source_id != fonte:
+            return {"status": "indisponivel", "motivo": "fonte_selecionada_nao_capturada"}
+        if rw.source_id == "camara_legin":
+            return self._obter_camara(rw, path, data, versao)
+        if versao == "publicacao_original":
+            return {"status": "unknown", "reason_code": "primeira_publicacao_nao_identificada", "texto": None}
         sit = situacao.carregar(self.conn, rw, self.home)  # C2
         if not path:
             return {
@@ -1544,6 +1690,180 @@ class Verifica:
             "evidencia": self._evidencia_dispositivo(rw),
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
         }
+
+    def _obter_camara(self, rw, path, data, versao):
+        self._revalidar_camara(rw)
+        out = {"status": "encontrada", "work_id": rw.work_id, "caminho": path,
+               "versao": versao, "texto": None, "truncado": False,
+               "evidencia": self._evidencia_dispositivo(rw), "anotacoes": [],
+               "fontes_consultadas": rw.fontes_consultadas,
+               "fundamento_temporal": None, "correspondencia_textual": None}
+        prov = _find_provision(rw.document, path) if path else None
+        if path and prov is None:
+            out.update(status="unknown", reason_code="primeira_publicacao_do_dispositivo_nao_obtida"
+                       if versao == "publicacao_original" else "dispositivo_nao_identificado")
+        elif prov:
+            issues = [i for i in rw.document.issues if i.blocking_scope == "document" or
+                      (i.blocking_scope == "provision" and i.path and
+                       (i.path == path or i.path.startswith(path + ".") or path.startswith(i.path + ".")))]
+            if issues or prov.ambiguous:
+                out.update(status="unknown", reason_code="recorte_ambiguo", pendencias=[asdict(i) for i in issues])
+            else:
+                red = _current_redaction(prov)
+                out["texto"], out["truncado"] = _truncate(red.text, _DEFAULT_TEXT_LIMIT)
+                out["evidencia"].update(path=path, span=list(red.span), parser_version=rw.document.parser_version)
+                if not red.text.strip():
+                    out.update(status="unknown", reason_code="dispositivo_sem_redacao_normativa", texto=None)
+                out["anotacoes"] = [asdict(a) for a in red.annotations]
+                for annotation in out["anotacoes"]:
+                    annotation["links"] = [ref for block in rw.document.editorial_blocks
+                        if block.kind == "nota_camara_links" and rw.document.text[block.span[0]:block.span[1]] == annotation["raw"]
+                        for ref in json.loads(block.text)]
+                tr = temporal_select(prov, data, work_date=rw.work_date, fetched_at=rw.fetched_at,
+                                     quarantined=rw.quarantined)
+                out["vigencia"] = {"status": tr.status, "reason_code": tr.reason, "flags": tr.flags}
+        if versao == "publicacao_original":
+            out["vigencia"] = {"status": "unknown", "reason_code": "publicacao_nao_prova_aplicabilidade"}
+        self._material_historico_camara(out, rw, path, data)
+        return out
+
+    def _material_historico_camara(self, out, rw, path, data):
+        """Material de referência, sem prova de completude e sem habilitar fundamento."""
+        if not _historica(data) or rw.source_id != "camara_legin":
+            return
+        pending = []
+        failures = []
+        chain = []
+        inv = next((json.loads(b.text) for b in rw.document.editorial_blocks if b.kind == "camara_inventario"), {})
+        from freoa_verifica.connectors.camara_policy import validar_url
+        kinds = {"lei": "lei", "leicom": "lei_complementar", "medpro": "medida_provisoria",
+                 "declei": "decreto_lei", "decret": "decreto"}
+        if not self._offline():
+            con = self._get("camara_legin")
+            try:
+                candidate = con.resolve({"kind": rw.work_key.kind, "number": rw.work_key.number, "year": rw.work_key.year})
+                try:
+                    prior = self._selecionar_camara(rw.work_key, "publicacao_original", "camara_legin")
+                except SourceUnavailable:
+                    prior = None
+                if prior is None:
+                    try:
+                        self._capture_work(rw.work_key, versao="publicacao_original")
+                    except SourceUnavailable as exc:
+                        failures.extend(exc.fontes_consultadas or [{"motivo": exc.reason, "categoria": None}])
+                        pending.append({"motivo": "publicacao_original_indisponivel", "url": candidate.url})
+                result = con.capturar_relacoes(candidate)
+                pending.extend(result["pendencias"])
+                failures.extend(result["indisponibilidades"])
+                indexed = set()
+                for material in result["materiais"]:
+                    resp = material.get("resposta")
+                    doc = material.get("documento")
+                    if resp is None or doc is None or resp.sha256 in indexed:
+                        continue
+                    indexed.add(resp.sha256)
+                    own_key, own_date = declared_identity(doc)
+                    if own_key is None:
+                        pending.append({"motivo": "identidade_alterador_nao_confirmada", "url": resp.url})
+                        continue
+                    self.indexar_obra(source_id="camara_legin", work_key=own_key, document=doc, body=resp.body,
+                                      url=resp.final_url, fetched_at=resp.fetched_at, work_date=own_date,
+                                      content_type=content_type_do_response(resp), label=doc.title)
+                for page in con.paginas.values():
+                    repo.save_capture(self.conn, page, "camara_legin", home=self.home)
+            except AmbiguousCandidates:
+                pending.append({"motivo": "identidade_da_pagina_de_relacoes_ambigua", "url": inv.get("pagina", {}).get("url")})
+            except Unavailable as exc:
+                failures.append({"motivo": exc.reason, "categoria": exc.categoria, **exc.classificacao()})
+                pending.append({"motivo": "relacoes_indisponiveis", "url": inv.get("pagina", {}).get("url")})
+        known = {}
+        for r in inv.get("recursos", []):
+            if not r.get("acao"):
+                continue
+            try:
+                act = validar_url(r["url"])
+            except ValueError:
+                act = {}
+            captured = None
+            if act.get("familia") in kinds:
+                cache_key = (act["familia"], act["numero"], act["ano"])
+                if cache_key not in known:
+                    try:
+                        key = WorkKey("federal", kinds[act["familia"]], act["numero"], act["ano"])
+                        known[cache_key] = self._selecionar_camara(key, "publicacao_original", "camara_legin")
+                    except SourceUnavailable as exc:
+                        known[cache_key] = None
+                        if exc.reason != "versao_nao_capturada":
+                            failures.append({"motivo": exc.reason, "categoria": None, "url": r["url"]})
+                captured = known[cache_key]
+            pub = {"data": None, "veiculo": None, "pagina": None}
+            text, evidence = None, None
+            if isinstance(captured, ResolvedWork):
+                own_inv = next((json.loads(b.text) for b in captured.document.editorial_blocks if b.kind == "camara_inventario"), {})
+                publication = next((v.get("publicacao") for v in own_inv.get("recursos", []) if v["recurso"] == "original"), None)
+                if publication:
+                    pub = {k: publication.get(k) for k in pub}
+                text = captured.document.text
+                evidence = self._evidencia_dispositivo(captured)
+                if captured.quarantined:
+                    pending.append({"motivo": "texto_alterador_com_impedimentos_de_parse", "url": r["url"]})
+            # Datas desconhecidas não são substituídas pela assinatura ou pelo slug.
+            if pub["data"] and pub["data"] > data:
+                continue
+            chain.append({"ato": {"especie": kinds.get(act.get("familia"), "nao_identificado"),
+                                  "numero": act.get("numero"), "ano": act.get("ano"), "url": r["url"]},
+                          "publicacao": pub,
+                          "dispositivo_atingido": r.get("dispositivo_atingido"), "acao": r["acao"],
+                          "texto": text, "evidencia": evidence, "ordem_na_fonte": r["ordem_na_fonte"]})
+            if text is None:
+                pending.append({"motivo": "publicacao_e_texto_do_alterador_nao_obtidos", "url": r["url"]})
+            if pub["data"] is None:
+                pending.append({"motivo": "pertinencia_ao_periodo_e_ordenacao_desconhecidas", "url": r["url"]})
+        pending.append({"motivo": "completude_e_ordenacao_por_publicacao_nao_demonstradas", "url": inv.get("pagina", {}).get("url")})
+        previous = None
+        try:
+            original = self._selecionar_camara(rw.work_key, "publicacao_original", "camara_legin")
+        except SourceUnavailable as exc:
+            original = None
+            if exc.reason != "versao_nao_capturada":
+                failures.append({"motivo": exc.reason, "categoria": None})
+        pub = next((r.get("publicacao") for r in inv.get("recursos", []) if r["recurso"] == "original"), None)
+        if isinstance(original, ResolvedWork) and pub and pub.get("data") and pub["data"] <= data:
+            provision = _find_provision(original.document, path) if path else None
+            if provision and not original.quarantined and not provision.ambiguous and not any(
+                issue.blocking_scope == "provision" and issue.path and
+                (issue.path == path or issue.path.startswith(path + ".") or path.startswith(issue.path + "."))
+                for issue in original.document.issues
+            ):
+                previous = {"data": pub["data"], "texto": provision.redactions[0].text,
+                            "caminho": path, "evidencia": self._evidencia_dispositivo(original)}
+                previous["evidencia"].update(path=path, span=list(provision.redactions[0].span),
+                                             parser_version=original.document.parser_version)
+        if previous is None:
+            pending.append({"motivo": "versao_anterior_documentada_nao_identificada", "url": None})
+        else:
+            chain = [item for item in chain if item["publicacao"]["data"] is None
+                     or item["publicacao"]["data"] >= previous["data"]]
+        chain.sort(key=lambda item: (item["publicacao"]["data"] or "9999-99-99", str(item["ato"]["numero"]), item["ordem_na_fonte"]))
+        dated = {}
+        for item in chain:
+            stamp = item["publicacao"]["data"]
+            if stamp is not None:
+                dated.setdefault(stamp, set()).add(item["ato"]["url"])
+        for stamp, acts in dated.items():
+            if len(acts) > 1:
+                pending.append({"motivo": "empate_publicacao_sem_precedencia_normativa", "url": None})
+        out.update(ultima_versao_oficial_anterior=previous, cadeia_alteracoes=chain,
+                   cadeia_completa=False, pendencias_temporais=pending, fundamento_temporal=None)
+        if failures:
+            out["indisponibilidades_temporais"] = failures
+        if "vigencia" in out or "status" in out:
+            out["vigencia"] = {"status": "unknown", "reason_code": "sem_versao_oficial_na_data"}
+        for dim in ("temporal", "text"):
+            obj = out.get(dim)
+            if isinstance(obj, dict) and (obj.get("reason_code") in {"sem_fundamento_do_periodo", "HISTORICO_ANTERIOR_AUSENTE"}
+                                         or obj.get("status") in {"verified", "vigente_na_fonte"}):
+                obj.update(status="unknown", reason_code="sem_versao_oficial_na_data")
 
     @_authenticated_output
     def historico_dispositivo(self, citacao: str) -> dict[str, Any]:
@@ -1839,7 +2159,7 @@ class Verifica:
         # C2: aplicar_situacao (única aplicação para verificar_citacao e verificar_texto)
         # só com a identidade da obra confirmada: divergente/indisponível não é mascarado pela situação
         if (cite is not None and cite.work is not None
-                and out["identity"].get("status") not in ("not_found", "unavailable")):
+                and out["identity"].get("status") not in ("not_found", "unavailable", "ambiguous")):
             try:
                 rw = self._resolve(cite.work, strict=True)
             except (SourceUnavailable, IdentityMismatch):
@@ -1859,6 +2179,13 @@ class Verifica:
             out["temporal"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
         # C1 (0075, §2, itens 1, 5 e 6): guarda histórica na saída, defesa em profundidade da guarda da situação.
         _guarda_historica(out, data)
+        if cite is not None and cite.work is not None and out["identity"].get("status") == "verified" and _historica(data):
+            try:
+                material_rw = self._resolve(cite.work, strict=True)
+            except (SourceUnavailable, IdentityMismatch):
+                material_rw = None
+            if isinstance(material_rw, ResolvedWork):
+                self._material_historico_camara(out, material_rw, cite.path, data)
         # Nunca verified sem capture_id correspondente.
         for dim_name in ("identity", "text", "temporal"):
             dim = out.get(dim_name) or {}
@@ -2048,6 +2375,10 @@ class Verifica:
                     "verificacao": verif,
                     "fundamento_temporal": None,
                     "correspondencia_textual": (verif or {}).get("correspondencia_textual"),
+                    "ultima_versao_oficial_anterior": (verif or {}).get("ultima_versao_oficial_anterior"),
+                    "cadeia_alteracoes": (verif or {}).get("cadeia_alteracoes", []),
+                    "cadeia_completa": (verif or {}).get("cadeia_completa", False),
+                    "pendencias_temporais": (verif or {}).get("pendencias_temporais", []),
                     "evidencia": evidencia,
                     "parseada": _citation_to_dict(cite),
                 }
@@ -3732,15 +4063,38 @@ def _campos_do_registro(row) -> dict[str, Any] | None:
 
 
 _COM_ADITIVOS = frozenset({"obter_dispositivo", "verificar_citacao"})
-_COM_RECIBO = frozenset({"verificar_citacao", "verificar_texto"})
+_COM_RECIBO = frozenset({"verificar_citacao", "verificar_texto", "obter_dispositivo"})
 
 
-def _final_da_fachada(nome: str, out: Any) -> Any:
+def _recibo_da_obtencao(self, out, entrada):
+    """Recibo da seleção efetivamente emitida, depois da autenticação e dos decoradores."""
+    _final_da_fachada("obter_dispositivo", out, entrada.get("versao", "vigente"))
+    if self._read_only:
+        out.update(run_id=None, registro={"gravado": False, "motivo": "somente_leitura"})
+        return out
+    vig = out.get("vigencia") or {}
+    identity = {"status": "unknown", "reason_code": "OBTENCAO_SEM_CONFRONTO", "evidence": []}
+    if out.get("status") in {"indisponivel", "unavailable"}:
+        identity = {"status": "unavailable", "reason_code": out.get("reason_code", out.get("motivo"))}
+    recibo = {**out,
+        "identity": identity,
+        "text": {"status": "not_assessed", "reason_code": "OBTENCAO_SEM_CONFRONTO", "evidence": []},
+        "temporal": {"status": vig.get("status", "unknown"), "reason_code": vig.get("reason_code", out.get("motivo")), "evidence": []},
+        "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED", "evidence": []}}
+    out["run_id"] = persistir_resultado(self.conn, entrada.get("citacao"), None, entrada.get("data"), "literal", recibo,
+        ferramenta="obter_dispositivo", parametros={k: entrada.get(k, "vigente" if k == "versao" else None)
+                                                   for k in ("work_id", "caminho", "versao", "fonte")})
+    return out
+
+
+def _final_da_fachada(nome: str, out: Any, versao="vigente") -> Any:
     """Último ponto antes da emissão de toda operação da fachada (Python, MCP e REST): campos aditivos de C4 em todo
     estado de `obter_dispositivo` e `verificar_citacao` (inclusive `formato_invalido`, `indisponivel`, `unknown` e a
     recusa pelos derivados)."""
     if isinstance(out, dict) and nome in _COM_ADITIVOS:
         _normalizar_aditivos(out)
+        if nome == "obter_dispositivo":
+            out.setdefault("versao", versao)
     return out
 
 
@@ -3750,6 +4104,8 @@ def _recibo_da_recusa(self, nome: str, out: dict[str, Any], entrada: dict[str, A
     declara o modo, como o restante da finalização. Independe da compatibilidade dos derivados (só toca `run`)."""
     if nome not in _COM_RECIBO or not isinstance(out, dict):
         return out
+    if nome == "obter_dispositivo":
+        return _recibo_da_obtencao(self, out, entrada)
     if self._read_only:
         out.update(run_id=None, registro={"gravado": False, "motivo": "somente_leitura"})
         return out
@@ -3786,12 +4142,29 @@ def _guardar(fn):
             with self._operacao(caro), da_chamada():
                 if fn.__name__ in _DEPENDENTES and not _derivados.compativel(self.conn):
                     recusa = _derivados.indisponivel(self.acervo_status())
-                    return _final_da_fachada(fn.__name__, _recibo_da_recusa(self, fn.__name__, recusa, entrada))
-                out = _final_da_fachada(fn.__name__, fn(self, *args, **kwargs))
+                    return _final_da_fachada(fn.__name__, _recibo_da_recusa(self, fn.__name__, recusa, entrada), entrada.get("versao", "vigente"))
+                try:
+                    resposta = fn(self, *args, **kwargs)
+                except SourceAmbiguous as exc:
+                    resposta = {"status": "ambigua", "candidatos": exc.candidates,
+                                "motivo": "IDENTIDADE_AMBIGUA"}
+                    if fn.__name__ == "verificar_citacao":
+                        texto = entrada.get("citacao", "")
+                        cite = parse_one(texto)
+                        resposta = self._finalizar({
+                            "identity": {"status": "ambiguous", "reason_code": "IDENTIDADE_AMBIGUA", "evidence": []},
+                            "text": {"status": "not_assessed", "reason_code": "IDENTIDADE_AMBIGUA", "evidence": []},
+                            "temporal": {"status": "unknown", "reason_code": "IDENTIDADE_AMBIGUA", "evidence": []},
+                            "support": {"status": "not_assessed", "reason_code": "SUPPORT_NOT_ASSESSED", "evidence": []},
+                            "candidatos": exc.candidates, "citation": _citation_to_dict(cite), "run_id": None,
+                        }, cite, texto, entrada.get("trecho"), entrada.get("data"), entrada.get("modo", "literal"))
+                out = _final_da_fachada(fn.__name__, resposta, entrada.get("versao", "vigente"))
                 if externa and self.exigir_acervo and isinstance(out, dict):
                     aviso = self.acervo_status()
                     if aviso:
                         out["acervo_incompleto"] = aviso
+                if fn.__name__ == "obter_dispositivo" and isinstance(out, dict):
+                    _recibo_da_obtencao(self, out, entrada)
                 return out
         finally:
             _politica_atual.reset(token)

@@ -1,0 +1,63 @@
+{
+ "conector": "camara_legin",
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T10:11:14.955321+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-type": "text/html; charset=UTF-8",
+  "date": "Thu, 05 Nov 2026 10:11:15 GMT"
+ },
+ "sha256": "677752f6feaea991ca461933384b451d46d1a2f9c9d0cc7a6b6708de1b73b9e1",
+ "bytes": 47221,
+ "arquivo": "camara_legislacao_textos_mp881_lei6404.html",
+ "importacao_offline": {
+  "recibo_original": {
+   "conector": null,
+   "versao": "1.4.0a2",
+   "url": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+   "metodo": "GET",
+   "parametros": null,
+   "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+   "capturado_em": "2026-11-05T10:11:14.955321+00:00",
+   "sonda": true,
+   "fonte_sonda": "camara_legislacao",
+   "confirmacao_host": "A",
+   "confirmado_por_titular": false,
+   "unavailable": false,
+   "motivo": null,
+   "categoria": null,
+   "evidencia": {},
+   "url_final": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+   "status": 200,
+   "content_type": "text/html",
+   "cabecalhos": {
+    "content-type": "text/html; charset=UTF-8",
+    "date": "Thu, 05 Nov 2026 10:11:15 GMT"
+   },
+   "sha256": "677752f6feaea991ca461933384b451d46d1a2f9c9d0cc7a6b6708de1b73b9e1",
+   "bytes": 47221,
+   "arquivo": "camara_legislacao_textos_mp881_lei6404.html"
+  },
+  "recibo_sha256": "a1bf6c0ee2752d92eed6f4251cb28ab535e8d7da013324b1edf4658c40f40079",
+  "origem": {
+   "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+   "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+   "href": "../../../fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+   "recibo_sha256": "8d39f4ec6dcb52a84851056fdf99beef8eaa0a4335cc0216682e53c8da425814"
+  }
+ }
+}

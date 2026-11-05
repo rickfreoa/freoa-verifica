@@ -1,0 +1,63 @@
+{
+ "conector": "camara_legin",
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T08:38:58.823536+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-type": "text/html; charset=UTF-8",
+  "date": "Thu, 05 Nov 2026 08:39:00 GMT"
+ },
+ "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+ "bytes": 85675,
+ "arquivo": "camara_legislacao_norma_lei6404.html",
+ "importacao_offline": {
+  "recibo_original": {
+   "conector": null,
+   "versao": "1.4.0a2",
+   "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+   "metodo": "GET",
+   "parametros": null,
+   "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+   "capturado_em": "2026-11-05T08:38:58.823536+00:00",
+   "sonda": true,
+   "fonte_sonda": "camara_legislacao",
+   "confirmacao_host": "A",
+   "confirmado_por_titular": false,
+   "unavailable": false,
+   "motivo": null,
+   "categoria": null,
+   "evidencia": {},
+   "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+   "status": 200,
+   "content_type": "text/html",
+   "cabecalhos": {
+    "content-type": "text/html; charset=UTF-8",
+    "date": "Thu, 05 Nov 2026 08:39:00 GMT"
+   },
+   "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+   "bytes": 85675,
+   "arquivo": "camara_legislacao_norma_lei6404.html"
+  },
+  "recibo_sha256": "8d39f4ec6dcb52a84851056fdf99beef8eaa0a4335cc0216682e53c8da425814",
+  "origem": {
+   "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=6404&ano=1976&geral=",
+   "sha256": "4026cacd902d161f50df1dcd976f6845cf7a867c5fff1301c845f19f13642878",
+   "href": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+   "recibo_sha256": "7be33f1acd3e8173b51f02113f51da9642c317fe3319925542f81c353eaf3701"
+  }
+ }
+}

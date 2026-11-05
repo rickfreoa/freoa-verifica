@@ -72,4 +72,4 @@ def test_input_refused_before_launch(monkeypatch):
 def test_all_profiles_limited():
     assert set(isolated._LIMITES) == set(isolated._PROFILES)
     for profile, limits in isolated._LIMITES.items():
-        assert limits == ((1024, 60) if profile in {"pdf_texto", "cvm_pdf"} else (2048, 120))
+        assert limits == ((1024, 60) if profile in {"pdf_texto", "cvm_pdf", "camara_anexo"} else (2048, 120))

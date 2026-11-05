@@ -268,6 +268,12 @@ def _urls_permitidas():
 @pytest.mark.parametrize("cid,url", _urls_permitidas())
 def test_get_simples_usa_allowlist_limites_e_ua_do_conector(envios, tmp_path, cid, url):
     classe = registry()[cid]
+    if cid == "camara_legin":
+        # 0077: a allowlist do transporte não substitui descoberta e robots do adaptador.
+        with pytest.raises(ValueError, match="camara_exige_descoberta_pelo_adaptador"):
+            captura.capturar(cid, url=url, destino=tmp_path, sonda=True, chave="g")
+        assert envios == [] and not any(tmp_path.iterdir())
+        return
     if cid == "senado":
         assert url == "https://legis.senado.leg.br/dadosabertos/"
         with pytest.raises(ValueError, match="host barrado legis.senado.leg.br"):

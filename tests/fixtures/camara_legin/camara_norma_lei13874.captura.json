@@ -1,0 +1,63 @@
+{
+ "conector": "camara_legin",
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T08:39:12.857433+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-type": "text/html; charset=UTF-8",
+  "date": "Thu, 05 Nov 2026 08:39:14 GMT"
+ },
+ "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+ "bytes": 53481,
+ "arquivo": "camara_legislacao_norma_lei13874.html",
+ "importacao_offline": {
+  "recibo_original": {
+   "conector": null,
+   "versao": "1.4.0a2",
+   "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+   "metodo": "GET",
+   "parametros": null,
+   "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+   "capturado_em": "2026-11-05T08:39:12.857433+00:00",
+   "sonda": true,
+   "fonte_sonda": "camara_legislacao",
+   "confirmacao_host": "A",
+   "confirmado_por_titular": false,
+   "unavailable": false,
+   "motivo": null,
+   "categoria": null,
+   "evidencia": {},
+   "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+   "status": 200,
+   "content_type": "text/html",
+   "cabecalhos": {
+    "content-type": "text/html; charset=UTF-8",
+    "date": "Thu, 05 Nov 2026 08:39:14 GMT"
+   },
+   "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+   "bytes": 53481,
+   "arquivo": "camara_legislacao_norma_lei13874.html"
+  },
+  "recibo_sha256": "af39ad2be1f15bb576ea0dfc333b68e862ab3326be8c8f3c339edf8e7769d5c2",
+  "origem": {
+   "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral=",
+   "sha256": "c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d",
+   "href": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+   "recibo_sha256": "b8719a6bed83b5952fe627eb3aa17072d3c31be2155dd4b5863830e797f38d23"
+  }
+ }
+}

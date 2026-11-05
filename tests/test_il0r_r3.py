@@ -229,10 +229,13 @@ def test_a3_recusa_nao_depende_dos_derivados_e_demais_operacoes_nao_ganham_recib
     svc, _, _ = verifica_populada
     monkeypatch.setattr(modulo._derivados, "compativel", lambda conn: False)
     antes = svc.conn.execute("SELECT COUNT(*) FROM run").fetchone()[0]
-    for resp in (svc.obter_dispositivo(citacao=ART254A), svc.resolver_citacao(ART254A),
+    obtencao = svc.obter_dispositivo(citacao=ART254A)
+    assert obtencao["status"] == "indisponivel"
+    assert svc.obter_registro(obtencao["run_id"])["integridade"]["confere"] is True  # IL.2-c C12
+    for resp in (svc.resolver_citacao(ART254A),
                  svc.buscar_legislacao("alienação de controle"), svc.historico_dispositivo(citacao=ART254A)):
         assert resp["status"] == "indisponivel" and "run_id" not in resp  # não concluem verificação
-    assert svc.conn.execute("SELECT COUNT(*) FROM run").fetchone()[0] == antes
+    assert svc.conn.execute("SELECT COUNT(*) FROM run").fetchone()[0] == antes + 1
 
 
 def test_a3_recusa_em_modo_somente_leitura_declara_o_modo(verifica_populada, monkeypatch):

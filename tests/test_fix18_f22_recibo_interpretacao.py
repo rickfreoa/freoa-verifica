@@ -43,7 +43,14 @@ def planalto_local(monkeypatch):
 
 def test_captura_persistencia_reprocessamento_preserva_a_interpretacao(planalto_local, tmp_path):
     with Verifica(tmp_path / "h") as svc:
-        svc.verificar_citacao("art. 1º da Lei 1/2000", trecho="Ação de teste")
+        # IL.2-c: nova captura federal usa Câmara. Esta regressão é do recibo
+        # Planalto instalado: capturar explicitamente pelo conector legado.
+        from freoa_verifica.connectors.planalto import PlanaltoConnector
+        con = PlanaltoConnector()
+        response = con.fetch(con.resolve({"tipo": "lei", "numero": 1, "ano": 2000}))
+        svc.indexar_obra(source_id="planalto", work_key=WorkKey("federal", "lei", "1", 2000),
+                          document=con.parse(response), body=response.body, url=response.final_url,
+                          fetched_at=response.fetched_at, content_type=response.content_type)
         assert planalto_local, "a captura não passou pelo transporte"
         cap = svc.conn.execute("SELECT * FROM capture WHERE source_id='planalto'").fetchone()
         assert (cap["content_type"], cap["codificacao"], cap["origem_da_codificacao"]) == (CTYPE, "utf-8", "header")

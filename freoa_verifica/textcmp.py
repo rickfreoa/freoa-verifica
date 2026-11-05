@@ -66,11 +66,20 @@ def normalize(s: str, mode: str = "literal") -> tuple[str, list[str]]:
 
     Retorna (texto_normalizado, lista_de_transformações).
     """
-    if mode not in ("literal", "normalizado"):
+    if mode not in ("literal", "normalizado", "camara_il1"):
         raise ValueError(f"modo desconhecido: {mode!r}")
     out, transforms = _collapse_spaces(s)
     if mode == "literal":
         return out, transforms
+
+    if mode == "camara_il1":
+        quoted = "".join(_QUOTE_MAP.get(ch, ch) for ch in out)
+        if quoted != out:
+            transforms.append("quotes")
+        ordinal = quoted.replace("º", "o").replace("°", "o")
+        if ordinal != quoted:
+            transforms.append("ordinals")
+        return ordinal, transforms
 
     # aspas tipográficas
     buf: list[str] = []
@@ -128,6 +137,9 @@ def _map_norm_to_orig(original: str, mode: str) -> list[tuple[int, int]] | None:
                 continue
             if mode == "normalizado":
                 ch = _QUOTE_MAP.get(ch, _DASH_MAP.get(ch, ch))
+            elif mode == "camara_il1":
+                ch = _QUOTE_MAP.get(ch, ch)
+                ch = "o" if ch in "º°" else ch
             chars.append(ch)
             spans.append((i, j))
         i = j

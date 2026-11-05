@@ -83,14 +83,15 @@ def test_senado_lista_fixture():
     assert "10.303" in parsed.title or "10303" in parsed.title.replace(".", "")
 
 
-def test_bcb_busca_fixture():
+def test_bcb_busca_fixture(monkeypatch):
     payload = json.loads(load_fixture("bcb_busca_cmn_4966").decode("utf-8"))
     assert payload["TotalRows"] >= 1
     row = payload["Rows"][0]
     assert "4966" in str(row.get("NumeroOWSNMBR") or "")
-    # resolve offline: monta candidato a partir da chave (sem rede)
+    # O resolvedor consulta a busca: servi-la pela captura, sem tentativa externa.
+    monkeypatch.setattr("freoa_verifica.connectors.bcb.connector_fetch",
+                        lambda url, **kw: _resp("bcb_busca_cmn_4966", url))
     cand = BcbConnector().resolve({"tipo": "Resolução CMN", "numero": 4966})
-    # se a API estiver inacessível, resolve ainda devolve candidato sintético
     assert cand is not None
     assert "4966" in (cand.key or "")
     assert "exibenormativo" in (cand.url or "")

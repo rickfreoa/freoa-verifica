@@ -81,6 +81,7 @@ def test_rg_singleton_lists(layer):
     assert _object(_rg(data)['processoLeadingCase'])['numeroTema']==741
 
 def test_capture_mismatch_not_indexed(tmp_path,monkeypatch):
+    monkeypatch.delenv('FV_OFFLINE', raising=False)  # conector falso: nenhuma rede real
     from freoa_verifica.service import Verifica
     from freoa_verifica.connectors.base import Candidate
     from freoa_verifica.transport import Response
@@ -255,6 +256,7 @@ def test_snapshot_stj_absence_is_coverage_not_nonexistence(tmp_path,monkeypatch)
 
 
 def test_date_mismatch_before_index(tmp_path,monkeypatch):
+    monkeypatch.delenv('FV_OFFLINE', raising=False)  # conector falso: nenhuma rede real
     from freoa_verifica.service import Verifica
     from freoa_verifica.connectors.base import Candidate
     from freoa_verifica.transport import Response

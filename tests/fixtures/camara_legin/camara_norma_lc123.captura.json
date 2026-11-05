@@ -1,0 +1,63 @@
+{
+ "conector": "camara_legin",
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T08:39:06.123800+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-type": "text/html; charset=UTF-8",
+  "date": "Thu, 05 Nov 2026 08:39:06 GMT"
+ },
+ "sha256": "04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0",
+ "bytes": 74769,
+ "arquivo": "camara_legislacao_norma_lc123.html",
+ "importacao_offline": {
+  "recibo_original": {
+   "conector": null,
+   "versao": "1.4.0a2",
+   "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+   "metodo": "GET",
+   "parametros": null,
+   "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+   "capturado_em": "2026-11-05T08:39:06.123800+00:00",
+   "sonda": true,
+   "fonte_sonda": "camara_legislacao",
+   "confirmacao_host": "A",
+   "confirmado_por_titular": false,
+   "unavailable": false,
+   "motivo": null,
+   "categoria": null,
+   "evidencia": {},
+   "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+   "status": 200,
+   "content_type": "text/html",
+   "cabecalhos": {
+    "content-type": "text/html; charset=UTF-8",
+    "date": "Thu, 05 Nov 2026 08:39:06 GMT"
+   },
+   "sha256": "04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0",
+   "bytes": 74769,
+   "arquivo": "camara_legislacao_norma_lc123.html"
+  },
+  "recibo_sha256": "a83b29bbe4a87717f34419d5ef03f5485f2ca89d07e9bf687c897e27033d68be",
+  "origem": {
+   "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral=",
+   "sha256": "9bd90cfad8c6c0fed23f589a24e90e1cb1ee415c824c76034d9e36cb470aedb8",
+   "href": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+   "recibo_sha256": "5b60697125998bfc9fc56e3db7864c1985a9308900194065c73c76f1ed00f5fa"
+  }
+ }
+}

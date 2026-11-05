@@ -143,12 +143,12 @@ def test_r2_c4_recusa_pelos_derivados_traz_os_campos_e_o_recibo(verifica_populad
     for resp in (od, vc):
         assert resp["status"] == "indisponivel" and resp["reason_code"] == "ACERVO_DESATUALIZADO"
         assert resp["fundamento_temporal"] is None and resp["correspondencia_textual"] is None
-    for resp in (vc, vt):  # C11 (rodada 3): serviço gravável grava o recibo e devolve o `run_id`
+    for resp in (od, vc, vt):  # IL.2-c C12 também autentica o recibo da obtenção.
         assert resp["run_id"] and "registro" not in resp
         reg = svc.obter_registro(resp["run_id"])
         assert reg["integridade"]["confere"] is True
         assert reg["estado"]["identity"] == {"status": "unavailable", "reason_code": "ACERVO_DESATUALIZADO"}
-    assert svc.conn.execute("SELECT COUNT(*) FROM run").fetchone()[0] == antes + 2
+    assert svc.conn.execute("SELECT COUNT(*) FROM run").fetchone()[0] == antes + 3
 
 
 def test_r2_c4_verificar_texto_embutida_e_decisoes_tem_os_campos(verifica_populada):

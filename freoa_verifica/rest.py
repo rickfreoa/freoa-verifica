@@ -228,10 +228,12 @@ def create_app(
         work_id: str | None = None,
         caminho: str | None = None,
         data: str | None = None,
+        versao: str = "vigente",
+        fonte: str | None = None,
         _: None = Depends(require_auth),
     ):
         return svc.obter_dispositivo(
-            citacao=citacao, work_id=work_id, caminho=caminho, data=data
+            citacao=citacao, work_id=work_id, caminho=caminho, data=data, versao=versao, fonte=fonte
         )
 
     @app.get("/v1/dispositivos/historico")

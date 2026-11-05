@@ -123,6 +123,14 @@ class SourceUnavailable(Exception):
         super().__init__(reason)
 
 
+class SourceAmbiguous(Exception):
+    """Metadados de várias obras candidatas, sem promoção a documento normativo."""
+
+    def __init__(self, candidates):
+        self.candidates = list(candidates)
+        super().__init__("IDENTIDADE_AMBIGUA")
+
+
 @dataclass
 class MemoryResolver:
     """Resolver M3: mapa WorkKey → ResolvedWork (fixtures pré-carregadas)."""
@@ -203,7 +211,8 @@ def _inferir_source_kind(wk: WorkKey | None) -> str:
 # Perfis cujo parser só aceita o formato consolidado oficial (docstrings de `parsers/planalto.py` e `parsers/cvm_docx.py`).
 # A autoridade da obra não demonstra consolidação (IL.0-R, C6/0075 §3.2): metadados do Senado, HTML/PDF da CVM e o
 # JSON do BCB não sustentam a natureza e ficam `nao_identificado`.
-_NATUREZA_POR_PERFIL = {"planalto": "consolidacao_oficial", "cvm_docx": "consolidacao_oficial"}
+_NATUREZA_POR_PERFIL = {"planalto": "consolidacao_oficial", "cvm_docx": "consolidacao_oficial",
+                       "camara_atualizado": "consolidacao_oficial", "camara_original": "publicacao_original"}
 
 
 def _inferir_natureza_texto(rw: ResolvedWork) -> str:
@@ -558,6 +567,8 @@ def verificar(
         resolved = resolved[0]
 
     rw: ResolvedWork = resolved
+    comparison_mode = ("camara_il1" if rw.document.profile in {"camara_atualizado", "camara_original"}
+                       and modo == "normalizado" else modo)
     from freoa_verifica.identity import IdentityMismatch, validate_identity, requested_date
     try:
         declared = validate_identity(cite.work, rw.document, requested_date(cite.raw))
@@ -742,7 +753,7 @@ def verificar(
                 [_ev_from_resolved(rw, path, red.text)],
             )
         else:
-            cmp = compare(trecho, red.text, modo)
+            cmp = compare(trecho, red.text, comparison_mode)
             ev = _ev_from_resolved(
                 rw,
                 path,
@@ -774,7 +785,7 @@ def verificar(
                 for r2 in prov.redactions:
                     if r2 is red:
                         continue
-                    c2 = compare(trecho, r2.text, modo, exact_only=True)
+                    c2 = compare(trecho, r2.text, comparison_mode, exact_only=True)
                     if c2.status == "match":
                         other_hit = r2
                         break
@@ -806,7 +817,7 @@ def verificar(
                             ],
                         )
                 else:
-                    elsewhere = _search_text_in_work(rw.document, trecho, modo, path)
+                    elsewhere = _search_text_in_work(rw.document, trecho, comparison_mode, path)
                     if elsewhere:
                         if is_historical:
                             text_dim = Dimension(
@@ -835,7 +846,7 @@ def verificar(
     corr_textual = _calcular_correspondencia_textual(
         prov=prov,
         trecho=trecho,
-        modo=modo,
+        modo=comparison_mode,
         temporal_res=temporal_res,
         is_historical=is_historical,
         identity_status=identity.status,
@@ -918,7 +929,7 @@ def _persist(
 
 
 def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any], *,
-                        ferramenta: str = "verificar_citacao") -> str:
+                        ferramenta: str = "verificar_citacao", parametros: dict[str, Any] | None = None) -> str:
     """Grava o recibo (C4): chamado só depois da finalização, com a conclusão devolvida.
 
     Política `sem_conteudo` (C5): só hashes, política e dimensões; sem citação, trecho nem evidência.
@@ -926,6 +937,8 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
     from freoa_verifica.registro import hmac_entrada, politica_atual
 
     request = {"citacao": citacao, "trecho": trecho, "data": data, "modo": modo}
+    if parametros:
+        request.update(parametros)
     request_json = json.dumps(request, ensure_ascii=False, sort_keys=True)
     request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
     if politica_atual.get() == "sem_conteudo":
@@ -955,8 +968,14 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
     # Não criar compromisso para evidência sem capture_id, sha256 e url (decisão 0075 / parecer Codex r1)
     evidencias_unicas: list[dict[str, Any]] = []
     vistos_ev: set[tuple[Any, Any, Any]] = set()
-    for d in ("identity", "text", "temporal", "support"):
-        for ev in (resultado.get(d) or {}).get("evidence") or []:
+    grupos_evidencia = [(resultado.get(d) or {}).get("evidence") or []
+                       for d in ("identity", "text", "temporal", "support")]
+    grupos_evidencia.append([resultado.get("evidencia"),
+                            (resultado.get("ultima_versao_oficial_anterior") or {}).get("evidencia")])
+    grupos_evidencia.append([item.get("evidencia") for item in resultado.get("cadeia_alteracoes", [])
+                            if isinstance(item, dict)])
+    for grupo in grupos_evidencia:
+        for ev in grupo:
             if isinstance(ev, dict):
                 cid = ev.get("capture_id")
                 sha = ev.get("sha256")

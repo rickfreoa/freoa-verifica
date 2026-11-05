@@ -153,7 +153,13 @@ def test_auxiliary_facades_authenticate(populated, attack, monkeypatch):
                 result=getattr(svc,name)(**params)
                 esperado={'status':'unavailable','motivo':expected,'reason_code':expected}
                 if name=='obter_dispositivo':  # IL.0-R r2 (C4): campos aditivos em todo estado
-                    esperado.update(fundamento_temporal=None,correspondencia_textual=None)
+                    esperado.update(fundamento_temporal=None,correspondencia_textual=None,
+                                    ultima_versao_oficial_anterior=None,cadeia_alteracoes=[],
+                                    cadeia_completa=False,pendencias_temporais=[],versao='vigente')
+                    # IL.2-c C12 autentica também a obtenção recusada, sem alegar confronto.
+                    recibo = svc.obter_registro(result.pop('run_id'))
+                    assert recibo['integridade']['confere'] is True
+                    assert recibo['estado']['identity'] == {'status':'unavailable','reason_code':expected}
                 assert result==esperado
         for svc in [s,fresh]:  # busca: itens com evidência inválida viram candidatos não indexados
             r=svc.buscar_legislacao('principal')

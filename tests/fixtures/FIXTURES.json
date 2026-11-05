@@ -31,6 +31,953 @@
   "proposito": "gabarito mínimo do bench offline (tests/test_m6_semente_bench.py)",
   "sha256": "3f0ecff71184ca96d8a3b1d65e85ff26683288cf44747ef7352b3738dfcb7829"
  },
+ "camara_busca_lc123": {
+  "bytes": 59778,
+  "capturado_em": "2026-11-05T07:13:27.900435+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_busca_lc123.html",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "arquivo": "camara_legislacao_busca_lc123.html",
+    "bytes": 59778,
+    "cabecalhos": {
+     "content-type": "text/html; charset=utf-8",
+     "date": "Thu, 05 Nov 2026 07:13:28 GMT"
+    },
+    "capturado_em": "2026-11-05T07:13:27.900435+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "9bd90cfad8c6c0fed23f589a24e90e1cb1ee415c824c76034d9e36cb470aedb8",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral=",
+    "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral=",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "5b60697125998bfc9fc56e3db7864c1985a9308900194065c73c76f1ed00f5fa"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "9bd90cfad8c6c0fed23f589a24e90e1cb1ee415c824c76034d9e36cb470aedb8",
+  "status": 200,
+  "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral=",
+  "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral=",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_busca_lc123__captura": {
+  "bytes": 2236,
+  "categoria": "metadados_captura",
+  "descreve": "camara_busca_lc123",
+  "file": "camara_legin/camara_busca_lc123.captura.json",
+  "sha256": "355082d20ce0c1bd5e522ae611dc86b90ed8868cfb0498cc4653758905db7e69"
+ },
+ "camara_busca_lei13874": {
+  "bytes": 62896,
+  "capturado_em": "2026-11-05T07:13:33.923433+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_busca_lei13874.html",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "arquivo": "camara_legislacao_busca_lei13874.html",
+    "bytes": 62896,
+    "cabecalhos": {
+     "content-type": "text/html; charset=utf-8",
+     "date": "Thu, 05 Nov 2026 07:13:34 GMT"
+    },
+    "capturado_em": "2026-11-05T07:13:33.923433+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral=",
+    "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral=",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "b8719a6bed83b5952fe627eb3aa17072d3c31be2155dd4b5863830e797f38d23"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d",
+  "status": 200,
+  "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral=",
+  "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral=",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_busca_lei13874__captura": {
+  "bytes": 2258,
+  "categoria": "metadados_captura",
+  "descreve": "camara_busca_lei13874",
+  "file": "camara_legin/camara_busca_lei13874.captura.json",
+  "sha256": "26ba0f6fc2f73fa94391860c60ef3905e95abb7b70142f59e0df6d19b21a9631"
+ },
+ "camara_busca_lei6404": {
+  "bytes": 62219,
+  "capturado_em": "2026-11-05T07:13:21.868228+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_busca_lei6404.html",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "arquivo": "camara_legislacao_busca_lei6404.html",
+    "bytes": 62219,
+    "cabecalhos": {
+     "content-type": "text/html; charset=utf-8",
+     "date": "Thu, 05 Nov 2026 07:13:22 GMT"
+    },
+    "capturado_em": "2026-11-05T07:13:21.868228+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "4026cacd902d161f50df1dcd976f6845cf7a867c5fff1301c845f19f13642878",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=6404&ano=1976&geral=",
+    "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=6404&ano=1976&geral=",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "7be33f1acd3e8173b51f02113f51da9642c317fe3319925542f81c353eaf3701"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "4026cacd902d161f50df1dcd976f6845cf7a867c5fff1301c845f19f13642878",
+  "status": 200,
+  "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=6404&ano=1976&geral=",
+  "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=6404&ano=1976&geral=",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_busca_lei6404__captura": {
+  "bytes": 2252,
+  "categoria": "metadados_captura",
+  "descreve": "camara_busca_lei6404",
+  "file": "camara_legin/camara_busca_lei6404.captura.json",
+  "sha256": "7aa8f8b67367d42191051f4ce4c8b31aee9b310645b1dd881641799ed05ab576"
+ },
+ "camara_norma_lc123": {
+  "bytes": 74769,
+  "capturado_em": "2026-11-05T08:39:06.123800+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_norma_lc123.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+    "recibo_sha256": "5b60697125998bfc9fc56e3db7864c1985a9308900194065c73c76f1ed00f5fa",
+    "sha256": "9bd90cfad8c6c0fed23f589a24e90e1cb1ee415c824c76034d9e36cb470aedb8",
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral="
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_norma_lc123.html",
+    "bytes": 74769,
+    "cabecalhos": {
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 08:39:06 GMT"
+    },
+    "capturado_em": "2026-11-05T08:39:06.123800+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "a83b29bbe4a87717f34419d5ef03f5485f2ca89d07e9bf687c897e27033d68be"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_norma_lc123__captura": {
+  "bytes": 2568,
+  "categoria": "metadados_captura",
+  "descreve": "camara_norma_lc123",
+  "file": "camara_legin/camara_norma_lc123.captura.json",
+  "sha256": "8c77ee7d9b0b20d23129d0796ca51467c6fc766eacd7a70eab41190e02faed9b"
+ },
+ "camara_norma_lei13874": {
+  "bytes": 53481,
+  "capturado_em": "2026-11-05T08:39:12.857433+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_norma_lei13874.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+    "recibo_sha256": "b8719a6bed83b5952fe627eb3aa17072d3c31be2155dd4b5863830e797f38d23",
+    "sha256": "c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d",
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral="
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_norma_lei13874.html",
+    "bytes": 53481,
+    "cabecalhos": {
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 08:39:14 GMT"
+    },
+    "capturado_em": "2026-11-05T08:39:12.857433+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "af39ad2be1f15bb576ea0dfc333b68e862ab3326be8c8f3c339edf8e7769d5c2"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_norma_lei13874__captura": {
+  "bytes": 2513,
+  "categoria": "metadados_captura",
+  "descreve": "camara_norma_lei13874",
+  "file": "camara_legin/camara_norma_lei13874.captura.json",
+  "sha256": "9baa32cd071ee3437d911547de00ec6fb9b317c9498724f82f7285fd70393a62"
+ },
+ "camara_norma_lei6404": {
+  "bytes": 85675,
+  "capturado_em": "2026-11-05T08:38:58.823536+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_norma_lei6404.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+    "recibo_sha256": "7be33f1acd3e8173b51f02113f51da9642c317fe3319925542f81c353eaf3701",
+    "sha256": "4026cacd902d161f50df1dcd976f6845cf7a867c5fff1301c845f19f13642878",
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=6404&ano=1976&geral="
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_norma_lei6404.html",
+    "bytes": 85675,
+    "cabecalhos": {
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 08:39:00 GMT"
+    },
+    "capturado_em": "2026-11-05T08:38:58.823536+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "8d39f4ec6dcb52a84851056fdf99beef8eaa0a4335cc0216682e53c8da425814"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_norma_lei6404__captura": {
+  "bytes": 2530,
+  "categoria": "metadados_captura",
+  "descreve": "camara_norma_lei6404",
+  "file": "camara_legin/camara_norma_lei6404.captura.json",
+  "sha256": "2c7c6d70b9ce474bf00cfa5ccf728b780ee6e161947ad87e91be7958a691600c"
+ },
+ "camara_pesquisa": {
+  "bytes": 59842,
+  "capturado_em": "2026-11-04T22:14:12.681472+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_pesquisa.html",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "arquivo": "camara_legislacao_pesquisa.html",
+    "bytes": 59842,
+    "cabecalhos": {
+     "content-type": "text/html; charset=utf-8",
+     "date": "Wed, 04 Nov 2026 22:14:12 GMT"
+    },
+    "capturado_em": "2026-11-04T22:14:12.681472+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www.camara.leg.br/legislacao",
+    "url_final": "https://www.camara.leg.br/legislacao",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "ca7c071cb7612cb8a0ffa90d44e186793dfef236cadb20bf7e6d9135c81b43d3"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1",
+  "status": 200,
+  "url": "https://www.camara.leg.br/legislacao",
+  "url_final": "https://www.camara.leg.br/legislacao",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_pesquisa__captura": {
+  "bytes": 1846,
+  "categoria": "metadados_captura",
+  "descreve": "camara_pesquisa",
+  "file": "camara_legin/camara_pesquisa.captura.json",
+  "sha256": "a517553608496e16ccaeeafb069d25ab8ec5a5757523d906ce4d1df4bb7a3b92"
+ },
+ "camara_robots_legin": {
+  "bytes": 5809,
+  "capturado_em": "2026-11-04T22:13:08.987527+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/plain",
+  "file": "camara_legin/camara_robots_legin.txt",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "arquivo": "camara_legislacao_robots_legin.txt",
+    "bytes": 5809,
+    "cabecalhos": {
+     "content-length": "5809",
+     "content-type": "text/plain; charset=utf-8",
+     "date": "Wed, 04 Nov 2026 22:13:09 GMT"
+    },
+    "capturado_em": "2026-11-04T22:13:08.987527+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/plain",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/robots.txt",
+    "url_final": "https://www2.camara.leg.br/robots.txt",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "91986b591b92a96583ea290067a823187d37c693a0672b3f85e03af71e557388"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/robots.txt",
+  "url_final": "https://www2.camara.leg.br/robots.txt",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_robots_legin__captura": {
+  "bytes": 1916,
+  "categoria": "metadados_captura",
+  "descreve": "camara_robots_legin",
+  "file": "camara_legin/camara_robots_legin.captura.json",
+  "sha256": "79e8aa4962aa6cc423c32dd8f66608b5f4ab1b8ce174c3b3671f8970f28e27c9"
+ },
+ "camara_robots_portal": {
+  "bytes": 6589,
+  "capturado_em": "2026-11-04T22:13:08.055470+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/plain",
+  "file": "camara_legin/camara_robots_portal.txt",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "arquivo": "camara_legislacao_robots_portal.txt",
+    "bytes": 6589,
+    "cabecalhos": {
+     "content-length": "6589",
+     "content-type": "text/plain; charset=utf-8",
+     "date": "Wed, 04 Nov 2026 22:13:08 GMT",
+     "last-modified": "Fri, 23 Oct 2026 17:42:53 GMT"
+    },
+    "capturado_em": "2026-11-04T22:13:08.055470+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/plain",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www.camara.leg.br/robots.txt",
+    "url_final": "https://www.camara.leg.br/robots.txt",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "6b0b4ee849e1901031520c60806fc37712230e644ca943293e2d854561c0a63e"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+  "status": 200,
+  "url": "https://www.camara.leg.br/robots.txt",
+  "url_final": "https://www.camara.leg.br/robots.txt",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_robots_portal__captura": {
+  "bytes": 2020,
+  "categoria": "metadados_captura",
+  "descreve": "camara_robots_portal",
+  "file": "camara_legin/camara_robots_portal.captura.json",
+  "sha256": "0bd8f5359339770f838ada0298b8c4f470c07023dec658c20cb71746148285c4"
+ },
+ "camara_textos_anexo_lc123": {
+  "bytes": 120702,
+  "capturado_em": "2026-11-05T10:11:34.189276+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/pdf",
+  "file": "camara_legin/camara_textos_anexo_lc123.pdf",
+  "importacao_offline": {
+   "origem": {
+    "href": "leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf",
+    "recibo_sha256": "a83b29bbe4a87717f34419d5ef03f5485f2ca89d07e9bf687c897e27033d68be",
+    "sha256": "04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0",
+    "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html"
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_textos_anexo_lc123.pdf",
+    "bytes": 120702,
+    "cabecalhos": {
+     "content-length": "120702",
+     "content-type": "application/pdf",
+     "date": "Thu, 05 Nov 2026 10:11:34 GMT",
+     "last-modified": "Thu, 29 Oct 2026 12:16:10 GMT"
+    },
+    "capturado_em": "2026-11-05T10:11:34.189276+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "application/pdf",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "c8abdd8ca254a81e4d274335c705630c21ed3cf24948ba70fc12ab145a096887",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf",
+    "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "13a06004dbf11ed20813cd10ba572ffec9ec41106bd15a09d8e8efc3c4329dd5"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "c8abdd8ca254a81e4d274335c705630c21ed3cf24948ba70fc12ab145a096887",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf",
+  "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_textos_anexo_lc123__captura": {
+  "bytes": 2664,
+  "categoria": "metadados_captura",
+  "descreve": "camara_textos_anexo_lc123",
+  "file": "camara_legin/camara_textos_anexo_lc123.captura.json",
+  "sha256": "48c869ee94ebfec2bbb9862d6548f16b682c3655ae5f9378224dd96ccf76ae11"
+ },
+ "camara_textos_atualizado_lc123": {
+  "bytes": 796759,
+  "capturado_em": "2026-11-05T10:11:21.755445+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_textos_atualizado_lc123.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html",
+    "recibo_sha256": "a83b29bbe4a87717f34419d5ef03f5485f2ca89d07e9bf687c897e27033d68be",
+    "sha256": "04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0",
+    "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html"
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_textos_atualizado_lc123.html",
+    "bytes": 796759,
+    "cabecalhos": {
+     "content-length": "796759",
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 10:11:22 GMT"
+    },
+    "capturado_em": "2026-11-05T10:11:21.755445+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "ad9b586fdf7864ba47dcdeabb20af2cdc9882c8a7511e75461b4321c2e59e459",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "19e63a6d28776c172f6c8c682af52386cbd5e4c4e044e8acbea52f081d4dd345"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "ad9b586fdf7864ba47dcdeabb20af2cdc9882c8a7511e75461b4321c2e59e459",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_textos_atualizado_lc123__captura": {
+  "bytes": 2631,
+  "categoria": "metadados_captura",
+  "descreve": "camara_textos_atualizado_lc123",
+  "file": "camara_legin/camara_textos_atualizado_lc123.captura.json",
+  "sha256": "6b6745738ee386bfce7c73e705425352fac0ce82665cfdc413a27fd7cf701427"
+ },
+ "camara_textos_atualizado_lei13874": {
+  "bytes": 117838,
+  "capturado_em": "2026-11-05T10:11:40.200342+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_textos_atualizado_lei13874.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+    "recibo_sha256": "af39ad2be1f15bb576ea0dfc333b68e862ab3326be8c8f3c339edf8e7769d5c2",
+    "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_textos_atualizado_lei13874.html",
+    "bytes": 117838,
+    "cabecalhos": {
+     "content-length": "117838",
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 10:11:40 GMT"
+    },
+    "capturado_em": "2026-11-05T10:11:40.200342+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "a231acb388e65b023db0536b60d134e146890f1f642413d1d4e8616317a3c6b0",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "782304bc96d1ee2b206df46bcf1a09027c5bb0c0510086f8e28729bad27bbc9a"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "a231acb388e65b023db0536b60d134e146890f1f642413d1d4e8616317a3c6b0",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_textos_atualizado_lei13874__captura": {
+  "bytes": 2562,
+  "categoria": "metadados_captura",
+  "descreve": "camara_textos_atualizado_lei13874",
+  "file": "camara_legin/camara_textos_atualizado_lei13874.captura.json",
+  "sha256": "3e046a9a76080e95e671d0bafb5a7734a54174108188060fda7573d148b0cf0b"
+ },
+ "camara_textos_atualizado_lei6404": {
+  "bytes": 686299,
+  "capturado_em": "2026-11-05T10:11:00.992588+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_textos_atualizado_lei6404.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html",
+    "recibo_sha256": "8d39f4ec6dcb52a84851056fdf99beef8eaa0a4335cc0216682e53c8da425814",
+    "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html"
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_textos_atualizado_lei6404.html",
+    "bytes": 686299,
+    "cabecalhos": {
+     "content-length": "686299",
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 10:11:01 GMT"
+    },
+    "capturado_em": "2026-11-05T10:11:00.992588+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "ee3f76848ce42def5e758ed77b994d2a5d05598c4e9dc8b43771c801aa4a854c",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "38b27726e52ced265e9daef2c977066d11869fe26c8037d661404d318f44f002"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "ee3f76848ce42def5e758ed77b994d2a5d05598c4e9dc8b43771c801aa4a854c",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_textos_atualizado_lei6404__captura": {
+  "bytes": 2579,
+  "categoria": "metadados_captura",
+  "descreve": "camara_textos_atualizado_lei6404",
+  "file": "camara_legin/camara_textos_atualizado_lei6404.captura.json",
+  "sha256": "f1402df2a2097177b6ed3a43a55a1a583e06ecda0d18b9da6d2a5d8c1d4f385e"
+ },
+ "camara_textos_mp881_lei6404": {
+  "bytes": 47221,
+  "capturado_em": "2026-11-05T10:11:14.955321+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_textos_mp881_lei6404.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "../../../fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+    "recibo_sha256": "8d39f4ec6dcb52a84851056fdf99beef8eaa0a4335cc0216682e53c8da425814",
+    "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html"
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_textos_mp881_lei6404.html",
+    "bytes": 47221,
+    "cabecalhos": {
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 10:11:15 GMT"
+    },
+    "capturado_em": "2026-11-05T10:11:14.955321+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "677752f6feaea991ca461933384b451d46d1a2f9c9d0cc7a6b6708de1b73b9e1",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "a1bf6c0ee2752d92eed6f4251cb28ab535e8d7da013324b1edf4658c40f40079"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "677752f6feaea991ca461933384b451d46d1a2f9c9d0cc7a6b6708de1b73b9e1",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_textos_mp881_lei6404__captura": {
+  "bytes": 2517,
+  "categoria": "metadados_captura",
+  "descreve": "camara_textos_mp881_lei6404",
+  "file": "camara_legin/camara_textos_mp881_lei6404.captura.json",
+  "sha256": "8ef31083e28bd7973fe0e3e50a522c34dfd23d2d6432ef0aad7b5fbbcbb850b4"
+ },
+ "camara_textos_original_lc123": {
+  "bytes": 166709,
+  "capturado_em": "2026-11-05T10:11:27.952020+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_textos_original_lc123.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html",
+    "recibo_sha256": "a83b29bbe4a87717f34419d5ef03f5485f2ca89d07e9bf687c897e27033d68be",
+    "sha256": "04aee462753d1eaa1caae30fe5be953a4160c343b20565135cf024cab1a842c0",
+    "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html"
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_textos_original_lc123.html",
+    "bytes": 166709,
+    "cabecalhos": {
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 10:11:28 GMT"
+    },
+    "capturado_em": "2026-11-05T10:11:27.952020+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "65775c1f3e09819229f05c0a10adbeeb6d0bfd8eb0a481c01faaba3bb16e5a99",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "9ff124f1dfc8737d8f48adfb295f378a806cc5274f13c045c783dbe23be6f9d4"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "65775c1f3e09819229f05c0a10adbeeb6d0bfd8eb0a481c01faaba3bb16e5a99",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_textos_original_lc123__captura": {
+  "bytes": 2615,
+  "categoria": "metadados_captura",
+  "descreve": "camara_textos_original_lc123",
+  "file": "camara_legin/camara_textos_original_lc123.captura.json",
+  "sha256": "91088b9a592f4c1df29f02b07a1075c503021702bdb8fdb446b40c0f31d0fc0b"
+ },
+ "camara_textos_original_lei13874": {
+  "bytes": 103071,
+  "capturado_em": "2026-11-05T10:11:46.238434+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_textos_original_lei13874.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+    "recibo_sha256": "af39ad2be1f15bb576ea0dfc333b68e862ab3326be8c8f3c339edf8e7769d5c2",
+    "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_textos_original_lei13874.html",
+    "bytes": 103071,
+    "cabecalhos": {
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 10:11:46 GMT"
+    },
+    "capturado_em": "2026-11-05T10:11:46.238434+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "6c453561194ffc2dc50926b345a6e8661168f51aec3333416d8f62c38faf93a9"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_textos_original_lei13874__captura": {
+  "bytes": 2546,
+  "categoria": "metadados_captura",
+  "descreve": "camara_textos_original_lei13874",
+  "file": "camara_legin/camara_textos_original_lei13874.captura.json",
+  "sha256": "20a69f2fe542512f9902d74fec60cd81e81812a61f7e97606d14f638fac13676"
+ },
+ "camara_textos_original_lei6404": {
+  "bytes": 365194,
+  "capturado_em": "2026-11-05T10:11:07.347534+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/camara_textos_original_lei6404.html",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+    "recibo_sha256": "8d39f4ec6dcb52a84851056fdf99beef8eaa0a4335cc0216682e53c8da425814",
+    "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html"
+   },
+   "recibo_original": {
+    "arquivo": "camara_legislacao_textos_original_lei6404.html",
+    "bytes": 365194,
+    "cabecalhos": {
+     "content-type": "text/html; charset=UTF-8",
+     "date": "Thu, 05 Nov 2026 10:11:08 GMT"
+    },
+    "capturado_em": "2026-11-05T10:11:07.347534+00:00",
+    "categoria": null,
+    "conector": null,
+    "confirmacao_host": "A",
+    "confirmado_por_titular": false,
+    "content_type": "text/html",
+    "evidencia": {},
+    "fonte_sonda": "camara_legislacao",
+    "metodo": "GET",
+    "motivo": null,
+    "parametros": null,
+    "sha256": "7dc335d77b1b30f7165c27cb62ce4525bb464b68bf4d03bf5387d7d264156822",
+    "sonda": true,
+    "status": 200,
+    "unavailable": false,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+    "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+    "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+    "versao": "1.4.0a2"
+   },
+   "recibo_sha256": "d25814eab3ec730cf3fa6155ce88c97feeb9725afeed5bf2a8b0bf66fe1d6b54"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "7dc335d77b1b30f7165c27cb62ce4525bb464b68bf4d03bf5387d7d264156822",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+  "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)"
+ },
+ "camara_textos_original_lei6404__captura": {
+  "bytes": 2538,
+  "categoria": "metadados_captura",
+  "descreve": "camara_textos_original_lei6404",
+  "file": "camara_legin/camara_textos_original_lei6404.captura.json",
+  "sha256": "f4f0ce4a6b754cdc92b1ea35f718bb3c512435b1bde1a8e997ca5b1f713ce418"
+ },
  "challenge_aws_waf_sample": {
   "bytes": 92,
   "capturado_em": "2026-10-17T21:40:38.269354+00:00",

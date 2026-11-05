@@ -1,0 +1,62 @@
+{
+ "conector": "camara_legin",
+ "versao": "1.4.0a2",
+ "url": "https://www.camara.leg.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-04T22:13:08.055470+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www.camara.leg.br/robots.txt",
+ "status": 200,
+ "content_type": "text/plain",
+ "cabecalhos": {
+  "content-length": "6589",
+  "content-type": "text/plain; charset=utf-8",
+  "date": "Wed, 04 Nov 2026 22:13:08 GMT",
+  "last-modified": "Fri, 23 Oct 2026 17:42:53 GMT"
+ },
+ "sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+ "bytes": 6589,
+ "arquivo": "camara_legislacao_robots_portal.txt",
+ "importacao_offline": {
+  "recibo_original": {
+   "conector": null,
+   "versao": "1.4.0a2",
+   "url": "https://www.camara.leg.br/robots.txt",
+   "metodo": "GET",
+   "parametros": null,
+   "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+   "capturado_em": "2026-11-04T22:13:08.055470+00:00",
+   "sonda": true,
+   "fonte_sonda": "camara_legislacao",
+   "confirmacao_host": "A",
+   "confirmado_por_titular": false,
+   "unavailable": false,
+   "motivo": null,
+   "categoria": null,
+   "evidencia": {},
+   "url_final": "https://www.camara.leg.br/robots.txt",
+   "status": 200,
+   "content_type": "text/plain",
+   "cabecalhos": {
+    "content-length": "6589",
+    "content-type": "text/plain; charset=utf-8",
+    "date": "Wed, 04 Nov 2026 22:13:08 GMT",
+    "last-modified": "Fri, 23 Oct 2026 17:42:53 GMT"
+   },
+   "sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+   "bytes": 6589,
+   "arquivo": "camara_legislacao_robots_portal.txt"
+  },
+  "recibo_sha256": "6b0b4ee849e1901031520c60806fc37712230e644ca943293e2d854561c0a63e",
+  "origem": null
+ }
+}

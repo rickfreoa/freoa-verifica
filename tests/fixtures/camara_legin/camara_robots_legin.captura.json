@@ -1,0 +1,60 @@
+{
+ "conector": "camara_legin",
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-04T22:13:08.987527+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/robots.txt",
+ "status": 200,
+ "content_type": "text/plain",
+ "cabecalhos": {
+  "content-length": "5809",
+  "content-type": "text/plain; charset=utf-8",
+  "date": "Wed, 04 Nov 2026 22:13:09 GMT"
+ },
+ "sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+ "bytes": 5809,
+ "arquivo": "camara_legislacao_robots_legin.txt",
+ "importacao_offline": {
+  "recibo_original": {
+   "conector": null,
+   "versao": "1.4.0a2",
+   "url": "https://www2.camara.leg.br/robots.txt",
+   "metodo": "GET",
+   "parametros": null,
+   "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+   "capturado_em": "2026-11-04T22:13:08.987527+00:00",
+   "sonda": true,
+   "fonte_sonda": "camara_legislacao",
+   "confirmacao_host": "A",
+   "confirmado_por_titular": false,
+   "unavailable": false,
+   "motivo": null,
+   "categoria": null,
+   "evidencia": {},
+   "url_final": "https://www2.camara.leg.br/robots.txt",
+   "status": 200,
+   "content_type": "text/plain",
+   "cabecalhos": {
+    "content-length": "5809",
+    "content-type": "text/plain; charset=utf-8",
+    "date": "Wed, 04 Nov 2026 22:13:09 GMT"
+   },
+   "sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+   "bytes": 5809,
+   "arquivo": "camara_legislacao_robots_legin.txt"
+  },
+  "recibo_sha256": "91986b591b92a96583ea290067a823187d37c693a0672b3f85e03af71e557388",
+  "origem": null
+ }
+}

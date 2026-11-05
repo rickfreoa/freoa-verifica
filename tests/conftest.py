@@ -162,6 +162,21 @@ def planalto_offline(monkeypatch):
     original = Verifica._get
 
     def _get(self, connector_id):
+        if connector_id == "camara_legin" and connector_id not in self._connectors:
+            # 0077: novas capturas federais usam Câmara; a fixture Planalto continua acervo legado.
+            # Shortcut de transporte só para testes de registro/fronteira; política coberta em test_camara_legin.
+            from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
+            from tests.test_camara_legin import response, FIX
+            con = CamaraLeginConnector()
+            captures = {r.url: r for r in (response(p.stem.removeprefix("camara_").removesuffix(".captura"))
+                                          for p in FIX.glob("*.captura.json"))}
+            def offline_get(url):
+                if url not in captures:
+                    raise Unavailable("http_404")
+                con.paginas[url] = captures[url]
+                return captures[url]
+            con._get = offline_get
+            self._connectors[connector_id] = con
         if connector_id == "planalto" and not isinstance(self._connectors.get("planalto"), _PlanaltoOffline):
             self._connectors["planalto"] = _PlanaltoOffline()
         return original(self, connector_id)
