@@ -1225,6 +1225,18 @@ CAPTURAS_NORMAS_CAMARA = (
     ('lei13874', 53481, '01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3'),
 )
 
+# IL.2-b.3 REG: valores dos corpos conferidos com o log local do supervisor.
+CAPTURAS_TEXTOS_CAMARA = (
+    ('atualizado_lei6404', 686299, 'ee3f76848ce42def5e758ed77b994d2a5d05598c4e9dc8b43771c801aa4a854c'),
+    ('original_lei6404', 365194, '7dc335d77b1b30f7165c27cb62ce4525bb464b68bf4d03bf5387d7d264156822'),
+    ('mp881_lei6404', 47221, '677752f6feaea991ca461933384b451d46d1a2f9c9d0cc7a6b6708de1b73b9e1'),
+    ('atualizado_lc123', 796759, 'ad9b586fdf7864ba47dcdeabb20af2cdc9882c8a7511e75461b4321c2e59e459'),
+    ('original_lc123', 166709, '65775c1f3e09819229f05c0a10adbeeb6d0bfd8eb0a481c01faaba3bb16e5a99'),
+    ('anexo_lc123', 120702, 'c8abdd8ca254a81e4d274335c705630c21ed3cf24948ba70fc12ab145a096887'),
+    ('atualizado_lei13874', 117838, 'a231acb388e65b023db0536b60d134e146890f1f642413d1d4e8616317a3c6b0'),
+    ('original_lei13874', 103071, '4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3'),
+)
+
 ROTAS_IL2 = {
     "lexml": {"www.lexml.gov.br": ()},
     "normas_leg": {"normas.leg.br": ()},
@@ -1445,14 +1457,17 @@ def test_il2_barreiras_reais_recusadas_por_fonte_e_por_host_antes_da_rede(envios
 def test_il2_evidencias_locais_integras_e_sanitizadas():
     base = ROTEIRO.parent / "auditoria/1.4.0/il2a-sondas"
     registros = sorted(base.rglob("*.captura.json"))
-    assert len(registros) == 13
+    assert len(registros) == 21
+    assert {r.name for r in registros if r.stem.startswith("camara_legislacao_textos_")} == {
+        f"camara_legislacao_textos_{key}.captura.json" for key, _, _ in CAPTURAS_TEXTOS_CAMARA
+    }
     corpos = set()
     for registro in registros:
         texto = registro.read_text(encoding="utf-8")
         assert not re.search(r"(?<![A-Za-z])[A-Za-z]:[\\/]", texto)
         r = json.loads(texto)
         assert r["fonte_sonda"] == registro.parent.name
-        assert r["capturado_em"].startswith("2026-11-05" if registro.stem.startswith(("camara_legislacao_busca_", "camara_legislacao_norma_")) else "2026-11-04") and r["sonda"] is True
+        assert r["capturado_em"].startswith("2026-11-05" if registro.stem.startswith(("camara_legislacao_busca_", "camara_legislacao_norma_", "camara_legislacao_textos_")) else "2026-11-04") and r["sonda"] is True
         if r["unavailable"]:
             assert r["motivo"] == "http_403" and r["categoria"] == "recusa_identificado"
             assert r["evidencia"]["status"] == 403 and r["arquivo"] is None
@@ -1461,6 +1476,15 @@ def test_il2_evidencias_locais_integras_e_sanitizadas():
             data = corpo.read_bytes()
             assert len(data) == r["bytes"] and hashlib.sha256(data).hexdigest() == r["sha256"]
             corpos.add(corpo)
+        elif registro.stem.startswith("camara_legislacao_textos_"):
+            key, size, sha = next(c for c in CAPTURAS_TEXTOS_CAMARA
+                                  if registro.name == f"camara_legislacao_textos_{c[0]}.captura.json")
+            pdf = key == "anexo_lc123"
+            assert r["status"] == 200 and r["content_type"] == ("application/pdf" if pdf else "text/html")
+            assert (r["bytes"], r["sha256"]) == (size, sha)
+            assert r["url"] == r["url_final"] == "https://www2.camara.leg.br" + next(c[1] for c in TEXTOS_CAMARA if c[0] == key)
+            assert r["arquivo"] == f"camara_legislacao_textos_{key}.{'pdf' if pdf else 'html'}"
+            assert not (registro.parent / r["arquivo"]).exists()
         elif registro.stem.startswith("camara_legislacao_norma_"):
             key, size, sha = next(c for c in CAPTURAS_NORMAS_CAMARA
                                   if registro.name == f"camara_legislacao_norma_{c[0]}.captura.json")

@@ -112,3 +112,32 @@ Robots www2 preservado: 5.809 bytes, SHA-256 `b725bf41f0e293419518714b83edb1c2de
 IL.2-b.3 cataloga somente esses oito destinos adicionais, sem consulta ou prefixo, com chaves novas `camara_legislacao_textos_*` no roteiro. Limitação: `FonteSonda.mimes` é por fonte, sem restrição por rota. `application/pdf` foi acrescentado para o anexo principal da LC 123, mas também fica aceito nas demais rotas de conteúdo dessa fonte; robots continua exclusivamente `text/plain`. Não foram liberados os demais links observados. Nenhum destino foi capturado nesta sessão, nenhuma capacidade da Porta L ou `verified` demonstrado; sem mudança de regra. Auditoria independente fica com a outra sessão.
 
 Validação IL.2-b.3: `python -m pytest tests/test_sondas.py tests/test_captura_instrumento.py -q -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2b3` — **454 passed**. Constantes independentes para os oito destinos, MIME, proveniência e metadados das três capturas; transporte substituído; rejeição de variantes antes do transporte; mutantes de remoção/expansão/alteração de rotas, consulta indevida, MIME, proveniência, roteiro (host, identificador, query, prefixo, chave, destino e remoção) e `Disallow` aplicável. Suíte completa não executada; auditoria independente pendente. Sem commit ou push.
+
+## IL.2-b.3: textos da Câmara
+
+Registro das oito sondas do supervisor em 05/11/2026, log `C:\dev\fv14-sondas\il2b3-textos.txt`, instrumento `1.4.0a2`, UA identificado. Conferência local por Codex, sessão de escrita, worktree `C:\dev\fv14-il2`, ramo `feat/il2b3-registro`, base `5aa2ff2` (main com PR #33). Sem rede, sondas ou novas capturas nesta sessão. Esta seção atualiza as hipóteses dos lotes anteriores; não apura a Porta L.
+
+Os oito corpos foram lidos como dados, com tamanho e SHA-256 recalculados e iguais aos respectivos `.captura.json` e ao log. MIME conforme `content_type` dos registros (HTML com `charset=UTF-8` no cabeçalho). Capturas entre `2026-11-05T10:11:00.992588+00:00` e `2026-11-05T10:11:46.238434+00:00`.
+
+| Chave | HTTP | Bytes | SHA-256 do corpo | MIME |
+|---|---|---|---|---|
+| `camara_legislacao_textos_atualizado_lei6404` | 200 | 686299 | `ee3f76848ce42def5e758ed77b994d2a5d05598c4e9dc8b43771c801aa4a854c` | `text/html` |
+| `camara_legislacao_textos_original_lei6404` | 200 | 365194 | `7dc335d77b1b30f7165c27cb62ce4525bb464b68bf4d03bf5387d7d264156822` | `text/html` |
+| `camara_legislacao_textos_mp881_lei6404` | 200 | 47221 | `677752f6feaea991ca461933384b451d46d1a2f9c9d0cc7a6b6708de1b73b9e1` | `text/html` |
+| `camara_legislacao_textos_atualizado_lc123` | 200 | 796759 | `ad9b586fdf7864ba47dcdeabb20af2cdc9882c8a7511e75461b4321c2e59e459` | `text/html` |
+| `camara_legislacao_textos_original_lc123` | 200 | 166709 | `65775c1f3e09819229f05c0a10adbeeb6d0bfd8eb0a481c01faaba3bb16e5a99` | `text/html` |
+| `camara_legislacao_textos_anexo_lc123` | 200 | 120702 | `c8abdd8ca254a81e4d274335c705630c21ed3cf24948ba70fc12ab145a096887` | `application/pdf` |
+| `camara_legislacao_textos_atualizado_lei13874` | 200 | 117838 | `a231acb388e65b023db0536b60d134e146890f1f642413d1d4e8616317a3c6b0` | `text/html` |
+| `camara_legislacao_textos_original_lei13874` | 200 | 103071 | `4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3` | `text/html` |
+
+Características estruturais confirmadas nos corpos locais:
+
+- **Textos atualizados:** HTML de editor, com dispositivos em parágrafos e rótulos textuais no início, sem identificador próprio de dispositivo na Lei 6.404 e na LC 123; a Lei 13.874 tem âncoras parciais de artigo (`<a name="art1">` a `art20`, 21 âncoras, com `art4` repetida para os arts. 4º e 4º-A), sem cobertura de parágrafos, incisos e alíneas e sem unicidade garantida. Lei 6.404 e LC 123 usam `<p class="western">` e `<font>`; a Lei 13.874 usa `<p class="MsoHeader">`, sem `<font>`. A extração exige segmentação por rótulo e normalização das quebras de linha internas: por exemplo, `Art. 116.` na Lei 6.404, `a)`, `Parágrafo único.` e `§ 1º` no conjunto. As classes e estilos são de apresentação, não identificadores normativos.
+- **Redações e notas:** nenhum dos três textos atualizados contém `<strike>`, `<s>`, `<del>` ou `line-through`. Não oferecem redações anteriores riscadas nem versão histórica em D: apresentam a redação atualizada, com notas textuais de alteração e marcadores de revogação. Foram confirmadas notas de redação dada, de acréscimo (`Parágrafo acrescido pela Lei...`) e de revogação (`Revogado pela...`), identificando o ato responsável; não se presume o literal `Incluído pela` sugerido na observação inicial. Isso não comprova vigência, produção de efeitos ou correção da consolidação por dispositivo.
+- **Publicações originais:** outra família de HTML, com `<P>`, `<CENTER>` e `<TABLE>` contendo alíneas; texto apresentado como publicação original no DOU. As páginas indicam DOU de 17/12/1976 (Lei 6.404, suplemento), 15/12/2006 (LC 123) e 20/9/2019 (Lei 13.874, edição extra B). Essas indicações são dados das páginas, sem confronto com os exemplares do DOU nesta sessão.
+- **MP 881/2019:** página `-norma-pe.html` de dados da norma, não o texto da MP. Publica origem, situação rotulada `Convertida em Lei`, relação com a Lei 13.874/2019 e links de publicação original e retificação. O texto dos destinos não foi capturado neste lote; os rótulos não substituem análise temporal.
+- **Anexo LC 123:** corpo com assinatura `%PDF-1.6`, MIME `application/pdf`. Conteúdo interno e equivalência do anexo não examinados.
+
+Os oito `.captura.json` foram copiados para [il2a-sondas/camara_legislacao/](il2a-sondas/camara_legislacao/), sem edição, com igualdade de bytes conferida após a cópia. Os sete HTMLs e o PDF permanecem somente em `C:\dev\fv14-sondas\camara_legislacao\`, fora do repositório. Nenhuma fixture criada, nenhum código de produto ou regra alterado. Auditoria independente fica com a outra sessão; nenhuma conclusão de `verified` ou aprovação da Porta L.
+
+Validação IL.2-b.3 REG: `python -m pytest tests/test_sondas.py -q -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2b3reg` — **391 passed in 19.96s**. A primeira execução teve 390 aprovados e uma falha na expectativa antiga de 13 registros. O teste de integridade foi atualizado para os 21 registros, com constantes independentes de tamanho/hash e conferência dos oito novos nomes, MIME, URLs e ausência dos corpos. `TMP`/`TEMP` em `C:\dev\tmp`; sem commit ou push. Suíte completa não executada; auditoria independente pendente.

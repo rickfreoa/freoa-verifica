@@ -1,0 +1,27 @@
+{
+ "conector": null,
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T10:11:14.955321+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-type": "text/html; charset=UTF-8",
+  "date": "Thu, 05 Nov 2026 10:11:15 GMT"
+ },
+ "sha256": "677752f6feaea991ca461933384b451d46d1a2f9c9d0cc7a6b6708de1b73b9e1",
+ "bytes": 47221,
+ "arquivo": "camara_legislacao_textos_mp881_lei6404.html"
+}
