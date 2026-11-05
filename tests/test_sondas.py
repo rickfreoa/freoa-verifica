@@ -10,7 +10,7 @@ import importlib.util
 import json
 import re
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -1093,7 +1093,7 @@ def test_rota_exata_e_consulta_so_na_rota_declarada_com_parametros(envios, tmp_p
     assert [e["url"] for e in envios][-1].startswith("https://esaj.tjac.jus.br/cjsg/resultadoCompleta.do?")
     assert len(envios) == 4
     assert FONTES_SONDA["tjac"].consultas == {"esaj.tjac.jus.br": ("/cjsg/resultadoCompleta.do",)}
-    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac"]
+    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac", "camara_legislacao"]
 
 
 def test_catalogo_so_tem_caminho_exato_sem_prefixo_nem_segmento_proibido():
@@ -1204,9 +1204,9 @@ def test_tjrs_robots_primeiro_no_roteiro_e_decisao_na_auditoria():
 ROTAS_IL2 = {
     "lexml": {"www.lexml.gov.br": ()},
     "normas_leg": {"normas.leg.br": ()},
-    "camara_legislacao": {"www.camara.leg.br": ("/legislacao",), "www2.camara.leg.br": ()},
+    "camara_legislacao": {"www.camara.leg.br": ("/legislacao", "/legislacao/busca"), "www2.camara.leg.br": ()},
 }
-CONSULTAS_IL2 = {}
+CONSULTAS_IL2 = {"camara_legislacao": {"www.camara.leg.br": ("/legislacao/busca",)}}
 
 
 def test_il2_allowlist_exata_de_hosts_rotas_e_consultas():
@@ -1332,6 +1332,11 @@ def test_il2_mutantes_de_mime_hosts_rotas_e_consulta_sao_rejeitados(fid):
     if com_rota:  # liberar consulta em rota que não a admite diverge
         mutantes["consultas"].append(dataclasses.replace(
             f, consultas={**f.consultas, com_rota[0]: f.rotas[com_rota[0]]}))
+    if fid == "camara_legislacao":
+        mutantes["rotas"].append(dataclasses.replace(
+            f, rotas={**f.rotas, "www.camara.leg.br": ("/legislacao",)}, consultas={}))
+        mutantes["consultas"].append(dataclasses.replace(
+            f, consultas={"www.camara.leg.br": ("/legislacao", "/legislacao/busca")}))
     if fid == "lexml":  # única com XML: retirar o XML também diverge
         mutantes["mimes"].append(dataclasses.replace(f, mimes=frozenset(f.mimes - {"text/xml"})))
     for atributo, lista in mutantes.items():
@@ -1520,3 +1525,80 @@ def test_b1_consulta_valida_todas_as_etapas_antes_do_primeiro_pedido(transporte_
     with pytest.raises(ValueError, match="host barrado.*legis.senado.leg.br"):
         captura.capturar("senado", consulta={}, destino=tmp_path, sonda=False)
     assert not any(tmp_path.iterdir())
+
+
+# IL.2-b.1: contrato do formulário observado na captura, sem depender do catálogo.
+CAMPOS_CAMARA = frozenset({"abrangencia", "tipo", "numero", "ano", "geral"})
+CASOS_BUSCA_CAMARA = (
+    ("lei6404", "Lei Ordinária", "6404", "1976"),
+    ("lc123", "Lei Complementar", "123", "2006"),
+    ("lei13874", "Lei Ordinária", "13874", "2019"),
+)
+
+
+def _conferir_buscas_camara(comandos):
+    esperados = {f"camara_legislacao_busca_{k}": {
+        "abrangencia": ["Legislação Federal"], "tipo": [tipo],
+        "numero": [numero], "ano": [ano], "geral": [""],
+    } for k, tipo, numero, ano in CASOS_BUSCA_CAMARA}
+    assert {c[3] for c in comandos} == set(esperados)
+    for _, fid, _, chave, url, bloqueado in comandos:
+        alvo = urlsplit(url)
+        assert fid == "camara_legislacao" and not bloqueado
+        assert alvo.scheme == "https" and alvo.netloc == "www.camara.leg.br"
+        assert alvo.path == "/legislacao/busca"
+        campos = parse_qs(alvo.query, keep_blank_values=True)
+        assert set(campos) == CAMPOS_CAMARA
+        assert campos == esperados[chave]
+
+
+@pytest.mark.repositorio
+def test_il2b_buscas_do_roteiro_conferem_e_chegam_por_get_ao_transporte(envios, tmp_path):
+    comandos = [c for c in _comandos_do_roteiro() if c[3].startswith("camara_legislacao_busca_")]
+    _conferir_buscas_camara(comandos)
+    for _, fid, _, chave, url, _ in comandos:
+        reg = captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave=chave, fonte_sonda=fid)
+        enviado = envios[-1]
+        assert not reg.unavailable and reg.confirmacao_host == "A"
+        assert enviado["url"] == url and enviado["method"] == "GET" and enviado["body"] is None
+        assert enviado["allowed_hosts"] == HOSTS_IL2[fid]
+        assert enviado["allowed_mimes"] == MIMES_IL2[fid]
+        assert enviado["allowed_path_prefixes"] == {
+            h: (rs or ("/robots.txt",)) for h, rs in ROTAS_IL2[fid].items()}
+        assert enviado["max_redirects"] == 0
+
+
+@pytest.mark.repositorio
+@pytest.mark.parametrize("antes,depois", [("numero=", "number="), ("tipo=", "type="),
+                                         ("ano=", "year="), ("geral=", "assunto="),
+                                         ("abrangencia=", "escopo="),
+                                         ("/legislacao/busca?", "/legislacao/busca/?"),
+                                         ("www.camara.leg.br", "www2.camara.leg.br")])
+def test_il2b_mutantes_de_campos_e_destino_do_roteiro_falham(antes, depois):
+    comandos = [c for c in _comandos_do_roteiro() if c[3].startswith("camara_legislacao_busca_")]
+    _conferir_buscas_camara(comandos)  # controle positivo
+    mutantes = [(*c[:4], c[4].replace(antes, depois), c[5]) for c in comandos]
+    with pytest.raises(AssertionError):
+        _conferir_buscas_camara(mutantes)
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.camara.leg.br/legislacao/busca/?numero=6404",
+    "https://www.camara.leg.br/legislacao/busca.bak?numero=6404",
+    "https://www.camara.leg.br/legislacao/busca/extra?numero=6404",
+    "https://www2.camara.leg.br/legislacao/busca?numero=6404",
+])
+def test_il2b_variantes_da_rota_de_busca_recusadas_antes_do_transporte(envios, tmp_path, url):
+    with pytest.raises(ValueError, match="fora da allowlist da fonte-sonda"):
+        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="b", fonte_sonda="camara_legislacao")
+    assert envios == [] and not any(tmp_path.iterdir())
+
+
+def test_il2b_proveniencia_da_busca_aponta_para_captura():
+    f = FONTES_SONDA["camara_legislacao"]
+    assert f.confirmacao == "A" and not f.hosts_b
+    assert "https://www.camara.leg.br/legislacao (captura de 04/11/2026" in f.origem_hosts
+    assert "camara_legislacao_pesquisa.html" in f.origem_hosts
+    assert "2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1" in f.origem_hosts
+    assert "GET implícito" in f.nota and "IL.2-b.2" in f.nota
+    assert "campos abrangencia, tipo, numero, ano, geral" in f.nota
