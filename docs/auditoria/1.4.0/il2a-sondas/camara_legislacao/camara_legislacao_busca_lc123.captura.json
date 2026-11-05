@@ -1,0 +1,27 @@
+{
+ "conector": null,
+ "versao": "1.4.0a2",
+ "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral=",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T07:13:27.900435+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Complementar&numero=123&ano=2006&geral=",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-type": "text/html; charset=utf-8",
+  "date": "Thu, 05 Nov 2026 07:13:28 GMT"
+ },
+ "sha256": "9bd90cfad8c6c0fed23f589a24e90e1cb1ee415c824c76034d9e36cb470aedb8",
+ "bytes": 59778,
+ "arquivo": "camara_legislacao_busca_lc123.html"
+}

@@ -56,3 +56,22 @@ No lote IL.2 de hoje, nenhuma rota viva capturada entrega texto de dispositivo, 
 | (e) remissões | Sem rota viva demonstrada de remissões resolvidas; nenhum corpo de norma ou resposta de API capturado |
 
 Isso descreve apenas este lote, sem concluir indisponibilidade geral dos acervos, incapacidade das fontes ou resultado da Porta L. Planalto e acervo instalado ficam fora desta consolidação. IL.3 e a apuração da matriz continuam necessários.
+
+
+## IL.2-b.1: buscas da Câmara
+
+Buscas executadas pelo supervisor em 05/11/2026, pelo instrumento, UA identificado `freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)`. Conferência local por Codex na sessão de escrita IL.2-b.2, worktree `C:\dev\fv14-il2`, ramo `feat/il2b2-camara-normas`, base informada `1077b1d`. Sem rede, sondas ou novas capturas nesta consolidação. HTMLs tratados como dados: cada URL abaixo consta como `href` de um link da respectiva resposta. Tamanhos e SHA-256 recalculados, iguais aos registros e ao log do supervisor `C:\dev\fv14-sondas\il2b1-buscas.txt`.
+
+| Chave da busca | Resultado | Bytes HTML | SHA-256 HTML | URL publicada (nível A) |
+|---|---|---|---|---|
+| `camara_legislacao_busca_lei6404` | 200 `text/html` | 62219 | `4026cacd902d161f50df1dcd976f6845cf7a867c5fff1301c845f19f13642878` | `https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html` |
+| `camara_legislacao_busca_lc123` | 200 `text/html` | 59778 | `9bd90cfad8c6c0fed23f589a24e90e1cb1ee415c824c76034d9e36cb470aedb8` | `https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-norma-pl.html` |
+| `camara_legislacao_busca_lei13874` | 200 `text/html` | 62896 | `c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d` | `https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html` |
+
+Os três `.captura.json` estão em [il2a-sondas/camara_legislacao/](il2a-sondas/camara_legislacao/), copiados byte a byte dos registros locais, sem edição; igualdade de bytes e hashes conferida após a cópia. Os HTMLs permanecem fora do repositório, em `C:\dev\fv14-sondas\camara_legislacao\`; hashes acima. Esta seção acrescenta três registros aos sete do lote IL.2-a, totalizando dez; os quatro corpos de robots permanecem iguais.
+
+Robots de `www2.camara.leg.br`: `camara_legislacao_robots_legin.txt`, 5.809 bytes, SHA-256 `b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f`, conferido com seu registro e a cópia preservada. Grupo único `User-Agent: *`; nenhum dos 230 `Disallow` alcança os três caminhos exatos, inclusive considerando `*` e âncora final `$`.
+
+IL.2-b.2 cataloga somente esses três caminhos de `www2`, nível A, sem consulta e sem prefixo; `origem_hosts` associa cada caminho à chave e ao hash da resposta que o publica. Roteiro com chaves novas `camara_legislacao_norma_lei6404`, `camara_legislacao_norma_lc123` e `camara_legislacao_norma_lei13874`. Nenhum comando foi executado nesta sessão. Links publicados nessas páginas (publicação original, texto atualizado, anexos) só entram no IL.2-b.3, depois de capturados. Nenhuma capacidade normativa ou `verified` demonstrado; sem mudança de regra. Auditoria independente fica com a outra sessão.
+
+Valida??o IL.2-b.2: `python -m pytest tests/test_sondas.py tests/test_captura_instrumento.py -q -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2b2` ? **389 passed**. Testes com constantes independentes, transporte substitu?do e mutantes de remo??o/expans?o/altera??o de rotas, libera??o de consulta, destino e chave do roteiro, proveni?ncia e `Disallow` aplic?vel. Su?te completa n?o executada nesta sess?o; auditoria independente pendente.
