@@ -1,0 +1,29 @@
+{
+ "conector": null,
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T10:11:34.189276+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf",
+ "status": 200,
+ "content_type": "application/pdf",
+ "cabecalhos": {
+  "content-length": "120702",
+  "content-type": "application/pdf",
+  "date": "Thu, 05 Nov 2026 10:11:34 GMT",
+  "last-modified": "Thu, 29 Oct 2026 12:16:10 GMT"
+ },
+ "sha256": "c8abdd8ca254a81e4d274335c705630c21ed3cf24948ba70fc12ab145a096887",
+ "bytes": 120702,
+ "arquivo": "camara_legislacao_textos_anexo_lc123.pdf"
+}

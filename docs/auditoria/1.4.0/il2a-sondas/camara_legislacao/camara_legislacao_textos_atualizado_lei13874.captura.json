@@ -1,0 +1,28 @@
+{
+ "conector": null,
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T10:11:40.200342+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-length": "117838",
+  "content-type": "text/html; charset=UTF-8",
+  "date": "Thu, 05 Nov 2026 10:11:40 GMT"
+ },
+ "sha256": "a231acb388e65b023db0536b60d134e146890f1f642413d1d4e8616317a3c6b0",
+ "bytes": 117838,
+ "arquivo": "camara_legislacao_textos_atualizado_lei13874.html"
+}
