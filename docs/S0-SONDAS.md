@@ -394,15 +394,16 @@ Notas: A página oficial lida (notícia do Senado sobre o portal) dá o endereç
 
 ### camara_legislacao: Câmara dos Deputados: Legislação Informatizada (publicação original e texto publicado)
 
-Hosts e rotas do catálogo: `www.camara.leg.br`: `/legislacao`, `/legislacao/busca` (com consulta); `www2.camara.leg.br`: as três páginas `-norma-pl.html` abaixo (caminhos exatos, sem consulta nem prefixo). Confirmação: A pelas respostas capturadas das buscas de 05/11/2026, com chaves e hashes no [registro](auditoria/1.4.0/il2a-sondas.md#il2-b1-buscas-da-câmara).
+Hosts e rotas do catálogo: `www.camara.leg.br`: `/legislacao`, `/legislacao/busca` (com consulta); `www2.camara.leg.br`: as três páginas `-norma-pl.html` e os oito destinos IL.2-b.3 abaixo (caminhos exatos, sem consulta nem prefixo). Confirmação: A pelas respostas capturadas das buscas e das páginas de norma de 05/11/2026, com chaves e hashes no [registro](auditoria/1.4.0/il2a-sondas.md).
 
 | # | O quê | Nível | Estado |
 |---|---|---|---|
 | 1 | robots.txt do portal | P | liberada |
 | 2 | página de pesquisa de legislação | A | liberada |
 | 3 | robots.txt do host da Legislação Informatizada | P | liberada |
-| 4 | páginas de norma da Lei 6.404/1976, LC 123/2006 e Lei 13.874/2019 | A | comandos novos IL.2-b.2 abaixo; ainda não capturadas |
+| 4 | páginas de norma da Lei 6.404/1976, LC 123/2006 e Lei 13.874/2019 | A | capturadas pelo supervisor em 05/11/2026; não repetir |
 | 5 | busca da Lei 6.404/1976, LC 123/2006 e Lei 13.874/2019 pelo formulário | A | capturada pelo supervisor em 05/11/2026 (IL.2-b.1); não repetir |
+| 6 | seis textos HTML, anexo principal PDF da LC 123 e página da MP 881/2019 | A | comandos novos IL.2-b.3 abaixo; destinos ainda não capturados |
 
 ```powershell
 python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_robots_portal --url "https://www.camara.leg.br/robots.txt"
@@ -420,7 +421,7 @@ python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --sai
 python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_busca_lei13874 --url "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral="
 ```
 
-IL.2-b.2: os três HTMLs de busca publicam os endereços exatos abaixo, conferidos localmente com seus hashes. Comandos novos, ainda não executados. Ler previamente o robots preservado `camara_legislacao_robots_legin.txt` (SHA-256 `b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f`): grupo `User-Agent: *`, nenhum dos 230 `Disallow` alcança esses caminhos. Os robots já capturados não devem ser pedidos novamente. Após qualquer recusa, parar sem executar os comandos seguintes.
+IL.2-b.2: os três HTMLs de busca publicam os endereços exatos abaixo, conferidos localmente com seus hashes. Comandos IL.2-b.2 já executados pelo supervisor em 05/11/2026; preservados como histórico, não repetir. Ler previamente o robots preservado `camara_legislacao_robots_legin.txt` (SHA-256 `b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f`): grupo `User-Agent: *`, nenhum dos 230 `Disallow` alcança esses caminhos. Os robots já capturados não devem ser pedidos novamente. Após qualquer recusa, parar sem executar os comandos seguintes.
 
 ```powershell
 python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_norma_lei6404 --url "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html"
@@ -428,9 +429,22 @@ python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --sai
 python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_norma_lei13874 --url "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
 ```
 
-Links publicados nessas páginas (publicação original, texto atualizado, anexos) só entram no IL.2-b.3, depois de capturados. Endereços vistos fora das capturas são nível B, sem comando nem promoção ao catálogo. Pesquisa avançada e coleções continuam fora do catálogo. A autorização dessas três páginas não demonstra texto, consolidação, anexos, vigência, `verified` ou qualquer capacidade da Porta L.
+IL.2-b.3: links relativos resolvidos contra a URL de cada página de norma capturada, nível A; confirmação, chaves e hashes no [registro](auditoria/1.4.0/il2a-sondas.md#il2-b2-páginas-de-norma-da-câmara). Os oito caminhos exatos abaixo não são alcançados pelos 230 `Disallow` do robots de www2 preservado (hash acima, inclusive regras com `*` e `$`). Ler esse robots antes dos comandos, sem pedi-lo novamente; após qualquer recusa, parar sem executar os seguintes. Chaves novas, destinos ainda não capturados; nenhum destes comandos foi executado nesta consolidação.
 
-Perguntas para a futura sonda: alcançável? Barreira e categoria? Formato? Quais links exatos para publicação original, texto atualizado e anexos a resposta publica? Nenhuma página de norma foi capturada nesta consolidação.
+Limitação do instrumento: MIME é declarado por fonte, sem restrição por rota. `application/pdf` foi acrescentado para o anexo principal da LC 123, mas também será aceito nas demais rotas de conteúdo de `camara_legislacao`; robots permanece exclusivamente `text/plain`. DOC/DOCX, PDFs de texto atualizado, vetos, republicações, outros anexos e demais atos relacionados continuam fora do catálogo.
+
+```powershell
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_textos_atualizado_lei6404 --url "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-normaatualizada-pl.html"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_textos_original_lei6404 --url "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_textos_mp881_lei6404 --url "https://www2.camara.leg.br/legin/fed/medpro/2019/medidaprovisoria-881-30-abril-2019-788037-norma-pe.html"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_textos_atualizado_lc123 --url "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-normaatualizada-pl.html"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_textos_original_lc123 --url "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-publicacaooriginal-156405-pl.html"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_textos_anexo_lc123 --url "https://www2.camara.leg.br/legin/fed/leicom/2006/leicomplementar-123-14-dezembro-2006-548099-anexo-pl.pdf"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_textos_atualizado_lei13874 --url "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html"
+python scripts/capturar_fixture.py --fonte-sonda camara_legislacao --sonda --saida C:/dev/fv14-sondas/camara_legislacao --chave camara_legislacao_textos_original_lei13874 --url "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html"
+```
+
+Endereços vistos fora das capturas são nível B, sem comando nem promoção ao catálogo. Pesquisa avançada e coleções continuam fora. A autorização dos links não demonstra texto capturado, consolidação, vigência, `verified` ou capacidade da Porta L. Perguntas para a futura sonda: alcançável? Barreira e categoria? Formato e conteúdo efetivos? A cadeia da MP 881 permite confrontar redações e eventos temporais? O PDF contém os anexos esperados?
 
 Notas: O portal de Dados Abertos da Câmara não tem endpoint de legislação em página oficial lida. Termos de uso: link no rodapé, não lido.
 
