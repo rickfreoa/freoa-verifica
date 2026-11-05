@@ -1,0 +1,27 @@
+{
+ "conector": null,
+ "versao": "1.4.0a2",
+ "url": "https://legis.senado.leg.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-04T22:13:04.641662+00:00",
+ "sonda": true,
+ "fonte_sonda": "senado_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": true,
+ "motivo": "http_403",
+ "categoria": "recusa_identificado",
+ "evidencia": {
+  "status": 403,
+  "url": "https://legis.senado.leg.br/robots.txt"
+ },
+ "url_final": null,
+ "status": null,
+ "content_type": null,
+ "cabecalhos": {},
+ "sha256": null,
+ "bytes": null,
+ "arquivo": null
+}

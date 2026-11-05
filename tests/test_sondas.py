@@ -26,9 +26,9 @@ from tests.test_transport import _fast_guards, _wire_local
 IDS = (
     "tst", "stf_acordaos", "bnp", "djen", "cjf_unificada", "trf1", "trf2", "trf3",
     "tjac", "tjal", "tjam", "tjms", "tjrj", "tjmg", "tjrs", "tjpr",
-    "senado_legislacao", "lexml", "normas_leg", "camara_legislacao", "dou",
+    "lexml", "normas_leg", "camara_legislacao",
 )
-IDS_IL2 = ("senado_legislacao", "lexml", "normas_leg", "camara_legislacao", "dou")
+IDS_IL2 = ("lexml", "normas_leg", "camara_legislacao")
 CORPO = b'{"ok":true}'
 
 
@@ -87,7 +87,7 @@ def test_catalogo_tem_exatamente_os_ids_da_especificacao_e_e_imutavel():
 
 # `.leg.br` só nos hosts exatos do IL.2 (lista fixa aqui, independente do catálogo); as 16 fontes anteriores seguem
 # restritas a .jus.br e .gov.br.
-HOSTS_LEG_BR_IL2 = frozenset({"legis.senado.leg.br", "normas.leg.br", "www.camara.leg.br", "www2.camara.leg.br"})
+HOSTS_LEG_BR_IL2 = frozenset({"normas.leg.br", "www.camara.leg.br", "www2.camara.leg.br"})
 
 
 def _dominio_oficial(fid: str, host: str) -> bool:
@@ -150,7 +150,7 @@ def test_escopo_de_caminho_consistente_sem_host_livre():
         ("tst", "consultadocumento.tst.jus.br"),
         ("cjf_unificada", "jurisprudencia.cjf.jus.br"), ("trf1", "jurisprudencia.cjf.jus.br"),
         ("trf1", "arquivo.trf1.jus.br"), ("trf2", "jurisprudencia.trf2.jus.br"),
-        ("normas_leg", "normas.leg.br"), ("camara_legislacao", "www2.camara.leg.br"), ("dou", "www.in.gov.br"),
+        ("normas_leg", "normas.leg.br"), ("camara_legislacao", "www2.camara.leg.br"), ("lexml", "www.lexml.gov.br"),
     }
 
 
@@ -1092,7 +1092,7 @@ def test_rota_exata_e_consulta_so_na_rota_declarada_com_parametros(envios, tmp_p
     assert [e["url"] for e in envios][-1].startswith("https://esaj.tjac.jus.br/cjsg/resultadoCompleta.do?")
     assert len(envios) == 4
     assert FONTES_SONDA["tjac"].consultas == {"esaj.tjac.jus.br": ("/cjsg/resultadoCompleta.do",)}
-    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac", "senado_legislacao", "lexml"]
+    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac"]
 
 
 def test_catalogo_so_tem_caminho_exato_sem_prefixo_nem_segmento_proibido():
@@ -1148,8 +1148,9 @@ def test_redirecionamento_de_rota_exata_nao_e_seguido(monkeypatch, tmp_path, des
 
 # --- B2: barreira registrada --------------------------------------------------------------------------
 
-def test_nenhuma_fonte_barrada_no_momento_e_tjrs_de_volta_em_nivel_b():
-    assert not FONTES_BARRADAS and not set(FONTES_BARRADAS) & set(FONTES_SONDA)
+def test_fontes_barradas_registradas_e_tjrs_de_volta_em_nivel_b():
+    assert set(FONTES_BARRADAS) == {"senado_legislacao", "dou"}
+    assert not set(FONTES_BARRADAS) & set(FONTES_SONDA)
     assert "tjrs" in FONTES_SONDA and FONTES_SONDA["tjrs"].hosts_b == {"www.tjrs.jus.br"}
     assert "www.tjrs.jus.br" not in HOSTS_RECUSADOS
 
@@ -1200,18 +1201,11 @@ def test_tjrs_robots_primeiro_no_roteiro_e_decisao_na_auditoria():
 # --- IL.2-a: catálogo e roteiro das rotas de legislação ----------------------------------------------------
 
 ROTAS_IL2 = {
-    "senado_legislacao": {"legis.senado.leg.br": ("/dadosabertos/legislacao/urn.json", "/dadosabertos/legislacao/lista.json",
-                                                  "/dadosabertos/legislacao/LEI/6404/1976.json")},
-    "lexml": {"www.lexml.gov.br": ("/busca/SRU",)},
+    "lexml": {"www.lexml.gov.br": ()},
     "normas_leg": {"normas.leg.br": ()},
     "camara_legislacao": {"www.camara.leg.br": ("/legislacao",), "www2.camara.leg.br": ()},
-    "dou": {"www.in.gov.br": ()},
 }
-CONSULTAS_IL2 = {
-    "senado_legislacao": {"legis.senado.leg.br": ("/dadosabertos/legislacao/urn.json", "/dadosabertos/legislacao/lista.json")},
-    "lexml": {"www.lexml.gov.br": ("/busca/SRU",)},
-}
-URN_LSA = "urn%3Alex%3Abr%3Afederal%3Alei%3A1976-12-15%3B6404"
+CONSULTAS_IL2 = {}
 
 
 def test_il2_allowlist_exata_de_hosts_rotas_e_consultas():
@@ -1221,8 +1215,7 @@ def test_il2_allowlist_exata_de_hosts_rotas_e_consultas():
         assert {h: tuple(c) for h, c in f.consultas.items()} == CONSULTAS_IL2.get(fid, {}), fid
         assert f.confirmacao == "A" and not f.hosts_b, fid
     assert {h for fid in IDS_IL2 for h in FONTES_SONDA[fid].hosts} == {
-        "legis.senado.leg.br", "www.lexml.gov.br", "normas.leg.br", "www.camara.leg.br", "www2.camara.leg.br",
-        "www.in.gov.br",
+        "www.lexml.gov.br", "normas.leg.br", "www.camara.leg.br", "www2.camara.leg.br",
     }
 
 
@@ -1247,10 +1240,7 @@ def test_il2_inlabs_e_hosts_sem_endpoint_oficial_recusados_e_fora_do_catalogo():
 
 
 @pytest.mark.parametrize("fid,url", [
-    ("senado_legislacao", f"https://legis.senado.leg.br/dadosabertos/legislacao/urn.json?urn={URN_LSA}"),
-    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/lista.json?tipo=LEI&numero=6404&ano=1976"),
-    ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/LEI/6404/1976.json"),
-    ("lexml", f"https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=urn+%3D+%22{URN_LSA}%22"),
+    ("lexml", "https://www.lexml.gov.br/robots.txt"),
     ("camara_legislacao", "https://www.camara.leg.br/legislacao"),
 ])
 def test_il2_rota_documentada_vai_ao_transporte(envios, tmp_path, fid, url):
@@ -1280,25 +1270,24 @@ def test_il2_rota_documentada_vai_ao_transporte(envios, tmp_path, fid, url):
     ("dou", "https://inlabs.in.gov.br/robots.txt"),
 ])
 def test_il2_caminho_nao_documentado_host_recusado_e_login_recusados_antes_da_rede(envios, tmp_path, fid, url):
-    with pytest.raises(ValueError, match="fora da allowlist da fonte-sonda"):
+    with pytest.raises(ValueError, match="barrada, sem sonda" if fid in FONTES_BARRADAS else "fora da allowlist da fonte-sonda"):
         captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="s", fonte_sonda=fid)
     assert envios == [] and not any(tmp_path.iterdir())
 
 
-def test_il2_consulta_so_nas_rotas_declaradas_com_parametros(envios, tmp_path):
-    for fid, url in [("lexml", "https://www.lexml.gov.br/busca/SRU?operation=searchRetrieve&query=a"),
-                     ("senado_legislacao", "https://legis.senado.leg.br/dadosabertos/legislacao/urn.json?urn=x")]:
-        captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave=f"k{len(envios)}", fonte_sonda=fid)
-    assert len(envios) == 2
+@pytest.mark.parametrize("path", ["/busca/SRU", "/busca/SRU?operation=searchRetrieve&query=a", "/sru", "/urn"])
+def test_il2_lexml_rotas_proibidas_ou_sem_documentacao_recusadas(envios, tmp_path, path):
+    with pytest.raises(ValueError, match="fora da allowlist da fonte-sonda"):
+        captura.capturar(None, url=f"https://www.lexml.gov.br{path}", destino=tmp_path,
+                         sonda=True, chave="s", fonte_sonda="lexml")
+    assert envios == [] and not any(tmp_path.iterdir())
 
 
 _BASE_MIMES = frozenset({"text/html", "application/json", "text/plain"})
 MIMES_IL2 = {  # conjunto esperado por fonte, fixado aqui, independente do catálogo
-    "senado_legislacao": _BASE_MIMES,
     "lexml": _BASE_MIMES | {"application/xml", "text/xml"},
     "normas_leg": _BASE_MIMES,
     "camara_legislacao": _BASE_MIMES,
-    "dou": _BASE_MIMES,
 }
 HOSTS_IL2 = {fid: frozenset(r) for fid, r in ROTAS_IL2.items()}
 
@@ -1354,10 +1343,10 @@ def test_il2_mutantes_de_mime_hosts_rotas_e_consulta_sao_rejeitados(fid):
 def test_il2_mutante_de_mime_chega_ao_transporte_e_o_teste_de_repasse_o_acusa(monkeypatch, envios, tmp_path):
     from types import MappingProxyType
 
-    f = FONTES_SONDA["senado_legislacao"]
+    f = FONTES_SONDA["camara_legislacao"]
     mutante = dataclasses.replace(f, mimes=f.mimes | {"application/octet-stream"})
     monkeypatch.setattr(captura, "FONTES_SONDA", MappingProxyType({**FONTES_SONDA, f.id: mutante}))
-    captura.capturar(None, url="https://legis.senado.leg.br/dadosabertos/legislacao/LEI/6404/1976.json",
+    captura.capturar(None, url="https://www.camara.leg.br/legislacao",
                      destino=tmp_path, sonda=True, chave="mut", fonte_sonda=f.id)
     assert envios[-1]["allowed_mimes"] != MIMES_IL2[f.id]  # a comparação com a constante o pega
 
@@ -1388,9 +1377,11 @@ def test_il2_roteiro_tem_secao_e_robots_primeiro_para_cada_fonte():
     por_fonte = {fid: [c for c in _comandos_do_roteiro() if c[1] == fid] for fid in IDS_IL2}
     for fid, cmds in por_fonte.items():
         assert cmds and cmds[0][4].endswith("/robots.txt") and not any(c[5] for c in cmds), fid  # nenhum host B
-    # a consulta neutra e os dois casos das capacidades c e d
-    urls = " ".join(c[4] for c in por_fonte["senado_legislacao"] + por_fonte["lexml"])
-    assert "1976-12-15%3B6404" in urls and "2006-12-14%3B123" in urls and "2019-04-30%3B881" in urls
+    for fid in ("senado_legislacao", "dou"):
+        assert f"### {fid}:" in texto
+        secao = texto.split(f"### {fid}:", 1)[1].split("\n##", 1)[0]
+        assert "04/11/2026" in secao and "http_403" in secao and "recusa_identificado" in secao
+        assert not any(c[1] == fid for c in _comandos_do_roteiro())
 
 
 @pytest.mark.repositorio
@@ -1401,3 +1392,51 @@ def test_il2_roteiro_inlabs_so_como_sessao_assistida_e_b_sem_comando():
     assert not any("inlabs" in ln for ln in secao.splitlines() if ln.startswith("python "))
     assert "decisão 0067" in secao
     assert all("inlabs" not in c[4] for c in _comandos_do_roteiro() if c[4])
+
+
+@pytest.mark.parametrize("fid,host,rota", [
+    ("senado_legislacao", "legis.senado.leg.br", "/dadosabertos/legislacao/LEI/6404/1976.json"),
+    ("dou", "www.in.gov.br", "/web/dou"),
+])
+@pytest.mark.parametrize("confirmado", [False, True])
+def test_il2_barreiras_reais_recusadas_por_fonte_e_por_host_antes_da_rede(envios, tmp_path, fid, host, rota, confirmado):
+    assert "04/11/2026" in FONTES_BARRADAS[fid] and "http_403" in FONTES_BARRADAS[fid]
+    assert "recusa_identificado" in FONTES_BARRADAS[fid]
+    assert HOSTS_RECUSADOS[host] == FONTES_BARRADAS[fid]
+    for path in ("/robots.txt", rota):
+        for fonte in (fid, "camara_legislacao"):
+            with pytest.raises(ValueError, match="barrada, sem sonda" if fonte == fid else "fora da allowlist"):
+                captura.capturar(None, url=f"https://{host}{path}", destino=tmp_path,
+                                 sonda=True, chave="b", fonte_sonda=fonte, confirmado_por_titular=confirmado)
+    assert envios == [] and not any(tmp_path.iterdir())
+
+
+@pytest.mark.repositorio
+def test_il2_evidencias_locais_integras_e_sanitizadas():
+    base = ROTEIRO.parent / "auditoria/1.4.0/il2a-sondas"
+    registros = sorted(base.rglob("*.captura.json"))
+    assert len(registros) == 7
+    corpos = set()
+    for registro in registros:
+        texto = registro.read_text(encoding="utf-8")
+        assert not re.search(r"(?<![A-Za-z])[A-Za-z]:[\\/]", texto)
+        r = json.loads(texto)
+        assert r["fonte_sonda"] == registro.parent.name
+        assert r["capturado_em"].startswith("2026-11-04") and r["sonda"] is True
+        if r["unavailable"]:
+            assert r["motivo"] == "http_403" and r["categoria"] == "recusa_identificado"
+            assert r["evidencia"]["status"] == 403 and r["arquivo"] is None
+        elif r["content_type"] == "text/plain":
+            corpo = registro.parent / r["arquivo"]
+            data = corpo.read_bytes()
+            assert len(data) == r["bytes"] and hashlib.sha256(data).hexdigest() == r["sha256"]
+            corpos.add(corpo)
+        else:
+            assert r["fonte_sonda"] == "camara_legislacao" and r["bytes"] == 59842
+            assert r["sha256"] == "2735440e8cc2c54f71b610af8b0dd38fcb0a46110ef1b9b667b20cc90bda49f1"
+            assert not (registro.parent / r["arquivo"]).exists()
+    assert len(corpos) == 4
+    assert set(base.rglob("*.txt")) == corpos
+    lexml = (base / "lexml/lexml_robots.txt").read_text(encoding="utf-8")
+    assert "Disallow: /busca/" in lexml and "Crawl-delay: 5" in lexml
+    assert "Allow: /urn" in lexml and "Allow: /sru" in lexml
