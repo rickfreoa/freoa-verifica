@@ -57,6 +57,7 @@ from freoa_verifica.texto_resposta import (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERID
                                            interpretar_legado_padrao)
 from freoa_verifica.transport import _CIRCUIT_BREAKERS, Response
 from freoa_verifica import situacao  # C2
+from freoa_verifica import qualificacao as _qualificacao  # A3
 from freoa_verifica.verify import (
     MemoryResolver,
     ResolvedWork,
@@ -3892,11 +3893,14 @@ class Verifica:
                     "circuito": circuit,
                 }
             )
+        rotas = self._carregar_qualificacao_rotas()
+        qualificacao = _qualificacao.anexar_rotas(self._carregar_qualificacao(), rotas)
         return {
             "fontes": fontes,
             "total": len(fontes),
             "contrato": CONTRATO_VERSAO,
-            "qualificacao": self._carregar_qualificacao(),
+            "qualificacao": qualificacao,
+            "qualificacao_rotas": rotas,
             "avisos_incidente": self._carregar_avisos_incidente(),
         }
 
@@ -3908,6 +3912,16 @@ class Verifica:
         except (OSError, ValueError, TypeError):
             _log.warning("falha ao carregar qualificacao.json", exc_info=True)
             return []
+
+    def _carregar_qualificacao_rotas(self) -> list[dict[str, Any]]:
+        """A3 (IL.3-a): matriz de capacidades por rota; sem apuração, tudo `nao_apurada`."""
+        try:
+            from importlib.resources import files
+            raw = files("freoa_verifica").joinpath("data/qualificacao_rotas.json").read_text(encoding="utf-8")
+        except OSError:
+            _log.warning("falha ao carregar qualificacao_rotas.json", exc_info=True)
+            return []
+        return _qualificacao.carregar(raw)
 
     def _carregar_avisos_incidente(self) -> list[dict[str, Any]]:
         avisos: list[dict[str, Any]] = []
