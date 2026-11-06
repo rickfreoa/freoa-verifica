@@ -1592,6 +1592,11 @@ class Verifica:
             return {"status": "formato_invalido", "motivo": "fonte_invalida", "versao": versao}
         out = self._obter_dispositivo(citacao, work_id, caminho, data, versao, fonte)
         out["versao"] = versao
+        # A2 (IL.3-a): `remissoes[]` só acompanha texto efetivamente devolvido; nos demais estados é lista vazia.
+        if out.get("status") != "encontrada" or not isinstance(out.get("texto"), str) or not out["texto"]:
+            out["remissoes"] = []
+        else:
+            out.setdefault("remissoes", [])
         vig = out.get("vigencia")
         if isinstance(vig, dict) and _historica(data) and (
                 vig.get("status") in ("verified", "vigente_na_fonte", "revogado")
@@ -1729,6 +1734,7 @@ class Verifica:
             "situacao_obra": situacao.resumo(sit),  # C2
             "caminho": path,
             "texto": text_out,
+            "remissoes": self._remissoes_dispositivo(rw, path, texto),
             "texto_atual": texto_atual,
             "truncado": trunc,
             "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, rw),
@@ -1750,6 +1756,45 @@ class Verifica:
             "evidencia": self._evidencia_dispositivo(rw),
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
         }
+
+    def _remissoes_dispositivo(self, rw, path, texto) -> list[dict[str, Any]]:
+        """A2 (IL.3-a): remissões expressas do texto; `resolvida` só com a obra identificada sem ambiguidade e o caminho
+        existente no documento da obra alvo já capturado (nunca consulta a rede)."""
+        if not isinstance(texto, str) or not texto:
+            return []
+        from freoa_verifica import remissoes as _rem
+
+        own = rw.work_key
+        raiz = (path or "").split(".")[0]
+        art = raiz if re.fullmatch(r"art\d+(?:-[A-Z])?", raiz) else None
+        documentos: dict[tuple, Any] = {}
+
+        def existe(work, p: str) -> bool:
+            chave = (work.kind, work.number, work.year)
+            if chave == (own.kind, own.number, own.year):
+                doc = rw.document
+            else:
+                if chave not in documentos:
+                    documentos[chave] = self._documento_local(work)
+                doc = documentos[chave]
+            return doc is not None and _find_provision(doc, p) is not None
+
+        return _rem.remissoes(texto, own, existe, art, implicita="/" not in (path or ""))
+
+    def _documento_local(self, work: WorkKey):
+        """Documento já capturado da obra, sem rede e sem escolher entre candidatas (ambígua ou ausente: None)."""
+        if not work.year:
+            return None
+        try:
+            hit = self._resolver.resolve(work)
+            if not isinstance(hit, ResolvedWork):
+                hit = self._rebuild_from_db(work, _exact=True)
+            if not isinstance(hit, ResolvedWork) or hit.persisted_incomplete:
+                return None
+            validate_identity(work, hit.document, hit.work_date)
+            return hit.document
+        except Exception:  # noqa: BLE001  - fechado: sem conferência, a remissão não é resolvida
+            return None
 
     def _obter_camara(self, rw, path, data, versao):
         self._revalidar_camara(rw)
