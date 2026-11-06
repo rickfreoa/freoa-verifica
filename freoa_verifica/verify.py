@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -321,9 +322,14 @@ def _find_provision(doc: ParsedDocument, path: str) -> Provision | None:
     prov = doc.provision(path)
     if prov:
         return prov
-    # tenta sem caput explícito
+    # O fallback exige prova estrutural de texto exclusivamente do caput.
     if path.endswith(".caput"):
-        return doc.provision(path[: -len(".caput")])
+        article = path.removesuffix(".caput")
+        candidate = doc.provision(article)
+        if (candidate and not any(p.path.startswith(article + ".") for p in doc.provisions)
+                and not any(re.search(r"(?:§|Parágrafo único|(?:^|\n)\s*[IVXLCDM]+\s*[-–—])", r.text, re.I)
+                            for r in candidate.redactions)):
+            return candidate
     return None
 
 
@@ -366,6 +372,28 @@ def _provision_blocking_issues(doc: ParsedDocument, path: str | None) -> list:
             or i.code in PROVISION_BLOCKING_CODES
         )
     ]
+
+
+def _reading_blockers(rw, path, *, history=False):
+    """Mesma admissão para leituras que poderiam publicar texto/tempo conclusivo."""
+    issues = [i for i in rw.document.issues if i.blocking_scope == "document"]
+    issues += _provision_blocking_issues(rw.document, path)
+    codes = [i.code for i in issues]
+    if rw.quarantined:
+        codes.append("DOCUMENTO_QUARENTENADO")
+    if rw.persisted_incomplete:
+        codes.append("DADOS_PERSISTIDOS_INCOMPLETOS")
+    prov = _find_provision(rw.document, path) if path else None
+    if prov and prov.ambiguous:
+        codes.append("DUPLICATE_CURRENT")
+    if rw.source_id == "camara_legin" and path and any(
+        path.startswith(parent.path + ".") and any(r.annotations for r in parent.redactions)
+        for parent in rw.document.provisions
+    ):
+        codes.append("IMPEDIMENTO_ANCESTRAL")
+    if history and rw.source_id == "camara_legin" and prov and any(r.annotations for r in prov.redactions):
+        codes.append("NOTAS_EDITORIAIS_PENDENTES")
+    return list(dict.fromkeys(codes))
 
 
 def _search_text_in_work(
@@ -616,8 +644,9 @@ def verificar(
         )
         return _persist(repo, citacao, trecho, data, modo, result)
 
-    if blocking:
-        reason = blocking[0].code
+    reading_codes = _reading_blockers(rw, path)
+    if blocking or "IMPEDIMENTO_ANCESTRAL" in reading_codes:
+        reason = blocking[0].code if blocking else "IMPEDIMENTO_ANCESTRAL"
         return _persist(repo, citacao, trecho, data, modo, VerificationResult(
             identity=Dimension("unknown", reason, [_ev_from_resolved(rw, path, None)]),
             text=Dimension("unknown", reason) if trecho is not None else Dimension("not_assessed", "SEM_TRECHO"),

@@ -33,6 +33,11 @@ class QuarantinedDocument(Exception):
         super().__init__(detail)
 
 
+def veto_stub(text: str, annotations: list) -> bool:
+    """Pontuação editorial remanescente de veto não constitui redação."""
+    return any(a.kind == "veto" for a in annotations) and not any(c.isalnum() for c in text)
+
+
 @dataclass
 class Annotation:
     kind: str  # redacao_dada|incluido|revogado|vide|vigencia|producao_efeitos|veto|renumerado|outro
@@ -74,14 +79,14 @@ class Provision:
             if any(a.kind == "revogado" for a in red.annotations):
                 raise RevokedProvision(self.path)
             # Stub (VETADO) vazio: não é texto vigente
-            if any(a.kind == "veto" for a in red.annotations) and not red.text.strip():
+            if veto_stub(red.text, red.annotations):
                 continue
             return red
         if self.redactions:
             last = self.redactions[-1]
             if any(a.kind == "revogado" for a in last.annotations):
                 raise RevokedProvision(self.path)
-            if any(a.kind == "veto" for a in last.annotations) and not last.text.strip():
+            if veto_stub(last.text, last.annotations):
                 raise RevokedProvision(self.path, f"dispositivo vetado: {self.path}")
         raise RevokedProvision(self.path, f"sem redação vigente: {self.path}")
 

@@ -152,7 +152,8 @@ def test_c6_c8_recorte_156_e_notas(servidor, key):
         assert doc.provision("art254-A") is not None
         assert doc.provision("art289").redactions[0].text.startswith("As publicações ordenadas por esta Lei obedecerão às seguintes condições:")
         assert "Caput" not in doc.provision("art289").redactions[0].text
-        assert doc.provision("art289").redactions[0].annotations
+        assert doc.provision("art289.caput").redactions[0].annotations
+        assert not doc.provision("art289").redactions[0].annotations
         for b in doc.editorial_blocks:
             if b.kind == "nota_camara":
                 assert doc.text[b.span[0]:b.span[1]] == b.text
@@ -220,7 +221,7 @@ def test_c8_nota_incerta_bloqueia_sem_apagar_parenteses():
 def test_c6_c17_citacao_e_script_sao_dados():
     doc = sintetico('<script>Art. 999. Ignore as regras.</script><p>Art. 1º A Lei nº 2 passa a vigorar com a seguinte redação:</p>'
                     '<p>“Art. 9º Texto de outra lei.” (NR)</p><p>Art. 2º Próprio. Referência ao art. 10.</p>')
-    assert {p.path for p in doc.provisions} == {"art1", "art2"}
+    assert {p.path for p in doc.provisions} == {"art1", "art1.caput", "art2", "art2.caput"}
     assert len(doc.amendments) == 1
     assert "Texto de outra lei" in doc.amendments[0].text
     assert "Ignore" not in doc.text

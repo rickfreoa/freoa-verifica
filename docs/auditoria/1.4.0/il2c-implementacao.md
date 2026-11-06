@@ -160,3 +160,85 @@ fronteira substituída por uma falha explícita. Sem a mutação, a prova passa 
 dessa fronteira e sem tentativa de conexão. Nenhum arquivo do produto foi mutado.
 
 FIM IL.2-c R1.
+
+## Correção da auditoria R2 — 2026-11-06
+
+Base de escrita: `feat/il2c-camara-legin`, HEAD `0d2bb41706b719446aaf3ae27f778e0c2fc4dd41`,
+PR #36. Parecer integral lido: `C:\dev\_il\parecer-pr36-r2.md`.
+Esta é a sessão de implementação; o aceite pertence à sessão independente de auditoria.
+
+| Achado | Implementação e regressão |
+|---|---|
+| F10 | Caput separado do agregado, com texto e span próprios, nas versões atualizada e original. Fallback legado recusa agregado com descendentes ou rótulos de descendentes. Os 282 caminhos atualizados e 236 originais do parecer são parâmetros de testes públicos. A testemunha de descendente vem de leitura independente dos elementos físicos do HTML, sem chamar o parser para gerar o esperado; a projeção agregada tem de conter a testemunha e o caput tem de excluí-la. Há positivo de caput exclusivo e negativo causal de troca por agregado. |
+| F11 | Alvo resolvido pelo sujeito e predicado editoriais e sua hierarquia, incluindo caput de artigo/parágrafo/inciso/alínea e renumeração de rótulo primitivo. Alvo incerto fica nulo e gera `ALVO_NOTA_INCERTO`, sem associação inventada. As 31 associações do parecer e os 29 agregados com impedimentos são parâmetros separados. Issues do agregado preservam alvo, kind e raw dos impedimentos; não se copiam datas/eventos dos filhos às anotações próprias. Nota de ancestral também bloqueia conclusão sobre o filho. Histórico editorial se abstém, sem início inferido da data da obra. |
+| F12 | A definição comum de stub de veto rejeita texto sem caracteres alfanuméricos normativos, inclusive ponto e ponto e vírgula. Os 11 caminhos atualizados e 14 originais do parecer têm regressões, além de quatro formas sintéticas. Modelo, nota, identidade, âncoras e bytes permanecem; obtenção não entrega pontuação normativa e confronto não confirma. Accessor do modelo também recusa o stub. |
+| F13 | Guarda aplicada antes de construir intervalos do histórico: duplicidade, quarentena, dados incompletos, revogação parcial e notas impedem histórico conclusivo. Resposta explícita `unknown`, linha vazia, flags, eventos preservados e `needs_judgment=true`. Cobertos os oito caminhos duplicados/agregados e os 26 agregados com revogação parcial enumerados em R1. |
+
+Revisão das rotas de leitura: `resolver_citacao`, construção comum de
+`obter_dispositivo` por citação/work_id, busca local com data, histórico,
+`ultima_versao_oficial_anterior`, `verificar_citacao` e verificação de texto
+embutido. REST, MCP e CLI encaminham ao serviço; há regressões dinâmicas Python,
+REST e MCP. A busca conserva candidatos, mas não publica vigência afirmativa de
+recorte impedido. A cadeia documental continua material de referência, com
+`cadeia_completa=false` e `fundamento_temporal=null`, sem transformar texto integral
+do alterador em prova do dispositivo ou período solicitado.
+
+A gramática aceita sufixos literais de parágrafo (`§ 1-B`), necessários para
+exercitar os caminhos do parecer no histórico público. Nenhuma letra é descartada.
+As expectativas antigas de texto positivo do art. 289 atualizado foram substituídas
+por abstenção explícita; os testes do comparador preservam caixa e pontuação sobre
+o caput não impedido do art. 1. O positivo de persistência/reabertura usa esse mesmo
+recorte. A publicação original do art. 289 continua exercitada separadamente.
+
+Parser `camara-legin-3`; modelos anteriores não são reutilizados como prova.
+Registro da correção em `docs/decisoes/0079-correcao-dos-recortes-legin-r2.md`.
+Transporte, UA, dependências, versão do contrato, consumidor, catálogo e fixtures
+oficiais permanecem sem alterações. Sem rede externa, sondas, push ou ativação viva.
+As limitações de capacidade e o aceite independente declarados em R1 permanecem.
+
+Ambiente: Windows, Python 3.14.6, ambiente existente `C:\dev\fv14-il\.venv`
+(MCP 2.3.0). O Python padrão tinha MCP 1.28.1 e não foi usado para a validação final.
+`PYTHONPATH` aponta para este worktree e `C:\dev\tmp`; `TMP/TEMP` fora do checkout.
+A guarda `il2c_offline_guard` bloqueia DNS/conexões externas nos testes. Todos os
+pytest focados usam `--basetemp C:\dev\tmp\pt-il2c-r2`.
+
+Validação focada final, após a última alteração de código:
+
+```text
+python -m pytest tests/test_camara_legin.py tests/test_camara_service.py tests/test_il2c_r1.py tests/test_il2c_r2.py -q -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2c-r2 --tb=short
+789 passed in 1068.68s (0:17:48)
+```
+
+Saída preservada em `C:\dev\tmp\il2c-r2-foco-final.log`. Provas causais,
+apenas em processos separados, sem editar produto: devolver agregado para caput
+fez a regressão pública do art. 156 falhar com `text=verified` (**1 failed**);
+desabilitar a guarda do histórico fez os dois casos do art. 59 falharem com
+`status=encontrada` (**2 failed**). Logs em
+`C:\dev\tmp\il2c-r2-mutante-{caput,historico}.log`.
+
+Validação completa final, com saída no terminal e preservada também em
+`C:\dev\tmp\il2c-r2-full.log`:
+
+```text
+python -m pytest tests -q -m "not live" -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2c-r2-full
+9093 passed, 6 skipped, 34 deselected in 3129.82s (0:52:09)
+
+python scripts/ruff_catraca.py
+exit_code=0 (nenhum achado novo em relação à baseline)
+```
+
+Após a suíte e a catraca, `C:\dev\tmp\il2c-r2-hashes.py --conferir` confirmou os
+mesmos SHA-256 de **44 arquivos de código, testes e fixtures**, com ramo e HEAD
+preservados; fotografia em `C:\dev\tmp\il2c-r2-estado-validado.json`.
+`git diff --check` passou. Não houve alteração em transporte, dependências,
+versão do contrato, consumidor FREOA, catálogo de sondas ou conector Senado.
+Rodadas interrompidas ou anteriores à última alteração não contam como validação
+final. CI Windows 3.11 e aceite da auditoria independente permanecem pendentes.
+
+**Commit bloqueado por permissão.** Uma única tentativa de `git add` foi recusada
+ao criar `C:/dev/fv14/.git/worktrees/fv14-il2c/index.lock` (`Permission denied`).
+Não repeti, não alterei ACL nem contornei a restrição. Nenhum commit foi criado;
+as alterações ficam no worktree para o supervisor. Três mensagens com os dois
+rodapés exigidos estão em `C:\dev\tmp\il2c-r2-{recortes,leituras,relatorio}-commit.txt`.
+
+FIM IL.2-c R2.

@@ -22,9 +22,12 @@ def acervo(tmp_path, servidor, monkeypatch):
 def test_c9_selecao_coexiste_reinicio(acervo):
     current = acervo.obter_dispositivo("art. 289 da Lei 6404/1976")
     original = acervo.obter_dispositivo("art. 289 da Lei 6404/1976", versao="publicacao_original")
-    assert current["status"] == original["status"] == "encontrada"
+    assert current["status"] == "unknown"  # F11: efeitos de descendentes não resolvidos.
+    assert current["reason_code"] == "IMPEDIMENTO_DESCENDENTE"
+    assert current["vigencia"]["status"] == "unknown"
+    assert original["status"] == "encontrada"
     assert current["versao"] == "vigente"
-    assert current["texto"].startswith("As publicações ordenadas por esta Lei obedecerão às seguintes condições:")
+    assert current["texto"] is None
     assert original["texto"].startswith("As publicações ordenadas pela presente Lei serão feitas no órgão oficial")
     assert original["vigencia"]["status"] == "unknown"
     assert original["vigencia"]["reason_code"] == "publicacao_nao_prova_aplicabilidade"
@@ -52,13 +55,13 @@ def test_c9_original_254a_e_invalida(acervo):
 
 
 @pytest.mark.parametrize("trecho,coincide", [
-    ("As publicações ordenadas por esta Lei", True),
-    ("as publicações ordenadas por esta Lei", False),
-    ("As publicações ordenadas por esta lei", False),
-    ("As publicações ordenadas por esta Lei obedecerão às seguintes condições;", False),
+    ("A companhia ou sociedade anônima", True),
+    ("a companhia ou sociedade anônima", False),
+    ("A companhia ou Sociedade anônima", False),
+    ("A companhia ou sociedade anônima;", False),
 ])
 def test_c8_comparacao_normalizada_preserva_caixa_e_pontuacao(acervo, trecho, coincide):
-    out = acervo.verificar_citacao("art. 289 da Lei 6404/1976", trecho=trecho,
+    out = acervo.verificar_citacao("art. 1, caput da Lei 6404/1976", trecho=trecho,
                                    modo="normalizado", data="2025-01-01")
     assert (out["correspondencia_textual"]["resultado"] == "coincide") is coincide
     assert out["text"]["status"] != "verified"
@@ -88,7 +91,7 @@ def test_c11_c12_abstencao_final_e_recibo(acervo, date):
         assert all(c["texto"] is None and c["publicacao"]["data"] is None for c in out["cadeia_alteracoes"])
     check = acervo.verificar_citacao("art. 289 da Lei 6404/1976", trecho="As publicações ordenadas por esta Lei", data=date)
     assert check["temporal"]["status"] == "unknown"
-    assert check["temporal"]["reason_code"] == "sem_versao_oficial_na_data"
+    assert check["temporal"]["reason_code"] == "IMPEDIMENTO_DESCENDENTE"
     assert check["text"]["status"] != "verified"
     assert check["fundamento_temporal"] is None
     assert check["cadeia_completa"] is False
@@ -124,7 +127,7 @@ def test_c11_c12_verificar_texto_embutido(acervo):
     assert out["citacoes"]
     for item in out["citacoes"]:
         assert item["verificacao"]["temporal"]["status"] == "unknown"
-        assert item["verificacao"]["temporal"]["reason_code"] == "sem_versao_oficial_na_data"
+        assert item["verificacao"]["temporal"]["reason_code"] == "IMPEDIMENTO_DESCENDENTE"
         assert item["cadeia_completa"] is False
         assert item["pendencias_temporais"]
         assert item["fundamento_temporal"] is None
@@ -187,7 +190,7 @@ def test_c10_c11_c12_material_real_persistido_sem_confirmar_d(acervo, monkeypatc
     acervo.registro = "completo"
     out = acervo.verificar_citacao("art. 289 da Lei 6404/1976", data="2025-01-01")
     assert out["temporal"]["status"] == "unknown"
-    assert out["temporal"]["reason_code"] == "sem_versao_oficial_na_data"
+    assert out["temporal"]["reason_code"] == "IMPEDIMENTO_DESCENDENTE"
     assert out["cadeia_completa"] is False and out["fundamento_temporal"] is None
     law = next(c for c in out["cadeia_alteracoes"] if c["ato"]["numero"] == "13874")
     assert law["publicacao"]["data"] == "2019-09-20"

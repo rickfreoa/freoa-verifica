@@ -118,7 +118,7 @@ def test_f2_lei_alteradora_nao_possui_inciso_do_codigo_civil(acervo_r1, chamar):
     out = chamar(acervo_r1, "obter_dispositivo", citacao=citacao)
     assert out["status"] != "encontrada" and out["texto"] is None
     rw = acervo_r1._resolve(WorkKey("federal", "lei", "13874", 2019))
-    assert not any(p.path.startswith("art7.") for p in rw.document.provisions)
+    assert not any(p.path.startswith("art7.") and p.path != "art7.caput" for p in rw.document.provisions)
     assert any("Art. 1.368-D." in q.text and "CAPÍTULO X" in q.text for q in rw.document.amendments)
 
 
@@ -133,7 +133,7 @@ def test_f2_escopo_incerto_bloqueia_saida(verifica_populada, chamar, monkeypatch
     out = chamar(svc, "verificar_citacao", citacao="art. 1 da Lei 1/2001", trecho="Texto estrangeiro")
     assert out["identity"]["status"] == "unknown"
     assert out["text"]["status"] == "unknown"
-    assert len(rw.document.provisions) == 1
+    assert {p.path for p in rw.document.provisions} == {"art1", "art1.caput"}
 
 
 def test_f3_revogacao_parcial_preserva_alvo(acervo_r1, chamar):
@@ -164,7 +164,10 @@ def test_f3_revogacao_parcial_preserva_alvo(acervo_r1, chamar):
             assert out["vigencia"]["status"] == "unknown", (path, out)
         for prov in rw.document.provisions:
             for red in prov.redactions:
-                assert all(a.target_path == prov.path for a in red.annotations), prov.path
+                assert all(a.target_path == prov.path or (
+                    a.target_path is None and any(i.code == "ALVO_NOTA_INCERTO" and i.path == prov.path
+                                                  for i in rw.document.issues))
+                    for a in red.annotations), prov.path
 
 
 def test_modelo_anterior_nao_reutiliza_falso_positivo(acervo_r1, chamar, monkeypatch):
@@ -366,8 +369,8 @@ def test_f8_busca_ate_persistencia_e_reinicio(tmp_path, servidor, chamar, monkey
         assert svc.conn.execute("SELECT count(*) FROM capture WHERE source_id='camara_legin'").fetchone()[0] >= 5
     monkeypatch.setenv("FV_OFFLINE", "1")
     with Verifica(home=home) as reopened:
-        out = chamar(reopened, "obter_dispositivo", citacao="art. 289 da Lei 6404/1976")
+        out = chamar(reopened, "obter_dispositivo", citacao="art. 1, caput da Lei 6404/1976")
         assert out["status"] == "encontrada", out
-        assert _conteudo(out["texto"]).startswith("As publicações ordenadas por esta Lei")
+        assert _conteudo(out["texto"]).startswith("A companhia ou sociedade anônima")
         assert out["evidencia"]["sha256"] == response("textos_atualizado_lei6404").sha256
     assert proibir_rede == []

@@ -8,10 +8,10 @@ from urllib.parse import urljoin
 from lxml import html
 
 from freoa_verifica.parsers.model import (ParsedDocument, Provision, Redaction, Annotation, Issue,
-                                         EditorialBlock, QuotedAmendment)
+                                         EditorialBlock, QuotedAmendment, veto_stub)
 from freoa_verifica.parsers.paths import roman_to_int
 
-PARSER_VERSION = "camara-legin-2"
+PARSER_VERSION = "camara-legin-3"
 _LABEL = re.compile(r"^(?:(Art\.\s*(\d+[º°o]?(?:-[A-Z])?)[.]?)|"
                     r"(§\s*(\d+[º°o]?(?:-[A-Z])?)[.]?)|(Parágrafo\s+único[.]?)|"
                     r"([IVXLCDM]+)\s*[-–—]|([a-z])\)|([1-9]\d*)\.)\s*", re.I)
@@ -24,6 +24,43 @@ _COMANDO_NOTA = re.compile(r"(?:com (?:nova )?redação dada|acrescid[oa](?: dad
                            r"transformad[oa] em §\s*\d+[º°o]? pel[ao] Lei(?: Complementar)?\s+n[º°o]?\s*[\d.]+|"
                            r"^Vide\s+(?:Lei(?: Complementar)?|Decreto(?:-lei)?|art\.)|VETAD[OA](?:\s+na\s+Lei(?: Complementar)?\s+n[º°o]?\s*[\d.]+"
                            r"(?:,\s*de\s*\d{1,2}/\d{1,2}/\d{4})?)?$|^Revogad[oa]$", re.I)
+
+
+def _alvo_nota(inside, active, records):
+    """O sujeito editorial nomeia o nível; a pilha só resolve seus ancestrais."""
+    primitive = re.match(r'^Primitivo\s+(§\s*\d+[º°o]?|inciso\s+[IVXLCDM]+)\s+renumerad[oa]\b', inside, re.I)
+    if primitive:
+        level = 2 if primitive[1].startswith("§") else 3
+        return next((r["path"] for r in reversed(records) if r["level"] == level and
+                     (active["path"] == r["path"] or active["path"].startswith(r["path"] + "."))), None)
+    subject = re.match(r'^[“"]?(Caput|Artigo|Parágrafo(?: único)?|Inciso|Alínea|Item)\b[”"]?', inside, re.I)
+    if not subject:
+        # Predicado sem sujeito explícito refere-se ao recorte em que foi publicado.
+        return (active["path"] if re.match(r'^(?:NR$|Redação\b|Revogad[oa]\b|Incluíd[oa]\b|Vide\b|VETAD[OA]\b)', inside, re.I)
+                else None)
+    family = subject[1].lower()
+    remainder = inside[subject.end():]
+    if family == "caput":
+        qualifier = re.match(r'\s+d[oa]\s+(artigo|parágrafo|inciso|alínea)\b', remainder, re.I)
+        if not qualifier:
+            return None
+        remainder = remainder[qualifier.end():]
+    if not re.match(r'\s+(?:com (?:nova )?redação dada|acrescid[oa]|incluíd[oa]|revogad[oa]|renumerad[oa]|transformad[oa]|VETAD[OA])\b', remainder, re.I):
+        return None
+    if family == "caput":
+        level = {"artigo": 1, "parágrafo": 2, "inciso": 3, "alínea": 4}[qualifier[1].lower()]
+        for record in reversed(records):
+            if record["level"] == level and (active["path"] == record["path"] or
+                                            active["path"].startswith(record["path"] + ".")):
+                return record["path"] + ".caput"
+        return None
+    level = {"artigo": 1, "parágrafo": 2, "parágrafo único": 2,
+             "inciso": 3, "alínea": 4, "item": 5}[family]
+    for record in reversed(records):
+        if record["level"] == level and (active["path"] == record["path"] or
+                                        active["path"].startswith(record["path"] + ".")):
+            return record["path"]
+    return None
 
 
 def _blocos(root):
@@ -111,6 +148,7 @@ def parse_camara_legin(data: str, *, base_url=None):
     quote_open, quote_balance = None, 0
     last_article = None
     used_note_spans = set()
+    pending_annotations = []
     for index, line in enumerate(lines):
         start, end = offset, offset + len(line)
         offset = end + 1
@@ -207,8 +245,11 @@ def parse_camara_legin(data: str, *, base_url=None):
                         except ValueError:
                             pass  # data literal inválida não é corrigida
                     act_date = next(iter(dates)) if len(dates) == 1 else None
-                    ann = Annotation(kind, raw, ref[0] if ref else None, href, act_date, active["path"])
-                    active["annotations"].append(ann)
+                    target = _alvo_nota(inside, active, records)
+                    if target is None:
+                        doc.issues.append(Issue("ALVO_NOTA_INCERTO", active["path"], raw, "provision"))
+                    ann = Annotation(kind, raw, ref[0] if ref else None, href, act_date, target)
+                    pending_annotations.append((active, ann))
                     # Toda nota removida da projeção mantém texto e âncora no texto-fonte.
                     note_start = doc.text.rfind(raw, active["start"], active["end"])
                     while note_start >= 0 and (note_start, note_start + len(raw)) in used_note_spans:
@@ -219,14 +260,23 @@ def parse_camara_legin(data: str, *, base_url=None):
                         doc.editorial_blocks.append(EditorialBlock(raw, note_span, "nota_camara"))
                         doc.editorial_blocks.append(EditorialBlock(json.dumps(refs, ensure_ascii=False), note_span, "nota_camara_links"))
                     if re.search(r"vigor|efeitos|vigência|condicionad", inside, re.I):
-                        active["annotations"].append(Annotation("vigencia", raw, ann.act_ref, href,
-                                                                act_date, active["path"]))
+                        pending_annotations.append((active, Annotation("vigencia", raw, ann.act_ref, href,
+                                                                         act_date, target)))
                     clean = clean[:m.start()] + clean[m.end():]
                 elif re.search(r"redação|renumerad|transformad|acrescid|incluíd|revogad|vetad|^vide\b|produção de efeitos", inside, re.I):
                     doc.issues.append(Issue("NOTA_NAO_RECONHECIDA", active["path"], raw, "provision"))
             active["text"] = clean.strip()
     if in_quote:
         doc.issues.append(Issue("TRUNCATED", quote_host, "citacao_alteradora_sem_fim", "document"))
+    # Associar depois da leitura permite que uma nota terminal pertença ao artigo/caput.
+    caput_annotations = {}
+    for owner, ann in pending_annotations:
+        if ann.target_path and ann.target_path.endswith(".caput"):
+            caput_annotations.setdefault(ann.target_path, []).append(ann)
+        else:
+            targets = [r for r in records if r["path"] == ann.target_path and
+                       r["start"] <= owner["start"]]
+            (targets[-1] if targets else owner)["annotations"].append(ann)
     seen = {}
     for i, r in enumerate(records):
         descendants = []
@@ -239,7 +289,14 @@ def parse_camara_legin(data: str, *, base_url=None):
         if any(a.kind == "revogado" for c in descendants for a in c["annotations"]):
             doc.issues.append(Issue("REVOGACAO_PARCIAL", r["path"],
                                     "revogação restrita a descendente; agregado não revogado", "provision"))
-        if any(a.kind == "veto" for a in anns) and not r["text"].strip():
+        impediments = [a for c in [r, *descendants] for a in
+                       (c["annotations"] if c is not r else []) + caput_annotations.get(c["path"] + ".caput", [])
+                       if a.kind in {"vide", "vigencia", "veto", "renumerado"}]
+        if impediments:
+            doc.issues.append(Issue("IMPEDIMENTO_DESCENDENTE", r["path"],
+                                    json.dumps([{"target_path": a.target_path, "kind": a.kind, "raw": a.raw}
+                                                for a in impediments], ensure_ascii=False), "provision"))
+        if veto_stub(r["text"], anns):
             doc.issues.append(Issue("VETO", r["path"], "dispositivo sem redação normativa", "provision"))
         span = (r["start"], descendants[-1]["end"] if descendants else r["end"])
         prov = Provision(r["path"], r["label"], "", redactions=[Redaction(text, False, 0, anns, span)])
@@ -248,6 +305,15 @@ def parse_camara_legin(data: str, *, base_url=None):
             doc.issues.append(Issue("DUPLICATE_CURRENT", r["path"], "rótulo concorrente", "provision"))
         seen[r["path"]] = prov
         doc.provisions.append(prov)
+        if r["level"] == 1 or r["path"] + ".caput" in caput_annotations:
+            cap_path = r["path"] + ".caput"
+            cap = Provision(cap_path, r["label"] + " caput", "", redactions=[Redaction(
+                r["text"], False, 0, caput_annotations.get(cap_path, []), (r["start"], r["end"]))])
+            if cap_path in seen:
+                seen[cap_path].ambiguous = cap.ambiguous = True
+                doc.issues.append(Issue("DUPLICATE_CURRENT", cap_path, "caput concorrente", "provision"))
+            seen[cap_path] = cap
+            doc.provisions.append(cap)
     # Um agregado inclui os descendentes: impedimento do filho impede confronto do agregado.
     for issue in list(doc.issues):
         if issue.path and issue.blocking_scope == "provision":

@@ -66,6 +66,7 @@ from freoa_verifica.verify import (
     _current_redaction,
     _provision_blocking_issues,
     _find_provision,
+    _reading_blockers,
     _inferir_esfera,
     campos_evidencia,
     campos_evidencia_obra,
@@ -1316,7 +1317,9 @@ class Verifica:
                     rw = self._resolve(wk)
                     if isinstance(rw, ResolvedWork):
                         prov = rw.document.provision(row["path"])
-                        if prov:
+                        if codes := _reading_blockers(rw, row["path"]):
+                            vigencia = {"status": "unknown", "motivo": codes[0], "flags": codes}
+                        elif prov:
                             tr = temporal_select(prov, data, work_date=rw.work_date)
                             vigencia = {
                                 "status": tr.status,
@@ -1540,6 +1543,10 @@ class Verifica:
             out["candidatos"] = [r.work_id for r in resolved]
             return out
         if cite.path:
+            if codes := _reading_blockers(resolved, cite.path):
+                return {**out, "status": "unknown", "caminho": cite.path,
+                        "motivo": codes[0], "flags": codes, "work_id": resolved.work_id,
+                        "identity": {"status": "unknown", "reason_code": codes[0]}}
             provision = _find_provision(resolved.document, cite.path)
             if provision is None:
                 neg = self._sem_dispositivo(resolved, cite.path)
@@ -1660,6 +1667,16 @@ class Verifica:
         if prov is None:
             return self._sem_dispositivo(rw, path)
 
+        if codes := _reading_blockers(rw, path):
+            return {"status": "unknown", "reason_code": codes[0], "work_id": rw.work_id,
+                    "caminho": path, "texto": None, "texto_atual": None, "truncado": False,
+                    "redacoes_anteriores": [], "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov),
+                    "situacao_obra": situacao.resumo(sit), "fundamento_temporal": None,
+                    "correspondencia_textual": None, "evidencia": self._evidencia_dispositivo(rw),
+                    "anotacoes": [asdict(a) for r in prov.redactions for a in r.annotations],
+                    "vigencia": {"status": "unknown", "reason_code": codes[0], "regras": [],
+                                 "flags": codes, "intervalo": None}}
+
         tr = temporal_select(prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts, fetched_at=rw.fetched_at, quarantined=rw.quarantined)
         tr = situacao.aplicar_situacao_tr(tr, sit, data)  # C2
         red = _redaction_by_id(prov, tr.redaction_id) if tr.redaction_id else None
@@ -1746,8 +1763,7 @@ class Verifica:
                            vigencia={"status": "unknown", "reason_code": issues[0].code if issues else "recorte_ambiguo",
                                      "regras": [], "flags": [], "intervalo": None},
                            pendencias=[asdict(i) for i in issues])
-            else:
-                red = _current_redaction(prov)
+            if red := _current_redaction(prov):
                 out["evidencia"].update(path=path, span=list(red.span), parser_version=rw.document.parser_version)
                 if not red.text.strip():
                     out.update(status="unknown", reason_code="dispositivo_sem_redacao_normativa", texto=None)
@@ -1865,11 +1881,7 @@ class Verifica:
         pub = next((r.get("publicacao") for r in inv.get("recursos", []) if r["recurso"] == "original"), None)
         if isinstance(original, ResolvedWork) and pub and pub.get("data") and pub["data"] <= data:
             provision = _find_provision(original.document, path) if path else None
-            if provision and not original.quarantined and not provision.ambiguous and not any(
-                issue.blocking_scope == "provision" and issue.path and
-                (issue.path == path or issue.path.startswith(path + ".") or path.startswith(issue.path + "."))
-                for issue in original.document.issues
-            ):
+            if provision and not _reading_blockers(original, path, history=True):
                 previous = {"data": pub["data"], "texto": provision.redactions[0].text,
                             "caminho": path, "evidencia": self._evidencia_dispositivo(original)}
                 previous["evidencia"].update(path=path, span=list(provision.redactions[0].span),
@@ -1919,6 +1931,12 @@ class Verifica:
         prov = _find_provision(resolved.document, cite.path)
         if prov is None:
             return self._sem_dispositivo(resolved, cite.path)
+        if codes := _reading_blockers(resolved, cite.path, history=True):
+            return {"status": "unknown", "citacao": citacao, "caminho": cite.path,
+                    "work_id": resolved.work_id, "linha_do_tempo": [], "regras": [],
+                    "eventos": [asdict(a) for r in prov.redactions for a in r.annotations],
+                    "flags": codes, "needs_judgment": True, "reason_code": codes[0],
+                    "fundamento_temporal": None, "evidencia": self._evidencia_dispositivo(resolved)}
         from freoa_verifica.temporal import build_intervals
 
         dated, rules, needs_judgment, gflags = build_intervals(
@@ -2215,12 +2233,16 @@ class Verifica:
             out["temporal"] = {"status": "unknown", "reason_code": "ASSOCIACAO_REQUER_CONFERENCIA"}
         # C1 (0075, §2, itens 1, 5 e 6): guarda histórica na saída, defesa em profundidade da guarda da situação.
         _guarda_historica(out, data)
-        if cite is not None and cite.work is not None and out["identity"].get("status") == "verified" and _historica(data):
+        if (cite is not None and cite.work is not None and _historica(data)
+                and out["identity"].get("status") in {"verified", "unknown"}):
             try:
                 material_rw = self._resolve(cite.work, strict=True)
             except (SourceUnavailable, IdentityMismatch):
                 material_rw = None
-            if isinstance(material_rw, ResolvedWork):
+            if isinstance(material_rw, ResolvedWork) and (
+                out["identity"].get("status") == "verified" or
+                out["identity"].get("reason_code") in _reading_blockers(material_rw, cite.path)
+            ):
                 self._material_historico_camara(out, material_rw, cite.path, data)
         # Nunca verified sem capture_id correspondente.
         for dim_name in ("identity", "text", "temporal"):

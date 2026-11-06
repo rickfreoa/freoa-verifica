@@ -111,7 +111,7 @@ def validate_cnj_dv(number: str) -> bool:
 
 _ART_NUM = r"\d+(?:\.\d{3})?(?:-[A-Za-z])?[ºªo°]?(?!\w|\.\w|[-/]\w)"
 _ART_TOKEN = rf"(?:arts?\.?|artigos?)\s*{_ART_NUM}(?:\s*(?:,|e)\s*{_ART_NUM})*"
-_PAR_TOKEN = r"(?:§|par[aá]grafo)\s*(?:[uú]nico|\d+[ºªo°]?)"
+_PAR_TOKEN = r"(?:§|par[aá]grafo)\s*(?:[uú]nico|\d+[ºªo°]?(?:-[A-Za-z])?)"
 _INC_TOKEN = r"(?:(?:inciso|inc\.)\s+)?[IVXLCDM]+(?:-[A-Za-z])?\b"
 _ALI_TOKEN = r"(?:(?:al[ií]nea|al\.)\s+[\"'“‘(]?[a-z](?!\w)[\"'”’)]?|[\"'“‘(][a-z][\"'”’)]|[a-z](?!\w)(?=\s*(?:,|do\b|da\b|$)))"
 _ITEM_TOKEN = r"item\s+\d+[ºªo°]?(?!\w|\.\d)"
@@ -296,9 +296,11 @@ def _device_to_paths(device_text: str) -> list[str]:
         if "-" in art.group(1):
             path += "-" + art.group(1).split("-")[1].upper()
         rest = text[:art.start()] + text[art.end():]
-        par = re.search(r"(?:§|par[aá]grafo)\s*([uú]nico|\d+)[ºªo°]?", rest, re.I)
+        par = re.search(r"(?:§|par[aá]grafo)\s*([uú]nico|\d+)[ºªo°]?(?:-([A-Za-z]))?", rest, re.I)
         if par:
             path += ".par" + ("unico" if not par.group(1).isdigit() else str(int(par.group(1))))
+            if par.group(2):
+                path += "-" + par.group(2).upper()
             rest = rest[:par.start()] + rest[par.end():]
         if re.search(r"\bcaput\b", rest, re.I):
             path += ".caput"
