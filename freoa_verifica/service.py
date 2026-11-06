@@ -53,7 +53,6 @@ from freoa_verifica.parsers.model import (
 from freoa_verifica.store import blobs, repo
 from freoa_verifica.store.db import connect, data_home
 from freoa_verifica.temporal import _parse_iso, today_sp
-from freoa_verifica.temporal import select as temporal_select
 from freoa_verifica.texto_resposta import (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO, content_type_do_response,
                                            interpretar_legado_padrao)
 from freoa_verifica.transport import _CIRCUIT_BREAKERS, Response
@@ -67,6 +66,10 @@ from freoa_verifica.verify import (
     _provision_blocking_issues,
     _find_provision,
     _reading_blockers,
+    _temporal_select,
+    _camara_sem_historia,
+    _annotations_for_cut,
+    INICIO_ATUAL_NAO_DOCUMENTADO,
     _inferir_esfera,
     campos_evidencia,
     campos_evidencia_obra,
@@ -1320,7 +1323,7 @@ class Verifica:
                         if codes := _reading_blockers(rw, row["path"]):
                             vigencia = {"status": "unknown", "motivo": codes[0], "flags": codes}
                         elif prov:
-                            tr = temporal_select(prov, data, work_date=rw.work_date)
+                            tr = _temporal_select(rw, prov, data, work_date=rw.work_date)
                             vigencia = {
                                 "status": tr.status,
                                 "regras": tr.rules_applied,
@@ -1670,14 +1673,14 @@ class Verifica:
         if codes := _reading_blockers(rw, path):
             return {"status": "unknown", "reason_code": codes[0], "work_id": rw.work_id,
                     "caminho": path, "texto": None, "texto_atual": None, "truncado": False,
-                    "redacoes_anteriores": [], "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov),
+                    "redacoes_anteriores": [], "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, rw),
                     "situacao_obra": situacao.resumo(sit), "fundamento_temporal": None,
                     "correspondencia_textual": None, "evidencia": self._evidencia_dispositivo(rw),
                     "anotacoes": [asdict(a) for r in prov.redactions for a in r.annotations],
                     "vigencia": {"status": "unknown", "reason_code": codes[0], "regras": [],
                                  "flags": codes, "intervalo": None}}
 
-        tr = temporal_select(prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts, fetched_at=rw.fetched_at, quarantined=rw.quarantined)
+        tr = _temporal_select(rw, prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts, fetched_at=rw.fetched_at, quarantined=rw.quarantined)
         tr = situacao.aplicar_situacao_tr(tr, sit, data)  # C2
         red = _redaction_by_id(prov, tr.redaction_id) if tr.redaction_id else None
         # C3: com data pedida e sem redação selecionada, a atual não substitui a resposta.
@@ -1724,7 +1727,7 @@ class Verifica:
             "texto": text_out,
             "texto_atual": texto_atual,
             "truncado": trunc,
-            "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov),
+            "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, rw),
             "vigencia": {
                 "status": tr.status,
                 "reason_code": tr.reason,
@@ -1767,11 +1770,19 @@ class Verifica:
                 out["evidencia"].update(path=path, span=list(red.span), parser_version=rw.document.parser_version)
                 if not red.text.strip():
                     out.update(status="unknown", reason_code="dispositivo_sem_redacao_normativa", texto=None)
-                out["anotacoes"] = [asdict(a) for a in red.annotations]
+                out["anotacoes"] = [asdict(a) for a in _annotations_for_cut(rw, path)]
                 for annotation in out["anotacoes"]:
                     annotation["links"] = [ref for block in rw.document.editorial_blocks
                         if block.kind == "nota_camara_links" and rw.document.text[block.span[0]:block.span[1]] == annotation["raw"]
                         for ref in json.loads(block.text)]
+        if _camara_sem_historia(rw) and prov:
+            vigencia = out.setdefault("vigencia", {})
+            vigencia.update(status="unknown", intervalo=None, limites_inferidos=True,
+                            needs_judgment=True)
+            vigencia["flags"] = list(dict.fromkeys([
+                *vigencia.get("flags", []), INICIO_ATUAL_NAO_DOCUMENTADO]))
+            vigencia.setdefault("reason_code", INICIO_ATUAL_NAO_DOCUMENTADO)
+            out["redacao_anterior_ausente_na_fonte"] = True
         if versao == "publicacao_original":
             out.setdefault("vigencia", {"regras": [], "flags": [], "intervalo": None}).update(
                 status="unknown", reason_code="publicacao_nao_prova_aplicabilidade")
@@ -1934,7 +1945,9 @@ class Verifica:
         if codes := _reading_blockers(resolved, cite.path, history=True):
             return {"status": "unknown", "citacao": citacao, "caminho": cite.path,
                     "work_id": resolved.work_id, "linha_do_tempo": [], "regras": [],
-                    "eventos": [asdict(a) for r in prov.redactions for a in r.annotations],
+                    "eventos": [asdict(a) for a in _annotations_for_cut(resolved, cite.path)],
+                    "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, resolved),
+                    "limites_inferidos": True,
                     "flags": codes, "needs_judgment": True, "reason_code": codes[0],
                     "fundamento_temporal": None, "evidencia": self._evidencia_dispositivo(resolved)}
         from freoa_verifica.temporal import build_intervals
@@ -1994,13 +2007,15 @@ class Verifica:
             "regras": rules,
             "flags": gflags,
             "needs_judgment": needs_judgment,
-            "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov),
+            "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, resolved),
             "situacao_obra": situacao.resumo(sit),  # C2
         }
 
     @staticmethod
-    def _anterior_ausente(prov: Provision) -> bool:
+    def _anterior_ausente(prov: Provision, rw=None) -> bool:
         """A primeira redação conhecida já é 'Redação dada': a anterior não consta da fonte."""
+        if rw is not None and _camara_sem_historia(rw):
+            return True
         if not prov.redactions:
             return False
         first = min(prov.redactions, key=lambda r: r.order)

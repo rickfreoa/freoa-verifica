@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import sqlite3
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -374,6 +374,35 @@ def _provision_blocking_issues(doc: ParsedDocument, path: str | None) -> list:
     ]
 
 
+INICIO_ATUAL_NAO_DOCUMENTADO = "inicio_redacao_atual_nao_documentado"
+
+
+def _camara_sem_historia(rw):
+    return rw.source_id == "camara_legin" and rw.document.profile == "camara_atualizado"
+
+
+def _annotations_for_cut(rw, path):
+    """Metadados do recorte, sem atribuir eventos de componentes ao pai."""
+    annotations = []
+    for prov in rw.document.provisions:
+        if prov.path == path or (path and prov.path.startswith(path + ".")):
+            for red in prov.redactions:
+                for ann in red.annotations:
+                    if ann not in annotations:
+                        annotations.append(ann)
+    return annotations
+
+
+def _temporal_select(rw, provision, data=None, **kwargs):
+    result = temporal_select(provision, data, **kwargs)
+    if not _camara_sem_historia(rw):
+        return result
+    # 0077: nem silêncio editorial nem data de nota documentam o início atual.
+    return replace(result, status="unknown", interval=None, rules_applied=[],
+                   needs_judgment=True, reason=INICIO_ATUAL_NAO_DOCUMENTADO,
+                   flags=list(dict.fromkeys([*result.flags, INICIO_ATUAL_NAO_DOCUMENTADO])))
+
+
 def _reading_blockers(rw, path, *, history=False):
     """Mesma admissão para leituras que poderiam publicar texto/tempo conclusivo."""
     issues = [i for i in rw.document.issues if i.blocking_scope == "document"]
@@ -391,7 +420,9 @@ def _reading_blockers(rw, path, *, history=False):
         for parent in rw.document.provisions
     ):
         codes.append("IMPEDIMENTO_ANCESTRAL")
-    if history and rw.source_id == "camara_legin" and prov and any(r.annotations for r in prov.redactions):
+    if history and _camara_sem_historia(rw):
+        codes.append(INICIO_ATUAL_NAO_DOCUMENTADO)
+    if history and rw.source_id == "camara_legin" and prov and _annotations_for_cut(rw, path):
         codes.append("NOTAS_EDITORIAIS_PENDENTES")
     return list(dict.fromkeys(codes))
 
@@ -696,8 +727,8 @@ def verificar(
                 [_ev_from_resolved(rw, path, None)],
             )
             # temporal ainda avalia revogado; text nunca verified
-            temporal_res = temporal_select(
-                prov,
+            temporal_res = _temporal_select(
+                rw, prov,
                 data,
                 work_date=rw.work_date,
                 amending_act_texts=rw.amending_act_texts,
@@ -742,8 +773,8 @@ def verificar(
         temporal_dim = Dimension("not_assessed", "SEM_DISPOSITIVO")
         temporal_res = None
     else:
-        temporal_res = temporal_select(
-            prov,
+        temporal_res = _temporal_select(
+            rw, prov,
             data,
             work_date=rw.work_date,
             amending_act_texts=rw.amending_act_texts,

@@ -40,6 +40,19 @@ Sem prova documental do período, o resultado para D é `unknown` com
 Nenhum dicionário do chamador habilita fundamento. As guardas das demais fontes da
 0075 continuam valendo. Não há reconstrução textual por comandos alteradores.
 
+Para o texto atualizado de `camara_legin`, acrescenta-se o motivo
+`inicio_redacao_atual_nao_documentado`: a fonte não estabelece o início da redação
+atual, inclusive em recortes sem notas. Na obtenção, `vigencia.intervalo=null`,
+`vigencia.limites_inferidos=true`, `vigencia.needs_judgment=true` e
+`redacao_anterior_ausente_na_fonte=true` explicitam essa lacuna. O histórico
+mantém `linha_do_tempo=[]`, `needs_judgment=true` e acrescenta
+`limites_inferidos=true` e a indicação de redação anterior ausente. Impedimentos
+específicos conservam seus motivos e o novo motivo também aparece nos flags;
+para D permanece a abstenção histórica acima. `anotacoes` da obtenção e `eventos`
+do histórico incluem todos os componentes do recorte, inclusive caputs, cada
+qual com seu `target_path`, sem atribuir eventos ou datas ao agregado. A publicação
+original continua referência documental, sem afirmar aplicabilidade.
+
 Evidências dos perfis HTML validados usam o construtor comum:
 `source_kind` da espécie efetiva, `natureza_texto` conforme atualizado/original,
 `procedencia` por captura, `esfera=federal`, `captured_at=fetched_at`, `acervo_ate=null`

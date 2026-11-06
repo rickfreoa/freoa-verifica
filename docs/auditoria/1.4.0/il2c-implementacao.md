@@ -170,7 +170,7 @@ Esta é a sessão de implementação; o aceite pertence à sessão independente 
 | Achado | Implementação e regressão |
 |---|---|
 | F10 | Caput separado do agregado, com texto e span próprios, nas versões atualizada e original. Fallback legado recusa agregado com descendentes ou rótulos de descendentes. Os 282 caminhos atualizados e 236 originais do parecer são parâmetros de testes públicos. A testemunha de descendente vem de leitura independente dos elementos físicos do HTML, sem chamar o parser para gerar o esperado; a projeção agregada tem de conter a testemunha e o caput tem de excluí-la. Há positivo de caput exclusivo e negativo causal de troca por agregado. |
-| F11 | Alvo resolvido pelo sujeito e predicado editoriais e sua hierarquia, incluindo caput de artigo/parágrafo/inciso/alínea e renumeração de rótulo primitivo. Alvo incerto fica nulo e gera `ALVO_NOTA_INCERTO`, sem associação inventada. As 31 associações do parecer e os 29 agregados com impedimentos são parâmetros separados. Issues do agregado preservam alvo, kind e raw dos impedimentos; não se copiam datas/eventos dos filhos às anotações próprias. Nota de ancestral também bloqueia conclusão sobre o filho. Histórico editorial se abstém, sem início inferido da data da obra. |
+| F11 | Alvo resolvido pelo sujeito e predicado editoriais e sua hierarquia, incluindo caput de artigo/parágrafo/inciso/alínea e renumeração de rótulo primitivo. Alvo incerto fica nulo e gera `ALVO_NOTA_INCERTO`, sem associação inventada. As 31 associações do parecer e os 29 agregados com impedimentos são parâmetros separados. Issues do agregado preservam alvo, kind e raw dos impedimentos; não se copiam datas/eventos dos filhos às anotações próprias. Nota de ancestral também bloqueia conclusão sobre o filho. A abstenção temporal de R2 cobria apenas os impedimentos enumerados; o auditor R3 demonstrou a lacuna de classe F14 em 102 agregados. |
 | F12 | A definição comum de stub de veto rejeita texto sem caracteres alfanuméricos normativos, inclusive ponto e ponto e vírgula. Os 11 caminhos atualizados e 14 originais do parecer têm regressões, além de quatro formas sintéticas. Modelo, nota, identidade, âncoras e bytes permanecem; obtenção não entrega pontuação normativa e confronto não confirma. Accessor do modelo também recusa o stub. |
 | F13 | Guarda aplicada antes de construir intervalos do histórico: duplicidade, quarentena, dados incompletos, revogação parcial e notas impedem histórico conclusivo. Resposta explícita `unknown`, linha vazia, flags, eventos preservados e `needs_judgment=true`. Cobertos os oito caminhos duplicados/agregados e os 26 agregados com revogação parcial enumerados em R1. |
 
@@ -242,3 +242,100 @@ as alterações ficam no worktree para o supervisor. Três mensagens com os dois
 rodapés exigidos estão em `C:\dev\tmp\il2c-r2-{recortes,leituras,relatorio}-commit.txt`.
 
 FIM IL.2-c R2.
+
+## Correção R3 — F14, classe temporal da consolidação
+
+Base: `04ac65f`, ramo `feat/il2c-camara-legin`, PR #36. Parecer lido:
+`C:\dev\_il\parecer-pr36-r3.md`. Esta seção substitui a abrangência excessiva
+da afirmação temporal de R2; F1–F13 não foram reabertos como escopo de mudança.
+
+O seletor usado pelas leituras públicas reconhece a classe `camara_atualizado`
+da fonte `camara_legin`: sua redação atual não tem início documentalmente
+estabelecido, mesmo sem nota editorial. Intervalo nulo, estado temporal
+`unknown`, motivo aditivo `inicio_redacao_atual_nao_documentado` e sinalização
+de juízo pendente preservam essa lacuna. A obtenção expõe também
+`limites_inferidos=true` e `redacao_anterior_ausente_na_fonte=true`; o histórico
+se abstém de linha do tempo conclusiva. A regra não substitui o início pela
+data de um ato mencionado na nota e não habilita fundamento para D.
+
+Os metadados públicos da obtenção e do histórico incluem as notas de todos
+os componentes do recorte, inclusive caputs, com seus próprios `target_path`.
+As anotações internas continuam pertencendo aos respectivos dispositivos:
+nenhum evento ou data é transferido ao pai. Publicação original conserva o
+tratamento de referência documental, sem afirmar aplicabilidade.
+
+`tests/test_il2c_r3.py` transcreve os 102 caminhos do auditor como parâmetros,
+com expectativas fixas de abstenção na obtenção e no histórico públicos.
+A varredura de classe percorre todos os 3.181 dispositivos das três fixtures
+atualizadas (1.841 LSA, 1.186 LC 123 e 154 Lei 13.874), além de verificar as
+fachadas de citação/texto com e sem data. Três testemunhas explícitas conferem
+os alvos dos caputs, incluindo inclusão e redação dada.
+
+Nos 102 parâmetros a releitura do banco é integral. Somente na varredura de
+classe, modelos das capturas imutáveis são reutilizados em memória para evitar
+reidratação repetida do mesmo JSON; a revalidação documental continua ocorrendo
+a cada seleção. Os testes chamam as operações públicas, sem substituir o seletor
+temporal, os bloqueadores, as capturas ou as respostas esperadas.
+
+Nenhuma fixture foi alterada. Sem acesso de rede, sondas, mudança de transporte,
+dependências, `CONTRATO_VERSAO`, consumidor FREOA, Senado ou qualificação IL.3.
+A auditoria independente e a decisão sobre o passe final do D5 continuam a
+cargo das sessões responsáveis.
+
+Ambiente do Pytest R3: `python` resolvido por
+`C:\dev\fv14\.venv\Scripts\python.exe`, com `PYTHONPATH=C:\dev\fv14-il2c`
+e `TMP`/`TEMP=C:\dev\tmp`. A origem do módulo importado foi conferida como
+este worktree. O Python padrão não oferecia `mcp.Client`; as tentativas nesse
+ambiente e as execuções interrompidas não são evidência de validação final.
+Não houve instalação de dependências nem acesso de rede para corrigir o ambiente.
+
+Validação focada final, preservada em `C:\dev\tmp\il2c-r3-foco.log`:
+
+```text
+python -m pytest tests/test_il2c_r3.py -q -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2c-r3 --tb=short
+111 passed in 798.28s (0:13:18)
+```
+
+Prova causal em processo separado: `C:\dev\tmp\il2c-r3-mutante.py` desabilitou
+somente a identificação da classe, sem editar arquivos do produto. O teste do
+art. 15 da LSA falhou porque a obtenção voltou a publicar `vigente_na_fonte`
+em vez de `unknown` (`1 failed`, saída em `C:\dev\tmp\il2c-r3-mutante.log`).
+O mesmo caso no processo normal passou (`1 passed in 7.47s`, saída em
+`C:\dev\tmp\il2c-r3-restaurado.log`). Ambos usaram o basetemp R3 exigido.
+
+**Commit bloqueado por permissão.** A tentativa R3 de `git add` foi recusada ao
+criar `C:/dev/fv14/.git/worktrees/fv14-il2c/index.lock` (`Permission denied`).
+Não houve commit nem nova tentativa, alteração de ACL ou contorno. As mudanças
+permanecem no worktree. As duas mensagens com os rodapés exigidos estão em
+`C:\dev\tmp\il2c-r3-classe-commit.txt` e
+`C:\dev\tmp\il2c-r3-relatorio-commit.txt`.
+
+Validação completa final, após a última alteração de código/testes, com saída
+preservada em `C:\dev\tmp\il2c-r3-full.log`:
+
+```text
+python -m pytest tests -q -m "not live" -p no:cacheprovider --basetemp C:\dev\tmp\pt-il2c-r3-full
+9204 passed, 6 skipped, 34 deselected in 3087.69s (0:51:27)
+```
+
+O resumo final do Pytest não apresenta falhas, erros ou erro interno. A sessão
+PowerShell que redirecionou a saída devolveu `exit_code=1`: o log contém
+`NativeCommandError` associado a diagnóstico de servidor em stderr. O código
+do processo Python dessa execução não foi coletado separadamente. O efeito do
+invólucro foi reproduzido com um Python que escreve em stderr e executa
+`sys.exit(0)`: o redirecionamento simples devolveu 1; coletando explicitamente
+`$LASTEXITCODE`, devolveu `python_exit_code=0`. Evidências em
+`C:\dev\tmp\il2c-r3-shell-smoke*.log`. O resumo verde do Pytest e o retorno
+do invólucro são registrados separadamente, sem declarar código 0 não observado
+para a execução completa.
+
+Após a suíte, `python scripts/ruff_catraca.py` passou com `exit_code=0`, sem
+achados novos; saída em `C:\dev\tmp\il2c-r3-ruff.log`. A catraca foi executada
+no Python padrão, que dispõe do módulo Ruff; nenhuma dependência foi instalada
+no venv do Pytest. `git diff --check` passou. Ramo e HEAD permanecem
+`feat/il2c-camara-legin` e `04ac65f`; nenhuma fixture ou arquivo de transporte,
+dependência, Senado, sondas ou consumidor FREOA foi alterado. A fotografia final
+de hashes fica em `C:\dev\tmp\il2c-r3-estado-validado.json`, gerada pelo script
+local `C:\dev\tmp\il2c-r3-estado.py`.
+
+FIM IL.2-c R3.
