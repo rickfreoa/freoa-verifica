@@ -1,4 +1,6 @@
 """F14: inventario literal do auditor e regra de classe nas fachadas publicas."""
+import re
+
 import pytest
 
 from freoa_verifica.aliases import WorkKey
@@ -43,7 +45,12 @@ def test_f14_obtencao_e_historico_publicos(acervo_r2, norm, path):
     assert history["redacao_anterior_ausente_na_fonte"] is True
     assert obtained["anotacoes"]
     assert history["eventos"]
-    assert all(a["target_path"] for a in obtained["anotacoes"])
+    for annotation in obtained["anotacoes"] + history["eventos"]:
+        # Correção do titular: a nota é preservada, mas não ganha alvo impróprio.
+        if re.search(r"\bcaput\W+d[oa]\s+(?:parágrafo|inciso|alínea)\b", annotation["raw"], re.I):
+            assert annotation["target_path"] is None
+        else:
+            assert annotation["target_path"]
     sem_inicio(obtained)
     sem_inicio(history)
 
@@ -111,7 +118,7 @@ def test_classe_verificar_texto_e_obtencao_datada(acervo_r2, data):
 
 @pytest.mark.parametrize("norm,path,target,kind", [
     ("lsa", "art17", "art17.caput", "redacao_dada"),
-    ("lsa", "art147.par3", "art147.par3.caput", "incluido"),
+    ("lsa", "art147.par3", None, "incluido"),
     ("lc", "art39", "art39.caput", "redacao_dada"),
 ])
 def test_notas_componentes_preservam_alvo(acervo_r2, norm, path, target, kind):

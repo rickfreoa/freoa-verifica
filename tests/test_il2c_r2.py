@@ -241,14 +241,21 @@ def test_f12_stub_sintetico_ate_saida(verifica_populada, monkeypatch, stub):
     ("Artigo", "art1"), ("Parágrafo", "art1.par1"),
     ("Inciso", "art1.par1.inc1"), ("Alínea", "art1.par1.inc1.ali-a"),
     ("“Caput” do artigo", "art1.caput"),
-    ("“Caput” do parágrafo", "art1.par1.caput"),
-    ("“Caput” do inciso", "art1.par1.inc1.caput"),
-    ("“Caput” da alínea", "art1.par1.inc1.ali-a.caput"),
+    ("“Caput” do parágrafo", None),
+    ("“Caput” do inciso", None),
+    ("“Caput” da alínea", None),
 ])
 def test_f11_sujeito_completo_terminal(subject, target):
     from tests.test_camara_legin import sintetico
     doc = sintetico('<p>Art. 1º Regra.</p><p>§ 1º Parágrafo.</p><p>I - Inciso.</p>'
                     '<p>a) Alínea.</p><p>(' + subject + ' acrescido pela Lei nº 2, de 1/1/2020)</p>')
+    if target is None:
+        # Correção do titular: caput só existe no artigo. Nota imprópria é preservada.
+        assert not any(".caput" in p.path and p.path != "art1.caput" for p in doc.provisions)
+        annotations = doc.provision("art1.par1.inc1.ali-a").redactions[0].annotations
+        assert annotations and all(a.target_path is None for a in annotations)
+        assert any(i.code == "ALVO_NOTA_INCERTO" for i in doc.issues)
+        return
     annotations = doc.provision(target).redactions[0].annotations
     assert annotations and all(a.target_path == target for a in annotations)
     for prov in doc.provisions:

@@ -170,7 +170,7 @@ Esta é a sessão de implementação; o aceite pertence à sessão independente 
 | Achado | Implementação e regressão |
 |---|---|
 | F10 | Caput separado do agregado, com texto e span próprios, nas versões atualizada e original. Fallback legado recusa agregado com descendentes ou rótulos de descendentes. Os 282 caminhos atualizados e 236 originais do parecer são parâmetros de testes públicos. A testemunha de descendente vem de leitura independente dos elementos físicos do HTML, sem chamar o parser para gerar o esperado; a projeção agregada tem de conter a testemunha e o caput tem de excluí-la. Há positivo de caput exclusivo e negativo causal de troca por agregado. |
-| F11 | Alvo resolvido pelo sujeito e predicado editoriais e sua hierarquia, incluindo caput de artigo/parágrafo/inciso/alínea e renumeração de rótulo primitivo. Alvo incerto fica nulo e gera `ALVO_NOTA_INCERTO`, sem associação inventada. As 31 associações do parecer e os 29 agregados com impedimentos são parâmetros separados. Issues do agregado preservam alvo, kind e raw dos impedimentos; não se copiam datas/eventos dos filhos às anotações próprias. Nota de ancestral também bloqueia conclusão sobre o filho. A abstenção temporal de R2 cobria apenas os impedimentos enumerados; o auditor R3 demonstrou a lacuna de classe F14 em 102 agregados. |
+| F11 | Alvo resolvido pelo sujeito e predicado editoriais e sua hierarquia, incluindo caput de artigo e renumeração de rótulo primitivo; a correção do titular no D5 abaixo exclui os antigos alvos impróprios de caput em outros níveis. Alvo incerto fica nulo e gera `ALVO_NOTA_INCERTO`, sem associação inventada. As 31 associações do parecer e os 29 agregados com impedimentos são parâmetros separados. Issues do agregado preservam alvo, kind e raw dos impedimentos; não se copiam datas/eventos dos filhos às anotações próprias. Nota de ancestral também bloqueia conclusão sobre o filho. A abstenção temporal de R2 cobria apenas os impedimentos enumerados; o auditor R3 demonstrou a lacuna de classe F14 em 102 agregados. |
 | F12 | A definição comum de stub de veto rejeita texto sem caracteres alfanuméricos normativos, inclusive ponto e ponto e vírgula. Os 11 caminhos atualizados e 14 originais do parecer têm regressões, além de quatro formas sintéticas. Modelo, nota, identidade, âncoras e bytes permanecem; obtenção não entrega pontuação normativa e confronto não confirma. Accessor do modelo também recusa o stub. |
 | F13 | Guarda aplicada antes de construir intervalos do histórico: duplicidade, quarentena, dados incompletos, revogação parcial e notas impedem histórico conclusivo. Resposta explícita `unknown`, linha vazia, flags, eventos preservados e `needs_judgment=true`. Cobertos os oito caminhos duplicados/agregados e os 26 agregados com revogação parcial enumerados em R1. |
 
@@ -339,3 +339,94 @@ de hashes fica em `C:\dev\tmp\il2c-r3-estado-validado.json`, gerada pelo script
 local `C:\dev\tmp\il2c-r3-estado.py`.
 
 FIM IL.2-c R3.
+
+## Redução de escopo do D5
+
+A correção conceitual do titular prevalece sobre F15 do parecer final em
+`e71499a` (`C:\dev\_il\parecer-pr36-final.md`) e sobre o prompt anterior:
+**caput designa somente a cabeça do artigo**. Em `art. 30, § 1º, caput`,
+caput refere-se ao art. 30; “Nessa proibição não se compreendem:” é o § 1º.
+Não se materializam recortes de caput sob parágrafos ou outros níveis.
+Notas editoriais com essa terminologia imprópria permanecem como dados,
+com alvo nulo e `ALVO_NOTA_INCERTO`; não se inventa um alvo para elas.
+O parser Câmara passa a `camara-legin-4`; modelos persistidos anteriores
+exigem reprocessamento pela guarda de versão já existente.
+
+Somente para `camara_legin`:
+
+- Caminhos `.parX.caput` abstêm-se com `caput_refere_se_ao_artigo`, inclusive
+  se um modelo antigo materializou esse caminho. As respostas que admitem
+  alternativas indicam `artN.caput` e `artN.parX`, sem confirmar nenhuma.
+- Caminhos `.caput.incX` e seus descendentes sem recorte exato materializado
+  abstêm-se com `inciso_do_caput_nao_resolvido`. Esse motivo cobre a matriz
+  F16 inteira, inclusive os prefixos sob parágrafos enumerados no parecer.
+- Outro recorte ausente com componente `caput` conserva o motivo aditivo
+  `recorte_caput_nao_representado`; caput de artigo representado continua
+  com o comportamento anterior.
+
+A guarda cobre `verificar_citacao` (identidade e texto), a verificação embutida
+em `verificar_texto`, `resolver_citacao`, `historico_dispositivo` antes da
+construção da linha do tempo, `obter_dispositivo` por citação ou caminho, e
+as exposições Python/MCP/REST. `pode_negar` também impede a negativa.
+Não há devolução do agregado nem confirmação de leitura alternativa.
+
+“Inciso I do caput do art. 16” é terminologia correta. Fica pendente somente
+a normalização `artN.caput.incX → artN.incX` no parser comum (`citation.py`),
+com a ressalva da colisão com incisos de parágrafos de mesma numeração.
+Essa equivalência não é implementada neste corte. Outras fontes não mudam.
+O parecer anterior continua reprovado; esta implementação não constitui
+novo aceite D5 nem avanço de marco sem auditoria independente.
+
+As regressões em `tests/test_camara_caput_reducao.py` transcrevem os 32 casos
+de verificação e 108 de histórico de F15 e geram os 293 e 990 de F16 pela
+regra do parecer nas três capturas atualizadas. Contagens por norma são
+assertivas independentes. As três fachadas executam as chamadas reais em
+replay local, sem simular respostas públicas. Há controles para caput de
+artigo representado, isolamento por fonte, obtenção por `work_id`/caminho e
+guarda anterior ao histórico, sem confirmação temporal na abstenção.
+Os testes antigos que exigiam alvos de caput em outros níveis foram
+corrigidos para exigir preservação da nota com alvo incerto. Capturas e
+manifesto permanecem intactos.
+
+Validação local sem rede, com `PYTHONPATH=C:\dev\fv14-il2c` e a venv existente
+`C:\dev\fv14\.venv` no `PATH` (`mcp 2.3.0`, dentro do contrato do projeto).
+`TMP` e `TEMP` ficam em `C:\dev\tmp`; pytest usa o basetemp pedido:
+
+- Controles D5: `21 passed, 4269 deselected`, código 0; R3 focado:
+  `108 passed, 3 deselected`, código 0, ambos com
+  `--basetemp C:\dev\tmp\pt-il2c-redb`. A matriz exaustiva e as varreduras
+  de classe ficam na suíte completa. Logs desta retomada:
+  `il2c-redb-final-controls.log` e `il2c-redb-current-r3.log`.
+  A tentativa focada inicial revelou uma expectativa antiga de alvo não
+  nulo em nota com terminologia imprópria; o teste agora exige alvo nulo
+  para essas notas e alvo identificado para as demais, mantendo as
+  assertivas temporais. A suíte completa foi reiniciada após esse ajuste.
+- Evidência herdada da execução anterior, inspecionada nos arquivos locais,
+  sem reexecução nesta retomada: mutante causal somente em memória, em
+  processo separado. Desabilitar
+  `_caput_nao_representado` em `verify` e `service` fez os dois casos públicos
+  `art30.par1.caput` e `art16.caput.inc1` falharem por `not_found` em vez de
+  `unknown` (`2 failed`, código 1). Sem mutante, os mesmos casos passaram
+  (`2 passed`, código 0). Script/logs: `il2c-redb-mutante.py`,
+  `il2c-redb-mutante.log` e `il2c-redb-restaurado.log`, em `C:\dev\tmp`.
+- `python scripts/ruff_catraca.py`: código 0 nesta retomada; baseline inalterada.
+  Log final: `C:\dev\tmp\il2c-redb-final-ruff.log`;
+  saída registrada em `il2c-redb-final-ruff.exit`.
+- Suíte completa: `python -m pytest tests -q -m "not live" -p no:cacheprovider
+  --basetemp C:\dev\tmp\pt-il2c-redb-full`: `13494 passed, 6 skipped,
+  34 deselected in 6714.96s (1:51:54)`, código 0, coletado separadamente.
+  Log desta retomada: `C:\dev\tmp\il2c-redb-final-full.log`;
+  saída registrada em `il2c-redb-final-full.exit`.
+
+As tentativas iniciais no Python global foram diagnósticas: faltava o pacote
+no caminho dos filhos isolados e, depois de ajustar `PYTHONPATH`, o `mcp`
+global não tinha `Client`. A execução acima usa dependências locais compatíveis,
+sem instalação, alteração de dependências ou acesso de rede. Nenhum novo
+parecer de auditor independente foi produzido nesta sessão de escrita.
+
+O preparo do commit (`git add` dos oito arquivos deste corte) falhou por
+`Permission denied` ao criar
+`C:/dev/fv14/.git/worktrees/fv14-il2c/index.lock`. Nenhum commit foi criado;
+as alterações permanecem no worktree, conforme instrução do titular.
+A mensagem com `Co-Authored-By` e `Claude-Session` está preservada em
+`C:\dev\tmp\il2c-redb-commit.txt`.

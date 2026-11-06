@@ -293,6 +293,8 @@ def _scope_of(path: str) -> str:
 
 def pode_negar(rw: ResolvedWork | None, path: str) -> str | None:
     """C1 (decisão 0023): None autoriza DISPOSITIVO_INEXISTENTE; senão, o motivo que o impede."""
+    if rw is not None and (motivo := _caput_nao_representado(rw, path)):
+        return motivo
     if rw is None or not rw.capture_id:
         return "COBERTURA"
     scope = _scope_of(path)
@@ -316,6 +318,30 @@ def negativa_dimension(rw: ResolvedWork | None, path: str) -> Dimension:
     if motivo is None:
         return Dimension("not_found", "DISPOSITIVO_INEXISTENTE", ev)
     return Dimension("unavailable" if motivo == "COBERTURA" else "unknown", motivo, ev)
+
+
+def _caput_nao_representado(rw: ResolvedWork, path: str | None) -> str | None:
+    """D5: caput é a cabeça do artigo; recorte não resolvido não prova ausência."""
+    if rw.source_id != "camara_legin" or not path:
+        return None
+    parts = path.split(".")
+    if "caput" not in parts:
+        return None
+    index = parts.index("caput")
+    # F16 inclui os descendentes de incisos, também sob parágrafos.
+    if (index + 1 < len(parts) and parts[index + 1].startswith("inc")
+            and rw.document.provision(path) is None):
+        return "inciso_do_caput_nao_resolvido"
+    if any(p.startswith("par") for p in parts[:index]):
+        return "caput_refere_se_ao_artigo"
+    if rw.document.provision(path) is None:
+        return "recorte_caput_nao_representado"
+    return None
+
+
+def _alternativas_caput(path: str) -> list[str]:
+    """Duas leituras de uma referência imprópria, sem confirmar nenhuma."""
+    return [path.split(".")[0] + ".caput", path.replace(".caput", "")]
 
 
 def _find_provision(doc: ParsedDocument, path: str) -> Provision | None:
@@ -405,6 +431,8 @@ def _temporal_select(rw, provision, data=None, **kwargs):
 
 def _reading_blockers(rw, path, *, history=False):
     """Mesma admissão para leituras que poderiam publicar texto/tempo conclusivo."""
+    if motivo := _caput_nao_representado(rw, path):
+        return [motivo]
     issues = [i for i in rw.document.issues if i.blocking_scope == "document"]
     issues += _provision_blocking_issues(rw.document, path)
     codes = [i.code for i in issues]
@@ -652,6 +680,12 @@ def verificar(
             support=support, citation=cite,
         ))
     path = cite.path
+    if motivo := _caput_nao_representado(rw, path):
+        return _persist(repo, citacao, trecho, data, modo, VerificationResult(
+            identity=Dimension("unknown", motivo, [_ev_from_resolved(rw, path, None)]),
+            text=Dimension("unknown", motivo),
+            temporal=Dimension("unknown", motivo), support=support, citation=cite,
+        ))
     prov = _find_provision(rw.document, path) if path else None
     blocking = _provision_blocking_issues(rw.document, path)
 

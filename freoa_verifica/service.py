@@ -65,6 +65,8 @@ from freoa_verifica.verify import (
     _current_redaction,
     _provision_blocking_issues,
     _find_provision,
+    _caput_nao_representado,
+    _alternativas_caput,
     _reading_blockers,
     _temporal_select,
     _camara_sem_historia,
@@ -1548,6 +1550,8 @@ class Verifica:
         if cite.path:
             if codes := _reading_blockers(resolved, cite.path):
                 return {**out, "status": "unknown", "caminho": cite.path,
+                        **({"alternativas": _alternativas_caput(cite.path)}
+                           if codes[0] == "caput_refere_se_ao_artigo" else {}),
                         "motivo": codes[0], "flags": codes, "work_id": resolved.work_id,
                         "identity": {"status": "unknown", "reason_code": codes[0]}}
             provision = _find_provision(resolved.document, cite.path)
@@ -1749,6 +1753,16 @@ class Verifica:
 
     def _obter_camara(self, rw, path, data, versao):
         self._revalidar_camara(rw)
+        if motivo := _caput_nao_representado(rw, path):
+            return {"status": "unknown", "reason_code": motivo, "motivo": motivo,
+                    **({"alternativas": _alternativas_caput(path)}
+                       if motivo == "caput_refere_se_ao_artigo" else {}),
+                    "work_id": rw.work_id, "caminho": path, "versao": versao,
+                    "texto": None, "texto_atual": None, "redacoes_anteriores": [],
+                    "vigencia": {"status": "unknown", "reason_code": motivo,
+                                 "regras": [], "flags": [], "intervalo": None},
+                    "fundamento_temporal": None, "fontes_consultadas": rw.fontes_consultadas,
+                    "evidencia": self._evidencia_dispositivo(rw)}
         out = self._resposta_dispositivo(rw, path, data)
         out.update(versao=versao, fontes_consultadas=rw.fontes_consultadas)
         out.setdefault("texto", None)
@@ -1939,6 +1953,14 @@ class Verifica:
             return {"status": "inexistente"}
         if isinstance(resolved, list):
             return {"status": "ambigua"}
+        if motivo := _caput_nao_representado(resolved, cite.path):
+            return {"status": "unknown", "reason_code": motivo, "motivo": motivo,
+                    **({"alternativas": _alternativas_caput(cite.path)}
+                       if motivo == "caput_refere_se_ao_artigo" else {}),
+                    "citacao": citacao, "caminho": cite.path, "work_id": resolved.work_id,
+                    "linha_do_tempo": [], "eventos": [], "regras": [],
+                    "needs_judgment": True, "fundamento_temporal": None,
+                    "evidencia": self._evidencia_dispositivo(resolved)}
         prov = _find_provision(resolved.document, cite.path)
         if prov is None:
             return self._sem_dispositivo(resolved, cite.path)
@@ -2254,7 +2276,8 @@ class Verifica:
                 material_rw = self._resolve(cite.work, strict=True)
             except (SourceUnavailable, IdentityMismatch):
                 material_rw = None
-            if isinstance(material_rw, ResolvedWork) and (
+            if (isinstance(material_rw, ResolvedWork)
+                    and not _caput_nao_representado(material_rw, cite.path)) and (
                 out["identity"].get("status") == "verified" or
                 out["identity"].get("reason_code") in _reading_blockers(material_rw, cite.path)
             ):
@@ -2296,6 +2319,9 @@ class Verifica:
                     ev["acervo_ate"] = corte_planalto
         # C4: campos aditivos no ponto único, depois de TODOS os rebaixamentos (inclusive ausência de captura e falha de
         # autenticação) e imediatamente antes da persistência e da emissão.
+        if (cite is not None and cite.path
+                and out["identity"].get("reason_code") == "caput_refere_se_ao_artigo"):
+            out["alternativas"] = _alternativas_caput(cite.path)
         _normalizar_aditivos(out)
         if gravar:
             if self._read_only:

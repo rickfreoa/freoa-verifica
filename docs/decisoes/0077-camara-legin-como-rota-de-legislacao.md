@@ -96,3 +96,22 @@ DOU segue barrado no instrumento pelo 403 do robots; LexML não admite `/busca/`
 - Nenhuma captura demonstra versão oficial por data, completude temporal ou remissões resolvidas. A habilitação de fundamento exige prova de período, regressões por classe e auditoria; a qualificação por capacidade e `porta_l.py` pertencem ao IL.3.
 
 Implementação futura deve satisfazer [IL.2-c, C1–C18](../auditoria/1.4.0/il2c-especificacao.md), com contrato aditivo e `CONTRATO_VERSAO` inalterado. Não há mudança de piso, reserva ou critério de `verified`, nem reconstrução mecânica, conclusão jurídica de vigência ou autorização de substituição do Jusratio.
+
+## Nota D5 — redução de escopo (F15/F16)
+
+Por correção conceitual do titular, caput designa somente a cabeça do artigo;
+a premissa de F15 e a pendência do prompt anterior nesse ponto são retiradas.
+Para `camara_legin`, `.parX.caput` produz abstenção com
+`caput_refere_se_ao_artigo`, com as leituras `artN.caput` e `artN.parX` como
+alternativas sem confirmação. Não se materializam caputs fora do artigo;
+notas impróprias são preservadas com alvo incerto. Parser Câmara versão 4
+invalida a releitura de modelos anteriores até reprocessamento.
+
+A referência a inciso do caput é correta. Sem recorte exato representado,
+`.caput.incX` produz `inciso_do_caput_nao_resolvido`. Fica pendente a
+normalização `artN.caput.incX → artN.incX` em `citation.py`, ressalvada a
+colisão com incisos de parágrafos. Não se implementa essa equivalência.
+As guardas precedem a negativa e a construção do histórico, em identidade,
+texto, verificação embutida, resolução e obtenção, por Python/MCP/REST.
+Caput de artigo representado e outras fontes preservam seu comportamento.
+Esta nota não declara novo aceite do auditor nem avanço de marco.

@@ -11,7 +11,7 @@ from freoa_verifica.parsers.model import (ParsedDocument, Provision, Redaction, 
                                          EditorialBlock, QuotedAmendment, veto_stub)
 from freoa_verifica.parsers.paths import roman_to_int
 
-PARSER_VERSION = "camara-legin-3"
+PARSER_VERSION = "camara-legin-4"
 _LABEL = re.compile(r"^(?:(Art\.\s*(\d+[º°o]?(?:-[A-Z])?)[.]?)|"
                     r"(§\s*(\d+[º°o]?(?:-[A-Z])?)[.]?)|(Parágrafo\s+único[.]?)|"
                     r"([IVXLCDM]+)\s*[-–—]|([a-z])\)|([1-9]\d*)\.)\s*", re.I)
@@ -42,13 +42,13 @@ def _alvo_nota(inside, active, records):
     remainder = inside[subject.end():]
     if family == "caput":
         qualifier = re.match(r'\s+d[oa]\s+(artigo|parágrafo|inciso|alínea)\b', remainder, re.I)
-        if not qualifier:
+        if not qualifier or qualifier[1].lower() != "artigo":
             return None
         remainder = remainder[qualifier.end():]
     if not re.match(r'\s+(?:com (?:nova )?redação dada|acrescid[oa]|incluíd[oa]|revogad[oa]|renumerad[oa]|transformad[oa]|VETAD[OA])\b', remainder, re.I):
         return None
     if family == "caput":
-        level = {"artigo": 1, "parágrafo": 2, "inciso": 3, "alínea": 4}[qualifier[1].lower()]
+        level = 1
         for record in reversed(records):
             if record["level"] == level and (active["path"] == record["path"] or
                                             active["path"].startswith(record["path"] + ".")):
@@ -305,7 +305,7 @@ def parse_camara_legin(data: str, *, base_url=None):
             doc.issues.append(Issue("DUPLICATE_CURRENT", r["path"], "rótulo concorrente", "provision"))
         seen[r["path"]] = prov
         doc.provisions.append(prov)
-        if r["level"] == 1 or r["path"] + ".caput" in caput_annotations:
+        if r["level"] == 1:
             cap_path = r["path"] + ".caput"
             cap = Provision(cap_path, r["label"] + " caput", "", redactions=[Redaction(
                 r["text"], False, 0, caput_annotations.get(cap_path, []), (r["start"], r["end"]))])
