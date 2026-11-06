@@ -354,12 +354,16 @@ exigem reprocessamento pela guarda de versão já existente.
 
 Somente para `camara_legin`:
 
-- Caminhos `.parX.caput` abstêm-se com `caput_refere_se_ao_artigo`, inclusive
-  se um modelo antigo materializou esse caminho. As respostas que admitem
-  alternativas indicam `artN.caput` e `artN.parX`, sem confirmar nenhuma.
-- Caminhos `.caput.incX` e seus descendentes sem recorte exato materializado
-  abstêm-se com `inciso_do_caput_nao_resolvido`. Esse motivo cobre a matriz
-  F16 inteira, inclusive os prefixos sob parágrafos enumerados no parecer.
+- Caminhos com `caput` abaixo de parágrafo (`.parX.caput`, inclusive `.parX.caput.incY` e
+  descendentes) abstêm-se com `caput_refere_se_ao_artigo`, regra que prevalece sobre a de
+  inciso do caput, inclusive se um modelo antigo materializou esse caminho. As respostas que
+  admitem alternativas indicam a leitura pelo caput do artigo (`artN.caput[.resto]`) e a
+  leitura sem `caput` (`artN.parX[.resto]`), sem confirmar nenhuma.
+- Caminhos `artN.caput.incX` (caput de artigo) e descendentes sem recorte exato materializado
+  abstêm-se com `inciso_do_caput_nao_resolvido`.
+- Conferência estreita da redução: NÃO CONFERE apenas pela precedência dos dois motivos nos
+  caminhos mistos (30 de verificação e 407 de histórico de F16), sem confirmação nem negativa
+  de existência; corrigida a precedência e as alternativas.
 - Outro recorte ausente com componente `caput` conserva o motivo aditivo
   `recorte_caput_nao_representado`; caput de artigo representado continua
   com o comportamento anterior.

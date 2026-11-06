@@ -103,7 +103,7 @@ Por correção conceitual do titular, caput designa somente a cabeça do artigo;
 a premissa de F15 e a pendência do prompt anterior nesse ponto são retiradas.
 Para `camara_legin`, `.parX.caput` produz abstenção com
 `caput_refere_se_ao_artigo`, com as leituras `artN.caput` e `artN.parX` como
-alternativas sem confirmação. Não se materializam caputs fora do artigo;
+alternativas sem confirmação; a regra vale também para `.parX.caput.incY` e descendentes e prevalece sobre a de inciso do caput. Não se materializam caputs fora do artigo;
 notas impróprias são preservadas com alvo incerto. Parser Câmara versão 4
 invalida a releitura de modelos anteriores até reprocessamento.
 

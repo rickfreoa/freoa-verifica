@@ -17,12 +17,18 @@ MOTIVO_INC = "inciso_do_caput_nao_resolvido"
 
 
 def _motivo(path):
+    # Caput abaixo de parágrafo é referência imprópria e prevalece (titular).
+    antes = path.split(".caput")[0]
+    if any(p.startswith("par") for p in antes.split(".")):
+        return MOTIVO_PAR
     return MOTIVO_INC if ".caput.inc" in path else MOTIVO_PAR
 
 
 def _assert_alternativas(out, path):
     if _motivo(path) == MOTIVO_PAR:
-        assert out["alternativas"] == [path.split(".")[0] + ".caput", path.removesuffix(".caput")]
+        parts = path.split(".")
+        resto = parts[parts.index("caput") + 1:]
+        assert out["alternativas"] == [".".join([parts[0], "caput", *resto]), path.replace(".caput", "")]
 
 
 NORMAS = {

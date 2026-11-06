@@ -328,12 +328,14 @@ def _caput_nao_representado(rw: ResolvedWork, path: str | None) -> str | None:
     if "caput" not in parts:
         return None
     index = parts.index("caput")
-    # F16 inclui os descendentes de incisos, também sob parágrafos.
+    # Caput é só a cabeça do artigo (titular): caput abaixo de parágrafo é referência
+    # imprópria e prevalece sobre a regra de inciso do caput.
+    if any(p.startswith("par") for p in parts[:index]):
+        return "caput_refere_se_ao_artigo"
+    # F16 inclui os descendentes de incisos.
     if (index + 1 < len(parts) and parts[index + 1].startswith("inc")
             and rw.document.provision(path) is None):
         return "inciso_do_caput_nao_resolvido"
-    if any(p.startswith("par") for p in parts[:index]):
-        return "caput_refere_se_ao_artigo"
     if rw.document.provision(path) is None:
         return "recorte_caput_nao_representado"
     return None
@@ -341,7 +343,9 @@ def _caput_nao_representado(rw: ResolvedWork, path: str | None) -> str | None:
 
 def _alternativas_caput(path: str) -> list[str]:
     """Duas leituras de uma referência imprópria, sem confirmar nenhuma."""
-    return [path.split(".")[0] + ".caput", path.replace(".caput", "")]
+    parts = path.split(".")
+    resto = parts[parts.index("caput") + 1:]
+    return [".".join([parts[0], "caput", *resto]), path.replace(".caput", "")]
 
 
 def _find_provision(doc: ParsedDocument, path: str) -> Provision | None:
