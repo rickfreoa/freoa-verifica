@@ -120,16 +120,16 @@ def test_busca_devolve_fontes_unavailable(verifica_populada, monkeypatch):
     monkeypatch.delenv("FV_OFFLINE", raising=False)
 
     class Boom:
-        id = "planalto"
+        id = "camara_legin"
 
         def search(self, q, **kw):
             raise Unavailable("HTTP_503")
 
-    svc._connectors["planalto"] = Boom()
-    res = svc.buscar_legislacao("xyzzy_no_hit", fonte="planalto", limite=3)
+    svc._connectors["camara_legin"] = Boom()
+    res = svc.buscar_legislacao("xyzzy_no_hit", fonte="camara_legin", limite=3)
     assert "fontes" in res
-    assert res["fontes"]["planalto"]["status"] == "unavailable"
-    assert res["fontes"]["planalto"]["motivo"] == "HTTP_503"
+    assert res["fontes"]["camara_legin"]["status"] == "unavailable"
+    assert res["fontes"]["camara_legin"]["motivo"] == "HTTP_503"
     assert "resultados" in res
 
 

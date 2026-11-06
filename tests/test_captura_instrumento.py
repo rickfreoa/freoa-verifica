@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -229,6 +230,42 @@ def test_bloqueio_espera_limitada_e_trava_velha_retomada(tmp_path):
         pass
 
 
+@pytest.mark.skipif(os.name != "nt", reason="delete-pending é uma condição do Windows")
+def test_publicacao_repete_lock_em_delete_pending(envios, tmp_path, monkeypatch):
+    fx = _fx(tmp_path)
+    reg = _capturar(tmp_path, "tjdft_pending")
+    original = captura.os.open
+    negadas = []
+    def abrir(path, flags, *args, **kwargs):
+        if Path(path).name == "FIXTURES.json.lock" and not negadas:
+            negadas.append(path)
+            raise PermissionError(13, "delete-pending")
+        return original(path, flags, *args, **kwargs)
+    monkeypatch.setattr(captura.os, "open", abrir)
+    captura.registrar_fixture(reg, "tjdft_pending", fx)
+    assert negadas
+    assert "tjdft_pending" in json.loads((fx / "FIXTURES.json").read_bytes())
+    assert validar_inventario(fx) == []
+
+
+@pytest.mark.skipif(os.name != "nt", reason="contenção ACCESS_DENIED do Windows")
+def test_lock_com_permissao_negada_permanente_preserva_erro(tmp_path, monkeypatch):
+    fx = _fx(tmp_path)
+    erro = PermissionError(13, "permissão negada permanente")
+    chamadas = []
+
+    def negar(*args, **kwargs):
+        chamadas.append(args)
+        raise erro
+
+    monkeypatch.setattr(captura.os, "open", negar)
+    with pytest.raises(PermissionError) as exc:
+        with captura._bloqueio(fx, espera=0):
+            pytest.fail("lock sem permissão não pode autorizar publicação")
+    assert exc.value is erro and len(chamadas) == 1
+    assert (fx / "FIXTURES.json").read_bytes() == b"{}\r\n"
+
+
 # --- A10: categoria e evidência estruturadas --------------------------------------------------------
 
 
@@ -268,6 +305,17 @@ def _urls_permitidas():
 @pytest.mark.parametrize("cid,url", _urls_permitidas())
 def test_get_simples_usa_allowlist_limites_e_ua_do_conector(envios, tmp_path, cid, url):
     classe = registry()[cid]
+    if cid == "planalto":
+        with pytest.raises(Unavailable, match="acervo_legado_sem_nova_captura"):
+            captura.capturar(cid, url=url, destino=tmp_path, sonda=True, chave="g")
+        assert envios == [] and not any(tmp_path.iterdir())
+        return
+    if cid == "camara_legin":
+        # 0077: a allowlist do transporte não substitui descoberta e robots do adaptador.
+        with pytest.raises(ValueError, match="camara_exige_descoberta_pelo_adaptador"):
+            captura.capturar(cid, url=url, destino=tmp_path, sonda=True, chave="g")
+        assert envios == [] and not any(tmp_path.iterdir())
+        return
     if cid == "senado":
         assert url == "https://legis.senado.leg.br/dadosabertos/"
         with pytest.raises(ValueError, match="host barrado legis.senado.leg.br"):

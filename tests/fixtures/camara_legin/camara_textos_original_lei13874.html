@@ -1,0 +1,1033 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-br" xml:lang="pt-br">
+<head>
+
+    <meta http-equiv="Content-Type" content="text/html charset=utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="apple-itunes-app" content="app-id=1049343067" />
+    <meta name="google-play-app" content="app-id=br.leg.camara.infolegmovel" />
+    <script>
+      (function () {
+        let initialized = false;
+        let loading = false;
+
+        function ensureBody(callback) {
+          if (document.body) {
+            callback();
+          } else {
+            setTimeout(() => ensureBody(callback), 50);
+          }
+        }
+
+        function loadScript() {
+          if (loading || window.VLibras) return;
+          loading = true;
+
+          ensureBody(() => {
+            const s = document.createElement("script");
+            s.src = "https://vlibras.gov.br/app/vlibras-plugin.js";
+            s.onload = initVLibras;
+            document.body.appendChild(s);
+          });
+        }
+
+        function initVLibras() {
+          if (initialized || !window.VLibras) return;
+
+          ensureBody(() => {
+            if (!document.querySelector("[vw]")) {
+              const container = document.createElement("div");
+              container.innerHTML = `
+              <div vw class="enabled">
+                <div vw-access-button class="active"></div>
+                <div vw-plugin-wrapper>
+                  <div class="vw-plugin-top-wrapper"></div>
+                </div>
+              </div>
+            `;
+              document.body.appendChild(container);
+            }
+
+            (new window.VLibras.Widget(
+              "https://vlibras.gov.br/app",
+              "https://vlibras.gov.br/config/camara.json",
+            ),
+              $("body").append(
+                '<aside><div vw class="enabled"><div vw-access-button class="active"></div><div vw-plugin-wrapper><div class="vw-plugin-top-wrapper"></div></div></div></aside>',
+              ));
+            initialized = true;
+
+            injectCSS();
+            if (!window.location.pathname.includes("/comissoes")) {
+              bindButton();
+            }
+          });
+        }
+
+        function injectCSS() {
+          if (document.getElementById("vlibras-style")) return;
+          const style = document.createElement("style");
+          style.id = "vlibras-style";
+          style.innerHTML = `
+          [vw-access-button] { display: none !important; }
+          div[vw] { z-index: 999999 !important; }
+        `;
+          document.head.appendChild(style);
+        }
+
+        function bindButton() {
+          const btn = document.getElementById("meu-botao-vlibras");
+          if (!btn) {
+            setTimeout(bindButton, 300);
+            return;
+          }
+
+          btn.onclick = function (e) {
+            e.preventDefault();
+            const original = document.querySelector("[vw-access-button]");
+            if (original) original.click();
+          };
+        }
+
+        // OBSERVA MUTA&#199;&#213;ES DO DOM (ESSENCIAL NO PLONE)
+        const observer = new MutationObserver(() => {
+          if (!document.querySelector("[vw]") && !initialized) {
+            loadScript();
+          }
+        });
+
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+        });
+
+        window.addEventListener("load", loadScript);
+      })();
+    </script>
+
+    <title>Portal da Câmara dos Deputados</title>
+  <style type="text/css">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/member-cachekey-46bb2e0fc9968a457e63f356c0ff3900.css);</style><style type="text/css">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/portlets-cachekey-8a45f49b338591ae0c9c8a91f261dc78.css);</style><style type="text/css" media="screen">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/deprecated-cachekey-32595b622b36f2eee9478f07796d4f67.css);</style><style type="text/css" media="screen">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/resourceplone.app.discussion.stylesheetsdiscussion-cachekey-5b23f388acd88bdb65020b51a5a278fb.css);</style><style type="text/css">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/elements-cachekey-57e40a70bd8192a6f63782abff5c2748.css);</style><style type="text/css" media="all">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/ploneCustom-cachekey-7fb44e17264e070fccf4e31d9f2ada1c.css);</style><link rel="stylesheet" type="text/css" href="https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/themecamara.leg.viradadigitalcsslibsbootstrap-datetimepicker.min-cachekey-ab2d257c1b49d2d194633e2ecb4564a2.css" /><link rel="stylesheet" type="text/css" href="https://www.camara.leg.br/tema/global/camara-custom.css" /><link rel="stylesheet" type="text/css" href="https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/++theme++camara.leg.viradadigital/css/all.min.css" /><link rel="apple-touch-icon" sizes="180x180" href="https://www.camara.leg.br/tema/apple-touch-icon.png" /><link rel="icon" type="image/png" sizes="32x32" href="https://www.camara.leg.br/tema/favicon-32x32.png" /><link rel="icon" type="image/png" sizes="16x16" href="https://www.camara.leg.br/tema/favicon-16x16.png" /><link rel="manifest" href="https://www.camara.leg.br/tema/site.webmanifest" /><link rel="mask-icon" href="https://www.camara.leg.br/tema/safari-pinned-tab.svg" color="#009e49" /><link rel="search" href="http://www2.camara.leg.br/busca-geral" title="Buscar neste site" /><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/resourceplone.app.jquery-cachekey-3fa72abea58e1799bd3b0bc237335d45.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/styleswitcher-cachekey-9178d2d1bc80488214ac8d40a46c7bdf.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/impressaoIframes-cachekey-7de901cf3c737563606c12fa53b7a321.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/GoogleAnalyticsTracker.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/kss-bbb-cachekey-df10a37e7aa4176c3b122c2e3b0ee128.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/inline_validation-cachekey-35d4d75a94cdb17b403a636871dd92cb.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljsbootstrap.min-cachekey-c15df71e2ec454087fe4c4eab0ce9d3e.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljslibsmoment.min-cachekey-860514b918ea422f7e82fa48125015c4.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljslibsmoment-pt-br-cachekey-0aafba4fb000126f1ed0f6701186de00.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljslibsbootstrap-datetimepicker.min-cachekey-fac2884b384d9c99236b26d0746facc4.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljslibsjquery.maskedinput.min-cachekey-e2f8b2523378532cc132594675b6dc6f.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljsacoes-tema-cachekey-a0084cf69f1785571a18f6a58a4986ac.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljscorrecoes-bootstrap-tema-cachekey-bd4c19550531506aa59d8b0aa7e8d6c5.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitalviradadigitalvendorjquery.mmenu.all-cachekey-f0e297313e30d6b2b2c2588ef23b5ef2.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitalviradadigitaljsvd_correcoes-cachekey-52a3614631388ad9e07bf35264bc73d5.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitalviradadigitaljsmmenu-correcoes-cachekey-8e45cc1e451978774afbfe2f5f1e95cf.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitalviradadigitaljsselecao-idioma-cachekey-998dbb210e1353a5d7f94011740ee16c.js"></script><meta name="msapplication-TileColor" content="#00a300" /><meta name="msapplication-TileImage" content="https://www.camara.leg.br/tema/mstile-144x144.png" /><meta name="theme-color" content="#009e49" /><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" /><link rel="canonical" href="" /><script type="text/javascript">
+          $("link[rel='canonical']").attr("href", window.location.href);
+        </script>
+
+
+
+
+
+
+
+<title>LEI Nº 13.874, DE 20 DE SETEMBRO DE 2019 - Publicação Original - Portal Câmara dos Deputados</title>
+
+<meta name="description" content="Publicação de Lei Ordinária: Institui a Declaração de Direitos de Liberdade Econômica; estabelece garantias de livre mercado; altera as Leis nºs 10.406, de 10 de janeiro de 2002 (Código Civil), 6.404, de 15 de dezembro de 1976, 11.598, de 3 de dezembro de 2007, 12.682, de 9 de julho de 2012, 6.015, de 31 de dezembro de 1973, 10.522, de 19 de julho de 2002, 8.934, de 18 de novembro 1994, o Decreto-Lei nº 9.760, de 5 de setembro de 1946 e a Consolidação das Leis do Trabalho, aprovada pelo Decreto-Lei nº 5.452, de 1º de maio de 1943; revoga a Lei Delegada nº 4, de 26 de setembro de 1962, a Lei nº 11.887, de 24 de dezembro de 2008, e dispositivos do Decreto-Lei nº 73, de 21 de novembro de 1966; e dá outras providências." />
+
+<!-- Coloque aqui sua referência ao CSS local -->
+<link rel="stylesheet" type="text/css" href="../../../_css/legislacao-v1.css" />
+
+<!-- CSS do portal-tema: necessário para o botão de compartilhamento -->
+<link rel="stylesheet" type="text/css" href="https://www.camara.leg.br/tema/global/camara-custom.css" />
+
+<!-- Coloque aqui seu javascript -->
+<!-- script type="text/javascript" src="caminho-e-nome-do-arquivo.js"></script -->
+
+</head>
+<body>
+    <header class="l-cabecalho-portal" role="banner" id="portal-header">
+        <ul aria-label="Acesso direto" class="acesso-direto">
+          <!-- Links para saltar diretamente para &#225;reas importantes da p&#225;gina accesskey 2 = conte&#250;do e 3 = navega&#231;&#227;o -->
+          <li>
+            <a class="acesso-direto__link" href="#main-content" accesskey="2">Ir ao conteúdo</a>
+          </li>
+          <li>
+            <a class="acesso-direto__link" href="#main-nav" accesskey="3">Ir à navegação principal</a>
+          </li>
+        </ul>
+
+        <!--[if lte IE 9]>
+          <p class="browserupgrade">
+            Voc&#234; est&#225; usando um navegador <strong>defasado</strong>. Por favor,
+            <a href="https://browsehappy.com/">atualize seu navegador</a> para
+            melhorar sua experi&#234;ncia e sua seguran&#231;a.
+          </p>
+        <![endif]-->
+
+        <div class="nav-top">
+          <div class="container nav-top--container">
+            <a href="https://www2.camara.leg.br" class="logo-camara" accesskey="1"><span class="sr-only">Página inicial</span></a>
+
+            <div class="nav-top__palacio"></div>
+
+            <div class="nav-top__menu-superior">
+              <ul aria-label="Ferramentas de apoio" class="links-apoio">
+                <li class="links-apoio__item links-apoio__item--vlibras">
+                  <a id="meu-botao-vlibras" href="javascript:void(0);">
+                    <span>
+                      <img src="https://www.camara.leg.br/tema/assets/images/ico-vlibras-branco.png" alt="Ativar VLibras" width="28px" height="30px" />
+                    </span>
+                  </a>
+                </li>
+                <li class="links-apoio__item links-apoio__item--acessibilidade">
+                  <a href="https://www2.camara.leg.br/acessibilidade/recursos-de-acessibilidade" accesskey="0">Acessibilidade</a>
+                </li>
+                <li class="links-apoio__item links-apoio__item--faleconosco">
+                  <a href="https://www.camara.leg.br/fale-conosco" accesskey="9">Fale Conosco</a>
+                </li>
+              </ul>
+
+              <ul class="orgaos-parceiros" aria-label="Órgãos parceiros">
+                <li class="orgaos-parceiros__item orgaos-parceiros__item--congresso">
+                  <a href="http://www.congressonacional.leg.br"><span>Congresso</span></a>
+                </li>
+                <li class="orgaos-parceiros__item orgaos-parceiros__item--senado">
+                  <a href="http://www.senado.leg.br"><span>Senado</span></a>
+                </li>
+              </ul>
+
+              <div class="lista-idiomas">
+                <button class="botao-idioma-topo" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-offset="4,0">
+                  <span class="botao-idioma-topo__sigla">PT</span>
+                </button>
+
+                <ul class="dropdown-menu dropdown-menu-right l-lista-idiomas" aria-label="Idioma">
+                  <li class="l-lista-idiomas__item">
+                    <a href="https://www2.camara.leg.br/english" class="idioma-topo">
+                      <span class="idioma-topo__bandeira idioma-topo__bandeira--ingles" aria-hidden="true"></span>
+                      <span class="idioma-topo__nome">English</span>
+                      <span class="idioma-topo__sigla">EN</span>
+                    </a>
+                  </li>
+                  <li class="l-lista-idiomas__item">
+                    <a href="https://www2.camara.leg.br/espanol" class="idioma-topo">
+                      <span class="idioma-topo__bandeira idioma-topo__bandeira--espanhol" aria-hidden="true"></span>
+                      <span class="idioma-topo__nome">Español</span>
+                      <span class="idioma-topo__sigla">ES</span>
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="home-camara-menu">
+    <nav class="menu-global navbar navbar-expand-lg" role="navigation" aria-label="Navegação principal" id="menuglobal">
+      <div class="container menu-global--container">
+      
+
+        <a href="https://www.camara.leg.br" class="logo-camara" accesskey="1">
+          <span class="sr-only">Página inicial</span>
+        </a>
+
+      
+        
+        <!-- icone menu -->
+        <button class="menu-global--btnmenu navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarportal" aria-controls="navbarportal" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="menu-global--icon"></span>
+        </button>
+
+        <!-- icone busca -->
+        <button class="menu-global--btnsearch" type="button" data-toggle="collapse" data-target="#buscaportal" aria-controls="buscaportal" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="fa fa-search"></span>
+        </button>
+
+        <div class="navbar-collapse hidden-sm hidden-md hidden-xs" id="navbarportal">
+          <ul title="Navegação Principal" id="main-nav" class="navbar-nav">
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-temas nav-link dropdown-toggle" id="temas">Assuntos</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="temas">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/agropecuaria">Agropecuária</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/cidades-e-transportes">Cidades e transportes</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/ciencia-tecnologia-e-comunicacoes">Ciência, tecnologia e comunicações</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/consumidor">Consumidor</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/direitos-humanos">Direitos humanos</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/economia">Economia</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/educacao-cultura-e-esportes">Educação, cultura e esportes</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/meio-ambiente-e-energia">Meio ambiente e energia</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/politica-e-administracao-publica">Política e administração pública</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/relacoes-exteriores">Relações exteriores</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/saude">Saúde</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/seguranca">Segurança</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/trabalho-previdencia-e-assistencia">Trabalho, previdência e assistência</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-institucional nav-link dropdown-toggle" id="institucional">Institucional</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="institucional">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/agenda">Agenda</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/transparencia/servicos-ao-cidadao">Serviços</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/a-camara/estruturaadm/mesa/presidencia">Presidência</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/biblioteca-e-publicacoes/">Biblioteca e publicações</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/escola-da-camara/">Escola da Câmara</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/papel-e-estrutura/">Papel e estrutura</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/historia-e-arquivo/">História e arquivo</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/a-camara/visiteacamara">Visite</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-deputados nav-link dropdown-toggle" id="deputados">Deputados</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="deputados">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/deputados/quem-sao">Quem são</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/deputados/liderancas-e-bancadas-partidarias">Lideranças e bancadas</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/deputados/frentes-e-grupos-parlamentares">Frentes e grupos parlamentares</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-atvlegislativa nav-link dropdown-toggle" id="atvlegislativa">Atividade Legislativa</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="atvlegislativa">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada">Propostas legislativas</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/plenario">Plenário</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/comissoes">Comissões</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/sessoesereunioes">Sessões e reuniões</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/atividade-legislativa/estudos-e-notas-tecnicas">Estudos legislativos</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/atividade-legislativa/orcamento-da-uniao">Orçamento da União</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/legislacao">Legislação</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/entenda-o-processo-legislativo/">Entenda o processo legislativo</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/atividade-legislativa/participe">Participe</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-comunicacao nav-link dropdown-toggle" id="comunicacao">Comunicação</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="comunicacao">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/noticias">Agência Câmara de Notícias</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/radio">Rádio Câmara</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/tv">TV Câmara</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/banco-imagens">Banco de Imagens</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assessoria-de-imprensa">Assessoria de Imprensa</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/comprove">Comprove uma notícia</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-transprestcontas nav-link dropdown-toggle" id="transprestcontas">Transparência e prestação de contas</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="transprestcontas">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/transparencia/">Transparência</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/transparencia/prestacao-de-contas">Prestação de contas</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://dadosabertos.camara.leg.br/">Dados abertos</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+          </ul>
+          <div class="outras-opcoes-menu-usuario hidden-md hidden-lg">
+            <ul aria-label="Ferramentas de apoio" class="links-apoio links-apoio--menu-mobile">
+              <li class="links-apoio__item links-apoio__item--acessibilidade">
+                <a href="https://www2.camara.leg.br/acessibilidade/recursos-de-acessibilidade" accesskey="0">Acessibilidade</a>
+              </li>
+              <li class="links-apoio__item links-apoio__item--faleconosco">
+                <a href="https://www.camara.leg.br/fale-conosco" accesskey="9">Fale Conosco</a>
+              </li>
+            </ul>
+          </div>
+          <div class="lista-idiomas hidden-md hidden-lg">
+            <button id="botao-idioma-topo" class="botao-idioma-topo" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-offset="4,0">
+                <span class="botao-idioma-topo__sigla">PT</span>
+            </button>
+        
+            <ul class="dropdown-menu-right l-lista-idiomas " aria-label="Idioma">
+                <li class="l-lista-idiomas__item">
+                    <a href="https://www2.camara.leg.br/english" class="idioma-topo">
+                        <span class="idioma-topo__bandeira idioma-topo__bandeira--ingles" aria-hidden="true"></span>
+                        <span class="idioma-topo__nome">English</span>
+                        <span class="idioma-topo__sigla">EN</span>
+                    </a>
+                </li>
+                <li class="l-lista-idiomas__item">
+                    <a href="https://www2.camara.leg.br/espanol" class="idioma-topo">
+                        <span class="idioma-topo__bandeira idioma-topo__bandeira--espanhol" aria-hidden="true"></span>
+                        <span class="idioma-topo__nome">Español</span>
+                        <span class="idioma-topo__sigla">ES</span>            
+                    </a>
+                </li>
+            </ul>
+        </div>
+        </div>
+
+
+        <div class="collapse box-search" id="buscaportal">
+          <form role="search" accesskey="4" class="box-search__busca form-inline" action="https://www.camara.leg.br/busca-geral">
+            <label for="termo" class="sr-only box-search__label">Pesquise no Portal da Câmara</label>
+            <input class="form-control box-search__campo" type="search" name="termo" id="termo" placeholder="Buscar" aria-label="Search" />
+          </form>
+        </div>
+      </div>
+    </nav>
+  </div>
+      </header>
+
+    <div class="breadcrumbs-marcacao">
+        <div class="container">
+            <nav aria-label="Onde estou">
+                <ol class="breadcrumb portal-breadcrumbs">
+                    <li class="breadcrumb-item"><a href="//www.camara.leg.br">Início</a></li>
+                    
+	<li class='breadcrumb-item'><a href='http://www2.camara.gov.br/atividade-legislativa'>Atividade Legislativa</a></li>
+    <li class='breadcrumb-item'><a href='http://www2.camara.gov.br/atividade-legislativa/legislacao'>Legislação</a></li>
+
+                    <li class="breadcrumb-item active" aria-current="page">Esta página</li>
+                </ol>
+            </nav>
+        </div>
+        
+        <div class="container-fluid p-0">
+            <div id="menu-secoes-internas" class="menu-secoes-internass">
+                <div id="portal-mainsection">
+                    <div class="l-identificacao-landing">
+                        <div class="container">
+                            <h1 class="titulo-landing">Legislação</h1>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="marcacao-conteudo-portal" class="conteudo-portal container nopadding-right nopadding-left">
+        <div class="coluna-centro col-md-12">
+
+
+<div id="portal-column-content">
+	<div id="portal-content-wrapper">
+		<div class="documentContent">
+			<div id="content">
+	
+				<h2 class="documentFirstHeading">Legislação Informatizada - LEI Nº 13.874, DE 20 DE SETEMBRO DE 2019 - Publicação Original</h2>
+
+			<div class="g-contexto-compartilhamento g-contexto-compartilhamento--extendido g-impressao">
+				<!-- Elemento propositalmente vazio, preenchido pelo JS de compartilhamento do portal -->
+			</div>
+				<div class="vejaTambem">
+			    	<p>Veja também:</p>
+			    	<ul>
+                                        <li>
+
+
+                                                <a href="lei-13874-20-setembro-2019-789149-normaatualizada-pl.html" target="_blank">Texto Atualizado <span class="descricaoArquivo">(HTML)</span></a>&nbsp;
+                                                (<a href="lei-13874-20-setembro-2019-789149-normaatualizada-pl.doc">formato doc</a>)
+                                                &nbsp;
+                                                    (<a href="lei-13874-20-setembro-2019-789149-normaatualizada-pl.pdf">formato pdf</a>)
+
+                                            
+                                        </li>
+                                            <li>  	
+                                                <a href="lei-13874-20-setembro-2019-789149-veto-159081-pl.html">Veto</a>
+                                            </li>
+                                        <li>
+                                            <a href="http://www.camara.gov.br/sileg/Prop_Detalhe.asp?id=2199763">Proposição Originária</a>
+                                        </li>
+                                    <li>
+                                        <a href="lei-13874-20-setembro-2019-789149-norma-pl.html">Dados da Norma</a>
+                                    </li>
+                                </ul>
+			    </div>	
+                                
+
+					<h1>LEI Nº 13.874, DE 20 DE SETEMBRO DE 2019</h1>
+				
+				<div class="textoNorma">
+				
+						<p class="ementa">
+							Institui a Declaração de Direitos de Liberdade Econômica; estabelece garantias de livre mercado; altera as Leis nºs 10.406, de 10 de janeiro de 2002 (Código Civil), 6.404, de 15 de dezembro de 1976, 11.598, de 3 de dezembro de 2007, 12.682, de 9 de julho de 2012, 6.015, de 31 de dezembro de 1973, 10.522, de 19 de julho de 2002, 8.934, de 18 de novembro 1994, o Decreto-Lei nº 9.760, de 5 de setembro de 1946 e a Consolidação das Leis do Trabalho, aprovada pelo Decreto-Lei nº 5.452, de 1º de maio de 1943; revoga a Lei Delegada nº 4, de 26 de setembro de 1962, a Lei nº 11.887, de 24 de dezembro de 2008, e dispositivos do Decreto-Lei nº 73, de 21 de novembro de 1966; e dá outras providências.
+						</p>
+				
+						<div class="texto">
+							&nbsp;&nbsp;&nbsp;&nbsp; <STRONG>O PRESIDENTE DA REPÚBLICA</STRONG><BR>&nbsp;&nbsp;&nbsp;&nbsp; Faço saber que o Congresso Nacional decreta e eu sanciono a seguinte Lei: <BR><BR>
+<CENTER>CAPÍTULO I <BR>DISPOSIÇÕES GERAIS </CENTER><BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 1º&nbsp;Fica instituída a Declaração de Direitos de Liberdade Econômica, que estabelece normas de proteção à livre iniciativa e ao livre exercício de atividade econômica e disposições sobre a atuação do Estado como agente normativo e regulador, nos termos do inciso IV do <I>caput</I> do art. 1º, do parágrafo único do art. 170 e do <I>caput</I> do art. 174 da Constituição Federal. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 1º O disposto nesta Lei será observado na aplicação e na interpretação do direito civil, empresarial, econômico, urbanístico e do trabalho nas relações jurídicas que se encontrem no seu âmbito de aplicação e na ordenação pública, inclusive sobre exercício das profissões, comércio, juntas comerciais, registros públicos, trânsito, transporte e proteção ao meio ambiente. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 2º Interpretam-se em favor da liberdade econômica, da boa-fé e do respeito aos contratos, aos investimentos e à propriedade todas as normas de ordenação pública sobre atividades econômicas privadas. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 3º O disposto nos arts. 1º, 2º, 3º e 4º desta Lei não se aplica ao direito tributário e ao direito financeiro, ressalvado o inciso X do <I>caput</I> do art. 3º. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 4º O disposto nos arts. 1º, 2º, 3º e 4º desta Lei constitui norma geral de direito econômico, conforme o disposto no inciso I do <I>caput</I> e nos §§ 1º, 2º, 3º e 4º do art. 24 da Constituição Federal, e será observado para todos os atos públicos de liberação da atividade econômica executados pelos Estados, pelo Distrito Federal e pelos Municípios, nos termos do § 2º deste artigo. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 5º O disposto no inciso IX do <I>caput</I> do art. 3º desta Lei não se aplica aos Estados, ao Distrito Federal e aos Municípios, exceto se: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - o ato público de liberação da atividade econômica for derivado ou delegado por legislação ordinária federal; ou <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - o ente federativo ou o órgão responsável pelo ato decidir vincular-se ao disposto no inciso IX do <I>caput</I> do art. 3º desta Lei por meio de instrumento válido e próprio. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 6º Para fins do disposto nesta Lei, consideram-se atos públicos de liberação a licença, a autorização, a concessão, a inscrição, a permissão, o alvará, o cadastro, o credenciamento, o estudo, o plano, o registro e os demais atos exigidos, sob qualquer denominação, por órgão ou entidade da administração pública na aplicação de legislação, como condição para o exercício de atividade econômica, inclusive o início, a continuação e o fim para a instalação, a construção, a operação, a produção, o funcionamento, o uso, o exercício ou a realização, no âmbito público ou privado, de atividade, serviço, estabelecimento, profissão, instalação, operação, produto, equipamento, veículo, edificação e outros. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 2º&nbsp;São princípios que norteiam o disposto nesta Lei: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - a liberdade como uma garantia no exercício de atividades econômicas; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - a boa-fé do particular perante o poder público; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;III - a intervenção subsidiária e excepcional do Estado sobre o exercício de atividades econômicas; e <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;IV - o reconhecimento da vulnerabilidade do particular perante o Estado. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<I>Parágrafo único. </I>Regulamento disporá sobre os critérios de aferição para afastamento do inciso IV do <I>caput</I> deste artigo, limitados a questões de má-fé, hipersuficiência ou reincidência. <BR><BR>
+<CENTER>CAPÍTULO II<BR>DA DECLARAÇÃO DE DIREITOS DE LIBERDADE ECONÔMICA </CENTER><BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 3º&nbsp;São direitos de toda pessoa, natural ou jurídica, essenciais para o desenvolvimento e o crescimento econômicos do País, observado o disposto no parágrafo único do art. 170 da Constituição Federal: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - desenvolver atividade econômica de baixo risco, para a qual se valha exclusivamente de propriedade privada própria ou de terceiros consensuais, sem a necessidade de quaisquer atos públicos de liberação da atividade econômica; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - desenvolver atividade econômica em qualquer horário ou dia da semana, inclusive feriados, sem que para isso esteja sujeita a cobranças ou encargos adicionais, observadas: <BR><BR>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>a)</I></TD>
+<TD>as normas de proteção ao meio ambiente, incluídas as de repressão à poluição sonora e à perturbação do sossego público; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>b)</I></TD>
+<TD>as restrições advindas de contrato, de regulamento condominial ou de outro negócio jurídico, bem como as decorrentes das normas de direito real, incluídas as de direito de vizinhança; e </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>c)</I></TD>
+<TD>a legislação trabalhista; </TD></TR></TBODY></TABLE><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;III - definir livremente, em mercados não regulados, o preço de produtos e de serviços como consequência de alterações da oferta e da demanda; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;IV - receber tratamento isonômico de órgãos e de entidades da administração pública quanto ao exercício de atos de liberação da atividade econômica, hipótese em que o ato de liberação estará vinculado aos mesmos critérios de interpretação adotados em decisões administrativas análogas anteriores, observado o disposto em regulamento; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;V - gozar de presunção de boa-fé nos atos praticados no exercício da atividade econômica, para os quais as dúvidas de interpretação do direito civil, empresarial, econômico e urbanístico serão resolvidas de forma a preservar a autonomia privada, exceto se houver expressa disposição legal em contrário; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;VI - desenvolver, executar, operar ou comercializar novas modalidades de produtos e de serviços quando as normas infralegais se tornarem desatualizadas por força de desenvolvimento tecnológico consolidado internacionalmente, nos termos estabelecidos em regulamento, que disciplinará os requisitos para aferição da situação concreta, os procedimentos, o momento e as condições dos efeitos; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;VII - (VETADO); <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;VIII - ter a garantia de que os negócios jurídicos empresariais paritários serão objeto de livre estipulação das partes pactuantes, de forma a aplicar todas as regras de direito empresarial apenas de maneira subsidiária ao avençado, exceto normas de ordem pública; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;IX - ter a garantia de que, nas solicitações de atos públicos de liberação da atividade econômica que se sujeitam ao disposto nesta Lei, apresentados todos os elementos necessários à instrução do processo, o particular será cientificado expressa e imediatamente do prazo máximo estipulado para a análise de seu pedido e de que, transcorrido o prazo fixado, o silêncio da autoridade competente importará aprovação tácita para todos os efeitos, ressalvadas as hipóteses expressamente vedadas em lei; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;X - arquivar qualquer documento por meio de microfilme ou por meio digital, conforme técnica e requisitos estabelecidos em regulamento, hipótese em que se equiparará a documento físico para todos os efeitos legais e para a comprovação de qualquer ato de direito público; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;XI - não ser exigida medida ou prestação compensatória ou mitigatória abusiva, em sede de estudos de impacto ou outras liberações de atividade econômica no direito urbanístico, entendida como aquela que: <BR><BR>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>a)</I></TD>
+<TD>(VETADO); </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>b)</I></TD>
+<TD>requeira medida que já era planejada para execução antes da solicitação pelo particular, sem que a atividade econômica altere a demanda para execução da referida medida; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>c)</I></TD>
+<TD>utilize-se do particular para realizar execuções que compensem impactos que existiriam independentemente do empreendimento ou da atividade econômica solicitada; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>d)</I></TD>
+<TD>requeira a execução ou prestação de qualquer tipo para áreas ou situação além daquelas diretamente impactadas pela atividade econômica; ou </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>e)</I></TD>
+<TD>mostre-se sem razoabilidade ou desproporcional, inclusive utilizada como meio de coação ou intimidação; e </TD></TR></TBODY></TABLE><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;XII - não ser exigida pela administração pública direta ou indireta certidão sem previsão expressa em lei. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 1º Para fins do disposto no inciso I do <I>caput</I> deste artigo: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - ato do Poder Executivo federal disporá sobre a classificação de atividades de baixo risco a ser observada na ausência de legislação estadual, distrital ou municipal específica; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - na hipótese de ausência de ato do Poder Executivo federal de que trata o inciso I deste parágrafo, será aplicada resolução do Comitê para Gestão da Rede Nacional para a Simplificação do Registro e da Legalização de Empresas e Negócios (CGSIM), independentemente da aderência do ente federativo à Rede Nacional para a Simplificação do Registro e da Legalização de Empresas e Negócios (Redesim); e <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;III - na hipótese de existência de legislação estadual, distrital ou municipal sobre a classificação de atividades de baixo risco, o ente federativo que editar ou tiver editado norma específica encaminhará notificação ao Ministério da Economia sobre a edição de sua norma. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 2º A fiscalização do exercício do direito de que trata o inciso I do <I>caput</I> deste artigo será realizada posteriormente, de ofício ou como consequência de denúncia encaminhada à autoridade competente. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 3º O disposto no inciso III do <I>caput</I> deste artigo não se aplica: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - às situações em que o preço de produtos e de serviços seja utilizado com a finalidade de reduzir o valor do tributo, de postergar a sua arrecadação ou de remeter lucros em forma de custos ao exterior; e <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - à legislação de defesa da concorrência, aos direitos do consumidor e às demais disposições protegidas por lei federal. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 4º Para fins do disposto no inciso VII do <I>caput</I> deste artigo, entende-se como restrito o grupo cuja quantidade de integrantes não seja superior aos limites específicos estabelecidos para a prática da modalidade de implementação, teste ou oferta, conforme estabelecido em portaria do Secretário Especial de Produtividade, Emprego e Competitividade do Ministério da Economia. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 5º O disposto no inciso VIII do <I>caput</I> deste artigo não se aplica à empresa pública e à sociedade de economia mista definidas nos arts. 3º e 4º da Lei nº 13.303, de 30 de junho de 2016. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 6º O disposto no inciso IX do <I>caput</I> deste artigo não se aplica quando: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - versar sobre questões tributárias de qualquer espécie ou de concessão de registro de marcas; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - a decisão importar em compromisso financeiro da administração pública; e <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;III - houver objeção expressa em tratado em vigor no País. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 7º A aprovação tácita prevista no inciso IX do <I>caput</I> deste artigo não se aplica quando a titularidade da solicitação for de agente público ou de seu cônjuge, companheiro ou parente em linha reta ou colateral, por consanguinidade ou afinidade, até o 3º (terceiro) grau, dirigida a autoridade administrativa ou política do próprio órgão ou entidade da administração pública em que desenvolva suas atividades funcionais. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 8º O prazo a que se refere o inciso IX do <I>caput</I> deste artigo será definido pelo órgão ou pela entidade da administração pública solicitada, observados os princípios da impessoalidade e da eficiência e os limites máximos estabelecidos em regulamento. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 9º (VETADO). <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 10. O disposto no inciso XI do <I>caput</I> deste artigo não se aplica às situações de acordo resultantes de ilicitude. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;§ 11. Para os fins do inciso XII do <I>caput</I> deste artigo, é ilegal delimitar prazo de validade de certidão emitida sobre fato imutável, inclusive sobre óbito. <BR><BR>
+<CENTER>CAPÍTULO III <BR>DAS GARANTIAS DE LIVRE INICIATIVA<STRONG> </STRONG></CENTER><BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 4º&nbsp;É dever da administração pública e das demais entidades que se vinculam a esta Lei, no exercício de regulamentação de norma pública pertencente à legislação sobre a qual esta Lei versa, exceto se em estrito cumprimento a previsão explícita em lei, evitar o abuso do poder regulatório de maneira a, indevidamente: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - criar reserva de mercado ao favorecer, na regulação, grupo econômico, ou profissional, em prejuízo dos demais concorrentes; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - redigir enunciados que impeçam a entrada de novos competidores nacionais ou estrangeiros no mercado; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;III - exigir especificação técnica que não seja necessária para atingir o fim desejado; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;IV - redigir enunciados que impeçam ou retardem a inovação e a adoção de novas tecnologias, processos ou modelos de negócios, ressalvadas as situações consideradas em regulamento como de alto risco; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;V - aumentar os custos de transação sem demonstração de benefícios; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;VI - criar demanda artificial ou compulsória de produto, serviço ou atividade profissional, inclusive de uso de cartórios, registros ou cadastros; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;VII - introduzir limites à livre formação de sociedades empresariais ou de atividades econômicas; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;VIII - restringir o uso e o exercício da publicidade e propaganda sobre um setor econômico, ressalvadas as hipóteses expressamente vedadas em lei federal; e <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;IX - exigir, sob o pretexto de inscrição tributária, requerimentos de outra natureza de maneira a mitigar os efeitos do inciso I do <I>caput</I> do art. 3º desta Lei. <BR><BR>
+<CENTER>CAPÍTULO IV <BR>DA ANÁLISE DE IMPACTO REGULATÓRIO </CENTER><BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 5º&nbsp;As propostas de edição e de alteração de atos normativos de interesse geral de agentes econômicos ou de usuários dos serviços prestados, editadas por órgão ou entidade da administração pública federal, incluídas as autarquias e as fundações públicas, serão precedidas da realização de análise de impacto regulatório, que conterá informações e dados sobre os possíveis efeitos do ato normativo para verificar a razoabilidade do seu impacto econômico. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<I>Parágrafo único. </I>Regulamento disporá sobre a data de início da exigência de que trata o <I>caput</I> deste artigo e sobre o conteúdo, a metodologia da análise de impacto regulatório, os quesitos mínimos a serem objeto de exame, as hipóteses em que será obrigatória sua realização e as hipóteses em que poderá ser dispensada. <BR><BR>
+<CENTER>CAPÍTULO V <BR>DAS ALTERAÇÕES LEGISLATIVAS E DISPOSIÇÕES FINAIS </CENTER><BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 6º&nbsp;Fica extinto o Fundo Soberano do Brasil (FSB), fundo especial de natureza contábil e financeira, vinculado ao Ministério da Economia, criado pela Lei nº 11.887, de 24 de dezembro de 2008. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 7º&nbsp;A Lei nº 10.406, de 10 de janeiro de 2002 (Código Civil), passa a vigorar com as seguintes alterações: <BR><BR>
+<DIR>"Art. 49-A.&nbsp;A pessoa jurídica não se confunde com os seus sócios, associados, instituidores ou administradores. <BR><BR><I>Parágrafo único. </I>A autonomia patrimonial das pessoas jurídicas é um instrumento lícito de alocação e segregação de riscos, estabelecido pela lei com a finalidade de estimular empreendimentos, para a geração de empregos, tributo, renda e inovação em benefício de todos."</DIR>
+<DIR>"Art. 50.&nbsp;Em caso de abuso da personalidade jurídica, caracterizado pelo desvio de finalidade ou pela confusão patrimonial, pode o juiz, a requerimento da parte, ou do Ministério Público quando lhe couber intervir no processo, desconsiderá-la para que os efeitos de certas e determinadas relações de obrigações sejam estendidos aos bens particulares de administradores ou de sócios da pessoa jurídica beneficiados direta ou indiretamente pelo abuso. <BR><BR>§ 1º Para os fins do disposto neste artigo, desvio de finalidade é a utilização da pessoa jurídica com o propósito de lesar credores e para a prática de atos ilícitos de qualquer natureza. <BR><BR>§ 2º Entende-se por confusão patrimonial a ausência de separação de fato entre os patrimônios, caracterizada por: <BR><BR>I - cumprimento repetitivo pela sociedade de obrigações do sócio ou do administrador ou vice-versa; <BR><BR>II - transferência de ativos ou de passivos sem efetivas contraprestações, exceto os de valor proporcionalmente insignificante; e <BR><BR>III - outros atos de descumprimento da autonomia patrimonial. <BR><BR>§ 3º O disposto no <I>caput</I> e nos §§ 1º e 2º deste artigo também se aplica à extensão das obrigações de sócios ou de administradores à pessoa jurídica. <BR><BR>§ 4º A mera existência de grupo econômico sem a presença dos requisitos de que trata o <I>caput</I> deste artigo não autoriza a desconsideração da personalidade da pessoa jurídica. <BR><BR>§ 5º Não constitui desvio de finalidade a mera expansão ou a alteração da finalidade original da atividade econômica específica da pessoa jurídica." (NR)</DIR>
+<DIR>"Art. 113.&nbsp;.............................................................................................................. <BR><BR>§ 1º A interpretação do negócio jurídico deve lhe atribuir o sentido que: <BR><BR>I - for confirmado pelo comportamento das partes posterior à celebração do negócio; <BR><BR>II - corresponder aos usos, costumes e práticas do mercado relativas ao tipo de negócio; <BR><BR>III - corresponder à boa-fé; <BR><BR>IV - for mais benéfico à parte que não redigiu o dispositivo, se identificável; e <BR><BR>V - corresponder a qual seria a razoável negociação das partes sobre a questão discutida, inferida das demais disposições do negócio e da racionalidade econômica das partes, consideradas as informações disponíveis no momento de sua celebração. <BR><BR>§ 2º As partes poderão livremente pactuar regras de interpretação, de preenchimento de lacunas e de integração dos negócios jurídicos diversas daquelas previstas em lei." (NR)</DIR>
+<DIR>"Art. 421.&nbsp;A liberdade contratual será exercida nos limites da função social do contrato. <BR><BR><I>Parágrafo único. </I>Nas relações contratuais privadas, prevalecerão o princípio da intervenção mínima e a excepcionalidade da revisão contratual." (NR)</DIR>
+<DIR>"Art. 421-A.&nbsp;Os contratos civis e empresariais presumem-se paritários e simétricos até a presença de elementos concretos que justifiquem o afastamento dessa presunção, ressalvados os regimes jurídicos previstos em leis especiais, garantido também que: <BR><BR>I - as partes negociantes poderão estabelecer parâmetros objetivos para a interpretação das cláusulas negociais e de seus pressupostos de revisão ou de resolução; <BR><BR>II - a alocação de riscos definida pelas partes deve ser respeitada e observada; e <BR><BR>III - a revisão contratual somente ocorrerá de maneira excepcional e limitada."</DIR>
+<DIR>"Art. 980-A.&nbsp;...........................................................................................................<BR>................................................................................................................................ <BR><BR>§ 7º Somente o patrimônio social da empresa responderá pelas dívidas da empresa individual de responsabilidade limitada, hipótese em que não se confundirá, em qualquer situação, com o patrimônio do titular que a constitui, ressalvados os casos de fraude." (NR)</DIR>
+<DIR>"Art. 1.052&nbsp;.............................................................................................................. <BR><BR>§ 1º A sociedade limitada pode ser constituída por 1 (uma) ou mais pessoas. <BR><BR>§ 2º Se for unipessoal, aplicar-se-ão ao documento de constituição do sócio único, no que couber, as disposições sobre o contrato social." (NR)</DIR><BR><BR>
+<DIR>
+<CENTER><B>"CAPÍTULO X </CENTER></B>
+<CENTER><B>DO FUNDO DE INVESTIMENTO </B></CENTER>
+<CENTER><B>&nbsp;</CENTER></B></DIR>
+<DIR>
+<P align=left>&nbsp;'Art. 1.368-C. O fundo de investimento é uma comunhão de recursos, constituído sob a forma de condomínio de natureza especial, destinado à aplicação em ativos financeiros, bens e direitos de qualquer natureza. </P>
+<P align=left>§ 1º Não se aplicam ao fundo de investimento as disposições constantes dos arts. 1.314 ao 1.358-A deste Código. <BR><BR>§ 2º Competirá à Comissão de Valores Mobiliários disciplinar o disposto no <I>caput</I> deste artigo. <BR><BR>§ 3º O registro dos regulamentos dos fundos de investimentos na Comissão de Valores Mobiliários é condição suficiente para garantir a sua publicidade e a oponibilidade de efeitos em relação a terceiros.'</P>
+<P align=left>'Art. 1.368-D. O regulamento do fundo de investimento poderá, observado o disposto na regulamentação a que se refere o § 2º do art. 1.368-C desta Lei, estabelecer: <BR><BR>I - a limitação da responsabilidade de cada investidor ao valor de suas cotas; <BR><BR>II - a limitação da responsabilidade, bem como parâmetros de sua aferição, dos prestadores de serviços do fundo de investimento, perante o condomínio e entre si, ao cumprimento dos deveres particulares de cada um, sem solidariedade; e <BR><BR>III - classes de cotas com direitos e obrigações distintos, com possibilidade de constituir patrimônio segregado para cada classe. <BR><BR>§ 1º A adoção da responsabilidade limitada por fundo de investimento constituído sem a limitação de responsabilidade somente abrangerá fatos ocorridos após a respectiva mudança em seu regulamento. <BR><BR>§ 2º A avaliação de responsabilidade dos prestadores de serviço deverá levar sempre em consideração os riscos inerentes às aplicações nos mercados de atuação do fundo de investimento e a natureza de obrigação de meio de seus serviços. <BR><BR>§ 3º O patrimônio segregado referido no inciso III do <I>caput</I> deste artigo só responderá por obrigações vinculadas à classe respectiva, nos termos do regulamento.'</P>
+<P align=left>'Art. 1.368-E. Os fundos de investimento respondem diretamente pelas obrigações legais e contratuais por eles assumidas, e os prestadores de serviço não respondem por essas obrigações, mas respondem pelos prejuízos que causarem quando procederem com dolo ou má-fé. <BR><BR>§ 1º Se o fundo de investimento com limitação de responsabilidade não possuir patrimônio suficiente para responder por suas dívidas, aplicam-se as regras de insolvência previstas nos arts. 955 a 965 deste Código. <BR><BR>§ 2º A insolvência pode ser requerida judicialmente por credores, por deliberação própria dos cotistas do fundo de investimento, nos termos de seu regulamento, ou pela Comissão de Valores Mobiliários.'</P>
+<P align=left>'Art. 1.368-F. O fundo de investimento constituído por lei específica e regulamentado pela Comissão de Valores Mobiliários deverá, no que couber, seguir as disposições deste Capítulo.'"</P></DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 8º&nbsp;O art. 85 da Lei nº 6.404, de 15 de dezembro de 1976, passa a vigorar com as seguintes alterações: <BR><BR>
+<DIR>"Art. 85.&nbsp;............................................................................................................... <BR><BR>§ 1º A subscrição poderá ser feita, nas condições previstas no prospecto, por carta à instituição, acompanhada das declarações a que se refere este artigo e do pagamento da entrada. <BR><BR>§ 2º Será dispensada a assinatura de lista ou de boletim a que se refere o <I>caput</I> deste artigo na hipótese de oferta pública cuja liquidação ocorra por meio de sistema administrado por entidade administradora de mercados organizados de valores mobiliários." (NR)</DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 9º&nbsp;O art. 4º da Lei nº 11.598, de 3 de dezembro de 2007, passa a vigorar acrescido do seguinte § 5º: <BR><BR>
+<DIR>"Art. 4º&nbsp;................................................................................................................<BR>.............................................................................................................................. <BR><BR>§ 5º Ato do Poder Executivo federal disporá sobre a classificação mínima de atividades de baixo risco, válida para todos os integrantes da Redesim, observada a Classificação Nacional de Atividades Econômicas, hipótese em que a autodeclaração de enquadramento será requerimento suficiente, até que seja apresentada prova em contrário." (NR)</DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 10.&nbsp;A Lei nº 12.682, de 9 de julho de 2012, passa a vigorar acrescida do seguinte art. 2º-A: <BR><BR>
+<DIR>"Art. 2º-A.&nbsp;Fica autorizado o armazenamento, em meio eletrônico, óptico ou equivalente, de documentos públicos ou privados, compostos por dados ou por imagens, observado o disposto nesta Lei, nas legislações específicas e no regulamento. <BR><BR>§ 1º Após a digitalização, constatada a integridade do documento digital nos termos estabelecidos no regulamento, o original poderá ser destruído, ressalvados os documentos de valor histórico, cuja preservação observará o disposto na legislação específica. <BR>§ 2º O documento digital e a sua reprodução, em qualquer meio, realizada de acordo com o disposto nesta Lei e na legislação específica, terão o mesmo valor probatório do documento original, para todos os fins de direito, inclusive para atender ao poder fiscalizatório do Estado. <BR><BR>§ 3º Decorridos os respectivos prazos de decadência ou de prescrição, os documentos armazenados em meio eletrônico, óptico ou equivalente poderão ser eliminados. <BR><BR>§ 4º Os documentos digitalizados conforme o disposto neste artigo terão o mesmo efeito jurídico conferido aos documentos microfilmados, nos termos da Lei nº 5.433, de 8 de maio de 1968, e de regulamentação posterior. <BR><BR>§ 5º Ato do Secretário de Governo Digital da Secretaria Especial de Desburocratização, Gestão e Governo Digital do Ministério da Economia estabelecerá os documentos cuja reprodução conterá código de autenticação verificável. <BR><BR>§ 6º Ato do Conselho Monetário Nacional disporá sobre o cumprimento do disposto no § 1º deste artigo, relativamente aos documentos referentes a operações e transações realizadas no sistema financeiro nacional. <BR><BR>§ 7º É lícita a reprodução de documento digital, em papel ou em qualquer outro meio físico, que contiver mecanismo de verificação de integridade e autenticidade, na maneira e com a técnica definidas pelo mercado, e cabe ao particular o ônus de demonstrar integralmente a presença de tais requisitos. <BR><BR>§ 8º Para a garantia de preservação da integridade, da autenticidade e da confidencialidade de documentos públicos será usada certificação digital no padrão da Infraestrutura de Chaves Públicas Brasileira (ICP-Brasil)."</DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 11.&nbsp;O Decreto-Lei nº 9.760, de 5 de setembro de 1946, passa a vigorar com as seguintes alterações: <BR><BR>
+<DIR>"Art. 14.&nbsp;Da decisão proferida pelo Secretário de Coordenação e Governança do Patrimônio da União da Secretaria Especial de Desestatização, Desinvestimento e Mercados do Ministério da Economia será dado conhecimento aos recorrentes que, no prazo de 20 (vinte) dias, contado da data de sua ciência, poderão interpor recurso, sem efeito suspensivo, dirigido ao superior hierárquico, em última instância." (NR)</DIR><BR>
+<DIR>"Art. 100.&nbsp;...............................................................................................................<BR>&nbsp;.................................................................................................................................. <BR><BR>§ 5º Considerada improcedente a impugnação, a autoridade submeterá o recurso à autoridade superior, nos termos estabelecidos em regulamento. <BR>............................................................................................................................." (NR) </DIR>
+<DIR>"Art. 216.&nbsp;O Ministro de Estado da Economia, diretamente ou por ato do Secretário Especial de Desestatização, Desinvestimento e Mercados do Ministério da Economia, ouvido previamente o Secretário de Coordenação e Governança do Patrimônio da União, editará os atos necessários à execução do disposto neste Decreto-Lei." (NR)</DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 12.&nbsp;O art. 1º da Lei nº 6.015, de 31 de dezembro de 1973, passa a vigorar acrescido do seguinte § 3º: <BR><BR>
+<DIR>"Art. 1º&nbsp;..................................................................................................................<BR>................................................................................................................................ <BR><BR>§ 3º Os registros poderão ser escriturados, publicitados e conservados em meio eletrônico, obedecidos os padrões tecnológicos estabelecidos em regulamento." (NR)</DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 13.&nbsp;A Lei nº 10.522, de 19 de julho de 2002, passa a vigorar com as seguintes alterações: <BR><BR>
+<DIR>"Art. 18-A.&nbsp;Comitê formado de integrantes do Conselho Administrativo de Recursos Fiscais, da Secretaria Especial da Receita Federal do Brasil do Ministério da Economia e da Procuradoria-Geral da Fazenda Nacional editará enunciados de súmula da administração tributária federal, conforme o disposto em ato do Ministro de Estado da Economia, que deverão ser observados nos atos administrativos, normativos e decisórios praticados pelos referidos órgãos."</DIR>
+<DIR>"Art. 19.&nbsp;Fica a Procuradoria-Geral da Fazenda Nacional dispensada de contestar, de oferecer contrarrazões e de interpor recursos, e fica autorizada a desistir de recursos já interpostos, desde que inexista outro fundamento relevante, na hipótese em que a ação ou a decisão judicial ou administrativa versar sobre: <BR>................................................................................................................................ <BR><BR>II - tema que seja objeto de parecer, vigente e aprovado, pelo Procurador-Geral da Fazenda Nacional, que conclua no mesmo sentido do pleito do particular; <BR>................................................................................................................................ <BR><BR>IV - tema sobre o qual exista súmula ou parecer do Advogado-Geral da União que conclua no mesmo sentido do pleito do particular; <BR><BR>V - tema fundado em dispositivo legal que tenha sido declarado inconstitucional pelo Supremo Tribunal Federal em sede de controle difuso e tenha tido sua execução suspensa por resolução do Senado Federal, ou tema sobre o qual exista enunciado de súmula vinculante ou que tenha sido definido pelo Supremo Tribunal Federal em sentido desfavorável à Fazenda Nacional em sede de controle concentrado de constitucionalidade; <BR><BR>VI - tema decidido pelo Supremo Tribunal Federal, em matéria constitucional, ou pelo Superior Tribunal de Justiça, pelo Tribunal Superior do Trabalho, pelo Tribunal Superior Eleitoral ou pela Turma Nacional de Uniformização de Jurisprudência, no âmbito de suas competências, quando: </DIR>
+<DIR><EM>a) </EM>for definido em sede de repercussão geral ou recurso repetitivo; ou <BR><EM>b) </EM>não houver viabilidade de reversão da tese firmada em sentido desfavorável à Fazenda Nacional, conforme critérios definidos em ato do Procurador-Geral da Fazenda Nacional; e <BR><BR>VII - tema que seja objeto de súmula da administração tributária federal de que trata o art. 18-A desta Lei. <BR>................................................................................................................................ <BR><BR>§ 3º (Revogado); <BR><BR>§ 4º (Revogado); <BR><BR>§ 5º (Revogado); <BR>................................................................................................................................. <BR><BR>§ 7º (Revogado). <BR><BR>§ 8º O parecer da Procuradoria-Geral da Fazenda Nacional que examina a juridicidade de proposições normativas não se enquadra no disposto no inciso II do <I>caput</I> deste artigo. <BR><BR>§ 9º A dispensa de que tratam os incisos V e VI do <I>caput</I> deste artigo poderá ser estendida a tema não abrangido pelo julgado, quando a ele forem aplicáveis os fundamentos determinantes extraídos do julgamento paradigma ou da jurisprudência consolidada, desde que inexista outro fundamento relevante que justifique a impugnação em juízo. <BR><BR>§ 10. O disposto neste artigo estende-se, no que couber, aos demais meios de impugnação às decisões judiciais. <BR><BR>§ 11. O disposto neste artigo aplica-se a todas as causas em que as unidades da Procuradoria-Geral da Fazenda Nacional devam atuar na qualidade de representante judicial ou de autoridade coatora. <BR><BR>§ 12. Os órgãos do Poder Judiciário e as unidades da Procuradoria-Geral da Fazenda Nacional poderão, de comum acordo, realizar mutirões para análise do enquadramento de processos ou de recursos nas hipóteses previstas neste artigo e celebrar negócios processuais com fundamento no disposto no art. 190 da Lei nº 13.105, de 16 de março de 2015 (Código de Processo Civil). <BR><BR>§ 13. Sem prejuízo do disposto no § 12 deste artigo, a Procuradoria-Geral da Fazenda Nacional regulamentará a celebração de negócios jurídicos processuais em seu âmbito de atuação, inclusive na cobrança administrativa ou judicial da dívida ativa da União." (NR)</DIR>
+<DIR>"Art. 19-A.&nbsp;Os Auditores-Fiscais da Secretaria Especial da Receita Federal do Brasil não constituirão os créditos tributários relativos aos temas de que trata o art. 19 desta Lei, observado: <BR><BR>I - o disposto no parecer a que se refere o inciso II do <I>caput</I> do art. 19 desta Lei, que será aprovado na forma do art. 42 da Lei Complementar nº 73, de 10 de fevereiro de 1993, ou que terá concordância com a sua aplicação pela Secretaria Especial da Receita Federal do Brasil do Ministério da Economia; <BR><BR>II - o parecer a que se refere o inciso IV do <I>caput</I> do art. 19 desta Lei, que será aprovado na forma do disposto no art. 40 da Lei Complementar nº 73, de 10 de fevereiro de 1993, ou que, quando não aprovado por despacho do Presidente da República, terá concordância com a sua aplicação pelo Ministro de Estado da Economia; ou <BR><BR>III - nas hipóteses de que tratam o inciso VI do <I>caput</I> e o § 9º do art. 19 desta Lei, a Procuradoria-Geral da Fazenda Nacional deverá manifestar-se sobre as matérias abrangidas por esses dispositivos. <BR><BR>§ 1º Os Auditores-Fiscais da Secretaria Especial da Receita Federal do Brasil do Ministério da Economia adotarão, em suas decisões, o entendimento a que estiverem vinculados, inclusive para fins de revisão de ofício do lançamento e de repetição de indébito administrativa. <BR><BR>§ 2º O disposto neste artigo aplica-se, no que couber, aos responsáveis pela retenção de tributos e, ao emitirem laudos periciais para atestar a existência de condições que gerem isenção de tributos, aos serviços médicos oficiais."</DIR>
+<DIR>"Art. 19-B.&nbsp;Os demais órgãos da administração pública que administrem créditos tributários e não tributários passíveis de inscrição e de cobrança pela Procuradoria-Geral da Fazenda Nacional encontram-se dispensados de constituir e de promover a cobrança com fundamento nas hipóteses de dispensa de que trata o art. 19 desta Lei. <BR><BR><I>Parágrafo único. </I>A aplicação do disposto no <I>caput</I> deste artigo observará, no que couber, as disposições do art. 19-A desta Lei."</DIR>
+<DIR>"Art. 19-C.&nbsp;A Procuradoria-Geral da Fazenda Nacional poderá dispensar a prática de atos processuais, inclusive a desistência de recursos interpostos, quando o benefício patrimonial almejado com o ato não atender aos critérios de racionalidade, de economicidade e de eficiência. <BR><BR>§ 1º O disposto no <I>caput</I> deste artigo inclui o estabelecimento de parâmetros de valor para a dispensa da prática de atos processuais. <BR><BR>§ 2º A aplicação do disposto neste artigo não implicará o reconhecimento da procedência do pedido formulado pelo autor. <BR><BR>§ 3º O disposto neste artigo aplica-se, inclusive, à atuação da Procuradoria-Geral da Fazenda Nacional no âmbito do contencioso administrativo fiscal."</DIR>
+<DIR>"Art. 19-D.&nbsp;À Procuradoria-Geral da União, à Procuradoria-Geral Federal e à Procuradoria-Geral do Banco Central do Brasil aplica-se, no que couber, o disposto nos arts. 19, 19-B e 19-C desta Lei, sem prejuízo do disposto na Lei nº 9.469, de 10 de julho de 1997. <BR><BR>§ 1º Aos órgãos da administração pública federal direta, representados pela Procuradoria-Geral da União, e às autarquias e fundações públicas, representadas pela Procuradoria-Geral Federal ou pela Procuradoria-Geral do Banco Central do Brasil, aplicase, no que couber, o disposto no art. 19-B desta Lei. <BR><BR>§ 2º Ato do Advogado-Geral da União disciplinará o disposto neste artigo."</DIR>
+<DIR>"Art. 20.&nbsp;Serão arquivados, sem baixa na distribuição, por meio de requerimento do Procurador da Fazenda Nacional, os autos das execuções fiscais de débitos inscritos em dívida ativa da União pela Procuradoria-Geral da Fazenda Nacional ou por ela cobrados, de valor consolidado igual ou inferior àquele estabelecido em ato do Procurador-Geral da Fazenda Nacional. <BR>......................................................................................................................." (NR)</DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 14.&nbsp;A Lei nº 8.934, de 18 de novembro de 1994, passa a vigorar com as seguintes alterações: <BR><BR>
+<DIR>"Art. 4º&nbsp;O Departamento Nacional de Registro Empresarial e Integração (Drei) da Secretaria de Governo Digital da Secretaria Especial de Desburocratização, Gestão e Governo Digital do Ministério da Economia tem por finalidade: <BR>......................................................................................................................... <BR><BR><I>Parágrafo único. </I>O cadastro nacional a que se refere o inciso IX do <I>caput</I> deste artigo será mantido com as informações originárias do cadastro estadual de empresas, vedados a exigência de preenchimento de formulário pelo empresário ou o fornecimento de novos dados ou informações, bem como a cobrança de preço pela inclusão das informações no cadastro nacional." (NR)</DIR>
+<DIR>"Art. 31.&nbsp;Os atos decisórios serão publicados em sítio da rede mundial de computadores da junta comercial do respectivo ente federativo." (NR)</DIR>
+<DIR>"Art. 32.&nbsp;................................................................................................................ <BR><BR>§ 1º Os atos, os documentos e as declarações que contenham informações meramente cadastrais serão levados automaticamente a registro se puderem ser obtidos de outras bases de dados disponíveis em órgãos públicos. <BR><BR>§ 2º Ato do Departamento Nacional de Registro Empresarial e Integração definirá os atos, os documentos e as declarações que contenham informações meramente cadastrais." (NR)</DIR>
+<DIR>"Art. 35.&nbsp;................................................................................................................ <BR>............................................................................................................................... <BR><BR>VIII - (revogado). <BR><BR><I>Parágrafo único. </I>O registro dos atos constitutivos e de suas alterações e extinções ocorrerá independentemente de autorização governamental prévia, e os órgãos públicos deverão ser informados pela Rede Nacional para a Simplificação do Registro e da Legalização de Empresas e Negócios (Redesim) a respeito dos registros sobre os quais manifestarem interesse." (NR)</DIR>
+<DIR>"Art. 41.&nbsp;............................................................................................................... <BR><BR>I - .......................................................................................................................... </DIR>
+<DIR><EM>a) </EM>dos atos de constituição de sociedades anônimas;<BR>........................................................................................................................ <BR><BR><I>Parágrafo único. </I>Os pedidos de arquivamento de que trata o inciso I do <I>caput</I> deste artigo serão decididos no prazo de 5 (cinco) dias úteis, contado da data de seu recebimento, sob pena de os atos serem considerados arquivados, mediante provocação dos interessados, sem prejuízo do exame das formalidades legais pela procuradoria." (NR) </DIR>
+<DIR>"Art. 42.&nbsp;................................................................................................................ <BR><BR>§ 1º ....................................................................................................................... <BR><BR>§ 2º Os pedidos de arquivamento não previstos no inciso I do <I>caput</I> do art. 41 desta Lei serão decididos no prazo de 2 (dois) dias úteis, contado da data de seu recebimento, sob pena de os atos serem considerados arquivados, mediante provocação dos interessados, sem prejuízo do exame das formalidades legais pela procuradoria. <BR><BR>§ 3º O arquivamento dos atos constitutivos e de alterações não previstos no inciso I do <I>caput</I> do art. 41 desta Lei terá o registro deferido automaticamente caso cumpridos os requisitos de: <BR><BR>I - aprovação da consulta prévia da viabilidade do nome empresarial e da viabilidade de localização, quando o ato exigir; e <BR><BR>II - utilização pelo requerente do instrumento padrão estabelecido pelo Departamento Nacional de Registro Empresarial e Integração (Drei) da Secretaria de Governo Digital da Secretaria Especial de Desburocratização, Gestão e Governo Digital do Ministério da Economia. <BR><BR>§ 4º O arquivamento dos atos de extinção não previstos no inciso I do <I>caput</I> do art. 41 desta Lei terá o registro deferido automaticamente no caso de utilização pelo requerente do instrumento padrão estabelecido pelo Drei. <BR><BR>§ 5º Nas hipóteses de que tratam os §§ 3º e 4º do <I>caput</I> deste artigo, a análise do cumprimento das formalidades legais será feita posteriormente, no prazo de 2 (dois) dias úteis, contado da data do deferimento automático do registro. <BR><BR>§ 6º Após a análise de que trata o § 5º deste artigo, a identificação da existência de vício acarretará: <BR><BR>I - o cancelamento do arquivamento, se o vício for insanável; ou <BR><BR>II - a observação do procedimento estabelecido pelo Drei, se o vício for sanável." (NR)</DIR>
+<DIR>"Art. 44.&nbsp;............................................................................................................... <BR>............................................................................................................................... <BR><BR>III - Recurso ao Departamento Nacional de Registro Empresarial e Integração." (NR) </DIR>
+<DIR>"Art. 47.&nbsp;Das decisões do plenário cabe recurso ao Departamento Nacional de Registro Empresarial e Integração como última instância administrativa. <BR><BR><I>Parágrafo único. </I>(Revogado)." (NR)</DIR>
+<DIR>"Art. 54.&nbsp;A prova da publicidade de atos societários, quando exigida em lei, será feita mediante anotação nos registros da junta comercial à vista da apresentação da folha do Diário Oficial, em sua versão eletrônica, dispensada a juntada da mencionada folha." (NR) </DIR><BR>
+<DIR>"Art. 55.&nbsp;Compete ao Departamento Nacional de Registro Empresarial e Integração propor a elaboração da tabela de preços dos serviços pertinentes ao Registro Público de Empresas Mercantis, na parte relativa aos atos de natureza federal, bem como especificar os atos a serem observados pelas juntas comerciais na elaboração de suas tabelas locais. <BR><BR>§ 1º ................................................................................................................. <BR><BR>§ 2º É vedada a cobrança de preço pelo serviço de arquivamento dos documentos relativos à extinção do registro do empresário individual, da empresa individual de responsabilidade limitada (Eireli) e da sociedade limitada." (NR)</DIR>
+<DIR>"Art. 63.&nbsp;......................................................................................................... <BR><BR>§ 1º A cópia de documento, autenticada na forma prevista em lei, dispensará nova conferência com o documento original. <BR><BR>§ 2º A autenticação do documento poderá ser realizada por meio de comparação entre o documento original e a sua cópia pelo servidor a quem o documento seja apresentado. <BR><BR>§ 3º Fica dispensada a autenticação a que se refere o § 1º do <I>caput</I> deste artigo quando o advogado ou o contador da parte interessada declarar, sob sua responsabilidade pessoal, a autenticidade da cópia do documento." (NR)</DIR>
+<DIR>"Art. 65-A.&nbsp;Os atos de constituição, alteração, transformação, incorporação, fusão, cisão, dissolução e extinção de registro de empresários e de pessoas jurídicas poderão ser realizados também por meio de sistema eletrônico criado e mantido pela administração pública federal."</DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 15.&nbsp;A Consolidação das Leis do Trabalho, aprovada pelo Decreto-Lei nº 5.452, de 1º de maio de 1943, passa a vigorar com as seguintes alterações: <BR><BR>
+<DIR>"Art. 13.&nbsp;............................................................................................................... <BR>.............................................................................................................................. <BR><BR>§ 2º A Carteira de Trabalho e Previdência Social (CTPS) obedecerá aos modelos que o Ministério da Economia adotar. <BR><BR>§ 3º (Revogado). <BR><BR>§ 4º (Revogado)." (NR)</DIR>
+<DIR>"Art. 14.&nbsp;A CTPS será emitida pelo Ministério da Economia preferencialmente em meio eletrônico. <BR><BR><I>Parágrafo único. </I>Excepcionalmente, a CTPS poderá ser emitida em meio físico, desde que: <BR><BR>I - nas unidades descentralizadas do Ministério da Economia que forem habilitadas para a emissão; <BR><BR>II - mediante convênio, por órgãos federais, estaduais e municipais da administração direta ou indireta; <BR><BR>III - mediante convênio com serviços notariais e de registro, sem custos para a administração, garantidas as condições de segurança das informações." (NR)</DIR>
+<DIR>"Art. 15.&nbsp;Os procedimentos para emissão da CTPS ao interessado serão estabelecidos pelo Ministério da Economia em regulamento próprio, privilegiada a emissão em formato eletrônico." (NR)</DIR>
+<DIR>"Art. 16.&nbsp;A CTPS terá como identificação única do empregado o número de inscrição no Cadastro de Pessoas Físicas (CPF).</DIR>
+<DIR>I - (revogado); <BR><BR>II - (revogado); <BR><BR>III - (revogado); <BR><BR>IV - (revogado). <BR><BR><I>Parágrafo único. </I>(Revogado).<BR><BR>a) (revogada);<BR><EM>b) </EM>(revogada)." (NR)</DIR>
+<DIR>"Art. 29.&nbsp;O empregador terá o prazo de 5 (cinco) dias úteis para anotar na CTPS, em relação aos trabalhadores que admitir, a data de admissão, a remuneração e as condições especiais, se houver, facultada a adoção de sistema manual, mecânico ou eletrônico, conforme instruções a serem expedidas pelo Ministério da Economia.<BR>................................................................................................................................ <BR><BR>§ 6º A comunicação pelo trabalhador do número de inscrição no CPF ao empregador equivale à apresentação da CTPS em meio digital, dispensado o empregador da emissão de recibo. <BR><BR>§ 7º Os registros eletrônicos gerados pelo empregador nos sistemas informatizados da CTPS em meio digital equivalem às anotações a que se refere esta Lei. <BR><BR>§ 8º O trabalhador deverá ter acesso às informações da sua CTPS no prazo de até 48 (quarenta e oito) horas a partir de sua anotação." (NR)</DIR>
+<DIR>"Art. 40.&nbsp;A CTPS ularmente emitida e anotada servirá de prova: <BR>................................................................................................................................ <BR><BR>II - (revogado); <BR>......................................................................................................................." (NR)</DIR>
+<DIR>"Art. 74.&nbsp;O horário de trabalho será anotado em registro de empregados. <BR><BR>§ 1º (Revogado). <BR><BR>§ 2º Para os estabelecimentos com mais de 20 (vinte) trabalhadores será obrigatória a anotação da hora de entrada e de saída, em registro manual, mecânico ou eletrônico, conforme instruções expedidas pela Secretaria Especial de Previdência e Trabalho do Ministério da Economia, permitida a pré-assinalação do período de repouso. <BR><BR>§ 3º Se o trabalho for executado fora do estabelecimento, o horário dos empregados constará do registro manual, mecânico ou eletrônico em seu poder, sem prejuízo do que dispõe o <I>caput</I> deste artigo. <BR><BR>§ 4º Fica permitida a utilização de registro de ponto por exceção à jornada regular de trabalho, mediante acordo individual escrito, convenção coletiva ou acordo coletivo de trabalho." (NR)</DIR>
+<DIR>"Art. 135.&nbsp;..............................................................................................................<BR>................................................................................................................................ <BR><BR>§ 3º Nos casos em que o empregado possua a CTPS em meio digital, a anotação será feita nos sistemas a que se refere o § 7º do art. 29 desta Consolidação, na forma do regulamento, dispensadas as anotações de que tratam os §§ 1º e 2º deste artigo." (NR)</DIR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 16.&nbsp;O Sistema de Escrituração Digital das Obrigações Fiscais, Previdenciárias e Trabalhistas (eSocial) será substituído, em nível federal, por sistema simplificado de escrituração digital de obrigações previdenciárias, trabalhistas e fiscais.&nbsp;<BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<I>Parágrafo único. </I>Aplica-se o disposto no <I>caput</I> deste artigo às obrigações acessórias à versão digital gerenciadas pela Receita Federal do Brasil do Livro de Controle de Produção e Estoque da Secretaria Especial da Receita Federal do Brasil (Bloco K). <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 17.&nbsp;Ficam resguardados a vigência e a eficácia ou os efeitos dos atos declaratórios do Procurador-Geral da Fazenda Nacional, aprovados pelo Ministro de Estado respectivo e editados até a data de publicação desta Lei, nos termos do inciso II do <I>caput</I> do art. 19 da Lei nº 10.522, de 19 de julho de 2002. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 18.&nbsp;A eficácia do disposto no inciso X do <I>caput</I> do art. 3º desta Lei fica condicionada à regulamentação em ato do Poder Executivo federal, observado que: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - para documentos particulares, qualquer meio de comprovação da autoria, integridade e, se necessário, confidencialidade de documentos em forma eletrônica é válido, desde que escolhido de comum acordo pelas partes ou aceito pela pessoa a quem for oposto o documento; e <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - independentemente de aceitação, o processo de digitalização que empregar o uso da certificação no padrão da Infraestrutura de Chaves Públicas Brasileira (ICP-Brasil) terá garantia de integralidade, autenticidade e confidencialidade para documentos públicos e privados. <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 19.&nbsp;Ficam revogados: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - a Lei Delegada nº 4, de 26 de setembro de 1962; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - os seguintes dispositivos do Decreto-Lei nº 73, de 21 de novembro de 1966: <BR><BR>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>a)</I></TD>
+<TD>inciso III do <I>caput</I> do art. 5º; e </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>b)</I></TD>
+<TD>inciso X do <I>caput</I> do art. 32; </TD></TR></TBODY></TABLE><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;III - a Lei nº 11.887, de 24 de dezembro de 2008; <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;IV - (VETADO); <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;V - os seguintes dispositivos da Consolidação das Leis do Trabalho, aprovada pelo Decreto-Lei nº 5.452, de 1º de maio de 1943: <BR><BR>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>a)</I></TD>
+<TD>art. 17; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>b)</I></TD>
+<TD>art. 20; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>c)</I></TD>
+<TD>art. 21; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>d)</I></TD>
+<TD>art. 25; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>e)</I></TD>
+<TD>art. 26; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>f)</I></TD>
+<TD>art. 30; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>g)</I></TD>
+<TD>art. 31; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>h)</I></TD>
+<TD>art. 32; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>i)</I></TD>
+<TD>art. 33; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>j)</I></TD>
+<TD>art. 34; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>k)</I></TD>
+<TD>inciso II do art. 40; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>l)</I></TD>
+<TD>art. 53; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>m)</I></TD>
+<TD>art. 54; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>n)</I></TD>
+<TD>art. 56; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>o)</I></TD>
+<TD>art. 141; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>p)</I></TD>
+<TD>parágrafo único do art. 415; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>q)</I></TD>
+<TD>art. 417; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>r)</I></TD>
+<TD>art. 419; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>s)</I></TD>
+<TD>art. 420; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>t)</I></TD>
+<TD>art. 421; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>u)</I></TD>
+<TD>art. 422; e </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>v)</I></TD>
+<TD>art. 633; </TD></TR></TBODY></TABLE><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;VI - os seguintes dispositivos da Lei nº 8.934, de 18 de novembro de 1994: <BR><BR>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>a)</I></TD>
+<TD>parágrafo único do art. 2º; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>b)</I></TD>
+<TD>inciso VIII do <I>caput</I> do art. 35; </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>c)</I></TD>
+<TD>art. 43; e </TD></TR></TBODY></TABLE>
+<TABLE>
+<TBODY>
+<TR>
+<TD width=20></TD>
+<TD vAlign=UP width=30 align=right><I>d)</I></TD>
+<TD>parágrafo único do art. 47. </TD></TR></TBODY></TABLE>
+<P>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Art. 20.&nbsp;Esta Lei entra em vigor: <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I - (VETADO); <BR><BR>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;II - na data de sua publicação, para os demais artigos. </P>
+<P>&nbsp;&nbsp;&nbsp;&nbsp; Brasília, 20 de setembro de 2019; 198º da Independência e 131º da República. </P>
+<P>JAIR MESSIAS BOLSONARO<BR>Paulo Guedes<BR>Luiz Henrique Mandetta </P>
+						</div>
+					    
+				</div>
+				
+
+                                            <br>
+                                            <div class="rodapeTexto">
+                                                <div class="texto">
+                                                    Este texto não substitui o original publicado no Diário Oficial da União - Seção 1 - Edição Extra - B de 20/09/2019
+                                                </div>
+                                            </div>
+
+					<br><br>
+					<div class="publicacoesTI">
+                                            <strong>Publicação:</strong>
+                                            <ul class="listaMarcada">
+                                                    <li>
+                                                        
+                                                        Diário Oficial da União - Seção 1 - Edição Extra - B
+                                                         - 20/9/2019, Página 1 
+                                                        
+                                                        (Publicação Original)
+                                                        
+                                                    </li>
+                                            </ul>
+					</div>
+
+
+
+			</div> <!-- content // -->
+		</div> <!-- documentContent // -->
+	</div> <!-- portal-content-wrapper // -->
+</div> <!-- portal-column-content // --> 
+
+<!-- JS do portal-tema: necessário para o botão de compartilhamento -->
+<script type="text/javascript" src="https://www.camara.leg.br/tema/global/vendor-bundle.js"></script>
+<script type="text/javascript" src="https://www.camara.leg.br/tema/global/camara-bundle.js"></script>
+
+</div></div>
+<div class="js-mmenu-container">
+      
+
+      
+      
+
+      
+
+      <footer role="contentinfo" class="rodape-portal">
+        <!-- Coloque aqui o endere&#231;o e demais informa&#231;&#245;es de assinatura -->
+        <address class="rodape-portal-info">
+          <div class="container">
+            <div class="rodape-portal-info__nome">
+              <p>
+                <strong id="legislaturaRodape">57ª Legislatura - 4ª Sessão Legislativa Ordinária</strong>
+              </p>
+            </div>
+
+            <div class="l-rodape-info">
+              <div class="l-rodape-info__local rodape-portal-info__texto">
+                <span class="rodape-info">Câmara dos Deputados - Palácio do Congresso Nacional - Praça
+                  dos Três Poderes</span>
+                <span class="rodape-info">Brasília - DF - Brasil - CEP 70160-900</span>
+                <span class="rodape-info"><span class="rodape-info__destaque">CNPJ:</span>
+                  00.530.352/0001-59</span>
+              </div>
+
+              <div class="l-rodape-info__telefones rodape-portal-info__texto">
+                <ul class="list-unstyled" aria-label="Número para contato e horário de atendimento">
+                  <li>
+                    <span class="rodape-info__destaque">Disque-Câmara:</span>
+                    <a href="tel:0800-0-619-619">0800-0-619-619</a>, das 8h às
+                    20h
+                  </li>
+                  <li>
+                    <span class="rodape-info__destaque">Atendimento por WhatsApp:</span>
+                    <a href="https://wa.me//556132160000?text">(61) 3216-0000</a>, das 8h às 19h
+                  </li>
+                  <li>
+                    <span class="rodape-info__destaque">Atendimento presencial:</span>
+                    das 9h às 19h
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div class="acesso-provedor text-right">
+              <a title="Autenticar-se no site" href="/login_form">
+                <i class="fas fa-lock" aria-hidden="true"></i>
+              </a>
+            </div>
+          </div>
+        </address>
+        <!-- Coloque aqui a lista de redes sociais da C&#226;mara -->
+        <div class="rodape-portal-links rodape-portal-links--redes-sociais">
+          <div class="container">
+            <ul class="rodape-portal-links__lista" aria-label="Câmara nas redes sociais">
+              <li class="rodape-portal-links__item">
+                <a href="https://whatsapp.com/channel/0029Va2fexI3gvWgfMs6Fv31" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--whatsapp" aria-hidden="true"></span>
+                  <span class="sr-only">Whatsapp</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://t.me/CamaradosDeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--telegram" aria-hidden="true"></span>
+                  <span class="sr-only">Telegram</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www.facebook.com/camaradeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--facebook" aria-hidden="true"></span>
+                  <span class="sr-only">Facebook</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://twitter.com/camaradeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--twitter" aria-hidden="true"></span>
+                  <span class="sr-only">X</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www.youtube.com/channel/UC-ZkSRh-7UEuwXJQ9UMCFJA" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--youtube" aria-hidden="true"></span>
+                  <span class="sr-only">Youtube</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://tiktok.com/@camaradosdeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--tiktok" aria-hidden="true"></span>
+                  <span class="sr-only">Tiktok</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www.instagram.com/camaradeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--instagram" aria-hidden="true"></span>
+                  <span class="sr-only">Instagram</span>
+                </a>
+              </li>
+              <li class="rodape-portal-links__item">
+                  <a href="https://www.threads.com/@camaradosdeputados" class="rodape-portal-links__link">
+                      <span class="g-social-icon-outline g-social-icon-outline--threads" aria-hidden="true"></span>
+                      <span class="sr-only">Threads</span>
+                  </a>
+              </li>
+              <li class="rodape-portal-links__item">
+                  <a href="https://bsky.app/profile/camara.leg.br" class="rodape-portal-links__link">
+                      <span class="g-social-icon-outline g-social-icon-outline--bluesky" aria-hidden="true"></span>
+                      <span class="sr-only">Bluesky</span>
+                  </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <!-- Coloque aqui a lista de links de apoio do rodap&#233; -->
+        <div class="rodape-portal-links rodape-portal-links--apoio">
+          <div class="container">
+            <ul class="rodape-portal-links__lista" aria-label="Links de apoio">
+              <li class="rodape-portal-links__item">
+                <a href="https://www2.camara.leg.br/sobre-o-portal" class="rodape-portal-links__link">Sobre o portal</a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www2.camara.leg.br/termo-de-uso-e-politica-de-privacidade" class="rodape-portal-links__link">Termos de uso</a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www2.camara.leg.br/aplicativos/" class="rodape-portal-links__link">Aplicativos</a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www.camara.leg.br/extranet" class="rodape-portal-links__link">Extranet</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </footer>
+
+      <div class="barra-carregando" style="display: none">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Carregando</h5>
+            </div>
+            <div class="modal-body">
+              <p>Por favor, aguarde.</p>
+              <div class="progress">
+                <div class="progress-bar progress-bar-striped active" role="progressbar" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100" style="width: 100%">
+                  <span class="sr-only"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

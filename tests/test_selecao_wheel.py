@@ -8,7 +8,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -60,13 +59,13 @@ def _selecionados(copia: Path) -> dict[str, set[str]]:
     return por_arquivo
 
 
-def test_selecao_da_wheel_sem_dependencia_de_scripts_ou_pacote_por_caminho():
-    # cópia fora do checkout (o tmp_path do pytest fica dentro dele)
-    with tempfile.TemporaryDirectory() as tmp:
-        copia = Path(tmp)
-        shutil.copytree(TESTES, copia / "tests", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        selecao = _selecionados(copia)
-        violacoes = _violacoes(copia, selecao)
+def test_selecao_da_wheel_sem_dependencia_de_scripts_ou_pacote_por_caminho(tmp_path):
+    # A factory do pytest preserva ACL herdável no Windows; --basetemp define a raiz externa.
+    copia = tmp_path / "copia"
+    copia.mkdir()
+    shutil.copytree(TESTES, copia / "tests", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    selecao = _selecionados(copia)
+    violacoes = _violacoes(copia, selecao)
     assert not violacoes, violacoes
 
 
@@ -88,21 +87,24 @@ def _violacoes(copia: Path, selecao: dict[str, set[str]]) -> list[str]:
     return violacoes
 
 
-def test_selecao_ancorada_em_arquivo_roda_na_copia_isolada():
+def test_selecao_ancorada_em_arquivo_roda_na_copia_isolada(tmp_path):
     """Execução efetiva (B2-02): os arquivos que resolvem caminho por `__file__` rodam numa cópia só com
     `tests/` e o instalador, como no job da wheel; leitura de `docs/`, `scripts/` ou do pacote por caminho falha."""
-    with tempfile.TemporaryDirectory() as tmp:
-        copia = Path(tmp)
-        shutil.copytree(TESTES, copia / "tests", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        (copia / "scripts").mkdir()
-        shutil.copy(TESTES.parent / "scripts" / PERMITIDO, copia / "scripts" / PERMITIDO)
-        alvos = sorted(a for a in _selecionados(copia) if "__file__" in (copia / a).read_text(encoding="utf-8-sig"))
-        alvos = [a for a in alvos if Path(a).name != Path(__file__).name]
-        r = subprocess.run(
-            [sys.executable, "-m", "pytest", *alvos, "-q", "-m", "not live and not repositorio", "-p", "no:cacheprovider"],
-            cwd=copia, env={**os.environ, "PYTHONSAFEPATH": "1"}, capture_output=True, text=True, timeout=900,
-        )
-    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-1000:]
+    copia = tmp_path / "copia"
+    copia.mkdir()
+    shutil.copytree(TESTES, copia / "tests", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    (copia / "scripts").mkdir()
+    shutil.copy(TESTES.parent / "scripts" / PERMITIDO, copia / "scripts" / PERMITIDO)
+    alvos = sorted(a for a in _selecionados(copia) if "__file__" in (copia / a).read_text(encoding="utf-8-sig"))
+    alvos = [a for a in alvos if Path(a).name != Path(__file__).name]
+    r = subprocess.run(
+        [sys.executable, "-m", "pytest", *alvos, "-q", "-m", "not live and not repositorio", "-p", "no:cacheprovider"],
+        cwd=copia, env={**os.environ, "PYTHONSAFEPATH": "1"}, capture_output=True, text=True, timeout=900,
+    )
+    diagnostico = tmp_path / "wheel-execucao.txt"
+    if r.returncode:
+        diagnostico.write_text(r.stdout + "\nSTDERR:\n" + r.stderr, encoding="utf-8")
+    assert r.returncode == 0, f"Diagnóstico completo: {diagnostico}\n" + r.stdout[-3000:] + r.stderr[-1000:]
 
 
 def test_violacoes_acusa_teste_selecionado_com_caminho(tmp_path):

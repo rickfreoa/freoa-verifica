@@ -1,7 +1,7 @@
 """FIX7c (decisão 0058, revista): entre fontes oficiais distintas, `Unavailable` de qualquer categoria
 permite a próxima fonte, declarada em `fontes_consultadas`; erro não-`Unavailable` interrompe.
 
-- `_capture_work` federal: Planalto → Senado.
+- `_capture_work` federal: Câmara (0077); não renova Planalto nem usa fallback oculto.
 - `_confirm_cnj`: TJSP → DataJud (confirma só o processo, com a falha do TJSP declarada).
 """
 
@@ -86,27 +86,31 @@ class _Marca:
     ],
     ids=["recusa", "desafio", "fonte_fora", "invalida", "404"],
 )
-def test_captura_federal_segue_para_o_senado_e_declara_a_falha_do_planalto(monkeypatch, tmp_path, erro):
+def test_captura_federal_recusa_camara_sem_fallback(monkeypatch, tmp_path, erro):
     monkeypatch.delenv("FV_OFFLINE", raising=False)
     with Verifica(tmp_path) as svc:
-        planalto, senado = _Falha("planalto", erro), _Senado()
-        svc._connectors["planalto"], svc._connectors["senado"] = planalto, senado
-        rw = svc._capture_work(LEI)
-        fonte = svc.conn.execute("SELECT source_id FROM capture WHERE id=?", (rw.capture_id,)).fetchone()[0]
-    assert fonte == "senado" and "senado" in rw.url
-    assert rw.fontes_consultadas == [
-        {"fonte": "planalto", "resultado": "indisponivel", "motivo": erro.reason, "categoria": erro.categoria}]
-    assert planalto.chamadas == 1 and senado.chamadas == 1
-
-
-def test_erro_de_parse_no_planalto_interrompe(monkeypatch, tmp_path):
-    monkeypatch.delenv("FV_OFFLINE", raising=False)
-    with Verifica(tmp_path) as svc:
-        planalto, senado = _Falha("planalto", ValueError("parse")), _Senado()
+        camara = _Falha("camara_legin", erro)
+        planalto, senado = _Marca("planalto"), _Marca("senado")
+        svc._connectors["camara_legin"] = camara
         svc._connectors["planalto"], svc._connectors["senado"] = planalto, senado
         with pytest.raises(SourceUnavailable) as ei:
             svc._capture_work(LEI)
-    assert ei.value.reason == "planalto:ValueError"
+    assert ei.value.fontes_consultadas == [
+        {"fonte": "camara_legin", "resultado": "indisponivel", "motivo": erro.reason, "categoria": erro.categoria}]
+    assert camara.chamadas == 1
+    assert planalto.chamadas == senado.chamadas == 0
+
+
+def test_erro_de_parse_na_camara_interrompe(monkeypatch, tmp_path):
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+    with Verifica(tmp_path) as svc:
+        planalto, senado = _Falha("planalto", ValueError("parse")), _Senado()
+        svc._connectors["camara_legin"] = _Falha("camara_legin", ValueError("parse"))
+        svc._connectors["planalto"], svc._connectors["senado"] = planalto, senado
+        with pytest.raises(SourceUnavailable) as ei:
+            svc._capture_work(LEI)
+    assert ei.value.reason == "camara_legin:ValueError"
+    assert planalto.chamadas == 0
     assert senado.chamadas == 0
 
 
@@ -115,11 +119,12 @@ def test_todas_as_fontes_indisponiveis_declaram_ambas(monkeypatch, tmp_path):
     with Verifica(tmp_path) as svc:
         planalto = _Falha("planalto", Unavailable("http_403", "recusa_identificado"))
         senado = _Falha("senado", Unavailable("http_503", "fonte_fora"))
+        svc._connectors["camara_legin"] = _Falha("camara_legin", Unavailable("http_403", "recusa_identificado"))
         svc._connectors["planalto"], svc._connectors["senado"] = planalto, senado
         with pytest.raises(SourceUnavailable) as ei:
             svc._capture_work(LEI)
-    assert ei.value.reason == "planalto:http_403;senado:http_503"
-    assert planalto.chamadas == 1 and senado.chamadas == 1
+    assert ei.value.reason == "camara_legin:http_403"
+    assert planalto.chamadas == 0 and senado.chamadas == 0
 
 
 def test_fontes_consultadas_chega_a_saida_da_verificacao(monkeypatch, tmp_path):
@@ -127,11 +132,12 @@ def test_fontes_consultadas_chega_a_saida_da_verificacao(monkeypatch, tmp_path):
     with Verifica(tmp_path) as svc:
         svc._connectors["planalto"] = _Falha("planalto", Unavailable("http_403", "recusa_identificado"))
         svc._connectors["senado"] = _Senado()
+        svc._connectors["camara_legin"] = _Falha("camara_legin", Unavailable("http_403", "recusa_identificado"))
         out = svc.verificar_citacao("Lei 6.404/1976, art. 1º")
     evs = out["identity"]["evidence"]
-    assert evs and evs[0]["fontes_consultadas"][0]["fonte"] == "planalto"
+    assert evs and evs[0]["fontes_consultadas"][0]["fonte"] == "camara_legin"
     assert evs[0]["fontes_consultadas"][0]["categoria"] == "recusa_identificado"
-    assert "senado" in evs[0]["url"]
+    assert out["identity"]["status"] == "unavailable"
 
 
 @pytest.mark.parametrize(

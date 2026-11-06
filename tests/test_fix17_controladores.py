@@ -145,7 +145,8 @@ def _pesquisar(svc, monkeypatch):
 
 
 def _verificar_citacao(svc, monkeypatch):
-    r = svc.verificar_citacao("art. 1º da Lei 6.404/1976")
+    # Fonte habilitada: a Câmara pendente é recusada antes de alcançar este cenário de CAPTCHA.
+    r = svc.verificar_citacao("art. 1º da Resolução CVM 160/2022")
     assert r["identity"]["status"] == "unavailable", r["identity"]
     consultadas = r["identity"]["evidence"][0]["fontes_consultadas"]
     assert consultadas and all(c["categoria"] == "ambiental_desafio" for c in consultadas), consultadas

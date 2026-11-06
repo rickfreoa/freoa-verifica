@@ -84,10 +84,12 @@ def test_listar_fontes_traz_capacidade_recorte_e_tipos(exposto):
     assert por_id["stj"]["tipos_documento"] == ["ementa"]
     assert por_id["datajud"]["tipos_documento"] == ["metadados"]
     assert por_id["planalto"]["recorte_acervo"]["capturas"] == 0
+    assert por_id["planalto"]["capacidade"] == "nenhuma"
+    assert por_id["camara_legin"]["capacidade"] == "nenhuma"
 
 
 def test_listar_fontes_recorte_com_acervo(verifica_populada):
     svc, *_ = verifica_populada
     por_id = {f["id"]: f for f in svc.listar_fontes()["fontes"]}
-    assert por_id["planalto"]["capacidade"] == "ambos"
+    assert por_id["planalto"]["capacidade"] == "acervo"
     assert por_id["planalto"]["recorte_acervo"]["capturas"] >= 1

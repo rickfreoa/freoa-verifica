@@ -17,6 +17,7 @@ _USER_AGENT_POR_MODO = {
 
 UA_POR_CONECTOR = {
     "bcb": MODO_IDENTIFICADO,
+    "camara_legin": MODO_IDENTIFICADO,
     "cvm_colegiado": MODO_IDENTIFICADO,
     "cvm_normas": MODO_IDENTIFICADO,
     "datajud": MODO_IDENTIFICADO,

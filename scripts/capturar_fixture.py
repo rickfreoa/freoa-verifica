@@ -23,8 +23,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from freoa_verifica.captura import UA_MODOS, capturar, registrar_fixture
-from freoa_verifica.connectors.base import registry
+from freoa_verifica.captura import UA_MODOS, capturar, registrar_fixture, importar_fixture_offline
+from freoa_verifica.connectors.base import Unavailable, registry
 from freoa_verifica.sondas import FONTES_SONDA
 
 REPO = Path(__file__).resolve().parents[1]
@@ -32,6 +32,21 @@ FIXTURES = REPO / "tests" / "fixtures"
 
 
 def main(argv: list[str] | None = None) -> int:
+    args_in = sys.argv[1:] if argv is None else argv
+    if "--importar-offline" in args_in:
+        off = argparse.ArgumentParser(description="Importa par recibo/corpo Câmara sem rede (C16)")
+        off.add_argument("--importar-offline", type=Path, required=True, metavar="RECIBO")
+        off.add_argument("--corpo", type=Path, required=True)
+        off.add_argument("--origem-recibo", type=Path)
+        off.add_argument("--chave", required=True)
+        a = off.parse_args(args_in)
+        try:
+            reg = importar_fixture_offline(a.importar_offline, a.corpo, a.chave, FIXTURES, a.origem_recibo)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            print(f"erro: {exc}", file=sys.stderr)
+            return 2
+        print(f"offline {reg.bytes} bytes sha256={reg.sha256}")
+        return 0
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     origem = ap.add_mutually_exclusive_group(required=True)
     origem.add_argument("--conector", choices=sorted(registry()))
@@ -77,6 +92,9 @@ def main(argv: list[str] | None = None) -> int:
                 reg = capturar(args.conector, consulta, destino=Path(tmp), sonda=False, **comum)
                 if not reg.unavailable:
                     registrar_fixture(reg, args.chave, FIXTURES)
+    except Unavailable as exc:
+        print(f"unavailable({exc.reason})", file=sys.stderr)
+        return 1
     except ValueError as exc:
         print(f"erro: {exc}", file=sys.stderr)
         return 2

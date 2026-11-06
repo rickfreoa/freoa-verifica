@@ -16,6 +16,7 @@ from freoa_verifica import transport as tr
 from freoa_verifica.connectors import challenge, httputil
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.connectors.bcb import BcbConnector
+from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
 from freoa_verifica.connectors.cvm_colegiado import CvmColegiadoConnector
 from freoa_verifica.connectors.cvm_normas import CvmNormasConnector
 from freoa_verifica.connectors.datajud import DatajudConnector
@@ -28,7 +29,7 @@ from freoa_verifica.connectors.tjdft import TjdftConnector
 from freoa_verifica.connectors.tjsp import TjspConnector
 
 CLASSES = [
-    BcbConnector, CvmColegiadoConnector, CvmNormasConnector, DatajudConnector, PlanaltoConnector,
+    BcbConnector, CamaraLeginConnector, CvmColegiadoConnector, CvmNormasConnector, DatajudConnector, PlanaltoConnector,
     SenadoConnector, StfConnector, StjConnector, TcuConnector, TjdftConnector, TjspConnector,
 ]
 HOST = "example.org"

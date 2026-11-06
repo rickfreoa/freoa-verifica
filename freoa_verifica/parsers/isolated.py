@@ -9,9 +9,9 @@ import sys
 from freoa_verifica.limites import restante
 from freoa_verifica.parsers.model import Issue, ParsedDocument, document_from_dict
 
-_PROFILES = ("planalto", "cvm_docx", "bcb_json", "cvm_pdf", "pdf_texto")
+_PROFILES = ("planalto", "cvm_docx", "bcb_json", "cvm_pdf", "pdf_texto", "camara_legin", "camara_anexo")
 # Limites instalados pelo filho antes de importar parsers/ler bytes não confiáveis.
-_LIMITES = {p: ((1024, 60) if p in {"cvm_pdf", "pdf_texto"} else (2048, 120))
+_LIMITES = {p: ((1024, 60) if p in {"cvm_pdf", "pdf_texto", "camara_anexo"} else (2048, 120))
             for p in _PROFILES}
 INPUT_LIMIT = 200 * 1024**2
 STDOUT_LIMIT = 64 * 1024**2
@@ -247,14 +247,16 @@ def _main() -> None:
     from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
     from freoa_verifica.parsers.bcb_json import parse_bcb_json
     from freoa_verifica.connectors.cvm_normas import parse_pdf_direto
-    parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto)))
+    from freoa_verifica.parsers.camara_legin import parse_camara_legin
+    from freoa_verifica.parsers.camara_anexo import parse_camara_anexo
+    parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto, parse_camara_legin, parse_camara_anexo)))
     try:
         body = sys.stdin.buffer.read()
         argumentos = sys.argv[2:]
         if argumentos[:1] == ["--texto"]:
             body, argumentos = body.decode("utf-8"), argumentos[1:]  # estrito: erro aqui é falha do filho
-        if sys.argv[1] == "planalto" and argumentos:
-            document = parse_planalto(body, base_url=argumentos[0])
+        if sys.argv[1] in {"planalto", "camara_legin"} and argumentos:
+            document = parsers[sys.argv[1]](body, base_url=argumentos[0])
         else:
             document = parsers[sys.argv[1]](body)
     except MemoryError:

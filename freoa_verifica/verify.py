@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -123,6 +124,14 @@ class SourceUnavailable(Exception):
         super().__init__(reason)
 
 
+class SourceAmbiguous(Exception):
+    """Metadados de várias obras candidatas, sem promoção a documento normativo."""
+
+    def __init__(self, candidates):
+        self.candidates = list(candidates)
+        super().__init__("IDENTIDADE_AMBIGUA")
+
+
 @dataclass
 class MemoryResolver:
     """Resolver M3: mapa WorkKey → ResolvedWork (fixtures pré-carregadas)."""
@@ -203,7 +212,8 @@ def _inferir_source_kind(wk: WorkKey | None) -> str:
 # Perfis cujo parser só aceita o formato consolidado oficial (docstrings de `parsers/planalto.py` e `parsers/cvm_docx.py`).
 # A autoridade da obra não demonstra consolidação (IL.0-R, C6/0075 §3.2): metadados do Senado, HTML/PDF da CVM e o
 # JSON do BCB não sustentam a natureza e ficam `nao_identificado`.
-_NATUREZA_POR_PERFIL = {"planalto": "consolidacao_oficial", "cvm_docx": "consolidacao_oficial"}
+_NATUREZA_POR_PERFIL = {"planalto": "consolidacao_oficial", "cvm_docx": "consolidacao_oficial",
+                       "camara_atualizado": "consolidacao_oficial", "camara_original": "publicacao_original"}
 
 
 def _inferir_natureza_texto(rw: ResolvedWork) -> str:
@@ -283,6 +293,8 @@ def _scope_of(path: str) -> str:
 
 def pode_negar(rw: ResolvedWork | None, path: str) -> str | None:
     """C1 (decisão 0023): None autoriza DISPOSITIVO_INEXISTENTE; senão, o motivo que o impede."""
+    if rw is not None and (motivo := _caput_nao_representado(rw, path)):
+        return motivo
     if rw is None or not rw.capture_id:
         return "COBERTURA"
     scope = _scope_of(path)
@@ -308,13 +320,46 @@ def negativa_dimension(rw: ResolvedWork | None, path: str) -> Dimension:
     return Dimension("unavailable" if motivo == "COBERTURA" else "unknown", motivo, ev)
 
 
+def _caput_nao_representado(rw: ResolvedWork, path: str | None) -> str | None:
+    """D5: caput é a cabeça do artigo; recorte não resolvido não prova ausência."""
+    if rw.source_id != "camara_legin" or not path:
+        return None
+    parts = path.split(".")
+    if "caput" not in parts:
+        return None
+    index = parts.index("caput")
+    # Caput é só a cabeça do artigo (titular): caput abaixo de parágrafo é referência
+    # imprópria e prevalece sobre a regra de inciso do caput.
+    if any(p.startswith("par") for p in parts[:index]):
+        return "caput_refere_se_ao_artigo"
+    # F16 inclui os descendentes de incisos.
+    if (index + 1 < len(parts) and parts[index + 1].startswith("inc")
+            and rw.document.provision(path) is None):
+        return "inciso_do_caput_nao_resolvido"
+    if rw.document.provision(path) is None:
+        return "recorte_caput_nao_representado"
+    return None
+
+
+def _alternativas_caput(path: str) -> list[str]:
+    """Duas leituras de uma referência imprópria, sem confirmar nenhuma."""
+    parts = path.split(".")
+    resto = parts[parts.index("caput") + 1:]
+    return [".".join([parts[0], "caput", *resto]), path.replace(".caput", "")]
+
+
 def _find_provision(doc: ParsedDocument, path: str) -> Provision | None:
     prov = doc.provision(path)
     if prov:
         return prov
-    # tenta sem caput explícito
+    # O fallback exige prova estrutural de texto exclusivamente do caput.
     if path.endswith(".caput"):
-        return doc.provision(path[: -len(".caput")])
+        article = path.removesuffix(".caput")
+        candidate = doc.provision(article)
+        if (candidate and not any(p.path.startswith(article + ".") for p in doc.provisions)
+                and not any(re.search(r"(?:§|Parágrafo único|(?:^|\n)\s*[IVXLCDM]+\s*[-–—])", r.text, re.I)
+                            for r in candidate.redactions)):
+            return candidate
     return None
 
 
@@ -350,12 +395,68 @@ def _provision_blocking_issues(doc: ParsedDocument, path: str | None) -> list:
     return [
         i
         for i in doc.issues
-        if i.path and (i.path == path or path.startswith(i.path + ".") or path.startswith(i.path + "/"))
+        if i.path and (i.path == path or path.startswith(i.path + ".") or path.startswith(i.path + "/")
+                       or i.path.startswith(path + ".") or i.path.startswith(path + "/"))
         and (
             i.blocking_scope == "provision"
             or i.code in PROVISION_BLOCKING_CODES
         )
     ]
+
+
+INICIO_ATUAL_NAO_DOCUMENTADO = "inicio_redacao_atual_nao_documentado"
+
+
+def _camara_sem_historia(rw):
+    return rw.source_id == "camara_legin" and rw.document.profile == "camara_atualizado"
+
+
+def _annotations_for_cut(rw, path):
+    """Metadados do recorte, sem atribuir eventos de componentes ao pai."""
+    annotations = []
+    for prov in rw.document.provisions:
+        if prov.path == path or (path and prov.path.startswith(path + ".")):
+            for red in prov.redactions:
+                for ann in red.annotations:
+                    if ann not in annotations:
+                        annotations.append(ann)
+    return annotations
+
+
+def _temporal_select(rw, provision, data=None, **kwargs):
+    result = temporal_select(provision, data, **kwargs)
+    if not _camara_sem_historia(rw):
+        return result
+    # 0077: nem silêncio editorial nem data de nota documentam o início atual.
+    return replace(result, status="unknown", interval=None, rules_applied=[],
+                   needs_judgment=True, reason=INICIO_ATUAL_NAO_DOCUMENTADO,
+                   flags=list(dict.fromkeys([*result.flags, INICIO_ATUAL_NAO_DOCUMENTADO])))
+
+
+def _reading_blockers(rw, path, *, history=False):
+    """Mesma admissão para leituras que poderiam publicar texto/tempo conclusivo."""
+    if motivo := _caput_nao_representado(rw, path):
+        return [motivo]
+    issues = [i for i in rw.document.issues if i.blocking_scope == "document"]
+    issues += _provision_blocking_issues(rw.document, path)
+    codes = [i.code for i in issues]
+    if rw.quarantined:
+        codes.append("DOCUMENTO_QUARENTENADO")
+    if rw.persisted_incomplete:
+        codes.append("DADOS_PERSISTIDOS_INCOMPLETOS")
+    prov = _find_provision(rw.document, path) if path else None
+    if prov and prov.ambiguous:
+        codes.append("DUPLICATE_CURRENT")
+    if rw.source_id == "camara_legin" and path and any(
+        path.startswith(parent.path + ".") and any(r.annotations for r in parent.redactions)
+        for parent in rw.document.provisions
+    ):
+        codes.append("IMPEDIMENTO_ANCESTRAL")
+    if history and _camara_sem_historia(rw):
+        codes.append(INICIO_ATUAL_NAO_DOCUMENTADO)
+    if history and rw.source_id == "camara_legin" and prov and _annotations_for_cut(rw, path):
+        codes.append("NOTAS_EDITORIAIS_PENDENTES")
+    return list(dict.fromkeys(codes))
 
 
 def _search_text_in_work(
@@ -558,6 +659,8 @@ def verificar(
         resolved = resolved[0]
 
     rw: ResolvedWork = resolved
+    comparison_mode = ("camara_il1" if rw.document.profile in {"camara_atualizado", "camara_original"}
+                       and modo == "normalizado" else modo)
     from freoa_verifica.identity import IdentityMismatch, validate_identity, requested_date
     try:
         declared = validate_identity(cite.work, rw.document, requested_date(cite.raw))
@@ -581,6 +684,12 @@ def verificar(
             support=support, citation=cite,
         ))
     path = cite.path
+    if motivo := _caput_nao_representado(rw, path):
+        return _persist(repo, citacao, trecho, data, modo, VerificationResult(
+            identity=Dimension("unknown", motivo, [_ev_from_resolved(rw, path, None)]),
+            text=Dimension("unknown", motivo),
+            temporal=Dimension("unknown", motivo), support=support, citation=cite,
+        ))
     prov = _find_provision(rw.document, path) if path else None
     blocking = _provision_blocking_issues(rw.document, path)
 
@@ -603,6 +712,15 @@ def verificar(
             citation=cite,
         )
         return _persist(repo, citacao, trecho, data, modo, result)
+
+    reading_codes = _reading_blockers(rw, path)
+    if blocking or "IMPEDIMENTO_ANCESTRAL" in reading_codes:
+        reason = blocking[0].code if blocking else "IMPEDIMENTO_ANCESTRAL"
+        return _persist(repo, citacao, trecho, data, modo, VerificationResult(
+            identity=Dimension("unknown", reason, [_ev_from_resolved(rw, path, None)]),
+            text=Dimension("unknown", reason) if trecho is not None else Dimension("not_assessed", "SEM_TRECHO"),
+            temporal=Dimension("unknown", reason), support=support, citation=cite,
+        ))
 
     if prov is not None and prov.ambiguous:
         identity = Dimension(
@@ -647,8 +765,8 @@ def verificar(
                 [_ev_from_resolved(rw, path, None)],
             )
             # temporal ainda avalia revogado; text nunca verified
-            temporal_res = temporal_select(
-                prov,
+            temporal_res = _temporal_select(
+                rw, prov,
                 data,
                 work_date=rw.work_date,
                 amending_act_texts=rw.amending_act_texts,
@@ -693,8 +811,8 @@ def verificar(
         temporal_dim = Dimension("not_assessed", "SEM_DISPOSITIVO")
         temporal_res = None
     else:
-        temporal_res = temporal_select(
-            prov,
+        temporal_res = _temporal_select(
+            rw, prov,
             data,
             work_date=rw.work_date,
             amending_act_texts=rw.amending_act_texts,
@@ -742,7 +860,7 @@ def verificar(
                 [_ev_from_resolved(rw, path, red.text)],
             )
         else:
-            cmp = compare(trecho, red.text, modo)
+            cmp = compare(trecho, red.text, comparison_mode)
             ev = _ev_from_resolved(
                 rw,
                 path,
@@ -774,7 +892,7 @@ def verificar(
                 for r2 in prov.redactions:
                     if r2 is red:
                         continue
-                    c2 = compare(trecho, r2.text, modo, exact_only=True)
+                    c2 = compare(trecho, r2.text, comparison_mode, exact_only=True)
                     if c2.status == "match":
                         other_hit = r2
                         break
@@ -806,7 +924,7 @@ def verificar(
                             ],
                         )
                 else:
-                    elsewhere = _search_text_in_work(rw.document, trecho, modo, path)
+                    elsewhere = _search_text_in_work(rw.document, trecho, comparison_mode, path)
                     if elsewhere:
                         if is_historical:
                             text_dim = Dimension(
@@ -835,7 +953,7 @@ def verificar(
     corr_textual = _calcular_correspondencia_textual(
         prov=prov,
         trecho=trecho,
-        modo=modo,
+        modo=comparison_mode,
         temporal_res=temporal_res,
         is_historical=is_historical,
         identity_status=identity.status,
@@ -918,7 +1036,7 @@ def _persist(
 
 
 def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, Any], *,
-                        ferramenta: str = "verificar_citacao") -> str:
+                        ferramenta: str = "verificar_citacao", parametros: dict[str, Any] | None = None) -> str:
     """Grava o recibo (C4): chamado só depois da finalização, com a conclusão devolvida.
 
     Política `sem_conteudo` (C5): só hashes, política e dimensões; sem citação, trecho nem evidência.
@@ -926,6 +1044,8 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
     from freoa_verifica.registro import hmac_entrada, politica_atual
 
     request = {"citacao": citacao, "trecho": trecho, "data": data, "modo": modo}
+    if parametros:
+        request.update(parametros)
     request_json = json.dumps(request, ensure_ascii=False, sort_keys=True)
     request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
     if politica_atual.get() == "sem_conteudo":
@@ -943,6 +1063,10 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
                        "reason_code": (resultado.get(d) or {}).get("reason_code")}
                    for d in ("identity", "text", "temporal", "support")},
                 "algo_versions": resultado.get("algo_versions"),
+                **({"fontes_consultadas_sha256": hmac_entrada(
+                    conn, "fontes_consultadas", json.dumps(resultado["fontes_consultadas"],
+                                                         ensure_ascii=False, sort_keys=True))}
+                   if "fontes_consultadas" in resultado else {}),
             },
             ensure_ascii=False, sort_keys=True,
         )
@@ -955,8 +1079,14 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
     # Não criar compromisso para evidência sem capture_id, sha256 e url (decisão 0075 / parecer Codex r1)
     evidencias_unicas: list[dict[str, Any]] = []
     vistos_ev: set[tuple[Any, Any, Any]] = set()
-    for d in ("identity", "text", "temporal", "support"):
-        for ev in (resultado.get(d) or {}).get("evidence") or []:
+    grupos_evidencia = [(resultado.get(d) or {}).get("evidence") or []
+                       for d in ("identity", "text", "temporal", "support")]
+    grupos_evidencia.append([resultado.get("evidencia"),
+                            (resultado.get("ultima_versao_oficial_anterior") or {}).get("evidencia")])
+    grupos_evidencia.append([item.get("evidencia") for item in resultado.get("cadeia_alteracoes", [])
+                            if isinstance(item, dict)])
+    for grupo in grupos_evidencia:
+        for ev in grupo:
             if isinstance(ev, dict):
                 cid = ev.get("capture_id")
                 sha = ev.get("sha256")

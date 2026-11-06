@@ -70,7 +70,7 @@ def _categoria(linha):
     return json.loads(linha["payload_json"])["categoria"]
 
 
-def test_503_persistente_na_semente_faz_tres_pedidos_e_um_incremento_no_breaker(monkeypatch, tmp_path):
+def test_503_persistente_na_semente_faz_tres_pedidos_e_um_incremento_no_breaker(monkeypatch, tmp_path, captura_legada_simulada):
     linha, breaker, esperas = _rodar(monkeypatch, tmp_path, server := _servidor_status(503))
     assert server.pedidos == 3  # 1 + 2 repetições do transporte; a semente não repete
     assert breaker.failures == 1
@@ -78,20 +78,20 @@ def test_503_persistente_na_semente_faz_tres_pedidos_e_um_incremento_no_breaker(
     assert linha["motivo"] == "http_503" and _categoria(linha) == "fonte_fora"
 
 
-def test_retry_after_longo_na_semente_faz_um_pedido(monkeypatch, tmp_path):
+def test_retry_after_longo_na_semente_faz_um_pedido(monkeypatch, tmp_path, captura_legada_simulada):
     linha, breaker, esperas = _rodar(monkeypatch, tmp_path, server := _servidor_status(503, "3600"))
     assert server.pedidos == 1
     assert esperas == []
     assert _categoria(linha) == "fonte_fora"
 
 
-def test_429_na_semente_faz_um_pedido(monkeypatch, tmp_path):
+def test_429_na_semente_faz_um_pedido(monkeypatch, tmp_path, captura_legada_simulada):
     linha, _, _ = _rodar(monkeypatch, tmp_path, server := _servidor_status(429))
     assert server.pedidos == 1
     assert linha["motivo"] == "http_429"
 
 
-def test_transporte_lento_apos_200_na_semente_faz_um_pedido(monkeypatch, tmp_path):
+def test_transporte_lento_apos_200_na_semente_faz_um_pedido(monkeypatch, tmp_path, captura_legada_simulada):
     linha, _, _ = _rodar(monkeypatch, tmp_path, server := _servidor_gotejante("text/html"))
     assert server.pedidos == 1
     assert _categoria(linha) == "resposta_inesperada"

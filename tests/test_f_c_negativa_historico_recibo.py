@@ -108,8 +108,11 @@ def test_c1_pdf_sem_dispositivos_e_sem_estrutura(svc):
 def test_c1_obra_ausente_do_acervo_offline_e_cobertura_nao_inexistente(svc):
     cit = f"art. 5 da {NORM}"
     assert svc.resolver_citacao(cit)["status"] == "indisponivel"
-    assert svc.obter_dispositivo(citacao=cit) == {"status": "indisponivel", "motivo": "COBERTURA", "fundamento_temporal": None,
-                                                     "correspondencia_textual": None}  # IL.0-R r2 (C4)
+    obtencao = svc.obter_dispositivo(citacao=cit)
+    assert obtencao.pop("run_id")
+    assert obtencao == {"status": "indisponivel", "motivo": "COBERTURA", "fundamento_temporal": None,
+        "correspondencia_textual": None, "versao": "vigente", "ultima_versao_oficial_anterior": None,
+        "cadeia_alteracoes": [], "cadeia_completa": False, "pendencias_temporais": []}  # IL.2-c: aditivos também na recusa
     assert svc.historico_dispositivo(cit)["motivo"] == "COBERTURA"
     v = svc.verificar_citacao(cit)
     assert v["identity"] == {"status": "unavailable", "reason_code": "COBERTURA", "evidence": []}

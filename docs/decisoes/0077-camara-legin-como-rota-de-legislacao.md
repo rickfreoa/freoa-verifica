@@ -51,6 +51,8 @@ Os prefixos atuais do transporte não implementam essa gramática. O adaptador d
 
 A diferença material para o Planalto é que os atualizados capturados não exibem a sequência histórica riscada: apresentam a redação atual declarada pela fonte e notas editoriais. Não se criam redações anteriores a partir dessas notas. `consolidacao_oficial` não significa texto autenticado do DOU nem versão válida em qualquer D, e não implica `verified`.
 
+Nota R3 (F14): para `camara_legin`, o início da redação do texto atualizado é sempre indeterminado, inclusive sem notas e nos agregados. Nenhuma leitura pública pode inferi-lo da data da obra ou do ato citado na nota. A obtenção sinaliza a lacuna e a ausência de redação anterior; o histórico se abstém de linha do tempo conclusiva. Metadados do recorte incluem as notas de todos os componentes, inclusive caputs, preservando cada alvo, sem transferir eventos ou datas ao pai. A publicação original conserva sua data documental como referência, sem provar aplicabilidade. Esta nota explicita também a execução conservadora da seção 4.
+
 `source_kind` é a espécie do ato cujo texto se entrega: `lei`, `lei_complementar`, `medida_provisoria` etc., conforme identidade declarada e validada, senão `nao_identificado`; não é `camara_legin` nem a espécie da obra alterada quando a evidência pertence ao alterador. `esfera=federal` exige identidade federal conferida. `procedencia` é persistida **por captura**: `captura_direta`, `snapshot` ou `sessao_assistida` conforme obtenção efetiva; ausência de marca é `nao_identificado`. Listar relações não transforma as capturas dos atos em `cadeia_de_alteracoes`; esse valor só descreve resultado derivado de cadeia explicitamente rotulado, nunca encobre o modo de obtenção dos documentos. Não há reconstrução mecânica nesta etapa.
 
 Cada evidência mantém `capture_id`, URL, SHA-256 e `captured_at=fetched_at` do recibo, nunca a data do ato, do parser ou da instalação. `acervo_ate` continua o corte do Planalto congelado, nulo para a Câmara viva. Snapshot não renova a captura. Nenhum desses eixos afirma vigência; cláusula literal do ato é somente `vigencia_declarada`, sem cálculo de vacatio, LINDB, eficácia ou transição.
@@ -89,8 +91,27 @@ DOU segue barrado no instrumento pelo 403 do robots; LexML não admite `/busca/`
 - Termos de uso/licença e política de atualização da Câmara, ainda não demonstrados; permanecem pendências antes da ativação ao vivo.
 - Completude/paginação da busca e das relações, frequência e data de referência da consolidação; não demonstradas pelas três normas.
 - Texto publicado dos alteradores (a MP 881 capturada só documenta sua página), publicações de MPs/executivos e famílias ainda sem perfil; sem esses corpos não há cadeia completa prometida.
-- Vetos, republicações, retificações, anexos de republicação e DOC/DOCX/PDF alternativos: links observados não validam conteúdo nem equivalência. No anexo PDF capturado, a extração tem três folhas e texto extraído idêntico nas folhas 2 e 3; ordem, duplicação e recorte de tabelas precisam de conferência própria, sem deduplicação silenciosa.
+- Vetos, republicações, retificações, anexos de republicação e DOC/DOCX/PDF alternativos: links observados não validam conteúdo nem equivalência. No anexo PDF capturado há três folhas. O exame textual reproduzido usa `pypdf 6.21.4`, `PdfReader(BytesIO(corpo))`, `page.extract_text()` com configuração padrão (`extraction_mode="plain"`, sem visitantes, sem OCR): o extrator repete o texto das folhas 2 e 3. Isso não prova folha repetida: a conferência por renderização informada na auditoria da especificação mostra conteúdos distintos. A repetição é defeito/limitação da extração; não deduplicar, reordenar ou colar folhas silenciosamente. Ordem, colunas, escopo e recorte exigem conferência visual e gabarito próprio.
 - Tratamento dos links HTTP antigos, novos padrões de slug, redirecionamentos e formatos fora da admissão inicial exige evidência e decisão explícita; não autoriza relaxar o transporte.
 - Nenhuma captura demonstra versão oficial por data, completude temporal ou remissões resolvidas. A habilitação de fundamento exige prova de período, regressões por classe e auditoria; a qualificação por capacidade e `porta_l.py` pertencem ao IL.3.
 
 Implementação futura deve satisfazer [IL.2-c, C1–C18](../auditoria/1.4.0/il2c-especificacao.md), com contrato aditivo e `CONTRATO_VERSAO` inalterado. Não há mudança de piso, reserva ou critério de `verified`, nem reconstrução mecânica, conclusão jurídica de vigência ou autorização de substituição do Jusratio.
+
+## Nota D5 — redução de escopo (F15/F16)
+
+Por correção conceitual do titular, caput designa somente a cabeça do artigo;
+a premissa de F15 e a pendência do prompt anterior nesse ponto são retiradas.
+Para `camara_legin`, `.parX.caput` produz abstenção com
+`caput_refere_se_ao_artigo`, com as leituras `artN.caput` e `artN.parX` como
+alternativas sem confirmação; a regra vale também para `.parX.caput.incY` e descendentes e prevalece sobre a de inciso do caput. Não se materializam caputs fora do artigo;
+notas impróprias são preservadas com alvo incerto. Parser Câmara versão 4
+invalida a releitura de modelos anteriores até reprocessamento.
+
+A referência a inciso do caput é correta. Sem recorte exato representado,
+`.caput.incX` produz `inciso_do_caput_nao_resolvido`. Fica pendente a
+normalização `artN.caput.incX → artN.incX` em `citation.py`, ressalvada a
+colisão com incisos de parágrafos. Não se implementa essa equivalência.
+As guardas precedem a negativa e a construção do histórico, em identidade,
+texto, verificação embutida, resolução e obtenção, por Python/MCP/REST.
+Caput de artigo representado e outras fontes preservam seu comportamento.
+Esta nota não declara novo aceite do auditor nem avanço de marco.

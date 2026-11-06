@@ -204,7 +204,7 @@ def _obra_com_remissao(svc, numero: int, ano: int) -> None:
 
 
 @pytest.mark.parametrize("ordem", [("6404", "7000"), ("7000", "6404")], ids=["alteradora_antes", "principal_antes"])
-def test_lei_principal_e_alteradora_e_pedida_uma_vez(ambiente, tmp_path, ordem):
+def test_lei_principal_e_alteradora_e_pedida_uma_vez(ambiente, tmp_path, ordem, captura_legada_simulada):
     server, incrementos = ambiente({"*": [(503, "text/html", b"", {"Retry-After": "3600"})]})
     with Verifica(tmp_path) as svc:
         _obra_com_remissao(svc, 6404, 1976)

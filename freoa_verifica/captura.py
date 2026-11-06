@@ -69,10 +69,13 @@ class RegistroCaptura:
     bytes: int | None = None
     arquivo: str | None = None
     corpo: bytes | None = field(default=None, repr=False)
+    importacao_offline: dict[str, Any] | None = None
 
     def meta(self) -> dict[str, Any]:
         d = asdict(self)
         d.pop("corpo")
+        if self.importacao_offline is None:
+            d.pop("importacao_offline")
         return d
 
 
@@ -181,9 +184,13 @@ def _plano_get(
 
 
 def _planejar(conector: str, consulta: dict[str, Any] | None, url: str | None) -> dict[str, Any]:
+    from freoa_verifica.politica_captura import exigir_nova_captura
+
     classes = registry()
     if conector not in classes:
         raise ValueError(f"conector sem captura: {conector}")
+    if conector == "camara_legin":
+        raise ValueError("camara_exige_descoberta_pelo_adaptador; para pares preservados use --importar-offline")
     if (consulta is None) == (url is None):
         raise ValueError("informe exatamente uma de: consulta, url")
     classe = classes[conector]
@@ -193,6 +200,7 @@ def _planejar(conector: str, consulta: dict[str, Any] | None, url: str | None) -
         plano = _CONSULTAS[conector](consulta)
     else:
         raise ValueError(f"conector {conector} só captura por url")
+    exigir_nova_captura(conector)
     plano.setdefault("path_prefixes", classe.path_prefixes)
     plano.setdefault("mimes", classe.mimes)
     plano.update(hosts=classe.hosts, user_agent=classe.user_agent)
@@ -420,12 +428,19 @@ def _bloqueio(fixtures: Path, espera: float = 10.0, velho: float = 120.0):
         try:
             fd = os.open(trava, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             break
-        except FileExistsError:
-            with contextlib.suppress(OSError):
-                if time.time() - trava.stat().st_mtime > velho:
-                    trava.unlink()
-                    continue
+        except (FileExistsError, PermissionError) as exc:
+            # Windows pode devolver ACCESS_DENIED enquanto o lock anterior está em
+            # delete-pending. Isso ainda é contenção, com o mesmo prazo limitado.
+            if isinstance(exc, PermissionError) and os.name != "nt":
+                raise
+            if isinstance(exc, FileExistsError):
+                with contextlib.suppress(OSError):
+                    if time.time() - trava.stat().st_mtime > velho:
+                        trava.unlink()
+                        continue
             if time.monotonic() >= limite:
+                if isinstance(exc, PermissionError):
+                    raise
                 raise TimeoutError(f"manifesto em uso: {trava}") from None
             time.sleep(0.02)
     try:
@@ -500,6 +515,9 @@ def registrar_fixture(reg: RegistroCaptura, chave: str, fixtures: Path) -> None:
             "origem_metadados": ORIGEM_METADADOS, "sha256": reg.sha256, "status": reg.status,
             "url": reg.url, "url_final": reg.url_final,
         }
+        if reg.importacao_offline is not None:
+            entrada_corpo.update(metodo=reg.metodo, user_agent=reg.user_agent,
+                                 importacao_offline=reg.importacao_offline)
         entrada_registro = {
             "bytes": len(registro_bytes), "categoria": "metadados_captura", "descreve": chave,
             "file": f"{reg.conector}/{registro.name}", "sha256": hashlib.sha256(registro_bytes).hexdigest(),
@@ -526,3 +544,103 @@ def registrar_fixture(reg: RegistroCaptura, chave: str, fixtures: Path) -> None:
         except Exception:
             _recuperar(fixtures)
             raise
+
+
+def importar_fixture_offline(recibo: Path, corpo: Path, chave: str, fixtures: Path,
+                             origem_recibo: Path | None = None) -> RegistroCaptura:
+    """Promove par do instrumento sem rede; recibo original comprometido e preservado.
+
+    Repetição idêntica é leitura idempotente. Nunca substitui bytes/manifesto divergentes.
+    A promoção não é nova captura e não muda UA ou instante.
+    """
+    from dataclasses import fields
+    from datetime import datetime
+    from lxml import html
+    from freoa_verifica.connectors.camara_policy import validar_url, url_publicada
+
+    if not isinstance(chave, str) or not CHAVE.fullmatch(chave):
+        raise ValueError("chave_invalida")
+
+    def ler_json_local(path):
+        # UTF-8 estrito e sem tradução de CRLF: round-trip preserva o hash do recibo.
+        with Path(path).open("r", encoding="utf-8", newline="") as arquivo:
+            texto = arquivo.read()
+        return texto.encode("utf-8"), json.loads(texto)
+
+    def ler(path):
+        raw, meta = ler_json_local(path)
+        if not isinstance(meta, dict):
+            raise ValueError("recibo_invalido")
+        body_path = _confinado(Path(path).parent, meta.get("arquivo", ""))
+        body = body_path.read_bytes()
+        if (meta.get("fonte_sonda") != "camara_legislacao" or meta.get("conector") is not None
+                or meta.get("sonda") is not True or meta.get("unavailable") is not False
+                or meta.get("status") != 200 or meta.get("metodo") != "GET"
+                or meta.get("categoria") is not None or meta.get("motivo") is not None
+                or meta.get("url_final") != meta.get("url")
+                or not re.fullmatch(r"freoa-verifica/[\w.+-]+ \(\+https://github.com/rickfreoa/freoa-verifica\)",
+                                    meta.get("user_agent", ""))
+                or type(meta.get("bytes")) is not int or meta["bytes"] != len(body)
+                or meta.get("sha256") != hashlib.sha256(body).hexdigest()):
+            raise ValueError("recibo_corpo_divergente")
+        if len(body) > 30 * 1024**2:
+            raise ValueError("corpo_excedido")
+        stamp = datetime.fromisoformat(meta["capturado_em"])
+        if stamp.tzinfo is None:
+            raise ValueError("instante_sem_fuso")
+        route = validar_url(meta["url"])
+        if (meta.get("content_type") != route["mime"] or
+                meta.get("cabecalhos", {}).get("content-type", "").split(";", 1)[0] != route["mime"]):
+            raise ValueError("mime_divergente")
+        return raw, meta, body_path, body, route
+
+    raw, meta, body_path, body, route = ler(recibo)
+    if Path(corpo).resolve() != body_path.resolve():
+        raise ValueError("corpo_fora_do_recibo")
+    origem = None
+    if route["recurso"] not in {"robots", "portal", "busca"}:
+        if origem_recibo is None:
+            raise ValueError("vinculo_ausente")
+        origin_raw, origin, _, origin_body, origin_route = ler(origem_recibo)
+        if origin_route["recurso"] not in {"busca", "norma", "atualizado", "original"}:
+            raise ValueError("origem_invalida")
+        tree = html.fromstring(origin_body)
+        links = [a for a in tree.xpath('//a[@href]')
+                 if url_publicada(origin["url"], a.get("href")) == meta["url"] and "".join(a.itertext()).strip()]
+        if not links:
+            raise ValueError("link_nao_publicado")
+        if route["recurso"] in {"atualizado", "original", "anexo"}:
+            if origin_route["recurso"] != "norma" or any(route[k] != origin_route[k] for k in ("id", "familia", "numero", "ano")):
+                raise ValueError("versao_de_outra_norma")
+            expected = {"atualizado": "Texto Atualizado", "original": "Publicação Original", "anexo": "Anexo"}
+            if not any(expected[route["recurso"]] in " ".join("".join(a.itertext()).split()) for a in links):
+                raise ValueError("rotulo_incompativel")
+        origem = {"url": origin["url"], "sha256": origin["sha256"], "href": links[0].get("href"),
+                  "recibo_sha256": hashlib.sha256(origin_raw).hexdigest()}
+    allowed = {f.name for f in fields(RegistroCaptura)} - {"corpo", "importacao_offline"}
+    if set(meta) - allowed:
+        raise ValueError("campos_recibo_desconhecidos")
+    reg = RegistroCaptura(**meta, corpo=body, importacao_offline={
+        "recibo_original": meta, "recibo_sha256": hashlib.sha256(raw).hexdigest(), "origem": origem,
+    })
+    reg.conector = "camara_legin"
+    dados, _ = _ler_manifesto(Path(fixtures) / "FIXTURES.json")
+    if chave in dados:
+        entry = dados[chave]
+        record_entry = dados.get(f"{chave}__captura", {})
+        saved = _confinado(Path(fixtures) / "camara_legin", f"{chave}.captura.json")
+        saved_raw, saved_meta = ler_json_local(saved) if saved.is_file() else (b"", None)
+        if (entry.get("categoria") != "captura_real" or entry.get("sha256") != reg.sha256
+                or entry.get("file") != f"camara_legin/{chave}{Path(reg.arquivo).suffix}"
+                or entry.get("bytes") != len(body)
+                or entry.get("importacao_offline") != reg.importacao_offline
+                or record_entry.get("categoria") != "metadados_captura" or record_entry.get("descreve") != chave
+                or record_entry.get("file") != f"camara_legin/{chave}.captura.json"
+                or record_entry.get("sha256") != hashlib.sha256(saved_raw).hexdigest()
+                or record_entry.get("bytes") != len(saved_raw)
+                or not saved.is_file() or saved_meta != reg.meta()
+                or (Path(fixtures) / entry["file"]).read_bytes() != body):
+            raise ValueError("fixture_existente_divergente")
+        return reg
+    registrar_fixture(reg, chave, fixtures)
+    return reg

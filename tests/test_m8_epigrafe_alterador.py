@@ -89,16 +89,16 @@ def _data_do_alterador(tmp_path, monkeypatch, senado_data, titulo):
     return doc.provisions[0].redactions[0].annotations[0].act_date
 
 
-def test_epigrafe_preenche_data_quando_senado_nao_da(tmp_path, monkeypatch):
+def test_epigrafe_preenche_data_quando_senado_nao_da(tmp_path, monkeypatch, captura_legada_simulada):
     titulo = "LEI Nº 14.195, DE 26 DE AGOSTO DE 2021"
     assert _data_do_alterador(tmp_path, monkeypatch, None, titulo) == "2021-08-26"
 
 
-def test_senado_tem_precedencia_sobre_epigrafe(tmp_path, monkeypatch):
+def test_senado_tem_precedencia_sobre_epigrafe(tmp_path, monkeypatch, captura_legada_simulada):
     titulo = "LEI Nº 14.195, DE 26 DE AGOSTO DE 2021"
     assert _data_do_alterador(tmp_path, monkeypatch, "2021-08-20", titulo) == "2021-08-20"
 
 
-def test_epigrafe_sem_data_valida_mantem_ano(tmp_path, monkeypatch):
+def test_epigrafe_sem_data_valida_mantem_ano(tmp_path, monkeypatch, captura_legada_simulada):
     titulo = "LEI Nº 14.195, DE 31 DE FEVEREIRO DE 2021"
     assert _data_do_alterador(tmp_path, monkeypatch, None, titulo) == "2021"

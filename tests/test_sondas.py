@@ -193,7 +193,7 @@ def test_fonte_incoerente_e_recusada_na_construcao():
 def test_registry_do_produto_nao_muda():
     assert not set(IDS) & set(registry())
     assert set(registry()) == {
-        "bcb", "cvm_colegiado", "cvm_normas", "datajud", "planalto", "senado", "stf", "stj", "tcu", "tjdft", "tjsp",
+        "bcb", "camara_legin", "cvm_colegiado", "cvm_normas", "datajud", "planalto", "senado", "stf", "stj", "tcu", "tjdft", "tjsp",
     }
 
 

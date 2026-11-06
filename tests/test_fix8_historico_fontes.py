@@ -28,11 +28,12 @@ def test_api_publica_declara_ambas_as_fontes_quando_todas_falham(monkeypatch, tm
     with Verifica(tmp_path) as svc:
         svc._connectors["planalto"] = _Falha("planalto", RECUSA)
         svc._connectors["senado"] = _Falha("senado", SENADO_FORA)
+        svc._connectors["camara_legin"] = _Falha("camara_legin", RECUSA)
         out = svc.verificar_citacao("Lei 6.404/1976, art. 1º")
     assert out["identity"]["status"] == "unavailable"
-    assert out["identity"]["reason_code"] == "planalto:http_403;senado:http_503"
+    assert out["identity"]["reason_code"] == "camara_legin:http_403"
     assert out["identity"]["evidence"][0]["fontes_consultadas"] == [
-        _item("planalto", RECUSA), _item("senado", SENADO_FORA)]
+        _item("camara_legin", RECUSA)]
 
 
 def test_excecao_de_indisponibilidade_carrega_a_lista_estruturada(monkeypatch, tmp_path):
@@ -40,9 +41,10 @@ def test_excecao_de_indisponibilidade_carrega_a_lista_estruturada(monkeypatch, t
     with Verifica(tmp_path) as svc:
         svc._connectors["planalto"] = _Falha("planalto", RECUSA)
         svc._connectors["senado"] = _Falha("senado", SENADO_FORA)
+        svc._connectors["camara_legin"] = _Falha("camara_legin", RECUSA)
         with pytest.raises(SourceUnavailable) as ei:
             svc._capture_work(LEI)
-    assert ei.value.fontes_consultadas == [_item("planalto", RECUSA), _item("senado", SENADO_FORA)]
+    assert ei.value.fontes_consultadas == [_item("camara_legin", RECUSA)]
 
 
 def test_erro_de_programacao_posterior_preserva_as_falhas_anteriores_como_regressao(monkeypatch, tmp_path):
@@ -50,10 +52,10 @@ def test_erro_de_programacao_posterior_preserva_as_falhas_anteriores_como_regres
     with Verifica(tmp_path) as svc:
         svc._connectors["planalto"] = _Falha("planalto", RECUSA)
         svc._connectors["senado"] = _Falha("senado", ValueError("parse"))
+        svc._connectors["camara_legin"] = _Falha("camara_legin", ValueError("parse"))
         out = svc.verificar_citacao("Lei 6.404/1976, art. 1º")
     assert out["identity"]["evidence"][0]["fontes_consultadas"] == [
-        _item("planalto", RECUSA),
-        {"fonte": "senado", "resultado": "erro", "motivo": "ValueError", "categoria": "regressao"},
+        {"fonte": "camara_legin", "resultado": "erro", "motivo": "ValueError", "categoria": "regressao"},
     ]
 
 

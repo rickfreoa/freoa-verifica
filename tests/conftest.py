@@ -133,7 +133,64 @@ def pytest_configure(config):
 
 
 @pytest.fixture
-def planalto_offline(monkeypatch):
+def proibir_rede(monkeypatch):
+    """Conexão real em replay offline é erro explícito, inclusive fora do transporte."""
+    import socket
+    import threading
+    tentativas = []
+    local = threading.local()
+    connect, socketpair = socket.socket.connect, socket.socketpair
+    def par_local(*args, **kwargs):
+        # No Windows, o self-pipe do asyncio usa um par TCP local da stdlib.
+        local.socketpair = True
+        try:
+            return socketpair(*args, **kwargs)
+        finally:
+            local.socketpair = False
+    def negar(*args, **kwargs):
+        if getattr(local, "socketpair", False):
+            return connect(*args, **kwargs)
+        tentativas.append((args, kwargs))
+        raise AssertionError("rede proibida no teste offline")
+    monkeypatch.setattr(socket, "socketpair", par_local)
+    monkeypatch.setattr(socket.socket, "connect", negar)
+    monkeypatch.setattr(socket.socket, "connect_ex", negar)
+    monkeypatch.setattr(socket, "create_connection", negar)
+    return tentativas
+
+
+@pytest.fixture
+def captura_legada_simulada(monkeypatch):
+    """Só para mecanismos antigos com dublês/servidor local; F5 testa a política real.
+
+    Não é autouse: a política de produto permanece ativa nos demais testes.
+    Até DNS e conexões são restritos a loopback durante esta simulação.
+    """
+    import socket
+    from freoa_verifica import politica_captura
+
+    monkeypatch.setattr(politica_captura, "LEGIS_NOVA_CAPTURA",
+                        politica_captura.LEGIS_NOVA_CAPTURA | {"planalto"})
+    locais = {"127.0.0.1", "::1"}
+    resolver = socket.getaddrinfo
+
+    def resolver_local(host, *args, **kwargs):
+        assert host in locais, "DNS externo proibido no mecanismo simulado"
+        return resolver(host, *args, **kwargs)
+
+    def guardar(conectar):
+        def local(sock, endereco, *args, **kwargs):
+            assert endereco[0] in locais, "conexão externa proibida no mecanismo simulado"
+            return conectar(sock, endereco, *args, **kwargs)
+        return local
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolver_local)
+    for nome in ("connect", "connect_ex"):
+        monkeypatch.setattr(socket.socket, nome, guardar(getattr(socket.socket, nome)))
+
+
+@pytest.fixture
+def planalto_offline(monkeypatch, proibir_rede):
     """Planalto servido pela captura real da Lei 6.404/1976 (sem rede); outras obras: `http_404`.
 
     A decisão 0058 impede cair no Senado após recusa do Planalto; testes que precisam de uma captura
@@ -162,6 +219,19 @@ def planalto_offline(monkeypatch):
     original = Verifica._get
 
     def _get(self, connector_id):
+        if connector_id == "camara_legin" and connector_id not in self._connectors:
+            # 0077: novas capturas federais usam Câmara; a fixture Planalto continua acervo legado.
+            # Shortcut de transporte só para testes de registro/fronteira; política coberta em test_camara_legin.
+            from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
+            from tests.test_camara_legin import response, FIX
+            captures = {r.url: r for r in (response(p.stem.removeprefix("camara_").removesuffix(".captura"))
+                                          for p in FIX.glob("*.captura.json"))}
+            def offline_get(url, **kwargs):
+                if url not in captures:
+                    raise Unavailable("http_404")
+                return captures[url]
+            con = CamaraLeginConnector(transporte_offline=offline_get)
+            self._connectors[connector_id] = con
         if connector_id == "planalto" and not isinstance(self._connectors.get("planalto"), _PlanaltoOffline):
             self._connectors["planalto"] = _PlanaltoOffline()
         return original(self, connector_id)

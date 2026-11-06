@@ -1,0 +1,63 @@
+{
+ "conector": "camara_legin",
+ "versao": "1.4.0a2",
+ "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-05T10:11:07.347534+00:00",
+ "sonda": true,
+ "fonte_sonda": "camara_legislacao",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-type": "text/html; charset=UTF-8",
+  "date": "Thu, 05 Nov 2026 10:11:08 GMT"
+ },
+ "sha256": "7dc335d77b1b30f7165c27cb62ce4525bb464b68bf4d03bf5387d7d264156822",
+ "bytes": 365194,
+ "arquivo": "camara_legislacao_textos_original_lei6404.html",
+ "importacao_offline": {
+  "recibo_original": {
+   "conector": null,
+   "versao": "1.4.0a2",
+   "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+   "metodo": "GET",
+   "parametros": null,
+   "user_agent": "freoa-verifica/1.4.0a2 (+https://github.com/rickfreoa/freoa-verifica)",
+   "capturado_em": "2026-11-05T10:11:07.347534+00:00",
+   "sonda": true,
+   "fonte_sonda": "camara_legislacao",
+   "confirmacao_host": "A",
+   "confirmado_por_titular": false,
+   "unavailable": false,
+   "motivo": null,
+   "categoria": null,
+   "evidencia": {},
+   "url_final": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+   "status": 200,
+   "content_type": "text/html",
+   "cabecalhos": {
+    "content-type": "text/html; charset=UTF-8",
+    "date": "Thu, 05 Nov 2026 10:11:08 GMT"
+   },
+   "sha256": "7dc335d77b1b30f7165c27cb62ce4525bb464b68bf4d03bf5387d7d264156822",
+   "bytes": 365194,
+   "arquivo": "camara_legislacao_textos_original_lei6404.html"
+  },
+  "recibo_sha256": "d25814eab3ec730cf3fa6155ce88c97feeb9725afeed5bf2a8b0bf66fe1d6b54",
+  "origem": {
+   "url": "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",
+   "sha256": "882ca0784ab7495c6f61725373f8efe15950845313090818aeb0ec3742023a13",
+   "href": "lei-6404-15-dezembro-1976-368447-publicacaooriginal-1-pl.html",
+   "recibo_sha256": "8d39f4ec6dcb52a84851056fdf99beef8eaa0a4335cc0216682e53c8da425814"
+  }
+ }
+}

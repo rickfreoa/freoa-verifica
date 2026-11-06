@@ -79,6 +79,14 @@ class CandidateList(list):
         return self.total is not None and self.total > len(self)
 
 
+class AmbiguousCandidates(Exception):
+    """Alternativas oficiais confirmadas por metadados; nenhuma escolhida como texto."""
+
+    def __init__(self, candidates: list[Candidate]):
+        self.candidates = tuple(candidates)
+        super().__init__("identidade_ambigua")
+
+
 @dataclass(frozen=True)
 class HealthProbe:
     name: str  # positivo | negativo | documento
@@ -191,6 +199,7 @@ def registry() -> dict[str, type[Connector]]:
     # Importação tardia para popular o registro.
     from freoa_verifica.connectors import (  # noqa: F401
         bcb,
+        camara_legin,
         cvm_colegiado,
         cvm_normas,
         datajud,
