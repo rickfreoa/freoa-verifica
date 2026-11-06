@@ -38,7 +38,8 @@ CASOS = [
      "Art. 191-A. Observado o disposto nos arts. 151, 205 e 206 desta Lei.",
      {(LSA_R, "art. 151", True), (LSA_R, "art. 205", True), (LSA_R, "art. 206", True)}),
     ("propria_lei_sem_qualificacao_e_paragrafo_do_ultimo",
-     "Art. 14. O preço de emissão (artigos 166 e 170, § 2o). Parágrafo único. O preço de emissão pode ser fixado.",
+     "Art. 14. O preço de emissão, fixado na constituição da companhia, na forma da lei, pelos fundadores "
+     "(artigos 166 e 170, § 2o). Parágrafo único. O preço de emissão pode ser fixado.",
      {(LSA_R, "art. 166", True), (LSA_R, "art. 170, § 2º", True)}),
     ("inciso_do_artigo_e_incisos_em_lista",
      "Art. 103. Entram em vigor: I - os atos a que se refere o inciso I do art. 100, na data; II - as decisões a que se "

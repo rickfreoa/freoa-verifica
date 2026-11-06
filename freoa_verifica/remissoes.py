@@ -64,7 +64,7 @@ _ANAFORICA = re.compile(r"\s*,?\s*(?:d|n)[oa]s?\s+(?:mesm[oa]|referid[oa]|citad[
 _OUTRA_OBRA = re.compile(r"\s*,?\s*d[aeo]s?\s+(?:Lei|Decreto|Medida|C[óo]digo|Constitui|Resolu|Instru|Portaria|"
                          r"Regulamento|Estatuto|Emenda|Conven|Tratado|Consolida|Ato|Norma)", re.I)
 _REFERENCIA_OBRA = re.compile(r"(?<![A-Za-zÀ-ú])(?:Lei|Decreto|Medida\s+Provis|C[óo]digo|Constitui[çc]|Resolu[çc]|"
-                              r"Instru[çc]|Portaria|Regulamento|Estatuto|Emenda\s+Constitucional|Consolida[çc])", re.I)
+                              r"Instru[çc]|Portaria|Regulamento|Estatuto|Emenda\s+Constitucional|Consolida[çc])")  # com inicial maiuscula: "constituicao" e "lei" em prosa nao qualificam obra
 _LIGACAO = re.compile(r"\s*(?:,|\be\b|\bou\b)\s*(?:(?:o|a|os|as)\s+)?")
 _FRONTEIRA = re.compile(r";|:|(?<=[a-zà-ú0-9\)])\.\s+(?=[A-ZÀ-Ú§])|\s[IVXLCDM]+\s*[-–—]\s")
 
