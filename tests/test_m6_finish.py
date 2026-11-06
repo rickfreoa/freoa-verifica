@@ -83,7 +83,7 @@ def test_drip_closes_socket_and_releases_worker(monkeypatch, mode):
         stop.set(); server.shutdown(); server.server_close(); thread.join(2)
 
 
-def test_transient_not_requeued_in_same_run(tmp_path, monkeypatch):
+def test_transient_not_requeued_in_same_run(tmp_path, monkeypatch, captura_legada_simulada):
     monkeypatch.delenv('FV_OFFLINE', raising=False)
     calls = []
     class Connector(LegisConnector):
@@ -171,7 +171,7 @@ def test_stj_cache_reopens_and_expires(tmp_path, monkeypatch):
         assert len(calls)==2
 
 
-def test_no_requeue_in_run_and_terminal_reason_preserved(tmp_path, monkeypatch):
+def test_no_requeue_in_run_and_terminal_reason_preserved(tmp_path, monkeypatch, captura_legada_simulada):
     import freoa_verifica.semente as seed
     waits=[]
     monkeypatch.setattr(seed.time,'sleep',waits.append)
@@ -211,7 +211,7 @@ def test_long_stj_mirror_is_not_full_judgment(tmp_path, monkeypatch):
         assert item['nivel_prova']=='ementa_capturada'
 
 
-def test_amending_context_failure_does_not_discard_remaining_queue(tmp_path, monkeypatch):
+def test_amending_context_failure_does_not_discard_remaining_queue(tmp_path, monkeypatch, captura_legada_simulada):
     monkeypatch.delenv('FV_OFFLINE', raising=False)
     calls=[]
     with Verifica(tmp_path) as svc:

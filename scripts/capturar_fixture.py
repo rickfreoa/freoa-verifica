@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 
 from freoa_verifica.captura import UA_MODOS, capturar, registrar_fixture, importar_fixture_offline
-from freoa_verifica.connectors.base import registry
+from freoa_verifica.connectors.base import Unavailable, registry
 from freoa_verifica.sondas import FONTES_SONDA
 
 REPO = Path(__file__).resolve().parents[1]
@@ -92,6 +92,9 @@ def main(argv: list[str] | None = None) -> int:
                 reg = capturar(args.conector, consulta, destino=Path(tmp), sonda=False, **comum)
                 if not reg.unavailable:
                     registrar_fixture(reg, args.chave, FIXTURES)
+    except Unavailable as exc:
+        print(f"unavailable({exc.reason})", file=sys.stderr)
+        return 1
     except ValueError as exc:
         print(f"erro: {exc}", file=sys.stderr)
         return 2

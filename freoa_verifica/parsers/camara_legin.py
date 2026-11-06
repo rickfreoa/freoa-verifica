@@ -11,17 +11,18 @@ from freoa_verifica.parsers.model import (ParsedDocument, Provision, Redaction, 
                                          EditorialBlock, QuotedAmendment)
 from freoa_verifica.parsers.paths import roman_to_int
 
-PARSER_VERSION = "camara-legin-1"
+PARSER_VERSION = "camara-legin-2"
 _LABEL = re.compile(r"^(?:(Art\.\s*(\d+[º°o]?(?:-[A-Z])?)[.]?)|"
                     r"(§\s*(\d+[º°o]?(?:-[A-Z])?)[.]?)|(Parágrafo\s+único[.]?)|"
                     r"([IVXLCDM]+)\s*[-–—]|([a-z])\)|([1-9]\d*)\.)\s*", re.I)
 _NOTA = re.compile(r"\((?:[^()]|\([^()]*\))*\)", re.S)
 _FAMILIA = re.compile(r"^(?:[“\"]?Caput[”\"]?(?: do artigo)?|Artigo|Inciso|Alínea|Item|"
-                      r"Parágrafo(?: único)?|Primitivo (?:inciso|parágrafo|artigo)|"
+                      r"Parágrafo(?: único)?|Primitivo|"
                       r"Redação|Revogad[oa]|Incluíd[oa]|Vide|VETAD[OA])\b", re.I)
-_COMANDO_NOTA = re.compile(r"(?:com (?:nova )?redação dada|acrescid[oa]|incluíd[oa]|revogad[oa]|renumerad[oa])"
-                           r"\s+pel[ao]\s+(?:Lei|Medida Provisória|Decreto)\s+n[º°o]?\s*[\d.]+|"
-                           r"^VETAD[OA](?:\s+na\s+Lei\s+n[º°o]?\s*[\d.]+"
+_COMANDO_NOTA = re.compile(r"(?:com (?:nova )?redação dada|acrescid[oa](?: dada)?|incluíd[oa]|revogad[oa]|renumerad[oa])"
+                           r"\s+(?:pel[ao]\s+)?(?:Lei(?: Complementar)?|Medida Provisória|Decreto(?:-lei)?)\s+(?:n[º°o]?\s*)?[\d.]+|"
+                           r"transformad[oa] em §\s*\d+[º°o]? pel[ao] Lei(?: Complementar)?\s+n[º°o]?\s*[\d.]+|"
+                           r"^Vide\s+(?:Lei(?: Complementar)?|Decreto(?:-lei)?|art\.)|VETAD[OA](?:\s+na\s+Lei(?: Complementar)?\s+n[º°o]?\s*[\d.]+"
                            r"(?:,\s*de\s*\d{1,2}/\d{1,2}/\d{4})?)?$|^Revogad[oa]$", re.I)
 
 
@@ -106,6 +107,8 @@ def parse_camara_legin(data: str, *, base_url=None):
     offset = 0
     in_quote, pending_quote = False, False
     quote_host, quote_parts = "", []
+    quote_close = None
+    quote_open, quote_balance = None, 0
     last_article = None
     used_note_spans = set()
     for index, line in enumerate(lines):
@@ -114,17 +117,27 @@ def parse_camara_legin(data: str, *, base_url=None):
         if author_start is not None and index >= author_start:
             active = None
             continue
-        if in_quote or (pending_quote and re.match(r'^[“"«]', line)) or re.match(r'^[“"«]Art\.', line):
+        if in_quote or (pending_quote and re.match(r'^[“"«‘\']', line)) or re.match(r'^[“"«‘\'](?:Art\.|CAPÍTULO|SEÇÃO|TÍTULO|LIVRO)', line, re.I):
             if not in_quote:
                 quote_host = art or ""
                 quote_parts = []
+                quote_close = {"“": "”", "«": "»", "‘": "’"}.get(line[0], line[0])
+                quote_open, quote_balance = line[0], 0
             in_quote = True
             quote_parts.append(line)
-            if re.search(r'[”"»]\s*(?:\(NR\))?\s*$', line):
+            if quote_open == quote_close:
+                quote_balance = (quote_balance + line.count(quote_open)) % 2
+            else:
+                quote_balance += line.count(quote_open) - line.count(quote_close)
+            if quote_balance == 0 and re.search(re.escape(quote_close) + r"\s*(?:\(NR\))?\s*$", line):
                 doc.amendments.append(QuotedAmendment(quote_host, "atribuição pendente", "", "\n".join(quote_parts)))
                 in_quote, pending_quote = False, False
             continue
         match = _LABEL.match(line)
+        if pending_quote and match:
+            doc.issues.append(Issue("SCOPE_COLLISION", art, "comando alterador sem escopo citado reconhecido", "document"))
+        if match and match[1]:
+            pending_quote = False
         if match:
             raw_label = match[0].strip()
             if match[1]:
@@ -179,9 +192,10 @@ def parse_camara_legin(data: str, *, base_url=None):
                 raw = m[0]
                 inside = raw[1:-1].strip()
                 if inside == "NR" or (_FAMILIA.match(inside) and _COMANDO_NOTA.search(inside)):
-                    kind = ("renumerado" if "renumerad" in inside.lower() else
+                    kind = ("vide" if inside.lower().startswith("vide") else
                             "revogado" if "revogad" in inside.lower() else
                             "veto" if "vetad" in inside.lower() else
+                            "renumerado" if re.search(r"renumerad|transformad", inside, re.I) else
                             "incluido" if re.search(r"acrescid|incluíd", inside, re.I) else "redacao_dada")
                     ref = re.search(r"(?:Lei|Medida Provisória|Decreto)[^)]*", inside)
                     refs = [{"rotulo": t, "href": u} for t, u in links if t and (t in raw or raw in t)]
@@ -193,7 +207,7 @@ def parse_camara_legin(data: str, *, base_url=None):
                         except ValueError:
                             pass  # data literal inválida não é corrigida
                     act_date = next(iter(dates)) if len(dates) == 1 else None
-                    ann = Annotation(kind, raw, ref[0] if ref else None, href, act_date)
+                    ann = Annotation(kind, raw, ref[0] if ref else None, href, act_date, active["path"])
                     active["annotations"].append(ann)
                     # Toda nota removida da projeção mantém texto e âncora no texto-fonte.
                     note_start = doc.text.rfind(raw, active["start"], active["end"])
@@ -205,9 +219,10 @@ def parse_camara_legin(data: str, *, base_url=None):
                         doc.editorial_blocks.append(EditorialBlock(raw, note_span, "nota_camara"))
                         doc.editorial_blocks.append(EditorialBlock(json.dumps(refs, ensure_ascii=False), note_span, "nota_camara_links"))
                     if re.search(r"vigor|efeitos|vigência|condicionad", inside, re.I):
-                        active["annotations"].append(Annotation("vigencia", raw, ann.act_ref, href))
+                        active["annotations"].append(Annotation("vigencia", raw, ann.act_ref, href,
+                                                                act_date, active["path"]))
                     clean = clean[:m.start()] + clean[m.end():]
-                elif re.search(r"redação|renumerad|acrescid|revogad|produção de efeitos", inside, re.I):
+                elif re.search(r"redação|renumerad|transformad|acrescid|incluíd|revogad|vetad|^vide\b|produção de efeitos", inside, re.I):
                     doc.issues.append(Issue("NOTA_NAO_RECONHECIDA", active["path"], raw, "provision"))
             active["text"] = clean.strip()
     if in_quote:
@@ -220,7 +235,12 @@ def parse_camara_legin(data: str, *, base_url=None):
                 break
             descendants.append(child)
         text = r["text"] + "".join("\n" + c["label"] + " " + c["text"] for c in descendants)
-        anns = r["annotations"] + [a for c in descendants for a in c["annotations"]]
+        anns = r["annotations"]
+        if any(a.kind == "revogado" for c in descendants for a in c["annotations"]):
+            doc.issues.append(Issue("REVOGACAO_PARCIAL", r["path"],
+                                    "revogação restrita a descendente; agregado não revogado", "provision"))
+        if any(a.kind == "veto" for a in anns) and not r["text"].strip():
+            doc.issues.append(Issue("VETO", r["path"], "dispositivo sem redação normativa", "provision"))
         span = (r["start"], descendants[-1]["end"] if descendants else r["end"])
         prov = Provision(r["path"], r["label"], "", redactions=[Redaction(text, False, 0, anns, span)])
         if r["path"] in seen:

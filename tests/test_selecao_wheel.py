@@ -101,7 +101,10 @@ def test_selecao_ancorada_em_arquivo_roda_na_copia_isolada(tmp_path):
         [sys.executable, "-m", "pytest", *alvos, "-q", "-m", "not live and not repositorio", "-p", "no:cacheprovider"],
         cwd=copia, env={**os.environ, "PYTHONSAFEPATH": "1"}, capture_output=True, text=True, timeout=900,
     )
-    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-1000:]
+    diagnostico = tmp_path / "wheel-execucao.txt"
+    if r.returncode:
+        diagnostico.write_text(r.stdout + "\nSTDERR:\n" + r.stderr, encoding="utf-8")
+    assert r.returncode == 0, f"Diagnóstico completo: {diagnostico}\n" + r.stdout[-3000:] + r.stderr[-1000:]
 
 
 def test_violacoes_acusa_teste_selecionado_com_caminho(tmp_path):

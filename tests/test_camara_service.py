@@ -210,8 +210,16 @@ def test_c10_c11_c12_material_real_persistido_sem_confirmar_d(acervo, monkeypatc
 
 
 @pytest.mark.parametrize("politica", ["completo", "sem_conteudo"])
-def test_c12_recibo_obtencao_compromete_versao_e_evidencias(acervo, politica):
+def test_c12_recibo_obtencao_compromete_versao_e_evidencias(acervo, politica, monkeypatch):
     import json
+    from freoa_verifica import registro
+    if politica == "sem_conteudo":
+        original = registro.hmac_entrada
+        def hash_com_numero(conn, campo, valor, **kwargs):
+            digest = original(conn, campo, valor, **kwargs)
+            # Contraexemplo causal do falso alarme da CI: dígitos também ocorrem em HMAC.
+            return "6404" + digest[4:] if campo == "citacao" else digest
+        monkeypatch.setattr(registro, "hmac_entrada", hash_com_numero)
     acervo.registro = politica
     out = acervo.obter_dispositivo("art. 289 da Lei 6404/1976", data="2025-01-01", versao="publicacao_original")
     evidence = [{k: out["evidencia"][k] for k in ("capture_id", "sha256", "url")}]
@@ -225,8 +233,15 @@ def test_c12_recibo_obtencao_compromete_versao_e_evidencias(acervo, politica):
         assert record["evidencias"] is None
         assert record["confere_evidencias"][0]["confere"] is True
         row = acervo.conn.execute("SELECT request_json,result_json FROM run WHERE id=?", (out["run_id"],)).fetchone()
-        assert "6404" not in row["request_json"]
-        assert out["texto"] not in row["result_json"]
+        request = json.loads(row["request_json"])
+        valores = {"citacao": "art. 289 da Lei 6404/1976", "trecho": None, "data": "2025-01-01",
+                   "modo": "literal", "work_id": None, "caminho": None,
+                   "versao": "publicacao_original", "fonte": None}
+        assert request == {"registro": "sem_conteudo", **{
+            f"{k}_sha256": None if v is None else registro.hmac_entrada(acervo.conn, k, str(v))
+            for k, v in valores.items()}}
+        reference = acervo.obter_dispositivo("art. 289 da Lei 6404/1976", versao="publicacao_original")
+        assert reference["texto"] and reference["texto"] not in row["result_json"]
         assert "versao_sha256" in json.loads(row["request_json"])
     # Um escritor SQL comum já é barrado. Simular depois o atacante com poder de remover trigger.
     import sqlite3

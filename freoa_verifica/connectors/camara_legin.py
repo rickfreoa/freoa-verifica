@@ -12,7 +12,7 @@ from lxml import html
 from freoa_verifica.connectors.base import (AmbiguousCandidates, Candidate, CandidateList, Connector, HealthProbe,
                                            HealthReport, Unavailable, register, sob_guarda)
 from freoa_verifica.connectors.camara_policy import HOSTS, validar_url, url_publicada
-from freoa_verifica.connectors.httputil import connector_fetch, _revalidar
+from freoa_verifica.connectors.httputil import _revalidar
 from freoa_verifica.identidade_http import UA_POR_CONECTOR, USER_AGENT_IDENTIFICADO
 from freoa_verifica.limites import restante
 from freoa_verifica.texto_resposta import corpo_binario, texto_do_response
@@ -162,7 +162,9 @@ class CamaraLeginConnector(Connector):
                 "inteiro_teor": True, "ementa": True, "periodo": "perfis demonstrados; sem exaustividade",
                 "atualizacao": "sob demanda; licença e política pendentes", "qualificacao": "nao_apurada"}
 
-    def __init__(self):
+    def __init__(self, *, transporte_offline=None):
+        # Não há opção de ativação ao vivo. A injeção serve ao replay de capturas locais.
+        self._transporte_offline = transporte_offline
         self.paginas = {}
         self.links = {}
         self.inventarios = {}
@@ -204,6 +206,8 @@ class CamaraLeginConnector(Connector):
 
     @sob_guarda
     def _obter_recurso(self, url):
+        if self._transporte_offline is None:
+            raise Unavailable("ativacao_ao_vivo_pendente")
         try:
             route = self._admitir(url)  # antes inclusive do robots e do cache
         except ValueError as exc:
@@ -226,7 +230,7 @@ class CamaraLeginConnector(Connector):
                 if wait > min(restante(60), 60):
                     raise Unavailable("orcamento")
                 time.sleep(wait)
-        resp = connector_fetch(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
+        resp = self._transporte_offline(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
                                mimes=frozenset({route["mime"]}), user_agent=self.user_agent,
                                max_redirects=0, repeticao=0, max_bytes=30 * 1024**2, timeout=60)
         self._last_request[urlsplit(url).netloc] = time.monotonic()
@@ -309,7 +313,18 @@ class CamaraLeginConnector(Connector):
         self._admitir(candidate.url)
         inv = self.inventarios.get(candidate.url)
         if inv is None:
-            raise Unavailable("pagina_norma_nao_capturada")
+            page = self._obter_recurso(candidate.url)
+            inv = inventario(page)
+            from freoa_verifica.aliases import WorkKey
+            from freoa_verifica.identity import validate_identity
+            from freoa_verifica.parsers.model import ParsedDocument
+            info = validar_url(candidate.url)
+            kind = {"lei": "lei", "leicom": "lei_complementar"}[info["familia"]]
+            key = WorkKey("federal", kind, info["numero"], int(info["ano"]))
+            if validate_identity(key, ParsedDocument("camara_norma", "1", inv["titulo"], None, "")) is None:
+                raise Unavailable("identidade_nao_confirmada")
+            self.inventarios[candidate.url] = inv
+            self._descobrir(page, inv)
         role = "atualizado" if version == "vigente" else "original"
         choices = [r for r in inv["recursos"] if r["recurso"] == role and r["admitido"]]
         if len(choices) != 1:

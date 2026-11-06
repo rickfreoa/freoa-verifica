@@ -64,6 +64,7 @@ from freoa_verifica.verify import (
     SourceUnavailable,
     SourceAmbiguous,
     _current_redaction,
+    _provision_blocking_issues,
     _find_provision,
     _inferir_esfera,
     campos_evidencia,
@@ -89,7 +90,11 @@ _ESPERA_CLOSE = 30.0
 
 from freoa_verifica.sanitizacao import DOC_CLOSE, DOC_OPEN, envolver  # noqa: E402,F401
 
-_LEGIS_CONNECTORS = ("planalto", "camara_legin", "cvm_normas", "bcb", "senado")
+from freoa_verifica.politica_captura import (  # noqa: E402
+    LEGIS_CONNECTORS as _LEGIS_CONNECTORS,
+    LEGIS_NOVA_CAPTURA as _LEGIS_NOVA_CAPTURA,
+    exigir_nova_captura,
+)
 # Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
 _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
 
@@ -821,6 +826,11 @@ class Verifica:
 
     def _revalidar_camara(self, rw):
         """Releitura não amplia a política: corpo, página de origem e href recuperáveis."""
+        from freoa_verifica.parsers.camara_legin import PARSER_VERSION
+        if rw.document.parser_version != PARSER_VERSION:
+            raise SourceUnavailable("camara_modelo_requer_reprocessamento", [
+                {"fonte": "camara_legin", "resultado": "indisponivel",
+                 "motivo": "camara_modelo_requer_reprocessamento", "categoria": None}])
         from freoa_verifica.connectors.camara_policy import validar_url, url_publicada
         from freoa_verifica.connectors.camara_legin import arvore, compacto
         try:
@@ -1133,6 +1143,8 @@ class Verifica:
         errors: list[str] = []
         consultadas: list[dict] = []
         for cid in dict.fromkeys(order):  # cada fonte uma vez por chamada (0058)
+            if cid not in _LEGIS_NOVA_CAPTURA:
+                continue
             try:
                 conn_obj = self._get(cid)
                 cand = conn_obj.resolve(key)
@@ -1344,6 +1356,9 @@ class Verifica:
             if not ao_vivo:
                 nao_consultada(cid, "offline" if offline else "somente_local")
                 continue
+            if cid not in _LEGIS_NOVA_CAPTURA:
+                nao_consultada(cid, "acervo_legado_sem_nova_captura")
+                continue
             if len(items) >= limite:
                 nao_consultada(cid, "limite_atingido_no_acervo_local")
                 continue
@@ -1404,7 +1419,10 @@ class Verifica:
         }
 
     def _index_candidate_legis(self, connector, cand: Candidate) -> dict[str, Any]:
+        if connector.id not in _LEGIS_NOVA_CAPTURA:
+            raise Unavailable("acervo_legado_sem_nova_captura")
         capture_id = None
+        work_id = None
         failure = None
         classificacao: dict[str, Any] = {}
         path = None
@@ -1431,6 +1449,12 @@ class Verifica:
                         authority = candidate_cite.work.authority
                         kind = candidate_cite.work.kind
                 wk = WorkKey(authority, kind, re.sub(r"\D", "", number) or number, year)
+                if connector.id == "camara_legin":
+                    wk, work_date = declared_identity(parsed)
+                    if wk is None:
+                        raise Unavailable("IDENTIDADE_NAO_DECLARADA")
+                else:
+                    work_date = None
                 # A7: candidato ao vivo é gravado direto no staging, nunca no FTS canônico.
                 rw = self.indexar_obra(
                     source_id=connector.id,
@@ -1442,8 +1466,13 @@ class Verifica:
                     fetched_at=resp.fetched_at,
                     label=cand.title,
                     fts_alvo="fts_staging",
+                    work_date=work_date,
                 )
                 capture_id = rw.capture_id
+                work_id = rw.work_id
+                if connector.id == "camara_legin":
+                    for page in connector.paginas.values():
+                        repo.save_capture(self.conn, page, connector.id, home=self.home)
                 if connector.id == "cvm_normas":  # C2
                     situacao.registrar_cvm(self.conn, self.home, connector, cand, rw)
                 if parsed.provisions:
@@ -1464,6 +1493,7 @@ class Verifica:
             "trecho": text,
             "url_oficial": cand.url,
             "capture_id": capture_id,
+            "work_id": work_id,
             "motivo": failure,
             "vigencia": None,
             "fonte": connector.id,
@@ -1569,7 +1599,8 @@ class Verifica:
                 try:
                     resolved = self._resolve(cite.work, strict=True, versao=versao, fonte=fonte)
                 except SourceUnavailable as exc:
-                    return {"status": "indisponivel", "motivo": exc.reason}
+                    return {"status": "indisponivel", "motivo": exc.reason,
+                            **({"fontes_consultadas": exc.fontes_consultadas} if exc.fontes_consultadas else {})}
                 if isinstance(resolved, list):
                     return {"status": "ambigua", "candidatos": [r.work_id for r in resolved]}
                 rw = resolved
@@ -1597,7 +1628,8 @@ class Verifica:
                         elif isinstance(resolved, list):
                             return {"status": "ambigua", "candidatos": [r.work_id for r in resolved]}
                     except SourceUnavailable as exc:
-                        return {"status": "indisponivel", "motivo": exc.reason}
+                        return {"status": "indisponivel", "motivo": exc.reason,
+                                **({"fontes_consultadas": exc.fontes_consultadas} if exc.fontes_consultadas else {})}
         if rw is None:
             return {"status": "inexistente"}
         if fonte is not None and rw.source_id != fonte:
@@ -1606,6 +1638,10 @@ class Verifica:
             return self._obter_camara(rw, path, data, versao)
         if versao == "publicacao_original":
             return {"status": "unknown", "reason_code": "primeira_publicacao_nao_identificada", "texto": None}
+        return self._resposta_dispositivo(rw, path, data)
+
+    def _resposta_dispositivo(self, rw, path, data):
+        """Construção comum do contrato de obtenção, inclusive nulidade dos campos."""
         sit = situacao.carregar(self.conn, rw, self.home)  # C2
         if not path:
             return {
@@ -1693,24 +1729,25 @@ class Verifica:
 
     def _obter_camara(self, rw, path, data, versao):
         self._revalidar_camara(rw)
-        out = {"status": "encontrada", "work_id": rw.work_id, "caminho": path,
-               "versao": versao, "texto": None, "truncado": False,
-               "evidencia": self._evidencia_dispositivo(rw), "anotacoes": [],
-               "fontes_consultadas": rw.fontes_consultadas,
-               "fundamento_temporal": None, "correspondencia_textual": None}
+        out = self._resposta_dispositivo(rw, path, data)
+        out.update(versao=versao, fontes_consultadas=rw.fontes_consultadas)
+        out.setdefault("texto", None)
+        out.setdefault("evidencia", self._evidencia_dispositivo(rw))
         prov = _find_provision(rw.document, path) if path else None
         if path and prov is None:
             out.update(status="unknown", reason_code="primeira_publicacao_do_dispositivo_nao_obtida"
                        if versao == "publicacao_original" else "dispositivo_nao_identificado")
         elif prov:
-            issues = [i for i in rw.document.issues if i.blocking_scope == "document" or
-                      (i.blocking_scope == "provision" and i.path and
-                       (i.path == path or i.path.startswith(path + ".") or path.startswith(i.path + ".")))]
+            issues = [i for i in rw.document.issues if i.blocking_scope == "document"]
+            issues += _provision_blocking_issues(rw.document, path)
             if issues or prov.ambiguous:
-                out.update(status="unknown", reason_code="recorte_ambiguo", pendencias=[asdict(i) for i in issues])
+                out.update(status="unknown", reason_code=issues[0].code if issues else "recorte_ambiguo",
+                           texto=None, texto_atual=None, redacoes_anteriores=[],
+                           vigencia={"status": "unknown", "reason_code": issues[0].code if issues else "recorte_ambiguo",
+                                     "regras": [], "flags": [], "intervalo": None},
+                           pendencias=[asdict(i) for i in issues])
             else:
                 red = _current_redaction(prov)
-                out["texto"], out["truncado"] = _truncate(red.text, _DEFAULT_TEXT_LIMIT)
                 out["evidencia"].update(path=path, span=list(red.span), parser_version=rw.document.parser_version)
                 if not red.text.strip():
                     out.update(status="unknown", reason_code="dispositivo_sem_redacao_normativa", texto=None)
@@ -1719,11 +1756,9 @@ class Verifica:
                     annotation["links"] = [ref for block in rw.document.editorial_blocks
                         if block.kind == "nota_camara_links" and rw.document.text[block.span[0]:block.span[1]] == annotation["raw"]
                         for ref in json.loads(block.text)]
-                tr = temporal_select(prov, data, work_date=rw.work_date, fetched_at=rw.fetched_at,
-                                     quarantined=rw.quarantined)
-                out["vigencia"] = {"status": tr.status, "reason_code": tr.reason, "flags": tr.flags}
         if versao == "publicacao_original":
-            out["vigencia"] = {"status": "unknown", "reason_code": "publicacao_nao_prova_aplicabilidade"}
+            out.setdefault("vigencia", {"regras": [], "flags": [], "intervalo": None}).update(
+                status="unknown", reason_code="publicacao_nao_prova_aplicabilidade")
         self._material_historico_camara(out, rw, path, data)
         return out
 
@@ -1858,7 +1893,7 @@ class Verifica:
         if failures:
             out["indisponibilidades_temporais"] = failures
         if "vigencia" in out or "status" in out:
-            out["vigencia"] = {"status": "unknown", "reason_code": "sem_versao_oficial_na_data"}
+            out.setdefault("vigencia", {}).update(status="unknown", reason_code="sem_versao_oficial_na_data")
         for dim in ("temporal", "text"):
             obj = out.get(dim)
             if isinstance(obj, dict) and (obj.get("reason_code") in {"sem_fundamento_do_periodo", "HISTORICO_ANTERIOR_AUSENTE"}
@@ -1875,7 +1910,8 @@ class Verifica:
         try:
             resolved = self._resolve(cite.work, strict=True)
         except SourceUnavailable as exc:
-            return {"status": "indisponivel", "motivo": exc.reason}
+            return {"status": "indisponivel", "motivo": exc.reason,
+                    **({"fontes_consultadas": exc.fontes_consultadas} if exc.fontes_consultadas else {})}
         if resolved is None:
             return {"status": "inexistente"}
         if isinstance(resolved, list):
@@ -3574,7 +3610,7 @@ class Verifica:
             n, capturado = self.conn.execute(
                 "SELECT COUNT(*), MAX(fetched_at) FROM capture WHERE source_id=?", (cid,)).fetchone()
             recorte = {"capturas": n, "capturado_em": capturado}
-            vivo = True  # captura sob demanda na fonte oficial
+            vivo = cid not in {"planalto", "camara_legin"}  # legado / ativação pendente
         return ("ambos" if n and vivo else "acervo" if n else "ao_vivo" if vivo else "nenhuma"), recorte
 
     def obter_registro(
@@ -3662,6 +3698,10 @@ class Verifica:
         if politica == "completo":
             evidencias_out = campos["evidencias_claro"]
             fundamento_out = campos["fundamento_claro"]
+            if "fontes_consultadas" in res_json:
+                estado["fontes_consultadas"] = res_json["fontes_consultadas"]
+                estado["status"] = res_json.get("status")
+                estado["motivo"] = res_json.get("motivo")
         else:
             evidencias_out = None
             fundamento_out = None
@@ -3836,6 +3876,7 @@ class Verifica:
                 relatorio.append({"fonte": cid, "status": "desconhecida"})
                 continue
             try:
+                exigir_nova_captura(cid)
                 conn_obj = self._get(cid)
                 if hasattr(conn_obj, "sync"):
                     kwargs: dict[str, Any] = {}
@@ -3906,6 +3947,7 @@ class Verifica:
             try:
                 # Uma guarda por fonte: as sondas dela compartilham o bloqueio após desafio/recusa (FIX16/F-17).
                 with GuardaExecucao().ativar():
+                    exigir_nova_captura(cid)
                     report = self._get(cid).health()
                 probes = [
                     {"nome": p.name, "status": p.status, "detalhe": p.detail}

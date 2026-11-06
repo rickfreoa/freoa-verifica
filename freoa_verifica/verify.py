@@ -359,7 +359,8 @@ def _provision_blocking_issues(doc: ParsedDocument, path: str | None) -> list:
     return [
         i
         for i in doc.issues
-        if i.path and (i.path == path or path.startswith(i.path + ".") or path.startswith(i.path + "/"))
+        if i.path and (i.path == path or path.startswith(i.path + ".") or path.startswith(i.path + "/")
+                       or i.path.startswith(path + ".") or i.path.startswith(path + "/"))
         and (
             i.blocking_scope == "provision"
             or i.code in PROVISION_BLOCKING_CODES
@@ -614,6 +615,14 @@ def verificar(
             citation=cite,
         )
         return _persist(repo, citacao, trecho, data, modo, result)
+
+    if blocking:
+        reason = blocking[0].code
+        return _persist(repo, citacao, trecho, data, modo, VerificationResult(
+            identity=Dimension("unknown", reason, [_ev_from_resolved(rw, path, None)]),
+            text=Dimension("unknown", reason) if trecho is not None else Dimension("not_assessed", "SEM_TRECHO"),
+            temporal=Dimension("unknown", reason), support=support, citation=cite,
+        ))
 
     if prov is not None and prov.ambiguous:
         identity = Dimension(
@@ -956,6 +965,10 @@ def persistir_resultado(conn, citacao, trecho, data, modo, resultado: dict[str, 
                        "reason_code": (resultado.get(d) or {}).get("reason_code")}
                    for d in ("identity", "text", "temporal", "support")},
                 "algo_versions": resultado.get("algo_versions"),
+                **({"fontes_consultadas_sha256": hmac_entrada(
+                    conn, "fontes_consultadas", json.dumps(resultado["fontes_consultadas"],
+                                                         ensure_ascii=False, sort_keys=True))}
+                   if "fontes_consultadas" in resultado else {}),
             },
             ensure_ascii=False, sort_keys=True,
         )

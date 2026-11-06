@@ -68,7 +68,7 @@ Modo = Literal["literal", "normalizado"]
 Parte = Literal["ementa", "inteiro_teor", "voto", "certidao"]
 Tribunal = str
 Fonte = Literal[
-    "planalto", "cvm_normas", "bcb", "senado", "__somente_local__"
+    "planalto", "camara_legin", "cvm_normas", "bcb", "senado", "__somente_local__"
 ]
 
 

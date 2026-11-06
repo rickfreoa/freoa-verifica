@@ -135,21 +135,23 @@ def rede(monkeypatch):
 
 
 def test_verificar_texto_varias_citacoes_compartilham_a_guarda(rede, tmp_path):
-    texto = ("Conforme o art. 1º da Lei 6.404/1976 e o art. 2º da Lei 6.385/1976 "
-             "e o art. 3º da Lei 10.406/2002.")
+    texto = ("Conforme o art. 1º da Resolução CVM 160/2022 e o art. 2º da Resolução CVM 44/2021 "
+             "e o art. 3º da Resolução CVM 80/2022.")
     with Verifica(tmp_path / "h") as svc:
         r = svc.verificar_texto(texto)
     por_host = rede()
     assert por_host and max(por_host.values()) == 1, por_host
+    assert len(r["citacoes"]) == 3
     assert all(c["identity"]["status"] != "verified" for c in r["citacoes"]), r
 
 
 def test_obter_dispositivo_declara_fonte_e_nao_repete(rede, tmp_path):
     with Verifica(tmp_path / "h") as svc:
-        r = svc.obter_dispositivo("art. 1º da Lei 6.404/1976")
+        r = svc.obter_dispositivo("art. 1º da Resolução CVM 160/2022")
     por_host = rede()
     assert por_host and max(por_host.values()) == 1, por_host
     assert r.get("status") != "ok", r
+    assert r["fontes_consultadas"][0]["categoria"] == "ambiental_desafio"
 
 
 def test_sincronizar_tcu_declara_e_nao_repete(rede, tmp_path):

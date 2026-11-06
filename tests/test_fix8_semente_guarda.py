@@ -80,7 +80,7 @@ def _obra_com_remissao(svc, numero: int, ano: int) -> None:
                      document=doc, body=f"principal{numero}".encode(), url=f"https://www.planalto.gov.br/{numero}")
 
 
-def test_dois_contextos_com_o_mesmo_alterador_consultam_a_data_uma_vez(monkeypatch, tmp_path):
+def test_dois_contextos_com_o_mesmo_alterador_consultam_a_data_uma_vez(monkeypatch, tmp_path, captura_legada_simulada):
     server = _servidor()
     incrementos = _preparar(monkeypatch, server)
     try:

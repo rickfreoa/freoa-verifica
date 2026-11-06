@@ -42,11 +42,12 @@ def test_evidencia_de_item_indexado_rebaixa_so_o_item(verifica_populada, monkeyp
 def test_buscar_legislacao_candidato_sem_captura(verifica_populada, monkeypatch):
     svc, rw, _ = verifica_populada
     monkeypatch.setenv("FV_OFFLINE", "0")
-    cands = CandidateList([Candidate("test", str(i), f"Ato {i}") for i in range(3)], total=3)
-    monkeypatch.setattr("freoa_verifica.service.registry", lambda: {"planalto": object()})
+    # A fonte simulada admite nova captura; Planalto é apenas acervo legado (F5).
+    cands = CandidateList([Candidate("camara_legin", str(i), f"Ato {i}") for i in range(3)], total=3)
+    monkeypatch.setattr("freoa_verifica.service.registry", lambda: {"camara_legin": object()})
     monkeypatch.setattr(svc, "_get", lambda cid: SimpleNamespace(search=lambda *a, **kw: cands))
     monkeypatch.setattr(svc, "_index_candidate_legis", lambda conn, cand: {
         "obra": cand.title, "trecho": "x", "capture_id": None, "motivo": "falha", "vigencia": None})
-    r = svc.buscar_legislacao("assunto inexistente no acervo local zzqq", fonte="planalto")
+    r = svc.buscar_legislacao("assunto inexistente no acervo local zzqq", fonte="camara_legin")
     assert r["status"] == "parcial" and r["itens"]
     assert all(i["nao_indexado"] and not _afirma(i) for i in r["itens"])

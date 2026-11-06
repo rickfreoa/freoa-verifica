@@ -22,6 +22,7 @@ from freoa_verifica.connectors.guarda import da_chamada
 from freoa_verifica.connectors.stf import SUMULA_BASES
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.parsers.model import ParsedDocument
+from freoa_verifica.politica_captura import exigir_nova_captura
 from freoa_verifica.texto_resposta import content_type_do_response
 
 log = logging.getLogger("freoa_verifica.semente")
@@ -292,6 +293,7 @@ class SementeSync:
         label: str,
     ) -> tuple[str, ParsedDocument | None]:
         try:
+            exigir_nova_captura(connector_id)
             conn_obj = self.svc._get(connector_id)
             key = {
                 "tipo": {"lei_complementar": "LCP", "decreto_lei": "DEL", "medida_provisoria": "MPV", "constituicao": "CF"}.get(
@@ -458,6 +460,7 @@ class SementeSync:
             iso = (json.loads(saved["payload_json"] or "{}").get("data") if saved else None)
             if not iso:
                 def datar(atipo=atipo, anumero=anumero, aano=aano, akey=akey):
+                    exigir_nova_captura("planalto")
                     self._sleep()
                     data = self.svc._get("planalto").resolve_alterador_date(atipo, anumero, aano)
                     self.state.set("alterador_data", akey, "parseado" if data else "indisponivel",

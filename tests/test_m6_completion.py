@@ -41,7 +41,7 @@ class LegisConnector:
         return document()
 
 
-def test_sync_retry_and_checkpoint(tmp_path, monkeypatch):
+def test_sync_retry_and_checkpoint(tmp_path, monkeypatch, captura_legada_simulada):
     monkeypatch.delenv("FV_OFFLINE", raising=False)
     with Verifica(tmp_path) as svc:
         connector = LegisConnector()
@@ -69,7 +69,7 @@ def test_offline_sync_never_calls_connector(tmp_path, monkeypatch):
         assert all(f["motivos"] == {"offline": 1} for f in result["fontes"])
 
 
-def test_alterador_context_survives_restart(tmp_path, monkeypatch):
+def test_alterador_context_survives_restart(tmp_path, monkeypatch, captura_legada_simulada):
     monkeypatch.delenv("FV_OFFLINE", raising=False)
     doc = document()
     for red in doc.provisions[0].redactions:
@@ -241,7 +241,7 @@ def test_colegiado_seed_captures_each_item(tmp_path, monkeypatch):
 @pytest.mark.parametrize("kind,number,year,tipo", [("lei_complementar", "182", 2021, "LCP"),
                                                    ("decreto_lei", "4657", 1942, "DEL"),
                                                    ("constituicao", "1988", 1988, "CF")])
-def test_seed_canonical_planalto_kinds(tmp_path, kind, number, year, tipo):
+def test_seed_canonical_planalto_kinds(tmp_path, kind, number, year, tipo, captura_legada_simulada):
     from freoa_verifica.connectors.planalto import PlanaltoConnector
     class Connector(PlanaltoConnector):
         def resolve(self, key):

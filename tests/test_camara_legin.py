@@ -28,7 +28,7 @@ def response(key):
 
 
 @pytest.fixture
-def servidor(monkeypatch):
+def servidor(monkeypatch, proibir_rede):
     responses = {response(p.stem.removeprefix("camara_").removesuffix(".captura")).url:
                  response(p.stem.removeprefix("camara_").removesuffix(".captura"))
                  for p in FIX.glob("*.captura.json")}
@@ -41,6 +41,10 @@ def servidor(monkeypatch):
             raise AssertionError(f"URL não documentada: {url}")
         return responses[url]
     monkeypatch.setattr("freoa_verifica.connectors.httputil.transport_fetch", fetch)
+    from freoa_verifica.connectors.httputil import connector_fetch
+    init = CamaraLeginConnector.__init__
+    monkeypatch.setattr(CamaraLeginConnector, "__init__",
+                        lambda self: init(self, transporte_offline=connector_fetch))
     return responses, calls
 
 
@@ -406,15 +410,16 @@ def test_c4_total_desconhecido_e_sem_zero_por_silencio(servidor):
 
 @pytest.mark.parametrize("status,categoria", [(401, "recusa_identificado"), (403, "recusa_identificado"),
                                              (503, "fonte_fora"), (404, None)])
-def test_c3_c14_falha_robots_encerra_sem_fallback(monkeypatch, status, categoria):
+def test_c3_c14_falha_robots_encerra_sem_fallback(monkeypatch, proibir_rede, status, categoria):
     from freoa_verifica.transport import HTTPStatusError
     calls = []
     def falha(url, **kw):
         calls.append((url, kw))
         raise HTTPStatusError(status)
     monkeypatch.setattr("freoa_verifica.connectors.httputil.transport_fetch", falha)
+    from freoa_verifica.connectors.httputil import connector_fetch
     with pytest.raises(Unavailable) as error:
-        CamaraLeginConnector().search("Lei 6404/1976")
+        CamaraLeginConnector(transporte_offline=connector_fetch).search("Lei 6404/1976")
     assert error.value.categoria == categoria
     assert error.value.reason == f"http_{status}"
     assert [c[0] for c in calls] == ["https://www.camara.leg.br/robots.txt"]

@@ -184,6 +184,8 @@ def _plano_get(
 
 
 def _planejar(conector: str, consulta: dict[str, Any] | None, url: str | None) -> dict[str, Any]:
+    from freoa_verifica.politica_captura import exigir_nova_captura
+
     classes = registry()
     if conector not in classes:
         raise ValueError(f"conector sem captura: {conector}")
@@ -198,6 +200,7 @@ def _planejar(conector: str, consulta: dict[str, Any] | None, url: str | None) -
         plano = _CONSULTAS[conector](consulta)
     else:
         raise ValueError(f"conector {conector} só captura por url")
+    exigir_nova_captura(conector)
     plano.setdefault("path_prefixes", classe.path_prefixes)
     plano.setdefault("mimes", classe.mimes)
     plano.update(hosts=classe.hosts, user_agent=classe.user_agent)
@@ -425,12 +428,19 @@ def _bloqueio(fixtures: Path, espera: float = 10.0, velho: float = 120.0):
         try:
             fd = os.open(trava, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             break
-        except FileExistsError:
-            with contextlib.suppress(OSError):
-                if time.time() - trava.stat().st_mtime > velho:
-                    trava.unlink()
-                    continue
+        except (FileExistsError, PermissionError) as exc:
+            # Windows pode devolver ACCESS_DENIED enquanto o lock anterior está em
+            # delete-pending. Isso ainda é contenção, com o mesmo prazo limitado.
+            if isinstance(exc, PermissionError) and os.name != "nt":
+                raise
+            if isinstance(exc, FileExistsError):
+                with contextlib.suppress(OSError):
+                    if time.time() - trava.stat().st_mtime > velho:
+                        trava.unlink()
+                        continue
             if time.monotonic() >= limite:
+                if isinstance(exc, PermissionError):
+                    raise
                 raise TimeoutError(f"manifesto em uso: {trava}") from None
             time.sleep(0.02)
     try:

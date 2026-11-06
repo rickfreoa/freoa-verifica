@@ -361,7 +361,7 @@ def test_arvore_html_aceita_declaracao_xml_em_texto():
 # --- F-17: diagnóstico não repete contra fonte que desafiou -----------------------------------------------------
 
 
-def test_doctor_nao_repete_sonda_apos_desafio(tmp_path, monkeypatch):
+def test_doctor_nao_repete_sonda_apos_desafio(tmp_path, monkeypatch, captura_legada_simulada):
     from freoa_verifica import service
     from freoa_verifica.connectors.planalto import PlanaltoConnector
 

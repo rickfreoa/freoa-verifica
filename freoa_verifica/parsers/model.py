@@ -40,6 +40,7 @@ class Annotation:
     act_ref: str | None = None
     act_href: str | None = None
     act_date: str | None = None  # ISO quando o texto traz data completa
+    target_path: str | None = None  # alvo expresso; não se transfere ao agregado
 
 
 @dataclass

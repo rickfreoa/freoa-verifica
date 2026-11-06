@@ -50,7 +50,7 @@ def _rodar(monkeypatch, tmp_path, server):
     return linha, breaker
 
 
-def test_alterador_503_durante_run_faz_tres_pedidos_e_um_incremento(monkeypatch, tmp_path):
+def test_alterador_503_durante_run_faz_tres_pedidos_e_um_incremento(monkeypatch, tmp_path, captura_legada_simulada):
     linha, breaker = _rodar(monkeypatch, tmp_path, server := _servidor_status(503))
     assert server.pedidos == 3
     assert breaker.failures == 1
@@ -58,7 +58,7 @@ def test_alterador_503_durante_run_faz_tres_pedidos_e_um_incremento(monkeypatch,
     assert json.loads(linha["payload_json"])["categoria"] == "fonte_fora"
 
 
-def test_alterador_retry_after_longo_durante_run_faz_um_pedido(monkeypatch, tmp_path):
+def test_alterador_retry_after_longo_durante_run_faz_um_pedido(monkeypatch, tmp_path, captura_legada_simulada):
     linha, breaker = _rodar(monkeypatch, tmp_path, server := _servidor_status(503, "3600"))
     assert server.pedidos == 1
     assert breaker.failures == 1

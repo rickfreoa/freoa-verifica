@@ -123,7 +123,7 @@ def test_fontes_nao_consultadas(verifica_populada, monkeypatch):
     svc._connectors["senado"].search = lambda q, **k: []
     res = svc.buscar_legislacao("zebrafish")
     assert res["fontes"]["planalto"] == {"status": "nao_consultada",
-                                         "motivo": "busca_textual_nao_suportada", "parcial": False}
+                                         "motivo": "acervo_legado_sem_nova_captura", "parcial": False}
     assert res["fontes"]["cvm_normas"]["status"] == "ok"
     monkeypatch.setenv("FV_OFFLINE", "1")
     off = svc.buscar_legislacao("zebrafish")
