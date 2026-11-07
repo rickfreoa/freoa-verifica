@@ -424,7 +424,7 @@ def remissoes(texto: str, obra_propria: WorkKey | None, existe: Callable[[WorkKe
         if not it["duvida"] and it["obra"] is not None and it["obra_rotulo"] is not None:
             try:
                 resolvida = bool(existe(it["obra"], it["path"]))
-            except Exception:  # noqa: BLE001  - fechado: não afirma o que não pôde conferir
+            except (LookupError, ValueError, TypeError, AttributeError):  # fechado: não afirma o que não pôde conferir
                 resolvida = False
         chave = (it["obra_rotulo"], it["caminho"], resolvida)
         if chave in vistos:

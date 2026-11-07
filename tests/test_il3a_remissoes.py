@@ -120,7 +120,7 @@ def test_dispositivo_de_anexo_nao_herda_obra_implicita():
 
 def test_excecao_em_existe_e_inexistencia():
     def boom(w, p):
-        raise RuntimeError("falha")
+        raise LookupError("falha")
     assert _rodar("Art. 5º art. 4º desta Lei.", existe=boom) == {(LSA_R, "art. 4º", False)}
 
 
