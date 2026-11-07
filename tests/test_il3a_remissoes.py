@@ -135,8 +135,8 @@ def test_desta_lei_em_obra_de_outra_especie_nao_resolve():
 
 def _por_proximidade(real):
     """Mutante do extrator: a remissão sem obra herda a obra da remissão explícita mais próxima antes dela."""
-    def mutante(texto, obra_propria, art_proprio=None, *, implicita=True):
-        itens = real(texto, obra_propria, art_proprio, implicita=implicita)
+    def mutante(texto, obra_propria, art_proprio=None, *, implicita=True, **kw):
+        itens = real(texto, obra_propria, art_proprio, implicita=implicita, **kw)
         ultima = None
         for it in itens:
             if it["obra"] is not None and not it["duvida"]:
@@ -247,3 +247,126 @@ def test_mcp_mesmas_regras_e_texto_da_remissao_envolvido(svc6385, monkeypatch):
     assert [x["alvo"] for x in out["remissoes"]] == [ESPERADO_ART9[0]["alvo"]]
     assert [x["resolvida"] for x in out["remissoes"]] == [True]
     assert out["remissoes"][0]["texto"].startswith(DOC_OPEN) and "art. 15" in out["remissoes"][0]["texto"]
+
+
+# --- B6 (R1): a expressão só é resolvida depois de consumida e validada por inteiro; na dúvida, abstenção ---------------
+# Oráculos escritos à mão por CLASSE (os exemplos do auditor mais as variantes da mesma classe). Em todos o conjunto de
+# alvos `resolvida: true` esperado é vazio: o alvo estrutural existe (existe=True), o que falta é a prova da expressão.
+
+
+def _resolvidas(texto, art="art14", obra=LSA, notas=(), truncado=False):
+    saida = rem.remissoes(texto, obra, lambda w, p: True, art, notas=notas, truncado=truncado)
+    return {(r["alvo"]["obra"], r["alvo"]["caminho"]) for r in saida if r["resolvida"]}
+
+
+NAO_RESOLVE = [
+    # qualificador estrutural depois do artigo que a leitura não reconhece (o ancestral não pode ser resolvido)
+    ("inciso_sem_palavra", "Art. 14. Ver art. 5, I, desta Lei."),
+    ("inciso_faixa", "Art. 14. Ver art. 5, I a III, desta Lei."),
+    ("paragrafo_e_inciso_sem_palavra", "Art. 14. Ver art. 5, § 1, I, desta Lei."),
+    ("inciso_capitalizado", "Art. 14. Ver art. 5, Inciso I, desta Lei."),
+    ("inciso_abreviado", "Art. 14. Ver art. 5, inc. I, desta Lei."),
+    ("inciso_abreviado_sem_virgula", "Art. 14. Ver art. 5 inc. II desta Lei."),
+    ("inciso_ordinal_alto", "Art. 14. Ver art. 5º, § 2º, III e IV, desta Lei."),
+    ("alinea_abreviada", "Art. 14. Ver art. 5º, I, al. a, desta Lei."),
+    ("alinea_com_parenteses", "Art. 14. Ver art. 5º, a) desta Lei."),
+    ("letra", "Art. 14. Ver art. 5º, letra b, desta Lei."),
+    ("item", "Art. 14. Ver art. 5º, item 3, desta Lei."),
+    ("paragrafo_sem_virgula", "Art. 14. Ver art. 5º § 2º desta Lei."),
+    ("inciso_antes_abreviado", "Art. 14. Ver inc. I do art. 5º desta Lei."),
+    ("inciso_antes_maiusculo", "Art. 14. Ver Inciso II do art. 5º desta Lei."),
+    ("alinea_antes_abreviada", "Art. 14. Ver al. b do inciso I do art. 5º desta Lei."),
+    ("romano_solto_antes", "Art. 14. Ver II do art. 5º desta Lei."),
+    # âmbito de anexo
+    ("anexo_depois_desta_lei", "Art. 14. Ver art. 5 do Anexo desta Lei."),
+    ("anexo_numerado", "Art. 14. Ver art. 4 do Anexo I."),
+    ("anexo_unico", "Art. 14. Ver art. 4º, do Anexo único."),
+    ("anexo_no", "Art. 14. Ver art. 4º no Anexo II."),
+    ("anexo_antes", "Art. 14. No Anexo I, aplica-se o art. 4º."),
+    # obra externa no contexto da frase (inclusive em minúscula) e demonstrativo anafórico
+    ("lei_minuscula_antes", "Art. 14. Conforme a lei 10.406/2002, art. 5."),
+    ("decreto_minusculo_antes", "Art. 14. Nos termos do decreto 9.000/2017, aplica-se o art. 3."),
+    ("mp_antes", "Art. 14. Segundo a medida provisória 2.200-2/2001, art. 3."),
+    ("resolucao_antes", "Art. 14. Pela Resolução 4.557/2017, art. 5."),
+    ("lei_maiuscula_antes", "Art. 14. A Lei 8.987/1995 aplica-se; ver art. 4 dessa Lei."),
+    ("dessa_lei", "Art. 14. Ver art. 4 dessa Lei."),
+    ("desse_codigo", "Art. 14. Ver art. 4 desse Código."),
+    ("nessa_lei", "Art. 14. Aplica-se o art. 4 nessa Lei."),
+    ("nesse_decreto", "Art. 14. Aplica-se o art. 4 nesse Decreto."),
+    ("paragrafo_desse_artigo", "Art. 14. Ver no § 1º desse artigo."),
+    # parágrafo/caput soltos com outra obra em volta
+    ("paragrafo_unico_de_outra_lei", "Art. 14. Ver no parágrafo único da Lei 10.406/2002."),
+    ("caput_em_contexto_de_outra_lei", "Art. 14. Na Lei 8.987/1995, aplica-se o disposto no caput."),
+    ("caput_em_contexto_de_lei_numerada", "Art. 14. Conforme o decreto 9.000/2017, aplica-se o disposto no caput."),
+    ("paragrafo_solto_com_inciso", "Art. 14. O disposto no § 2º, I, não se aplica."),
+    ("paragrafo_solto_de_anexo", "Art. 14. O disposto no § 2º do Anexo não se aplica."),
+    # nota editorial (parentética ou entre colchetes)
+    ("nota_editorial_colchetes", "Art. 14. [Nota editorial: ver art. 5 desta Lei.]"),
+    ("nota_do_editor_parenteses", "Art. 14. (Nota do editor: ver art. 5 desta Lei)"),
+    ("nota_ne", "Art. 14. (N.E. ver art. 5 desta Lei)"),
+    ("colchetes_sem_rotulo", "Art. 14. [ver art. 5 desta Lei]"),
+]
+
+
+@pytest.mark.parametrize("nome,texto", NAO_RESOLVE, ids=[c[0] for c in NAO_RESOLVE])
+def test_b6_classe_nunca_resolve(nome, texto):
+    assert _resolvidas(texto) == set(), nome
+
+
+def test_b6_controles_positivos_da_mesma_forma_continuam_resolvendo():
+    assert _resolvidas("Art. 14. Ver art. 5 desta Lei.") == {(LSA_R, "art. 5º")}
+    assert _resolvidas("Art. 14. Ver art. 5, § 1º, desta Lei.") == {(LSA_R, "art. 5º, § 1º")}
+    assert _resolvidas("Art. 14. Ver art. 5º, inciso I, desta Lei.") == {(LSA_R, "art. 5º, inciso I")}
+    assert _resolvidas("Art. 14. Ver o inciso I do art. 5º desta Lei.") == {(LSA_R, "art. 5º, inciso I")}
+    assert _resolvidas("Art. 14. Ver art. 3º da Lei 8.987/1995.") == {("Lei 8.987/1995", "art. 3º")}
+    assert _resolvidas("Art. 14. O disposto no caput não se aplica.") == {(LSA_R, "art. 14, caput")}
+    assert _resolvidas("Art. 14. O disposto no § 1º deste artigo.") == {(LSA_R, "art. 14, § 1º")}
+
+
+def test_b6_nao_resolvida_preserva_o_texto_e_nao_inventa_alvo_mais_raso():
+    saida = rem.remissoes("Art. 14. Ver art. 5, inc. I, desta Lei.", LSA, lambda w, p: True, "art14")
+    assert [r["resolvida"] for r in saida] == [False] and "art. 5" in saida[0]["texto"]
+    ext = rem.remissoes("Art. 14. Na Lei 8.987/1995, aplica-se o disposto no caput.", LSA, lambda w, p: True, "art14")
+    assert all(r["alvo"]["obra"] is None and r["resolvida"] is False for r in ext)  # nunca a obra própria
+
+
+def test_b6_notas_da_estrutura_do_documento_saem_da_leitura():
+    nota = "(Ver art. 5 desta Lei, conforme texto do editor)"  # forma que nenhum padrão textual reconhece
+    texto = f"Art. 14. O valor é fixado. {nota}"
+    assert _resolvidas(texto) == {(LSA_R, "art. 5º")}
+    assert _resolvidas(texto, notas=(nota,)) == set()
+
+
+def test_b6_nota_editorial_preservada_pelo_parser_planalto_nao_resolve():
+    html = ("<html><body><p>LEI Nº 6.404, DE 15 DE DEZEMBRO DE 1976.</p><p>Dispõe sobre as sociedades por ações.</p>"
+            "<p>Art. 5º O valor é fixado. [Nota editorial: ver art. 6º desta Lei.] (Redação dada pela Lei nº 9.457, "
+            "de 1997)</p><p>Art. 6º Texto.</p></body></html>")
+    doc = parse_planalto(html, base_url="https://www.planalto.gov.br/ccivil_03/leis/")
+    texto = doc.current_text("art5")
+    assert "Nota editorial" in texto  # o parser preserva a nota: o resolvedor é quem a exclui
+    assert _resolvidas(texto, art="art5") == set()
+
+
+def test_b6_texto_cortado_no_limite_nao_resolve_a_remissao_que_toca_o_corte():
+    assert _resolvidas("Art. 5º Ver o art. 15") == {(LSA_R, "art. 15")}
+    assert _resolvidas("Art. 5º Ver o art. 15", truncado=True) == set()  # "art. 151" cortado em "art. 15"
+    assert _resolvidas("Art. 5º Ver o art. 15, § 2", truncado=True) == set()
+    assert _resolvidas("Art. 5º Ver o art. 7º desta Lei. E mais texto.", truncado=True) == {(LSA_R, "art. 7º")}
+
+
+@pytest.mark.parametrize("regex_attr,nome", [
+    ("_RESIDUO", "inciso_sem_palavra"), ("_RESIDUO", "inciso_abreviado"), ("_RESIDUO", "paragrafo_solto_com_inciso"),
+    ("_PREFIXO_RESIDUAL", "inciso_antes_abreviado"), ("_ANEXO_DEPOIS", "anexo_numerado"),
+    ("_ANEXO_DEPOIS", "paragrafo_solto_de_anexo"), ("_DEMONSTRATIVO", "dessa_lei"),
+    ("_DEMONSTRATIVO", "paragrafo_desse_artigo"), ("_NOTA_COLCHETES", "nota_editorial_colchetes"),
+    ("_OBRA_NUMERADA", "lei_minuscula_antes"), ("_OBRA_NUMERADA", "caput_em_contexto_de_lei_numerada"),
+])
+def test_b6_mutantes_sem_cada_cautela_falham_no_oraculo(monkeypatch, regex_attr, nome):
+    import re as _re
+    texto = dict(NAO_RESOLVE)[nome]
+    assert _resolvidas(texto) == set()
+    monkeypatch.setattr(rem, regex_attr, _re.compile(r"(?!x)x"))  # a cautela deixa de existir
+    if regex_attr == "_DEMONSTRATIVO":  # a leitura volta a tratar "dessa/desse" como próprio
+        monkeypatch.setattr(rem, "_PROPRIA", _re.compile(rem._PROPRIA.pattern.replace("desta|deste", "desta|deste|dessa|desse"),
+                                                         rem._PROPRIA.flags))
+    assert _resolvidas(texto) != set(), f"a ausência de {regex_attr} passou despercebida em {nome}"

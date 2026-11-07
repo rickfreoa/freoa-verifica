@@ -6,9 +6,15 @@ obra no mesmo trecho ("artigos 166 e 170, § 2º"), no caminho mais profundo que
 dispositivo citado; `resolvida` só vale quando a obra é identificada sem ambiguidade e o caminho existe no documento
 capturado da obra alvo (decisão do chamador, por `existe`). Na dúvida, `resolvida: false` com o texto preservado.
 
-Não são remissões: anotação editorial (Redação dada, Incluído, Vide, NR...), remissão anafórica ou genérica ("do artigo
-anterior", "na forma da lei", "da mesma Lei": ficam em `referencias_nao_resolvidas`), referência a inciso ou alínea sem
-artigo (o caminho dependeria do contexto) e rubrica do próprio dispositivo ("Art. 14." no início).
+Não são remissões: anotação e nota editorial (Redação dada, Incluído, Vide, NR, "[Nota editorial: ...]"), remissão
+anafórica ou genérica ("do artigo anterior", "na forma da lei", "da mesma Lei", "dessa Lei": ficam em
+`referencias_nao_resolvidas`), referência a inciso ou alínea sem artigo (o caminho dependeria do contexto) e rubrica do
+próprio dispositivo ("Art. 14." no início).
+
+Resolução por classe, não por exemplo: a expressão só é resolvida depois de consumida e validada por inteiro. Qualificador
+não reconhecido depois ou antes do artigo (inciso abreviado ou fora de caixa, faixa de incisos, alínea, item), âmbito de
+anexo, obra externa no contexto da frase ("Conforme a lei 10.406/2002, art. 5"), `dessa/desse`, nota editorial e texto
+cortado no limite do que foi devolvido => `resolvida: false` (na dúvida, abstenção).
 """
 
 from __future__ import annotations
@@ -55,10 +61,26 @@ _PREFIXO = re.compile(
     rf"al[ií]neas?\s+[\"“]?[a-z][\"”]?|caput)\s+d[oa]s?\s+$", re.I)
 
 _PROPRIA = re.compile(
-    r"\s*,?\s*(?:d[aeo]s?\s+)?(?:(?:presente)|(?:desta|deste|dessa|desse|nesta|neste))\s+"
+    r"\s*,?\s*(?:d[aeo]s?\s+)?(?:(?:presente)|(?:desta|deste|nesta|neste))\s+"
     r"(?P<nome>Lei\s+Complementar|Lei|C[óo]digo|Decreto-Lei|Decreto|Medida\s+Provis[óo]ria|Constitui[çc][ãa]o|"
     r"Emenda\s+Constitucional|Resolu[çc][ãa]o|Regulamento|Estatuto|Consolida[çc][ãa]o)\b", re.I)
-_DESTE_ARTIGO = re.compile(r"\s*,?\s*(?:d[eo]ste|neste|d[eo]sse|nesse)\s+artigo\b", re.I)
+_DESTE_ARTIGO = re.compile(r"\s*,?\s*(?:d[eo]ste|neste)\s+artigo\b", re.I)
+_DEMONSTRATIVO = re.compile(r"\s*,?\s*(?:d|n)ess[ae]s?\s+[A-Za-zÀ-ú]", re.I)  # "dessa Lei", "desse artigo": anafórico
+_ANEXO_DEPOIS = re.compile(r"\s*,?\s*(?:d|n)[oa]s?\s+anexos?(?![A-Za-zÀ-ú])(?:\s+(?:[IVXLCDM]+(?![A-Za-zÀ-ú])|\d+|[úu]nico))?",
+                           re.I)
+# qualificador estrutural que a leitura do grupo não consumiu (inciso abreviado ou com outra caixa, faixa, alínea, item)
+_RESIDUO = re.compile(
+    r"\s*,?\s*(?:(?:[Ii]ncisos?|inc\.|[Aa]l[ií]neas?|al\.|[Ll]etras?|[Ii]t(?:em|ens)|[Pp]ar[áa]grafos?|par\.|§§?|[Cc]aput)"
+    r"(?![A-Za-zÀ-ú])|[IVXLCDM]+(?![A-Za-zÀ-ú0-9])|[a-z]\)|\d+\))")
+_PREFIXO_RESIDUAL = re.compile(
+    r"(?:(?<![A-Za-zÀ-ú])(?:[Ii]ncisos?|inc\.|[Aa]l[ií]neas?|al\.|[Ll]etras?|[Ii]t(?:em|ens)|[Cc]aput|[Pp]ar[áa]grafos?|par\.)"
+    r"(?![A-Za-zÀ-ú])[^;:.]{0,25}|§§?\s*\S{1,12}|(?<![A-Za-zÀ-ú])[IVXLCDM]{1,6}(?![A-Za-zÀ-ú0-9]))"
+    r"\s*,?\s*(?:d[oa]s?|n[oa]s?)\s+$")
+_OBRA_NUMERADA = re.compile(
+    r"(?<![A-Za-zÀ-ú])(?:lei(?:\s+complementar)?|decreto(?:-lei)?|medida\s+provis[óo]ria|emenda\s+constitucional|"
+    r"resolu[çc][ãa]o|instru[çc][ãa]o\s+normativa|portaria)\s+(?:n[ºo°.]{0,2}\s*)?\d", re.I)
+_ANEXO = re.compile(r"(?<![A-Za-zÀ-ú])anexos?(?![A-Za-zÀ-ú])", re.I)
+_NOTA_COLCHETES = re.compile(r"\[[^\[\]]*\]")
 _ANAFORICA = re.compile(r"\s*,?\s*(?:d|n)[oa]s?\s+(?:mesm[oa]|referid[oa]|citad[oa]|supracitad[oa]|aludid[oa]|dit[oa]|"
                         r"anterior)\b", re.I)
 _OUTRA_OBRA = re.compile(r"\s*,?\s*d[aeo]s?\s+(?:Lei|Decreto|Medida|C[óo]digo|Constitui|Resolu|Instru|Portaria|"
@@ -75,6 +97,7 @@ _ANOTACAO = re.compile(
     r"Al[ií]nea(?:s)?(?:\s+\w)?|Item|Express[ãa]o|Palavra|Texto|Anexo|Tabela)\"?\b[^()]*?"
     r"\b(?:acrescid|inclu[ií]d|acrescentad|revogad|reda[çc][ãa]o\s+dada|renumerad|vetad|alterad|suprimid|substitu[ií]d)"
     r"\w*\b[^()]*(?:\([^()]*\)[^()]*)*\)"
+    r"|\(\s*(?:Nota|N\.\s?E\.|Obs\.?|Observa[çc][ãa]o|Coment[áa]rio)(?![A-Za-zÀ-ú])[^()]*(?:\([^()]*\)[^()]*)*\)"
     r"|\(\s*NR\s*\)", re.I)
 
 # Natureza da expressão "desta X" por espécie da obra própria: X tem de ser a espécie da obra (ou código/estatuto da lei).
@@ -94,9 +117,19 @@ def _dobra(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).lower()
 
 
-def _mascarar_anotacoes(texto: str) -> str:
-    """Notas editoriais saem da leitura (viram espaços; as posições do texto se mantêm)."""
-    return _ANOTACAO.sub(lambda m: " " * len(m.group(0)), texto)
+def _mascarar_anotacoes(texto: str, notas: tuple[str, ...] = ()) -> str:
+    """Notas editoriais saem da leitura (viram espaços; as posições do texto se mantêm): as anotações que a estrutura do
+    documento já identificou (`notas`), os padrões textuais e todo trecho entre colchetes (nota do editor)."""
+    for nota in notas:
+        if isinstance(nota, str) and nota.strip():
+            texto = texto.replace(nota, " " * len(nota))
+    texto = _ANOTACAO.sub(lambda m: " " * len(m.group(0)), texto)
+    return _NOTA_COLCHETES.sub(lambda m: " " * len(m.group(0)), texto)
+
+
+def _contexto_externo(frase: str) -> bool:
+    """A frase (antes da remissão) já fala de outra obra ou de anexo: a remissão sem obra não herda a própria."""
+    return bool(_REFERENCIA_OBRA.search(frase) or _OBRA_NUMERADA.search(frase) or _ANEXO.search(frase))
 
 
 def _milhar(n: int) -> str:
@@ -273,10 +306,16 @@ def _grupos(t: str, art_proprio: str | None) -> list[_Grupo]:
                 g.duvida = True
             else:
                 g.subs = antes
+        if _PREFIXO_RESIDUAL.search(t[max(0, g.ini - 60):g.ini]):
+            g.duvida = True  # qualificador antes do artigo que a leitura não reconheceu ("inc. I do art. 5")
+        if _RESIDUO.match(t, g.fim):
+            g.duvida = True  # qualificador depois do artigo que a leitura não consumiu ("art. 5, I", "art. 5, inc. I")
+        if (am := _ANEXO_DEPOIS.match(t, g.fim)):
+            g.duvida, g.fim = True, am.end()  # âmbito de anexo: o caminho não é o do corpo da obra
         if _ABERTA.match(t, g.fim):
             g.duvida = True
             g.fim = _ABERTA.match(t, g.fim).end()
-        if _ANAFORICA.match(t, g.fim):
+        if _ANAFORICA.match(t, g.fim) or _DEMONSTRATIVO.match(t, g.fim):
             g.anafora = True
         elif (pm := _PROPRIA.match(t, g.fim)):
             g.proprio, g.fim = True, pm.end()
@@ -334,16 +373,18 @@ def _mesma_obra(a: WorkKey | None, b: WorkKey | None) -> bool:
 
 
 def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = None,
-            *, implicita: bool = True) -> list[dict[str, Any]]:
+            *, implicita: bool = True, notas: tuple[str, ...] = (), truncado: bool = False) -> list[dict[str, Any]]:
     """Remissões do texto, em ordem de aparição, antes da decisão de existência.
 
     Cada item: texto, obra (WorkKey|None), obra_rotulo, caminho (rótulo), path (canônico) e `duvida` (True quando a
     leitura não basta para resolver). `art_proprio` (ex.: 'art14') habilita "no caput", "§ 1º deste artigo" e
     "no § 2º" como referência ao artigo do próprio dispositivo; `implicita` autoriza a remissão sem qualificação de
-    obra a valer como a própria obra (desligada em dispositivo de anexo)."""
+    obra a valer como a própria obra (desligada em dispositivo de anexo). `notas` são as anotações editoriais que a
+    estrutura do documento já identificou; `truncado` marca texto cortado no limite: remissão que toca o corte não
+    resolve (o que veio depois dele não foi devolvido)."""
     if not texto or not isinstance(texto, str):
         return []
-    t = _mascarar_anotacoes(texto)
+    t = _mascarar_anotacoes(texto, tuple(notas))
     itens: list[dict[str, Any]] = []
     inicio_rubrica = re.match(r"\s*\"?Art\.?\s*\d", t)
     grupos = [g for g in _grupos(t, art_proprio) if not (inicio_rubrica and g.ini == 0)]
@@ -369,16 +410,21 @@ def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = 
                 duvida = True
         else:
             fr = t[_inicio_da_frase(t, g.ini):g.ini]
-            if (not implicita or obra_propria is None or _REFERENCIA_OBRA.search(fr) or vizinho_explicito(i)):
+            if (not implicita or obra_propria is None or _contexto_externo(fr) or vizinho_explicito(i)):
                 duvida = True
             else:
                 obra = obra_propria
         for path, rotulo in _caminhos(g):
             itens.append({"texto": texto[g.ini:g.fim].strip(), "obra": obra,
                           "obra_rotulo": rotulo_obra(obra) if obra is not None else None,
-                          "caminho": rotulo, "path": path, "duvida": duvida or obra is None})
+                          "caminho": rotulo, "path": path, "duvida": duvida or obra is None, "fim": g.fim})
     if art_proprio:
         itens.extend(_do_proprio_artigo(texto, t, art_proprio, obra_propria, [(g.ini, g.fim) for g in grupos]))
+    if truncado:
+        corte = len(texto.rstrip())
+        for it in itens:
+            if it["fim"] >= corte:
+                it["duvida"] = True
     return itens
 
 
@@ -403,23 +449,31 @@ def _do_proprio_artigo(texto: str, t: str, art_proprio: str, obra: WorkKey | Non
         resto = t[fim:]
         if re.match(r"\s*d[oa]s?\s+(?:art|artigos?)\b", resto, re.I) or _FAIXA_SUB.match(t, fim):
             continue  # a qualificação por artigo pertence ao grupo do artigo (ou é faixa não resolvida)
+        if _DEMONSTRATIVO.match(t, fim):
+            continue  # "§ 1º desse artigo": anafórico, nunca o artigo do próprio dispositivo
+        explicito = False
         if (m := _DESTE_ARTIGO.match(t, fim)):
-            fim = m.end()
+            fim, explicito = m.end(), True
         elif nome == "caput" and re.match(r"\s*d[oa]\s+(?:mesm|referid)", resto, re.I):
             continue
+        externo = bool(_OUTRA_OBRA.match(t, fim) or _ANEXO_DEPOIS.match(t, fim))  # "do parágrafo único da Lei X"
+        externo = externo or (not explicito and _contexto_externo(t[_inicio_da_frase(t, ini):ini]))  # "Na Lei X, ... caput"
+        duvida = externo or bool(_RESIDUO.match(t, fim))  # "§ 2º, I": o inciso não foi consumido
         for p in _caminhos(_Grupo(ini, fim, [(n, suf)], [(nome, vals)])):
-            out.append({"texto": texto[ini:fim].strip(), "obra": obra, "obra_rotulo": rotulo_obra(obra),
-                        "caminho": p[1], "path": p[0], "duvida": False})
+            out.append({"texto": texto[ini:fim].strip(), "obra": None if externo else obra,
+                        "obra_rotulo": None if externo else rotulo_obra(obra),
+                        "caminho": p[1], "path": p[0], "duvida": duvida, "fim": fim})
     return out
 
 
 def remissoes(texto: str, obra_propria: WorkKey | None, existe: Callable[[WorkKey, str], bool],
-              art_proprio: str | None = None, *, implicita: bool = True) -> list[dict[str, Any]]:
+              art_proprio: str | None = None, *, implicita: bool = True, notas: tuple[str, ...] = (),
+              truncado: bool = False) -> list[dict[str, Any]]:
     """`remissoes[]` do contrato: {texto, alvo: {obra, caminho}, resolvida}. `existe(obra, path)` consulta só o que já
     está capturado (sem rede) e nunca levanta; falha dela é inexistência."""
     saida: list[dict[str, Any]] = []
     vistos: set[tuple] = set()
-    for it in extrair(texto, obra_propria, art_proprio, implicita=implicita):
+    for it in extrair(texto, obra_propria, art_proprio, implicita=implicita, notas=notas, truncado=truncado):
         resolvida = False
         if not it["duvida"] and it["obra"] is not None and it["obra_rotulo"] is not None:
             try:
