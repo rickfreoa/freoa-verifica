@@ -237,3 +237,8 @@ def planalto_offline(monkeypatch, proibir_rede):
         return original(self, connector_id)
 
     monkeypatch.setattr(Verifica, "_get", _get)
+
+
+def pytest_collection_modifyitems(items):
+    """O sentinela do gancho de auditoria roda por último: só então a ausência do gancho no processo vale como prova."""
+    items.sort(key=lambda i: i.name == "test_sentinela_nenhum_gancho_de_auditoria_no_processo_do_pytest")
