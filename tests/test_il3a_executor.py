@@ -16,8 +16,12 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.repositorio  # carrega o script do checkout (a wheel instalada não traz scripts/)
+
 RAIZ = Path(__file__).resolve().parents[1]
 SCRIPT = RAIZ / "scripts" / "porta_l.py"
+if not SCRIPT.exists():  # job da wheel: sem checkout
+    pytest.skip("exige o checkout (scripts/)", allow_module_level=True)
 
 
 def _carregar():

@@ -13,8 +13,6 @@ from freoa_verifica import qualificacao as q
 from freoa_verifica.connectors.base import registry
 from freoa_verifica.service import Verifica
 
-RAIZ = Path(__file__).resolve().parents[1]
-ARQ = RAIZ / "freoa_verifica" / "data" / "qualificacao_rotas.json"
 
 # oráculo escrito à mão (rótulos da emenda IL, seção 6; capacidades (a)-(e) e transversais da seção 5, IL.3)
 CAPS_ESPERADAS = {
@@ -32,7 +30,8 @@ ROTAS_ESPERADAS = {("camara_atualizado", "camara_legin", "camara_atualizado"),
 
 
 def _dados():
-    return json.loads(ARQ.read_text(encoding="utf-8"))
+    from importlib.resources import files  # o dado do pacote instalado, sem caminho do checkout
+    return json.loads(files("freoa_verifica").joinpath("data/qualificacao_rotas.json").read_text(encoding="utf-8"))
 
 
 def test_dado_cobre_rotas_e_capacidades_todas_nao_apuradas():
@@ -71,7 +70,7 @@ def test_estado_diferente_de_nao_apurada_exige_relatorio_e_versao_por_hash():
     ruim = copy.deepcopy(d)
     ruim["rotas"][0]["capacidades"]["remissoes"].update(estado="aprovada")
     assert any("sem relatório" in e for e in q.validar(ruim))
-    ruim["rotas"][0]["capacidades"]["remissoes"].update(versao="1.4.0a3", relatorio="docs/x.md", relatorio_sha256="abc")
+    ruim["rotas"][0]["capacidades"]["remissoes"].update(versao="1.4.0a3", relatorio="relatorios/x.md", relatorio_sha256="abc")
     assert any("sem relatório" in e for e in q.validar(ruim))  # hash que não é SHA-256 não vale
     ruim["rotas"][0]["capacidades"]["remissoes"].update(relatorio_sha256="a" * 64)
     assert q.validar(ruim) == []
@@ -111,10 +110,11 @@ def test_carregar_fecha_em_nao_apurada_sem_referencia_verificavel():
 @pytest.mark.repositorio
 def test_estado_publicado_so_com_relatorio_do_repositorio_conferido_por_hash():
     """No checkout: todo estado diferente de nao_apurada aponta relatório existente cujo SHA-256 confere."""
+    raiz = Path(__file__).resolve().parents[1]
     for r in _dados()["rotas"]:
         for nome, item in r["capacidades"].items():
             if item["estado"] == "nao_apurada":
                 continue
-            rel = RAIZ / item["relatorio"]
+            rel = raiz / item["relatorio"]
             assert rel.is_file(), f"{r['rota']}.{nome}: relatório ausente"
             assert hashlib.sha256(rel.read_bytes()).hexdigest() == item["relatorio_sha256"]
