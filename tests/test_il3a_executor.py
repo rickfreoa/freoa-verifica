@@ -1169,22 +1169,19 @@ def test_b4_execucao_qualificante_sobre_o_desenvolvimento_com_a_fachada_real(tmp
 
 
 def test_b5_barra_envio_conexao_e_resolucao_inclusive_em_socket_criado_antes_da_guarda():
-    # nenhum TCP, nem loopback: o socket é UDP, criado antes da guarda e nunca conectado; os endereços são inválidos
-    u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        with ex.BloqueioDeRede() as bl:
-            acoes = (lambda: u.sendto(b"x", ("127.0.0.1", 9)), lambda: u.connect(("127.0.0.1", 9)),
-                     lambda: u.connect_ex(("127.0.0.1", 9)), lambda: u.send(b"x"), lambda: u.sendall(b"x"),
-                     lambda: socket.gethostbyname("example.invalid"), lambda: socket.gethostbyaddr("127.0.0.1"),
-                     lambda: socket.getnameinfo(("127.0.0.1", 9), 0))
-            for acao in acoes:
-                with pytest.raises(ex.RedeBloqueada):
-                    acao()
-            assert len(bl.tentativas) >= 8
-            with pytest.raises(ex.ViolacaoDeRede):
-                bl.verificar()
-    finally:
-        u.close()
+    # nenhum soquete do sistema: `__new__` sem `__init__` não cria descritor; os endereços são inválidos
+    u = socket.socket.__new__(socket.socket)  # sem descritor: não há o que fechar
+    with ex.BloqueioDeRede() as bl:
+        acoes = (lambda: u.sendto(b"x", ("127.0.0.1", 9)), lambda: u.connect(("127.0.0.1", 9)),
+                 lambda: u.connect_ex(("127.0.0.1", 9)), lambda: u.send(b"x"), lambda: u.sendall(b"x"),
+                 lambda: socket.gethostbyname("example.invalid"), lambda: socket.gethostbyaddr("127.0.0.1"),
+                 lambda: socket.getnameinfo(("127.0.0.1", 9), 0))
+        for acao in acoes:
+            with pytest.raises(ex.RedeBloqueada):
+                acao()
+        assert len(bl.tentativas) >= 8
+        with pytest.raises(ex.ViolacaoDeRede):
+            bl.verificar()
 
 
 def test_r2_4_tipo_c_socket_do_modulo__socket_esta_sob_a_guarda():
@@ -1194,7 +1191,7 @@ def test_r2_4_tipo_c_socket_do_modulo__socket_esta_sob_a_guarda():
     assert metodos == ["connect", "connect_ex", "send", "sendall", "sendto"]
     with ex.BloqueioDeRede() as bl:
         assert _socket.socket is not original
-        s = _socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s = _socket.socket.__new__(_socket.socket)  # sem `__init__`: nenhum soquete do sistema
         try:
             # o controle do auditor: endereço inválido faria a primitiva C falhar com TypeError, sem a guarda
             with pytest.raises(ex.RedeBloqueada):
@@ -1211,12 +1208,10 @@ def test_r2_4_tipo_c_socket_do_modulo__socket_esta_sob_a_guarda():
         with pytest.raises(ex.ViolacaoDeRede):
             bl.verificar()
     assert _socket.socket is original  # restaurado
-    s = _socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        with pytest.raises(TypeError):  # fora da guarda a primitiva C volta a ser a de verdade (falha antes de enviar)
-            s.sendto(b"x", object())
-    finally:
-        s.close()
+    s = _socket.socket.__new__(_socket.socket)
+    with pytest.raises((TypeError, OSError)) as exc:  # fora da guarda a primitiva C é a de verdade (falha antes de enviar)
+        s.sendto(b"x", object())
+    assert not isinstance(exc.value, ex.RedeBloqueada)
 
 
 def test_b5_restaura_o_que_herdava_do_tipo_base_sem_fixar_copia():
@@ -1329,3 +1324,139 @@ def test_b5_modo_local_sem_tentativa_nenhuma_registra_rede_bloqueada(tmp_path, m
                   "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--sintetico"])
     rel = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
     assert rc == 1 and rel["rede_bloqueada"] is True and rel["tentativas_de_rede"] == []
+
+
+# --- R3-5: gancho de auditoria (`sys.addaudithook`) como mecanismo que impõe a ausência de saída -----------------------
+# O gancho não pode ser removido do processo: estes testes rodam em SUBPROCESSO. Nenhum soquete real é criado, nem UDP nem
+# loopback: os eventos são disparados por `sys.audit` sintético, ou por construção com família de endereços inválida (o
+# interpretador dispara `socket.__new__` ANTES de pedir o descritor ao sistema, que recusa a família: nada é criado, com
+# ou sem o gancho).
+
+_PRELUDIO = r"""
+import importlib.util, json, socket, sys, _socket
+spec = importlib.util.spec_from_file_location("porta_l_sonda", sys.argv[1])
+ex = importlib.util.module_from_spec(spec)
+sys.modules["porta_l_sonda"] = ex
+spec.loader.exec_module(ex)
+
+
+def tenta(f):
+    try:
+        f()
+    except ex.RedeBloqueada:
+        return "bloqueada"
+    except BaseException as e:
+        return type(e).__name__
+    return "passou"
+
+
+def familia_invalida(t):
+    return lambda: t(65535, socket.SOCK_STREAM)
+"""
+
+_SONDA = _PRELUDIO + r"""
+saida = {}
+tipos = {"socket.socket": socket.socket, "socket.SocketType": socket.SocketType, "_socket.socket": _socket.socket}
+saida["alias_do_tipo_c"] = socket.SocketType is socket.socket.__base__
+saida["antes"] = {n: tenta(familia_invalida(t)) for n, t in tipos.items()}
+referencia_antiga = _socket.socket
+with ex.BloqueioDeRede() as g:
+    dentro = {**tipos, "_socket.socket(dentro)": _socket.socket, "referencia_guardada_antes": referencia_antiga,
+              "base_de_socket.socket": socket.socket.__base__}
+    saida["dentro"] = {n: tenta(familia_invalida(t)) for n, t in dentro.items()}
+    saida["eventos"] = {e: tenta(lambda e=e: sys.audit(e, None, ("203.0.113.1", 9), 0, 0, 0)) for e in ex.EVENTOS_DE_REDE}
+    saida["af_unix"] = (tenta(lambda: sys.audit("socket.__new__", None, socket.AF_UNIX, 1, 0))
+                        if hasattr(socket, "AF_UNIX") else "n/a")
+    saida["evento_alheio"] = tenta(lambda: sys.audit("open", "x", "r", 0))
+    saida["tentativas"] = len(g.tentativas)
+    try:
+        g.verificar()
+        saida["verificar"] = "nao_levantou"
+    except ex.ViolacaoDeRede:
+        saida["verificar"] = "ViolacaoDeRede"
+    g.tentativas.clear()
+    g.autoteste()
+    saida["autoteste"] = "ok"
+saida["depois"] = {e: tenta(lambda e=e: sys.audit(e, None, ("203.0.113.1", 9), 0, 0, 0)) for e in ex.EVENTOS_DE_REDE}
+saida["depois_construcao"] = {n: tenta(familia_invalida(t)) for n, t in tipos.items()}
+print("SAIDA=" + json.dumps(saida))
+"""
+
+_MUTANTE = _PRELUDIO + r"""
+res = {}
+todos = tuple(ex.EVENTOS_DE_REDE)
+for evento in todos:
+    ex._EVENTOS_BARRADOS = tuple(e for e in todos if e != evento)  # o gancho passa a ignorar este evento
+    try:
+        with ex.BloqueioDeRede() as g:
+            g.autoteste()
+        res[evento] = "autoteste_passou"
+    except ex.ViolacaoDeRede as exc:
+        res[evento] = "falhou:" + str(exc)
+ex._EVENTOS_BARRADOS = ()  # o gancho não barra nada
+try:
+    with ex.BloqueioDeRede() as g:
+        g.autoteste()
+    res["nenhum"] = "autoteste_passou"
+except ex.ViolacaoDeRede as exc:
+    res["nenhum"] = "falhou:" + str(exc)
+print("SAIDA=" + json.dumps(res))
+"""
+
+
+def _rodar_sonda(tmp_path, corpo):
+    import subprocess
+    prog = tmp_path / "sonda.py"
+    prog.write_text(corpo, encoding="utf-8")
+    r = subprocess.run([sys.executable, "-B", str(prog), str(SCRIPT)], capture_output=True, text=True, timeout=120,
+                       cwd=str(tmp_path))
+    linhas = [ln for ln in r.stdout.splitlines() if ln.startswith("SAIDA=")]
+    assert r.returncode == 0 and linhas, (r.returncode, r.stdout[-2000:], r.stderr[-2000:])
+    return json.loads(linhas[0][len("SAIDA="):])
+
+
+def test_r3_5_gancho_de_auditoria_barra_todo_evento_e_todo_alias_do_tipo_c(tmp_path):
+    s = _rodar_sonda(tmp_path, _SONDA)
+    assert s["alias_do_tipo_c"] is True  # `socket.SocketType` é o tipo C original (o escape apontado pelo auditor)
+    # controle: sem guarda a construção com família inválida falha por conta do sistema (não é a barreira) e nada é criado
+    assert set(s["antes"].values()) == {"OSError"}
+    # com guarda: a barreira é o gancho, por qualquer alias, inclusive o tipo C original e a referência guardada antes
+    assert set(s["dentro"]) >= {"socket.socket", "socket.SocketType", "_socket.socket", "referencia_guardada_antes",
+                                "base_de_socket.socket"}
+    assert set(s["dentro"].values()) == {"bloqueada"}, s["dentro"]
+    assert set(s["eventos"].values()) == {"bloqueada"}
+    assert set(s["eventos"]) >= {"socket.__new__", "socket.bind", "socket.connect", "socket.sendto", "socket.sendmsg",
+                                 "socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr",
+                                 "socket.getnameinfo"}
+    assert s["af_unix"] in ("passou", "n/a")  # soquete local do sistema, sem rede, não é barrado
+    assert s["evento_alheio"] == "passou"  # só eventos de rede
+    assert s["tentativas"] >= len(s["eventos"]) + len(s["dentro"])  # toda tentativa foi registrada (falha fechada)
+    assert s["verificar"] == "ViolacaoDeRede" and s["autoteste"] == "ok"
+    # o gancho não sai do processo, mas fora da guarda é inerte
+    assert set(s["depois"].values()) == {"passou"}
+    assert set(s["depois_construcao"].values()) == {"OSError"}
+
+
+def test_r3_5_autoteste_inclui_um_evento_por_entrada_e_os_tres_aliases():
+    nomes = {n for n, _ in ex.BloqueioDeRede().provas()}
+    assert {f"auditoria:{e}" for e in ex.EVENTOS_DE_REDE} <= nomes
+    assert {"auditoria:socket.socket(familia inválida)", "auditoria:socket.SocketType(familia inválida)",
+            "auditoria:_socket.socket(familia inválida)"} <= nomes
+
+
+def test_r3_5_mutantes_do_gancho_falham_o_autoteste_e_nomeiam_o_evento(tmp_path):
+    """Cada evento, um a um, deixa de ser barrado pelo gancho; o autoteste falha e o nomeia. Sem nenhum evento, falha."""
+    res = _rodar_sonda(tmp_path, _MUTANTE)
+    for evento, resultado in res.items():
+        assert resultado.startswith("falhou:"), (evento, resultado)
+        if evento != "nenhum":
+            assert f"auditoria:{evento}" in resultado, (evento, resultado)
+    assert set(res) == {*ex.EVENTOS_DE_REDE, "nenhum"}
+
+
+def test_r3_5_gancho_instalado_uma_vez_e_inerte_sem_guarda():
+    import ast
+    fonte = SCRIPT.read_text(encoding="utf-8")
+    assert len([n for n in ast.walk(ast.parse(fonte)) if isinstance(n, ast.Call)
+                and getattr(n.func, "attr", "") == "addaudithook"]) == 1
+    assert ex._GUARDAS_ATIVAS == []

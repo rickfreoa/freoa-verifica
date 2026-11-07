@@ -96,10 +96,44 @@ def _modulo_opcional(nome: str) -> Any:
         return None
 
 
+# Mecanismo PRINCIPAL (R3-5): gancho de auditoria do CPython (PEP 578). O interpretador dispara o evento em TODA operação de
+# rede, qualquer que seja o nome, alias ou referência usada para chegar ao tipo C (`socket.socket`, `socket.SocketType`,
+# `_socket.socket`, referência guardada antes da guarda): o gancho é por EVENTO. `sys.addaudithook` não tem remoção; por
+# isso o gancho é instalado uma vez e só age enquanto há uma guarda ativa (fora dela é inerte). Registra a tentativa e
+# aborta (`RedeBloqueada`); `verificar()` falha o executor mesmo que o chamador tenha engolido a exceção. A substituição
+# de métodos abaixo é camada adicional (também barra a chamada de módulo antes do evento) e não é a garantia.
+EVENTOS_DE_REDE = ("socket.__new__", "socket.bind", "socket.connect", "socket.sendto", "socket.sendmsg",
+                   "socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr", "socket.getnameinfo",
+                   "http.client.connect", "http.client.send", "urllib.Request")
+_EVENTO_COM_SOCKET_NO_ARG0 = ("socket.__new__", "socket.bind", "socket.connect", "socket.sendto", "socket.sendmsg")
+_EVENTOS_BARRADOS = EVENTOS_DE_REDE  # o que o gancho barra (variável própria: o teste de mutante a reduz num subprocesso)
+_GUARDAS_ATIVAS: list[Any] = []
+_gancho_instalado = False
+
+
+def _gancho_de_auditoria(evento: str, args: tuple) -> None:
+    if not _GUARDAS_ATIVAS or evento not in _EVENTOS_BARRADOS:
+        return
+    if evento == "socket.__new__" and len(args) > 1 and args[1] == getattr(socket, "AF_UNIX", None):
+        return  # soquete local do sistema (sem rede): a criação de AF_INET/AF_INET6/outros é que é barrada
+    resto = args[1:] if evento in _EVENTO_COM_SOCKET_NO_ARG0 else args
+    for guarda in list(_GUARDAS_ATIVAS):
+        guarda.tentativas.append(f"audit:{evento}:{resto!r}"[:200])
+    raise RedeBloqueada(f"rede bloqueada no modo local (evento de auditoria {evento})")
+
+
+def _instalar_gancho() -> None:
+    global _gancho_instalado
+    if not _gancho_instalado:
+        sys.addaudithook(_gancho_de_auditoria)
+        _gancho_instalado = True
+
+
 class BloqueioDeRede:
-    """Bloqueia no processo toda primitiva de saída (conexão, envio, resolução de nomes); guarda cada tentativa.
-    `verificar()` levanta se houve alguma, mesmo que o código chamado tenha engolido a exceção. O autoteste exerce
-    cada primitiva, com argumento que falharia antes de qualquer envio, e falha se qualquer uma escapar."""
+    """Bloqueia no processo toda operação de saída (criação de soquete de rede, bind, conexão, envio, resolução de nomes)
+    pelo gancho de auditoria e, em camada adicional, pela substituição das primitivas; guarda cada tentativa.
+    `verificar()` levanta se houve alguma, mesmo que o código chamado tenha engolido a exceção. O autoteste exerce cada
+    evento e cada primitiva, sem criar soquete nem produzir tráfego, e falha se qualquer uma escapar."""
 
     # primitivas de saída bloqueadas: métodos de socket (inclusive os herdados do tipo C), funções de módulo e SSL
     _SOCKET = ("connect", "connect_ex", "send", "sendall", "sendto", "sendmsg", "sendfile")
@@ -128,6 +162,8 @@ class BloqueioDeRede:
         return [(o, n) for o, n in alvos if hasattr(o, n)]
 
     def __enter__(self):
+        _instalar_gancho()
+        _GUARDAS_ATIVAS.append(self)
         for obj, atributo in self._alvos():
             self._orig.append((obj, atributo, getattr(obj, atributo), atributo in vars(obj)))
             setattr(obj, atributo, self._barrar(f"{getattr(obj, '__name__', 'socket')}.{atributo}"))
@@ -142,6 +178,8 @@ class BloqueioDeRede:
         return self
 
     def __exit__(self, *exc):
+        if self in _GUARDAS_ATIVAS:
+            _GUARDAS_ATIVAS.remove(self)
         for obj, atributo, original, proprio in reversed(self._orig):
             if proprio:
                 setattr(obj, atributo, original)
@@ -162,11 +200,8 @@ class BloqueioDeRede:
 
         def em(tipo, metodo, *args):
             def chamar():
-                s = tipo(socket.AF_INET, socket.SOCK_DGRAM)  # `_socket.socket` não é gerenciador de contexto
-                try:
-                    getattr(s, metodo)(*args)
-                finally:
-                    s.close()
+                # `__new__` sem `__init__`: objeto sem descritor de arquivo (nenhum soquete do sistema é criado)
+                getattr(tipo.__new__(tipo), metodo)(*args)
             return chamar
 
         args_socket = {"connect": (nada,), "connect_ex": (nada,), "send": (b"x",), "sendall": (b"x",),
@@ -189,6 +224,22 @@ class BloqueioDeRede:
             for n in self._SSL:
                 if hasattr(ssl.SSLSocket, n):
                     provas.append((f"ssl.{n}", lambda n=n: getattr(ssl.SSLSocket, n)(nada, b"x")))
+        # gancho de auditoria: cada evento é disparado de forma sintética (`sys.audit`), sem soquete e sem tráfego
+        sintetico = {"socket.__new__": (None, socket.AF_INET, socket.SOCK_STREAM, 0),
+                     "socket.bind": (None, ("203.0.113.1", 9)), "socket.connect": (None, ("203.0.113.1", 9)),
+                     "socket.sendto": (None, ("203.0.113.1", 9)), "socket.sendmsg": (None, ("203.0.113.1", 9)),
+                     "socket.getaddrinfo": ("example.invalid", 80, 0, 0, 0, 0), "socket.gethostbyname": ("example.invalid",),
+                     "socket.gethostbyaddr": ("203.0.113.1",), "socket.getnameinfo": (("203.0.113.1", 9), 0),
+                     "http.client.connect": (None, "example.invalid", 80), "http.client.send": (None, b"x"),
+                     "urllib.Request": ("http://example.invalid/", None, {}, "GET")}
+        for evento in EVENTOS_DE_REDE:
+            provas.append((f"auditoria:{evento}", lambda e=evento: sys.audit(e, *sintetico[e])))
+        # o evento de criação dispara pelo tipo C, qualquer que seja o alias; a família inválida faz o sistema recusar
+        # a criação, de modo que nenhum soquete existe com ou sem o gancho
+        for rotulo, tipo in (("socket.socket", socket.socket), ("socket.SocketType", getattr(socket, "SocketType", None)),
+                             ("_socket.socket", getattr(_socket, "socket", None))):
+            if tipo is not None:
+                provas.append((f"auditoria:{rotulo}(familia inválida)", lambda t=tipo: t(65535, socket.SOCK_STREAM)))
         return provas
 
     def autoteste(self) -> None:
