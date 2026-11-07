@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import importlib
 import importlib.util
 import inspect
 import json
@@ -87,6 +88,13 @@ class ViolacaoDeRede(RuntimeError):
     """Tentativa de rede detectada no modo local: o executor aborta (falha fechada)."""
 
 
+def _modulo_opcional(nome: str) -> Any:
+    try:
+        return importlib.import_module(nome)
+    except ImportError:  # plataforma sem o módulo: não há primitiva a barrar
+        return None
+
+
 class BloqueioDeRede:
     """Bloqueia no processo toda primitiva de saída (conexão, envio, resolução de nomes); guarda cada tentativa.
     `verificar()` levanta se houve alguma, mesmo que o código chamado tenha engolido a exceção. O autoteste exerce
@@ -111,16 +119,11 @@ class BloqueioDeRede:
     def _alvos(self) -> list[tuple[Any, str]]:
         alvos: list[tuple[Any, str]] = [(socket.socket, n) for n in self._SOCKET]
         alvos += [(socket, n) for n in self._MODULO]
-        try:
-            import _socket
+        _socket, ssl = _modulo_opcional("_socket"), _modulo_opcional("ssl")
+        if _socket is not None:
             alvos += [(_socket, n) for n in self._MODULO if n != "create_connection" and hasattr(_socket, n)]
-        except ImportError:  # pragma: no cover
-            pass
-        try:
-            import ssl
+        if ssl is not None:
             alvos += [(ssl.SSLSocket, n) for n in self._SSL if hasattr(ssl.SSLSocket, n)]
-        except ImportError:  # pragma: no cover
-            pass
         return [(o, n) for o, n in alvos if hasattr(o, n)]
 
     def __enter__(self):
@@ -159,30 +162,28 @@ class BloqueioDeRede:
             ("socket.gethostbyaddr", lambda s: socket.gethostbyaddr("127.0.0.1")),
             ("socket.getnameinfo", lambda s: socket.getnameinfo(alvo, 0)),
         ]
-        try:
-            import _socket
+        _socket, ssl = _modulo_opcional("_socket"), _modulo_opcional("ssl")
+        if _socket is not None:
             provas.append(("_socket.getaddrinfo", lambda s: _socket.getaddrinfo("example.invalid", 80)))
-        except ImportError:  # pragma: no cover
-            pass
-        try:
-            import ssl
+        if ssl is not None:
             for n in self._SSL:
                 if hasattr(ssl.SSLSocket, n):
                     provas.append((f"ssl.{n}", lambda s, n=n: getattr(ssl.SSLSocket, n)(s, b"x")))
-        except ImportError:  # pragma: no cover
-            pass
         escaparam: list[str] = []
         for nome, prova in provas:
-            if nome.startswith("socket.") and not hasattr(socket.socket, nome.split(".", 1)[1])                     and not hasattr(socket, nome.split(".", 1)[1]):
+            primitiva = nome.split(".", 1)[1]
+            if nome.startswith("socket.") and not (hasattr(socket.socket, primitiva) or hasattr(socket, primitiva)):
                 continue  # primitiva inexistente nesta plataforma: nada a barrar
+            barrada = False
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 try:
                     prova(s)
                 except RedeBloqueada:
-                    continue
-                except Exception:  # noqa: BLE001 - qualquer outra coisa é uma primitiva que escapou da barreira
-                    pass
-            escaparam.append(nome)
+                    barrada = True
+                except Exception as exc:  # noqa: BLE001 - outra coisa que não a barreira: a primitiva escapou
+                    nome = f"{nome} ({type(exc).__name__})"
+            if not barrada:
+                escaparam.append(nome)
         self.tentativas.clear()
         if escaparam:
             raise ViolacaoDeRede(f"o bloqueio de rede não está efetivo ({', '.join(escaparam)}); o executor não roda no "

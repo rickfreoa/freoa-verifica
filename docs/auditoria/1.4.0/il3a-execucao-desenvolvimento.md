@@ -1,23 +1,24 @@
 # IL.3-a: execução do executor no conjunto de desenvolvimento (DIAGNÓSTICO, não apuração)
 
-Autor: codificador (Sonnet), 06/11/2026, ramo `feat/il3a-executor`. Este documento registra a execução do executor `scripts/porta_l.py` sobre o conjunto de desenvolvimento congelado, em modo local, com home temporário vazio. **Não é apuração**: a matriz de capacidades por rota continua `nao_apurada` em todas as rotas e capacidades (`freoa_verifica/data/qualificacao_rotas.json`), e a ativação ao vivo da Câmara é a trilha IL.3-b. Nenhum estado de aprovação ou reprovação aqui vale como qualificação de capacidade; a apuração é a IL.3-c (emenda IL, seção 5, IL.3).
+Autor: codificador (Sonnet), 06/11/2026, ramo `feat/il3a-executor`; reexecutado e revisto na rodada 1 de correção (07/11/2026, achados B1 a B9 do parecer do PR #37), depois das correções do executor. Este documento registra a execução do executor `scripts/porta_l.py` sobre o conjunto de desenvolvimento congelado, em modo local, com home temporário vazio. **Não é apuração**: a matriz de capacidades por rota continua `nao_apurada` em todas as rotas e capacidades (`freoa_verifica/data/qualificacao_rotas.json`), e a ativação ao vivo da Câmara é a trilha IL.3-b. Nenhum estado de aprovação ou reprovação aqui vale como qualificação de capacidade; a apuração é a IL.3-c (emenda IL, seção 5, IL.3).
 
 ## Comando e insumos
 
 ```
 python -I -X utf8 scripts/porta_l.py --conjunto tests/porta_l/desenvolvimento.jsonl \
-    --mutantes tests/porta_l/mutantes.jsonl --home C:\dev\tmp\il3a-home --modo local \
-    --saida C:\dev\tmp\il3a-desenvolvimento.json
+    --mutantes tests/porta_l/mutantes.jsonl --home C:\dev\tmp\il3a-r1-home --modo local \
+    --saida C:\dev\tmp\il3a-r1-desenvolvimento.json
 ```
 
 | Item | Valor |
 |---|---|
-| Ramo / commit do executor | `feat/il3a-executor` @ `97d365f` (base `main` @ `3cbb14c`) |
+| Ramo / commit do executor | `feat/il3a-executor`, executor da rodada 1 de correção (base `main` @ `3cbb14c`) |
+| Natureza da execução | **qualificante** pelo critério do executor (congelamento normativo `il1-congelamento.md`, SHA-256 `ec8702b7af393958877393b6a539a076c69e9539ffcd04fb148f0b0453264d5b`, serviço real, sem `--sintetico`), mas **diagnóstica**: home vazio, sem apuração |
 | Conjunto | `tests/porta_l/desenvolvimento.jsonl`, SHA-256 `2fb75d158f197a474e753796e2d621ba67f5200413ef0121daeb5ae6873517b1` (52 casos), conferido contra `il1-congelamento.md` pelo executor |
 | Mutantes | `tests/porta_l/mutantes.jsonl`, SHA-256 `1f791fc1479d1a9d308b748a022adb69b8738435e5a87d37385f56f301e6afd3` (117), conferido |
-| Home | `C:\dev\tmp\il3a-home`, recém-criado e **vazio** (sem acervo, sem snapshot, sem capturas) |
+| Home | `C:\dev\tmp\il3a-r1-home`, recém-criado e **vazio** (sem acervo, sem snapshot, sem capturas) |
 | Modo | `local`: rede bloqueada no processo, `FV_OFFLINE=1`; `tentativas_de_rede: []`, `rede_bloqueada: true` |
-| Relatório integral | `C:\dev\tmp\il3a-desenvolvimento.json` (fora do repositório), SHA-256 `31462c5ea15dd490a9f6d1dbfbfabfc7f986fd4eabca5e49f0653449a1e67b3b` |
+| Relatório integral | `C:\dev\tmp\il3a-r1-desenvolvimento.json` (fora do repositório), SHA-256 `37a5e80314d7a3673ada059ff84fcefcf6acd66e0f0bf0c5cce5084650359e55`; declara `qualificante: true`, `rede_bloqueada: true`, `tentativas_de_rede: []` e os hashes dos MESMOS bytes lidos uma vez e conferidos (conjunto, mutantes e congelamento) |
 | Código de saída | 1 (alguma capacidade reprovada), como esperado com home vazio |
 
 ## Resultado
@@ -47,11 +48,12 @@ A matriz não fecha alguns pontos; o executor adota a leitura mais restritiva po
 
 1. **(ii) literal.** `status: encontrada` com `texto` diferente do gabarito é confirmação indevida em toda chamada de obtenção, inclusive quando o texto vem truncado (`truncado: true`): a matriz não abre exceção para texto honestamente marcado como truncado.
 2. **(b), "sem truncamento em 100% das normas grandes".** Vale para todos os casos (b) de tipo `texto` com `norma_grande`, não só os representantes; caso que não devolve texto não prova ausência de truncamento e reprova o item.
-3. **(c), "100% dos casos sem fundamento da data devolvidos como não verificados, com motivo".** Vale para todos os casos de tipo `nao_verificado_para_D` (não só os representantes) e exige `text` e `temporal` em `unknown`, ambos com `reason_code` em `motivos_aceitos`; a conferência da cadeia só decide o acerto do caso, não essa condição.
-4. **Cadeia e última versão anterior.** `ultima_versao_oficial_anterior` tem de existir, com data anterior a D; a cadeia tem de ter os mesmos atos, na mesma ordem, e cada data de publicação a até 45 dias da data do `gabarito.cadeia` (a mesma folga que o validador congelado admite entre ato e publicação).
+3. **(c), "100% dos casos sem fundamento da data devolvidos como não verificados, com motivo".** Vale para todos os casos de tipo `nao_verificado_para_D` (não só os representantes) e exige `text` e `temporal` em `unknown`, ambos com `reason_code` em `motivos_aceitos`; a conferência da cadeia só decide o acerto do caso, não essa condição (confirmada pelo parecer da rodada 1, com a ressalva de que o confronto documental decide o acerto).
+4. **Cadeia e última versão anterior (corrigida na rodada 1; a leitura anterior, com folga de 45 dias, foi recusada pelo parecer).** Sem tolerância de data: `ultima_versao_oficial_anterior` é confrontada com `gabarito.ultima_versao_anterior` (data idêntica, anterior a D; identificação do ato quando o gabarito não é o original; texto, caminho do dispositivo pedido e evidência identificável), e a cadeia com `gabarito.cadeia` (mesmos atos, mesma ordem, data de publicação idêntica, e a entrega documental de cada elo: URL do ato, texto e evidência identificável). Entrega documental incompleta é `parcial`, nunca acerto.
 5. **Mutante "rejeitado".** `renumerado`: nenhuma resposta `encontrada` com o texto do gabarito do caso de origem e nenhum `verified` em `text`, `temporal` ou `vigencia`; `caractere`: `text.status != verified`; `data_trocada`: `text.status` e `temporal.status` diferentes de `verified`. A dimensão `identity` pode ser `verified` num `renumerado` (o destino existe). Mutante não rejeitado ou inexecutável (função fora da fachada pública, parâmetro estranho, caso de origem ausente) conta como confirmação indevida (iv) e reprova tudo.
 6. **Mínimos de composição.** O executor também reprova a capacidade com menos de 8 unidades ou 4 normas, como a matriz exige do conjunto (seção 2), além do que o validador já confere.
-7. **Resultado do caso.** `acerto`, `parcial` (alvos de (e) só em parte; `verified` só numa dimensão em (c); cadeia divergente), `indisponivel` (`indisponivel`, `unavailable`) e `erro`; só `acerto` entra no numerador. O resultado vale pela primeira passada medida; a de aquecimento é descartada e as três medidas alimentam o p95 (posto mais próximo sobre todas as latências medidas da capacidade).
+7. **Resultado do caso.** `acerto`, `parcial` (alvos de (e) só em parte; `verified` só numa dimensão em (c); cadeia divergente), `indisponivel` (`indisponivel`, `unavailable`, `parcial` no estado agregado ou em QUALQUER dimensão da resposta: veto comum, aplicado antes de qualquer acerto, em todas as capacidades e tipos, sem tocar a inspeção de confirmação indevida) e `erro`; só `acerto` entra no numerador. O resultado principal vale pela primeira passada medida, mas **todas** as passadas medidas são examinadas quanto aos itens eliminatórios (a recusa da leitura 7 original, pelo parecer da rodada 1): confirmação indevida em qualquer passada reprova; a de aquecimento é descartada, para desempenho e para o exame, e as três medidas alimentam o p95 (posto mais próximo sobre todas as latências medidas da capacidade).
+8. **Congelamento e execução qualificante (rodada 1).** Só é qualificante a execução com o congelamento normativo do repositório (mesmo caminho e bytes de `il1-congelamento.md`), a fachada real e sem `--sintetico`; `--congelamento` alheio exige `--sintetico` e sai `NÃO QUALIFICANTE` no relatório (e na tabela reduzida do guardião). Cada entrada é lida uma única vez; os bytes conferidos são os analisados e os declarados no relatório. O bloqueio de rede cobre construção, uso e fechamento do serviço e as primitivas de saída (`connect`, `connect_ex`, `send`, `sendall`, `sendto`, `sendmsg`, `sendfile`, resolução de nomes, SSL), com autoteste por primitiva.
 
 ## Estado da matriz por rota
 
