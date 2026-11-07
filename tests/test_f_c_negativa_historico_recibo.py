@@ -112,7 +112,7 @@ def test_c1_obra_ausente_do_acervo_offline_e_cobertura_nao_inexistente(svc):
     assert obtencao.pop("run_id")
     assert obtencao == {"status": "indisponivel", "motivo": "COBERTURA", "fundamento_temporal": None,
         "correspondencia_textual": None, "versao": "vigente", "ultima_versao_oficial_anterior": None,
-        "cadeia_alteracoes": [], "cadeia_completa": False, "pendencias_temporais": []}  # IL.2-c: aditivos também na recusa
+        "cadeia_alteracoes": [], "cadeia_completa": False, "pendencias_temporais": [], "remissoes": []}  # IL.2-c e IL.3-a: aditivos também na recusa
     assert svc.historico_dispositivo(cit)["motivo"] == "COBERTURA"
     v = svc.verificar_citacao(cit)
     assert v["identity"] == {"status": "unavailable", "reason_code": "COBERTURA", "evidence": []}
