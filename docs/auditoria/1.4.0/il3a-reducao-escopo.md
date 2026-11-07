@@ -16,3 +16,11 @@ Em três rodadas, cada correção eliminou as contraprovas anteriores, mas varia
 ## Retomada
 
 Nova trilha posterior ao IL.3: gramática de expressões completas, identificação de obra única e normalizada aplicada antes e depois do caminho, validação de tokens, consumo verificável até término comprovado, e os contraexemplos das rodadas r1–r3 como negativos. A retomada exige auditoria própria e só então a capacidade (e) pode ser apurada.
+
+## Segunda redução (passe final, F1 e F2)
+
+Supervisor (Opus), 07/11/2026, depois do passe final do PR #37 (`parecer-pr37-final.md`, COM BLOQUEADOR: F1 e F2). Esgotadas as rodadas do D5, aplica-se redução de escopo, seguida de conferência estreita, como no precedente do PR #36.
+
+1. **F1 (conferência material da cadeia e do predecessor).** Nesta entrega o executor não confere materialmente o texto, a ação e o dispositivo atingido entregues em `ultima_versao_oficial_anterior` e em `cadeia_alteracoes`. Por isso, caso (c) do tipo `nao_verificado_para_D` com motivo `sem_versao_oficial_na_data`, cujo acerto depende dessa entrega (matriz IL.1, 1.1), nunca é contado como acerto: sai `parcial`, com motivo `conferencia_material_da_cadeia_nao_implementada`, no denominador e fora do numerador. A inspeção de confirmação indevida continua integral. A condição adicional de (c) (100% dos casos sem fundamento devolvidos como não verificados, com motivo) continua aferida pelos estados e motivos. Consequência declarada: a capacidade (c) tende a reprovar por acerto insuficiente enquanto a conferência material não existir; isso é abstenção do instrumento de medida, não aprovação.
+2. **F2 (envio por socket preexistente).** No modo local, a CLI instala o gancho de auditoria como primeira instrução do processo, antes de importar o serviço ou qualquer módulo de rede, e recusa executar se houver descritor de socket aberto no processo no momento da instalação. Assim, nenhum socket pode existir sem passar pelo evento de criação auditado e bloqueado. A garantia declarada passa a ser a do processo do executor iniciado pela CLI; chamadas de `send`/`sendall` sobre socket criado antes da guarda, fora desse processo, ficam expressamente fora da garantia (limitação documentada).
+3. Nada disso altera matriz, pisos, reserva ou mutantes congelados.
