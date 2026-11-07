@@ -67,8 +67,24 @@ def fund(cid="c1", sha="a" * 64, data="2001-01-01", tipo="versao_oficial_na_data
     return {"tipo": tipo, "capture_id": cid, "url": "https://x", "sha256": sha, "data": data}
 
 
+def sha_de(cid):
+    return hashlib.sha256(cid.encode()).hexdigest()
+
+
+def evid_cadeia(n=6):
+    """Capturas recuperáveis do predecessor (cap-0) e dos elos da cadeia (cap-1, cap-2, ...), com o SHA-256 de cada uma."""
+    ev = {}
+    for i in range(n):
+        ev.update(evid_ok(f"cap-{i}", sha_de(f"cap-{i}")))
+    return ev
+
+
+def svc_completo():
+    return Svc({**evid_ok(), **evid_cadeia()})
+
+
 def av(c, resp, svc=None):
-    return ex.avaliar_resposta(c, resp, svc or Svc(evid_ok()))
+    return ex.avaliar_resposta(c, resp, svc or svc_completo())
 
 
 def enc(texto=TEXTO, **kw):
@@ -85,18 +101,24 @@ CADEIA_GAB = [{"ato": "lei-10303-2001", "data": "2001-10-31"}, {"ato": "lei-1194
 
 
 def chain(*atos, **faltas):
-    """Cadeia de alterações com a entrega documental completa; `faltas` troca um campo de cada elo (texto, evidencia, url)."""
-    elo = {"texto": "Art. 14. Texto do ato alterador.", "evidencia": {"capture_id": "cap-1", "sha256": "c" * 64},
-           "url": "https://exemplo.gov.br/ato"}
+    """Cadeia de alterações com a entrega documental completa (ato, publicação, dispositivo atingido, ação, texto e
+    evidência própria de cada elo); `faltas` troca um campo de todos os elos (texto, evidencia, url, acao, ...)."""
+    elo = {"texto": "Art. 14. Texto do ato alterador.", "url": "https://exemplo.gov.br/ato",
+           "dispositivo_atingido": "art. 14", "acao": "nova redação"}
     elo.update(faltas)
-    return [{"ato": {"especie": "lei", "numero": n, "ano": a, "url": elo["url"]}, "publicacao": {"data": d},
-             "texto": elo["texto"], "evidencia": elo["evidencia"]} for n, a, d in atos]
+    out = []
+    for i, (n, a, d) in enumerate(atos, 1):
+        evid = elo["evidencia"] if "evidencia" in elo else {"capture_id": f"cap-{i}", "sha256": sha_de(f"cap-{i}")}
+        out.append({"ato": {"especie": "lei", "numero": n, "ano": a, "url": elo["url"]}, "publicacao": {"data": d},
+                    "dispositivo_atingido": elo["dispositivo_atingido"], "acao": elo["acao"], "texto": elo["texto"],
+                    "evidencia": evid})
+    return out
 
 
 def prev_ok(**kw):
     """Última versão oficial anterior com a entrega documental completa (data, texto, caminho, evidência)."""
     base = {"data": "1976-12-17", "texto": TEXTO, "caminho": "art. 14",
-            "evidencia": {"capture_id": "cap-0", "sha256": "d" * 64}}
+            "evidencia": {"capture_id": "cap-0", "sha256": sha_de("cap-0")}}
     base.update(kw)
     return {k: v for k, v in base.items() if v is not None}
 
@@ -255,10 +277,62 @@ def test_c_nao_verificado_para_D_motivo_aceito_e_cadeia():
                                                                     (11941, 2009, "2009-05-27"), url="")},
         "cadeia sem data de publicação": {**boa, "cadeia_alteracoes": chain(("10.303", 2001, None),
                                                                             (11941, 2009, "2009-05-27"))},
+        # R2-2: evidência é evidência (recuperável, hash conferido), e a cadeia entrega ação e dispositivo atingido
+        "predecessor com evidência fictícia": {**boa, "ultima_versao_oficial_anterior": prev_ok(evidencia={"sha256": "x"})},
+        "predecessor com capture_id irrecuperável": {**boa, "ultima_versao_oficial_anterior": prev_ok(
+            evidencia={"capture_id": "nao-existe", "sha256": sha_de("cap-0")})},
+        "predecessor com sha256 que não confere": {**boa, "ultima_versao_oficial_anterior": prev_ok(
+            evidencia={"capture_id": "cap-0", "sha256": "f" * 64})},
+        "predecessor com sha256 que não é hex de 64": {**boa, "ultima_versao_oficial_anterior": prev_ok(
+            evidencia={"capture_id": "cap-0", "sha256": "D" * 64})},
+        "predecessor só com sha256": {**boa, "ultima_versao_oficial_anterior": prev_ok(
+            evidencia={"sha256": sha_de("cap-0")})},
+        "predecessor só com capture_id": {**boa, "ultima_versao_oficial_anterior": prev_ok(
+            evidencia={"capture_id": "cap-0"})},
+        "elos com evidência fictícia": {**boa, "cadeia_alteracoes": chain(
+            ("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"), evidencia={"sha256": "x"})},
+        "elos com capture_id irrecuperável": {**boa, "cadeia_alteracoes": chain(
+            ("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"),
+            evidencia={"capture_id": "nao-existe", "sha256": sha_de("cap-1")})},
+        "elos com sha256 que não confere": {**boa, "cadeia_alteracoes": chain(
+            ("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"),
+            evidencia={"capture_id": "cap-1", "sha256": "f" * 64})},
+        "elos sem dispositivo atingido": {**boa, "cadeia_alteracoes": chain(
+            ("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"), dispositivo_atingido=None)},
+        "elos sem ação": {**boa, "cadeia_alteracoes": chain(
+            ("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"), acao="")},
+        "elos com a mesma captura (não é a de cada ato)": {**boa, "cadeia_alteracoes": chain(
+            ("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"),
+            evidencia={"capture_id": "cap-1", "sha256": sha_de("cap-1")})},
+        "elo com a captura do predecessor": {**boa, "cadeia_alteracoes": chain(
+            ("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"),
+            evidencia={"capture_id": "cap-0", "sha256": sha_de("cap-0")})},
     }
     for rotulo, ruim in ruins.items():
         r = av(cad, ruim)
         assert r["resultado"] == "parcial" and r["extra"]["nao_verificado_com_motivo"] is True, rotulo
+    # a mesma resposta boa, com um serviço que não recupera as capturas: a evidência não é efetiva
+    assert av(cad, boa, Svc(evid_ok()))["resultado"] == "parcial"
+    # R2-1: indisponibilidade declarada em qualquer ponto da entrega nunca é acerto
+    indisp = {
+        "indisponibilidades_temporais explícita": {**boa, "indisponibilidades_temporais": [
+            {"motivo": "timeout", "categoria": "timeout"}]},
+        "evidência do elo unavailable": {**boa, "cadeia_alteracoes": [
+            {**e, "evidencia": {**e["evidencia"], "status": "unavailable"}} for e in boa["cadeia_alteracoes"]]},
+        "evidência do predecessor unavailable": {**boa, "ultima_versao_oficial_anterior": prev_ok(
+            evidencia={"capture_id": "cap-0", "sha256": sha_de("cap-0"), "status": "unavailable"})},
+        "elo com indisponibilidade aninhada": {**boa, "cadeia_alteracoes": [
+            {**boa["cadeia_alteracoes"][0], "publicacao": {"data": "2001-10-31", "status": "indisponivel"}},
+            boa["cadeia_alteracoes"][1]]},
+        "indisponibilidades no predecessor": {**boa, "ultima_versao_oficial_anterior": prev_ok(
+            indisponibilidades_temporais=[{"motivo": "timeout"}])},
+        "indisponibilidades no elo": {**boa, "cadeia_alteracoes": [
+            {**boa["cadeia_alteracoes"][0], "indisponibilidades_temporais": [{"motivo": "x"}]},
+            boa["cadeia_alteracoes"][1]]},
+    }
+    for rotulo, ruim in indisp.items():
+        assert av(cad, ruim)["resultado"] == "indisponivel", rotulo
+    assert av(cad, {**boa, "indisponibilidades_temporais": []})["resultado"] == "acerto"  # lista vazia não é falha
     # gabarito sem `ultima_versao_anterior` ou sem `cadeia`: o caso não se confronta, nunca é acerto
     sem_uva = {**cad, "gabarito": {k: v for k, v in cad["gabarito"].items() if k != "ultima_versao_anterior"}}
     assert av(sem_uva, boa)["resultado"] == "parcial"
@@ -654,14 +728,33 @@ def bateria(m) -> list[str]:
     ne = {"reason_code": "NAO_EXISTIA"}
     if m.avaliar_resposta(nx, verif("unavailable", "not_found", m=ne), Svc())["resultado"] == "acerto":
         falhas.append("indisponibilidade no numerador")
+    if m.avaliar_resposta(nx, {**verif("unknown", "not_found", m=ne), "indisponibilidades_temporais": [
+            {"motivo": "timeout", "categoria": "timeout"}]}, Svc())["resultado"] == "acerto":
+        falhas.append("indisponibilidades_temporais explícitas no numerador")
     cad = caso("L-c-091", "c", tipo="nao_verificado_para_D", motivos_aceitos=["sem_versao_oficial_na_data"],
                cadeia=CADEIA_GAB, ultima_versao_anterior={"ato": "original", "data": "1976-12-17"})
     cad["data"] = "2010-01-01"
     svo = {"reason_code": "sem_versao_oficial_na_data"}
     um_dia = verif("unknown", "unknown", t=svo, m=svo, ultima_versao_oficial_anterior=prev_ok(),
                    cadeia_alteracoes=chain(("10.303", 2001, "2001-11-01"), (11941, 2009, "2009-05-27")))
-    if m.avaliar_resposta(cad, um_dia, Svc())["resultado"] == "acerto":
+    if m.avaliar_resposta(cad, um_dia, svc_completo())["resultado"] == "acerto":
         falhas.append("cadeia com tolerância de data")
+    boa = {**um_dia, "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"))}
+    if m.avaliar_resposta(cad, boa, svc_completo())["resultado"] != "acerto":
+        falhas.append("entrega completa recusada")
+    ficticia = {**boa, "ultima_versao_oficial_anterior": prev_ok(evidencia={"sha256": "x"}),
+                "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"),
+                                           evidencia={"sha256": "x"})}
+    if m.avaliar_resposta(cad, ficticia, svc_completo())["resultado"] == "acerto":
+        falhas.append("evidência fictícia")
+    sem_acao = {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"),
+                                                   acao=None, dispositivo_atingido=None)}
+    if m.avaliar_resposta(cad, sem_acao, svc_completo())["resultado"] == "acerto":
+        falhas.append("cadeia sem ação e dispositivo atingido")
+    aninhada = {**boa, "cadeia_alteracoes": [{**e, "evidencia": {**e["evidencia"], "status": "unavailable"}}
+                                            for e in boa["cadeia_alteracoes"]]}
+    if m.avaliar_resposta(cad, aninhada, svc_completo())["resultado"] == "acerto":
+        falhas.append("indisponibilidade aninhada na cadeia")
     return falhas
 
 
@@ -677,7 +770,8 @@ def test_bateria_passa_no_executor_correto():
     ("normaliza_caixa", "igual_texto",
      lambda a, b: isinstance(a, str) and isinstance(b, str) and ex.norm(a).lower() == ex.norm(b).lower()),
     ("sem_veto_de_indisponibilidade", "indisponivel", lambda resp: False),
-    ("cadeia_sem_confronto", "_cadeia_confere", lambda resp, caso, d: (True, "")),
+    ("cadeia_sem_confronto", "_cadeia_confere", lambda resp, caso, d, svc: (True, "")),
+    ("evidencia_qualquer_string", "_evidencia_valida", lambda ev, svc: (isinstance(ev, dict) and bool(ev), "")),
 ])
 def test_mutantes_do_executor_falham(monkeypatch, nome, alvo, mutacao):
     monkeypatch.setattr(ex, alvo, mutacao)
@@ -947,6 +1041,56 @@ def test_b4_relatorio_declara_os_hashes_dos_bytes_lidos_uma_vez(tmp_path, monkey
     assert rel["congelamento"]["sha256"] == hashlib.sha256(md.read_bytes()).hexdigest()
 
 
+def test_r2_3_main_le_o_manifesto_uma_vez_e_a_troca_entre_leituras_nao_vale(tmp_path, monkeypatch):
+    """Autenticação (1.ª leitura) e consumo dos hashes (2.ª leitura) liam bytes diferentes: manifesto verdadeiro na primeira
+    e sintético na segunda faziam entradas alheias passar por execução do congelamento normativo."""
+    d, dm, md_sintetico = _montar(tmp_path, _conjunto("a", 3))
+    original = Path.read_bytes
+    padrao = str(ex.CONGELAMENTO_PADRAO)
+    leituras: list[int] = []
+
+    def lendo(self):
+        if str(self) == padrao:
+            leituras.append(1)
+            if len(leituras) > 1:
+                return original(md_sintetico)  # uma segunda leitura veria o manifesto das entradas sintéticas
+        return original(self)
+    monkeypatch.setattr(Path, "read_bytes", lendo)
+
+    class Boom:
+        def __getattr__(self, n):
+            raise AssertionError("não devia executar")
+    rc = ex.main(["--conjunto", str(d), "--mutantes", str(dm), "--home", str(tmp_path), "--modo", "remoto",
+                  "--saida", str(tmp_path / "s.json")], _servico=Boom())
+    assert len(leituras) == 1  # percorrendo `main` inteiro
+    assert rc == 2 and not (tmp_path / "s.json").exists()  # entradas sintéticas não são as congeladas
+
+
+def test_r2_3_main_declara_o_hash_do_mesmo_manifesto_que_autenticou(tmp_path, monkeypatch):
+    d, dm, md = _montar(tmp_path, _conjunto("a", 3))
+    original = Path.read_bytes
+    leituras: list[bytes] = []
+
+    def lendo(self):
+        dados = original(self)
+        if str(self) == str(md):
+            leituras.append(dados)
+            if len(leituras) > 1:
+                return b"manifesto trocado"
+        return dados
+    monkeypatch.setattr(Path, "read_bytes", lendo)
+
+    class S(Svc):
+        def obter_dispositivo(self, citacao=None, work_id=None, caminho=None, data=None, versao="vigente", fonte=None):
+            return enc()
+    ex.main(["--conjunto", str(d), "--mutantes", str(dm), "--home", str(tmp_path), "--modo", "remoto",
+             "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--sintetico"], _servico=S())
+    monkeypatch.undo()
+    rel = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert len(leituras) == 1
+    assert rel["congelamento"]["sha256"] == hashlib.sha256(leituras[0]).hexdigest()
+
+
 @pytest.mark.repositorio
 def test_b4_execucao_qualificante_sobre_o_desenvolvimento_com_a_fachada_real(tmp_path):
     pl = RAIZ / "tests" / "porta_l"
@@ -964,62 +1108,115 @@ def test_b4_execucao_qualificante_sobre_o_desenvolvimento_com_a_fachada_real(tmp
 # --- B5: bloqueio de rede cobre as primitivas de saída e o ciclo completo do serviço ------------------------------------
 
 
-def test_b5_barra_envio_conexao_e_resolucao_inclusive_em_socket_ja_conectado():
-    a, b = socket.socketpair()  # par local já conectado: nenhum pacote de rede
+def test_b5_barra_envio_conexao_e_resolucao_inclusive_em_socket_criado_antes_da_guarda():
+    # nenhum TCP, nem loopback: o socket é UDP, criado antes da guarda e nunca conectado; os endereços são inválidos
+    u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         with ex.BloqueioDeRede() as bl:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as u:
-                acoes = (lambda: u.sendto(b"x", ("127.0.0.1", 9)), lambda: u.connect(("127.0.0.1", 9)),
-                         lambda: u.connect_ex(("127.0.0.1", 9)), lambda: u.send(b"x"), lambda: u.sendall(b"x"),
-                         lambda: socket.gethostbyname("example.invalid"), lambda: socket.gethostbyaddr("127.0.0.1"),
-                         lambda: socket.getnameinfo(("127.0.0.1", 9), 0))
-                for acao in acoes:
-                    with pytest.raises(ex.RedeBloqueada):
-                        acao()
-            with pytest.raises(ex.RedeBloqueada):
-                a.send(b"x")  # socket já conectado
-            with pytest.raises(ex.RedeBloqueada):
-                a.sendall(b"x")
-            assert len(bl.tentativas) >= 10
+            acoes = (lambda: u.sendto(b"x", ("127.0.0.1", 9)), lambda: u.connect(("127.0.0.1", 9)),
+                     lambda: u.connect_ex(("127.0.0.1", 9)), lambda: u.send(b"x"), lambda: u.sendall(b"x"),
+                     lambda: socket.gethostbyname("example.invalid"), lambda: socket.gethostbyaddr("127.0.0.1"),
+                     lambda: socket.getnameinfo(("127.0.0.1", 9), 0))
+            for acao in acoes:
+                with pytest.raises(ex.RedeBloqueada):
+                    acao()
+            assert len(bl.tentativas) >= 8
             with pytest.raises(ex.ViolacaoDeRede):
                 bl.verificar()
     finally:
-        a.close()
-        b.close()
+        u.close()
+
+
+def test_r2_4_tipo_c_socket_do_modulo__socket_esta_sob_a_guarda():
+    import _socket
+    original = _socket.socket
+    metodos = [m for m in ("connect", "connect_ex", "send", "sendall", "sendto") if hasattr(original, m)]
+    assert metodos == ["connect", "connect_ex", "send", "sendall", "sendto"]
+    with ex.BloqueioDeRede() as bl:
+        assert _socket.socket is not original
+        s = _socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # o controle do auditor: endereço inválido faria a primitiva C falhar com TypeError, sem a guarda
+            with pytest.raises(ex.RedeBloqueada):
+                s.sendto(b"x", object())
+            for m in ("connect", "connect_ex"):
+                with pytest.raises(ex.RedeBloqueada):
+                    getattr(s, m)(object())
+            for m in ("send", "sendall"):
+                with pytest.raises(ex.RedeBloqueada):
+                    getattr(s, m)(b"x")
+        finally:
+            s.close()
+        assert len(bl.tentativas) == 5 and all(t.startswith("_socket.socket.") for t in bl.tentativas)
+        with pytest.raises(ex.ViolacaoDeRede):
+            bl.verificar()
+    assert _socket.socket is original  # restaurado
+    s = _socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        with pytest.raises(TypeError):  # fora da guarda a primitiva C volta a ser a de verdade (falha antes de enviar)
+            s.sendto(b"x", object())
+    finally:
+        s.close()
 
 
 def test_b5_restaura_o_que_herdava_do_tipo_base_sem_fixar_copia():
     antes = "sendto" in vars(socket.socket)
+    envio = socket.socket.send
     with ex.BloqueioDeRede():
         pass
     assert ("sendto" in vars(socket.socket)) == antes
-    a, b = socket.socketpair()
-    try:
-        a.send(b"ok")  # fora da guarda, o envio local volta a funcionar
-        assert b.recv(2) == b"ok"
-    finally:
-        a.close()
-        b.close()
+    assert socket.socket.send is envio and socket.getaddrinfo.__module__ != ex.__name__
 
 
-PRIMITIVAS = [("socket", "sendto"), ("socket", "send"), ("socket", "sendall"), ("socket", "connect"),
-              ("socket", "connect_ex"), ("modulo", "create_connection"), ("modulo", "getaddrinfo"),
-              ("modulo", "gethostbyname"), ("modulo", "gethostbyname_ex"), ("modulo", "gethostbyaddr"),
-              ("modulo", "getnameinfo")]
+PRIMITIVAS = [("socket", n) for n in ("sendto", "send", "sendall", "connect", "connect_ex")] + [
+    ("modulo", n) for n in ("create_connection", "getaddrinfo", "gethostbyname", "gethostbyname_ex", "gethostbyaddr",
+                             "getnameinfo")] + [
+    ("_socket_tipo", n) for n in ("sendto", "send", "sendall", "connect", "connect_ex", "sendmsg")] + [
+    ("_socket_modulo", n) for n in ("getaddrinfo", "gethostbyname", "gethostbyname_ex", "gethostbyaddr", "getnameinfo")]
+
+
+def _alvo_da_primitiva(onde):
+    import _socket
+    return {"socket": socket.socket, "modulo": socket, "_socket_tipo": _socket.socket, "_socket_modulo": _socket}[onde]
 
 
 @pytest.mark.parametrize("onde,nome", PRIMITIVAS)
 def test_b5_autoteste_falha_se_qualquer_primitiva_escapar(onde, nome):
-    alvo = socket.socket if onde == "socket" else socket
-
+    """Cada entrada protegida, uma a uma, volta a escapar (sentinela em memória): o autoteste falha e a nomeia."""
     def escapou(*a, **k):
         raise OSError("escapou do bloqueio")  # sentinela em memória: nenhuma saída real
     with ex.BloqueioDeRede() as b:
         b.autoteste()  # íntegro
+        alvo = _alvo_da_primitiva(onde)  # dentro da guarda: `_socket.socket` é o tipo guardado (mutável)
+        if not hasattr(alvo, nome):
+            pytest.skip("primitiva inexistente nesta plataforma")
         setattr(alvo, nome, escapou)  # a primitiva volta a escapar da barreira
         with pytest.raises(ex.ViolacaoDeRede) as exc:
             b.autoteste()
         assert nome in str(exc.value)
+        if onde.startswith("_socket"):
+            assert "_socket" in str(exc.value)
+
+
+def test_r2_4_provas_cobrem_toda_entrada_protegida():
+    import _socket
+    esperadas = {f"socket.{n}" for n in ex.BloqueioDeRede._SOCKET if hasattr(socket.socket, n)}
+    esperadas |= {f"_socket.socket.{n}" for n in ex.BloqueioDeRede._SOCKET if hasattr(_socket.socket, n)}
+    esperadas |= {f"socket.{n}" for n in ex.BloqueioDeRede._MODULO}
+    esperadas |= {f"_socket.{n}" for n in ex.BloqueioDeRede._MODULO if n != "create_connection"}
+    nomes = {n for n, _ in ex.BloqueioDeRede().provas()}
+    assert esperadas <= nomes
+    assert {"_socket.getaddrinfo", "_socket.gethostbyname", "_socket.gethostbyname_ex", "_socket.gethostbyaddr",
+            "_socket.getnameinfo", "_socket.socket.sendto", "_socket.socket.connect"} <= nomes
+
+
+def test_r2_4_autoteste_sem_guarda_falha_sem_produzir_trafego():
+    """Sem a guarda, as provas usam argumentos inválidos: a primitiva real falha sozinha, antes de qualquer envio."""
+    b = ex.BloqueioDeRede()
+    with pytest.raises(ex.ViolacaoDeRede) as exc:
+        b.autoteste()
+    assert "TypeError" in str(exc.value) or "OSError" in str(exc.value)
+    assert b.tentativas == []  # nenhuma passou por barreira
 
 
 def test_b5_autoteste_falha_se_a_primitiva_nao_levanta_nada():

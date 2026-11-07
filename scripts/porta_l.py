@@ -98,7 +98,7 @@ def _modulo_opcional(nome: str) -> Any:
 class BloqueioDeRede:
     """Bloqueia no processo toda primitiva de saída (conexão, envio, resolução de nomes); guarda cada tentativa.
     `verificar()` levanta se houve alguma, mesmo que o código chamado tenha engolido a exceção. O autoteste exerce
-    cada primitiva e falha se qualquer uma escapar."""
+    cada primitiva, com argumento que falharia antes de qualquer envio, e falha se qualquer uma escapar."""
 
     # primitivas de saída bloqueadas: métodos de socket (inclusive os herdados do tipo C), funções de módulo e SSL
     _SOCKET = ("connect", "connect_ex", "send", "sendall", "sendto", "sendmsg", "sendfile")
@@ -130,6 +130,14 @@ class BloqueioDeRede:
         for obj, atributo in self._alvos():
             self._orig.append((obj, atributo, getattr(obj, atributo), atributo in vars(obj)))
             setattr(obj, atributo, self._barrar(f"{getattr(obj, '__name__', 'socket')}.{atributo}"))
+        _socket = _modulo_opcional("_socket")
+        if _socket is not None and hasattr(_socket, "socket"):
+            # `_socket.socket` é tipo C imutável: o nome do módulo passa a apontar para uma subclasse cujos métodos de
+            # conexão e envio são as barreiras; quem constrói `_socket.socket(...)` na guarda recebe o tipo guardado
+            base = _socket.socket
+            barreiras = {n: self._barrar(f"_socket.socket.{n}") for n in self._SOCKET if hasattr(base, n)}
+            self._orig.append((_socket, "socket", base, True))
+            _socket.socket = type("socket", (base,), barreiras)
         return self
 
     def __exit__(self, *exc):
@@ -145,45 +153,54 @@ class BloqueioDeRede:
         if self.tentativas:
             raise ViolacaoDeRede(f"tentativa de rede no modo local: {self.tentativas[0]}")
 
-    def autoteste(self) -> None:
-        """Falha fechada: exerce CADA primitiva bloqueada e levanta se qualquer uma não for barrada (a barreira age antes
-        de qualquer pacote; nada sai)."""
-        alvo = ("127.0.0.1", 9)
-        provas: list[tuple[str, Any]] = [
-            ("socket.connect", lambda s: s.connect(alvo)), ("socket.connect_ex", lambda s: s.connect_ex(alvo)),
-            ("socket.send", lambda s: s.send(b"x")), ("socket.sendall", lambda s: s.sendall(b"x")),
-            ("socket.sendto", lambda s: s.sendto(b"x", alvo)),
-            ("socket.sendmsg", lambda s: s.sendmsg([b"x"], [], 0, alvo)),  # não existe em todas as plataformas
-            ("socket.sendfile", lambda s: s.sendfile(__import__("io").BytesIO(b"x"))),
-            ("socket.create_connection", lambda s: socket.create_connection(alvo, timeout=0.2)),
-            ("socket.getaddrinfo", lambda s: socket.getaddrinfo("example.invalid", 80)),
-            ("socket.gethostbyname", lambda s: socket.gethostbyname("example.invalid")),
-            ("socket.gethostbyname_ex", lambda s: socket.gethostbyname_ex("example.invalid")),
-            ("socket.gethostbyaddr", lambda s: socket.gethostbyaddr("127.0.0.1")),
-            ("socket.getnameinfo", lambda s: socket.getnameinfo(alvo, 0)),
-        ]
+    def provas(self) -> list[tuple[str, Any]]:
+        """Uma prova por entrada protegida: (nome, chamada). Os argumentos são inválidos de propósito: se a barreira
+        faltar, a primitiva real falha sozinha antes de qualquer envio ou consulta (nenhum tráfego, nem local)."""
+        nada = object()  # endereço/nome inválido: TypeError na primitiva real, antes de qualquer saída
         _socket, ssl = _modulo_opcional("_socket"), _modulo_opcional("ssl")
-        if _socket is not None:
-            provas.append(("_socket.getaddrinfo", lambda s: _socket.getaddrinfo("example.invalid", 80)))
+
+        def em(tipo, metodo, *args):
+            def chamar():
+                s = tipo(socket.AF_INET, socket.SOCK_DGRAM)  # `_socket.socket` não é gerenciador de contexto
+                try:
+                    getattr(s, metodo)(*args)
+                finally:
+                    s.close()
+            return chamar
+
+        args_socket = {"connect": (nada,), "connect_ex": (nada,), "send": (b"x",), "sendall": (b"x",),
+                       "sendto": (b"x", nada), "sendmsg": ([b"x"], [], 0, nada),
+                       "sendfile": (__import__("io").BytesIO(b"x"),)}
+        provas: list[tuple[str, Any]] = []
+        for n in self._SOCKET:
+            if hasattr(socket.socket, n):  # primitiva inexistente nesta plataforma: nada a barrar
+                provas.append((f"socket.{n}", em(socket.socket, n, *args_socket[n])))
+            if _socket is not None and hasattr(_socket, "socket") and hasattr(_socket.socket, n):
+                provas.append((f"_socket.socket.{n}", lambda n=n: em(_socket.socket, n, *args_socket[n])()))
+        args_modulo = {"create_connection": (nada,), "getaddrinfo": (nada, 80), "gethostbyname": (nada,),
+                       "gethostbyname_ex": (nada,), "gethostbyaddr": (nada,), "getnameinfo": (nada, 0)}
+        for n in self._MODULO:
+            if hasattr(socket, n):
+                provas.append((f"socket.{n}", lambda n=n: getattr(socket, n)(*args_modulo[n])))
+            if _socket is not None and n != "create_connection" and hasattr(_socket, n):
+                provas.append((f"_socket.{n}", lambda n=n: getattr(_socket, n)(*args_modulo[n])))
         if ssl is not None:
             for n in self._SSL:
                 if hasattr(ssl.SSLSocket, n):
-                    provas.append((f"ssl.{n}", lambda s, n=n: getattr(ssl.SSLSocket, n)(s, b"x")))
+                    provas.append((f"ssl.{n}", lambda n=n: getattr(ssl.SSLSocket, n)(nada, b"x")))
+        return provas
+
+    def autoteste(self) -> None:
+        """Falha fechada: exerce CADA entrada bloqueada (`provas`) e levanta, nomeando-a, se qualquer uma não for barrada."""
         escaparam: list[str] = []
-        for nome, prova in provas:
-            primitiva = nome.split(".", 1)[1]
-            if nome.startswith("socket.") and not (hasattr(socket.socket, primitiva) or hasattr(socket, primitiva)):
-                continue  # primitiva inexistente nesta plataforma: nada a barrar
-            barrada = False
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                try:
-                    prova(s)
-                except RedeBloqueada:
-                    barrada = True
-                except Exception as exc:  # noqa: BLE001 - outra coisa que não a barreira: a primitiva escapou
-                    nome = f"{nome} ({type(exc).__name__})"
-            if not barrada:
-                escaparam.append(nome)
+        for nome, prova in self.provas():
+            try:
+                prova()
+            except RedeBloqueada:
+                continue
+            except Exception as exc:  # noqa: BLE001 - outra coisa que não a barreira: a primitiva escapou
+                nome = f"{nome} ({type(exc).__name__})"
+            escaparam.append(nome)
         self.tentativas.clear()
         if escaparam:
             raise ViolacaoDeRede(f"o bloqueio de rede não está efetivo ({', '.join(escaparam)}); o executor não roda no "
@@ -227,14 +244,16 @@ def sha256_arquivo(p: Path) -> str:
     return sha256_bytes(Path(p).read_bytes())
 
 
-def congelamento_normativo(md: Path) -> bool:
+def congelamento_normativo(md: Path, dados: bytes | None = None) -> bool:
     """O congelamento é o normativo do repositório: o mesmo caminho E os mesmos bytes (fins de linha normalizados) que o
-    hash fixado aqui. Qualquer outro Markdown de hashes é só ferramenta de teste e nunca qualifica."""
+    hash fixado aqui. Qualquer outro Markdown de hashes é só ferramenta de teste e nunca qualifica. Com `dados`, autentica
+    os bytes JÁ lidos (o chamador lê o manifesto uma única vez)."""
     try:
         md = Path(md)
         if md.resolve() != CONGELAMENTO_PADRAO.resolve():
             return False
-        return sha256_bytes(md.read_bytes().replace(b"\r\n", b"\n")) == CONGELAMENTO_SHA256
+        dados = md.read_bytes() if dados is None else dados
+        return sha256_bytes(dados.replace(b"\r\n", b"\n")) == CONGELAMENTO_SHA256
     except OSError:
         return False
 
@@ -264,10 +283,11 @@ def _jsonl_bytes(nome: str, dados: bytes) -> list[dict]:
     return out
 
 
-def carregar_entradas(conjunto: Path, mutantes: Path, md: Path) -> Entradas:
+def carregar_entradas(conjunto: Path, mutantes: Path, md: Path | bytes) -> Entradas:
     """Lê cada arquivo uma única vez, confere os bytes lidos contra o congelamento e interpreta esses mesmos bytes.
-    Levanta se não são os arquivos congelados do MESMO conjunto."""
-    dmd = Path(md).read_bytes()
+    `md` pode ser o manifesto já lido (bytes), para que quem o autenticou seja quem o consome. Levanta se não são os
+    arquivos congelados do MESMO conjunto."""
+    dmd = md if isinstance(md, bytes) else Path(md).read_bytes()
     papeis = _papeis(dmd.decode("utf-8"))
     bc, bm = Path(conjunto).read_bytes(), Path(mutantes).read_bytes()
     hc, hm = sha256_bytes(bc), sha256_bytes(bm)
@@ -318,14 +338,26 @@ def _dim(resp: dict, nome: str) -> dict:
 ESTADOS_NAO_NUMERADOR = ("unavailable", "indisponivel", "parcial")  # matriz, seção 2: nunca no numerador
 
 
+def _declara_indisponibilidade(x: Any, prof: int = 0) -> bool:
+    """`status` indisponível em qualquer dicionário, em qualquer profundidade (dimensões, predecessor, elos da cadeia,
+    evidências), ou `indisponibilidades_temporais` não vazia (a lista que o serviço emite quando a obtenção do material
+    temporal falha). Profundidade excessiva: falha fechado."""
+    if prof > 16:
+        return True
+    if isinstance(x, dict):
+        if x.get("status") in ESTADOS_NAO_NUMERADOR or x.get("indisponibilidades_temporais") not in (None, [], ()):
+            return True
+        return any(_declara_indisponibilidade(v, prof + 1) for v in x.values())
+    if isinstance(x, (list, tuple)):
+        return any(_declara_indisponibilidade(v, prof + 1) for v in x)
+    return False
+
+
 def indisponivel(resp: dict) -> bool:
     """Veto comum (matriz, seção 2): `unavailable`, `indisponivel` ou `parcial` no estado agregado ou em QUALQUER
-    dimensão da resposta (identidade, texto, temporal, vigência, evidência...) tira o caso do numerador."""
-    if not isinstance(resp, dict):
-        return True
-    if resp.get("status") in ESTADOS_NAO_NUMERADOR:
-        return True
-    return any(isinstance(v, dict) and v.get("status") in ESTADOS_NAO_NUMERADOR for v in resp.values())
+    ponto da resposta, e `indisponibilidades_temporais` não vazia, tiram o caso do numerador: operação que declara
+    falha na obtenção do seu material não é entrega integral."""
+    return not isinstance(resp, dict) or _declara_indisponibilidade(resp)
 
 
 def _verificado(resp: dict) -> bool:
@@ -377,17 +409,30 @@ def _tem_texto(x: Any) -> bool:
     return isinstance(x, str) and bool(x.strip())
 
 
-def _evidencia_identificavel(ev: Any) -> bool:
-    """Evidência entregue com a versão ou o ato: objeto com captura recuperável (`capture_id`) ou hash do documento."""
+def _evidencia_valida(ev: Any, svc: Any) -> tuple[bool, str]:
+    """Evidência efetiva: `capture_id` recuperável por `obter_evidencia` no serviço avaliado (status `encontrada`) e
+    `sha256` (64 hex) igual ao da captura. Texto qualquer ou hash solto não é evidência."""
     if not isinstance(ev, dict):
-        return False
-    return _tem_texto(ev.get("capture_id")) or _tem_texto(ev.get("sha256")) or _tem_texto(
-        _dim(ev, "metadados").get("sha256"))
+        return False, "evidência ausente"
+    cid, sha = ev.get("capture_id"), ev.get("sha256")
+    if not _tem_texto(cid):
+        return False, "evidência sem capture_id"
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
+        return False, "evidência sem sha256 de 64 hex"
+    try:
+        rec = svc.obter_evidencia(cid)
+    except Exception as exc:  # noqa: BLE001
+        return False, f"capture_id não recuperável ({type(exc).__name__})"
+    if not isinstance(rec, dict) or rec.get("status") != "encontrada":
+        return False, "capture_id não recuperável por obter_evidencia"
+    if _dim(rec, "metadados").get("sha256") != sha:
+        return False, "sha256 da evidência não confere com a captura"
+    return True, ""
 
 
-def _predecessor_confere(prev: Any, uva: Any, caso: dict, data_d: str) -> tuple[bool, str]:
+def _predecessor_confere(prev: Any, uva: Any, caso: dict, data_d: str, svc: Any) -> tuple[bool, str]:
     """Última versão oficial anterior contra `gabarito.ultima_versao_anterior` {ato, data}: data idêntica, anterior a D,
-    identificação do ato quando o gabarito não é o original, e a entrega documental (texto, caminho, evidência)."""
+    identificação do ato quando o gabarito não é o original, e a entrega documental (texto, caminho, evidência efetiva)."""
     if not isinstance(uva, dict) or _data_iso(uva.get("data")) is None or not _tem_texto(uva.get("ato")):
         return False, "gabarito sem ultima_versao_anterior {ato, data}"
     if not isinstance(prev, dict):
@@ -411,17 +456,19 @@ def _predecessor_confere(prev: Any, uva: Any, caso: dict, data_d: str) -> tuple[
     pe = VALIDADOR.parse_caminho(caso.get("caminho")) if isinstance(caso.get("caminho"), str) else None
     if pc is None or pe is None or VALIDADOR.chave_caminho(pc) != VALIDADOR.chave_caminho(pe):
         return False, "ultima_versao_oficial_anterior sem o caminho do dispositivo pedido"
-    if not _evidencia_identificavel(prev.get("evidencia")):
-        return False, "ultima_versao_oficial_anterior sem evidência identificável"
+    ok, motivo = _evidencia_valida(prev.get("evidencia"), svc)
+    if not ok:
+        return False, f"ultima_versao_oficial_anterior: {motivo}"
     return True, ""
 
 
-def _cadeia_confere(resp: dict, caso: dict, data_d: str) -> tuple[bool, str]:
+def _cadeia_confere(resp: dict, caso: dict, data_d: str, svc: Any) -> tuple[bool, str]:
     """Última versão oficial anterior e cadeia ordenada de atos alteradores, contra `gabarito.ultima_versao_anterior` e
-    `gabarito.cadeia` (1.1), sem tolerância de data e exigindo a entrega documental de cada elo."""
+    `gabarito.cadeia` (1.1), sem tolerância de data. Cada elo entrega o ato (espécie, número, ano, URL), a publicação,
+    o `dispositivo_atingido`, a `acao`, o texto e a evidência efetiva do próprio ato; ausência de qualquer um não é acerto."""
     gab = caso.get("gabarito") or {}
     ok, motivo = _predecessor_confere(resp.get("ultima_versao_oficial_anterior"), gab.get("ultima_versao_anterior"),
-                                      caso, data_d)
+                                      caso, data_d, svc)
     if not ok:
         return False, motivo
     cadeia = resp.get("cadeia_alteracoes")
@@ -434,15 +481,25 @@ def _cadeia_confere(resp: dict, caso: dict, data_d: str) -> tuple[bool, str]:
         return False, "gabarito sem cadeia"
     if len(obtida) != len(esperada):
         return False, f"cadeia com {len(obtida)} atos; esperados {len(esperada)}"
+    capturas = {(resp["ultima_versao_oficial_anterior"].get("evidencia") or {}).get("capture_id")}
     for (ao, do, item), (ae, de) in zip(obtida, esperada):
         if ao is None or ao != ae:
             return False, f"ato da cadeia {ao!r} diferente do esperado {ae!r} (ou fora de ordem)"
         if _data_iso(de) is None or do != de:
             return False, f"data de publicação do ato {ae!r} é {do!r}; esperada {de!r}"
         ato = item.get("ato") if isinstance(item.get("ato"), dict) else {}
-        if not (_tem_texto(ato.get("url")) and _tem_texto(item.get("texto"))
-                and _evidencia_identificavel(item.get("evidencia"))):
-            return False, f"entrega documental incompleta do ato {ae!r} (url, texto ou evidência)"
+        faltas = [n for n, v in (("url do ato", ato.get("url")), ("texto", item.get("texto")),
+                                 ("dispositivo_atingido", item.get("dispositivo_atingido")), ("acao", item.get("acao")))
+                  if not _tem_texto(v)]
+        if faltas:
+            return False, f"entrega documental incompleta do ato {ae!r}: {', '.join(faltas)}"
+        ok, motivo = _evidencia_valida(item.get("evidencia"), svc)
+        if not ok:
+            return False, f"ato {ae!r}: {motivo}"
+        cid = (item.get("evidencia") or {}).get("capture_id")
+        if isinstance(cid, str) and cid in capturas:  # o ato alterador tem captura própria: não reaproveita a do predecessor nem a de outro elo
+            return False, f"ato {ae!r} com evidência que não é a sua (capture_id repetido)"
+        capturas.add(cid)
     return True, ""
 
 
@@ -564,7 +621,7 @@ def _avaliar_c(caso: dict, resp: dict, svc: Any, out: dict, indisp: bool) -> Non
         com_motivo = unk and all(m in aceitos for m in motivos if m is not None) and None not in motivos
         out["extra"]["nao_verificado_com_motivo"] = bool(com_motivo)
         if com_motivo and "sem_versao_oficial_na_data" in motivos:
-            ok_c, motivo_c = _cadeia_confere(resp, caso, d)
+            ok_c, motivo_c = _cadeia_confere(resp, caso, d, svc)
             if ok_c:
                 out.update(resultado="acerto")
             else:
@@ -791,14 +848,19 @@ def main(argv: list[str] | None = None, *, _servico: Any = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, OSError):
         pass
-    normativo = congelamento_normativo(a.congelamento)
+    try:
+        manifesto = Path(a.congelamento).read_bytes()  # UMA leitura: autenticada, interpretada e declarada como lida
+    except OSError as exc:
+        _recusar(f"congelamento ilegível ({type(exc).__name__})", a.somente_tabela)
+        return 2
+    normativo = congelamento_normativo(a.congelamento, manifesto)
     if not normativo and not a.sintetico:
         _recusar("congelamento que não é o normativo do repositório (il1-congelamento.md); só --sintetico o aceita, "
                  "como execução NÃO QUALIFICANTE", a.somente_tabela)
         return 2
     qualificante = normativo and not a.sintetico and _servico is None  # serviço injetado = teste, nunca qualifica
     try:
-        entradas = carregar_entradas(a.conjunto, a.mutantes, a.congelamento)
+        entradas = carregar_entradas(a.conjunto, a.mutantes, manifesto)
     except (OSError, ValueError) as exc:
         _recusar(str(exc), a.somente_tabela)
         return 2
