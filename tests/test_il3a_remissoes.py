@@ -178,10 +178,10 @@ def svc6385(tmp_path, monkeypatch):
 
 
 ESPERADO_ART9 = [{"texto": "no § 2o do art. 15", "alvo": {"obra": "Lei 6.385/1976", "caminho": "art. 15, § 2º"},
-                  "resolvida": True}]
+                  "resolvida": False}]  # D5: a fachada nunca emite `resolvida: true`
 
 
-def test_fachada_python_devolve_remissoes_resolvidas_no_documento(svc6385):
+def test_fachada_python_devolve_remissoes_nao_resolvidas_no_documento(svc6385):
     svc, _ = svc6385
     r = svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")
     assert r["status"] == "encontrada"
@@ -248,7 +248,7 @@ def test_mcp_mesmas_regras_e_texto_da_remissao_envolvido(svc6385, monkeypatch):
 
     out = asyncio.run(_run())
     assert [x["alvo"] for x in out["remissoes"]] == [ESPERADO_ART9[0]["alvo"]]
-    assert [x["resolvida"] for x in out["remissoes"]] == [True]
+    assert [x["resolvida"] for x in out["remissoes"]] == [False]
     assert out["remissoes"][0]["texto"].startswith(DOC_OPEN) and "art. 15" in out["remissoes"][0]["texto"]
 
 
@@ -759,7 +759,7 @@ def test_b8_invariante_final_descarta_remissao_fora_do_texto_emitido():
     base = {"status": "encontrada", "texto": "Art. 1º Ver art. 2º desta Lei."}
     ok = {"texto": "art. 2º desta Lei", "alvo": {"obra": "Lei 1/2000", "caminho": "art. 2º"}, "resolvida": True}
     fora = {"texto": "art. 9º desta Lei", "alvo": {"obra": "Lei 1/2000", "caminho": "art. 9º"}, "resolvida": True}
-    assert fim({**base, "remissoes": [ok, fora]})["remissoes"] == [ok]
+    assert fim({**base, "remissoes": [ok, fora]})["remissoes"] == [{**ok, "resolvida": False}]
     assert fim({**base, "status": "unavailable", "remissoes": [ok]})["remissoes"] == []
     assert fim({**base, "texto": None, "remissoes": [ok]})["remissoes"] == []
     assert fim({"status": "indisponivel"})["remissoes"] == []

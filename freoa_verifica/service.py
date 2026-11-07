@@ -222,7 +222,7 @@ def _authenticated_output(method):
 def _remissoes_no_texto_emitido(out: dict[str, Any]) -> dict[str, Any]:
     """Invariante de emissão de `obter_dispositivo` (IL.3-a, B8): `remissoes[]` cobre só o texto EMITIDO (o `texto`
     devolvido, truncado ou não) e existe em toda saída. Sem texto devolvido ou fora de `encontrada`, lista vazia; remissão
-    cujo trecho não consta do texto emitido sai da lista."""
+    cujo trecho não consta do texto emitido sai da lista. `resolvida` é sempre `false` (redução de escopo, D5)."""
     if not isinstance(out, dict):
         return out
     texto = out.get("texto")
@@ -230,8 +230,10 @@ def _remissoes_no_texto_emitido(out: dict[str, Any]) -> dict[str, Any]:
     if out.get("status") != "encontrada" or not isinstance(texto, str) or not texto or not isinstance(lista, list):
         out["remissoes"] = []
     else:
-        out["remissoes"] = [r for r in lista if isinstance(r, dict) and isinstance(r.get("texto"), str)
-                            and r["texto"] and r["texto"] in texto]
+        # Redução de escopo (IL.3-a r3, D5): nenhuma remissão sai resolvida nesta versão; `alvo` é leitura mecânica não
+        # verificada. A resolução positiva fica desativada aqui, no ponto comum de emissão (Python, MCP e REST).
+        out["remissoes"] = [{**r, "resolvida": False} for r in lista if isinstance(r, dict)
+                            and isinstance(r.get("texto"), str) and r["texto"] and r["texto"] in texto]
     return out
 
 
