@@ -81,6 +81,26 @@ def verif(text="verified", temporal="verified", fundamento=None, t=None, m=None,
             "temporal": {"status": temporal, **(m or {})}, "fundamento_temporal": fundamento, **kw}
 
 
+CADEIA_GAB = [{"ato": "lei-10303-2001", "data": "2001-10-31"}, {"ato": "lei-11941-2009", "data": "2009-05-27"}]
+
+
+def chain(*atos, **faltas):
+    """Cadeia de alterações com a entrega documental completa; `faltas` troca um campo de cada elo (texto, evidencia, url)."""
+    elo = {"texto": "Art. 14. Texto do ato alterador.", "evidencia": {"capture_id": "cap-1", "sha256": "c" * 64},
+           "url": "https://exemplo.gov.br/ato"}
+    elo.update(faltas)
+    return [{"ato": {"especie": "lei", "numero": n, "ano": a, "url": elo["url"]}, "publicacao": {"data": d},
+             "texto": elo["texto"], "evidencia": elo["evidencia"]} for n, a, d in atos]
+
+
+def prev_ok(**kw):
+    """Última versão oficial anterior com a entrega documental completa (data, texto, caminho, evidência)."""
+    base = {"data": "1976-12-17", "texto": TEXTO, "caminho": "art. 14",
+            "evidencia": {"capture_id": "cap-0", "sha256": "d" * 64}}
+    base.update(kw)
+    return {k: v for k, v in base.items() if v is not None}
+
+
 def rem(obra, caminho, resolvida=True):
     return {"texto": "x", "alvo": {"obra": obra, "caminho": caminho}, "resolvida": resolvida}
 
@@ -204,28 +224,51 @@ def test_c_nao_verificado_para_D_motivo_aceito_e_cadeia():
     assert [i["item"] for i in r["indevidas"]] == ["i"] and r["resultado"] == "erro"
 
     cad = caso("L-c-003", "c", tipo="nao_verificado_para_D", motivos_aceitos=["sem_versao_oficial_na_data"],
-               cadeia=[{"ato": "lei-10303-2001", "data": "2001-10-31"}, {"ato": "lei-11941-2009", "data": "2009-05-27"}])
+               cadeia=CADEIA_GAB, ultima_versao_anterior={"ato": "original", "data": "1976-12-17"})
     cad["data"] = "2010-01-01"
     svo = {"reason_code": "sem_versao_oficial_na_data"}
-
-    def chain(*atos):
-        return [{"ato": {"especie": "lei", "numero": n, "ano": a, "url": "u"}, "publicacao": {"data": d}}
-                for n, a, d in atos]
-
-    boa = verif("unknown", "unknown", t=svo, m=svo, ultima_versao_oficial_anterior={"data": "1976-12-17"},
-                cadeia_alteracoes=chain(("10.303", 2001, "2001-11-01"), (11941, 2009, "2009-05-28")))
+    boa = verif("unknown", "unknown", t=svo, m=svo, ultima_versao_oficial_anterior=prev_ok(),
+                cadeia_alteracoes=chain(("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27")))
     assert av(cad, boa)["resultado"] == "acerto"
-    ruins = [
-        {**boa, "cadeia_alteracoes": list(reversed(boa["cadeia_alteracoes"]))},  # fora de ordem
-        {**boa, "cadeia_alteracoes": boa["cadeia_alteracoes"][:1]},  # incompleta
-        {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-11-01"), (11942, 2009, "2009-05-28"))},  # ato errado
-        {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-11-01"), (11941, 2009, "2009-09-01"))},  # fora da folga
-        {**boa, "ultima_versao_oficial_anterior": None},
-        {**boa, "ultima_versao_oficial_anterior": {"data": "2010-01-01"}},  # não anterior a D
-    ]
-    for ruim in ruins:
+    ruins = {
+        "fora de ordem": {**boa, "cadeia_alteracoes": list(reversed(boa["cadeia_alteracoes"]))},
+        "incompleta": {**boa, "cadeia_alteracoes": boa["cadeia_alteracoes"][:1]},
+        "ato errado": {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"), (11942, 2009, "2009-05-27"))},
+        "um dia de diferença (sem tolerância)": {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-11-01"),
+                                                                                    (11941, 2009, "2009-05-27"))},
+        "publicação 45 dias antes do ato": {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-09-16"),
+                                                                              (11941, 2009, "2009-05-27"))},
+        "predecessor ausente": {**boa, "ultima_versao_oficial_anterior": None},
+        "predecessor não anterior a D": {**boa, "ultima_versao_oficial_anterior": prev_ok(data="2010-01-01")},
+        "predecessor só com data": {**boa, "ultima_versao_oficial_anterior": {"data": "1976-12-17"}},
+        "predecessor com data errada (1900)": {**boa, "ultima_versao_oficial_anterior": prev_ok(data="1900-01-01")},
+        "predecessor sem texto": {**boa, "ultima_versao_oficial_anterior": prev_ok(texto="")},
+        "predecessor sem caminho": {**boa, "ultima_versao_oficial_anterior": prev_ok(caminho=None)},
+        "predecessor de outro dispositivo": {**boa, "ultima_versao_oficial_anterior": prev_ok(caminho="art. 99")},
+        "predecessor sem evidência": {**boa, "ultima_versao_oficial_anterior": prev_ok(evidencia={})},
+        "predecessor de outro ato": {**boa, "ultima_versao_oficial_anterior": prev_ok(ato="lei-9999-1999")},
+        "cadeia sem texto do ato": {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"),
+                                                                      (11941, 2009, "2009-05-27"), texto=None)},
+        "cadeia sem evidência": {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"),
+                                                                   (11941, 2009, "2009-05-27"), evidencia=None)},
+        "cadeia sem url do ato": {**boa, "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"),
+                                                                    (11941, 2009, "2009-05-27"), url="")},
+        "cadeia sem data de publicação": {**boa, "cadeia_alteracoes": chain(("10.303", 2001, None),
+                                                                            (11941, 2009, "2009-05-27"))},
+    }
+    for rotulo, ruim in ruins.items():
         r = av(cad, ruim)
-        assert r["resultado"] == "parcial" and r["extra"]["nao_verificado_com_motivo"] is True
+        assert r["resultado"] == "parcial" and r["extra"]["nao_verificado_com_motivo"] is True, rotulo
+    # gabarito sem `ultima_versao_anterior` ou sem `cadeia`: o caso não se confronta, nunca é acerto
+    sem_uva = {**cad, "gabarito": {k: v for k, v in cad["gabarito"].items() if k != "ultima_versao_anterior"}}
+    assert av(sem_uva, boa)["resultado"] == "parcial"
+    # predecessor não original: exige a identificação do ato, que o gabarito declara
+    cad2 = {**cad, "gabarito": {**cad["gabarito"], "ultima_versao_anterior": {"ato": "lei-10303-2001",
+                                                                              "data": "2001-10-31"}}}
+    prev2 = prev_ok(data="2001-10-31", ato="lei-10303-2001")
+    assert av(cad2, {**boa, "ultima_versao_oficial_anterior": prev2})["resultado"] == "acerto"
+    sem_ato = {k: v for k, v in prev2.items() if k != "ato"}
+    assert av(cad2, {**boa, "ultima_versao_oficial_anterior": sem_ato})["resultado"] == "parcial"
 
 
 def test_c_nao_existia_em_D():
@@ -535,7 +578,8 @@ def test_cli_recusa_divergente_e_nao_executa(tmp_path):
         def __getattr__(self, n):
             raise AssertionError("não devia executar")
     rc = ex.main(["--conjunto", str(f["d"]), "--mutantes", str(f["dm"]), "--home", str(tmp_path), "--modo", "remoto",
-                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md)], _servico=Boom())
+                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--sintetico"],
+                _servico=Boom())
     assert rc == 2 and not (tmp_path / "s.json").exists()
 
 
@@ -554,13 +598,15 @@ def test_cli_somente_tabela_nao_vaza_casos(tmp_path, capsys):
         def obter_dispositivo(self, citacao=None, work_id=None, caminho=None, data=None, versao="vigente", fonte=None):
             return enc()
     rc = ex.main(["--conjunto", str(d), "--mutantes", str(dm), "--home", str(tmp_path), "--modo", "remoto",
-                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--somente-tabela"], _servico=S())
+                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--somente-tabela", "--sintetico"],
+                _servico=S())
     out = capsys.readouterr().out
     saida = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
-    assert set(saida) == {"tabela"} and set(saida["tabela"]) == set(ex.CAPS)
+    assert set(saida) == {"tabela", "qualificante"} and set(saida["tabela"]) == set(ex.CAPS)
+    assert saida["qualificante"] is False  # execução sintética: marcada no próprio relatório reduzido
     assert rc == 1  # sem casos de b a e e sem unidades suficientes: reprovado
     assert "L-a-" not in out and "L-a-" not in json.dumps(saida)
-    assert out.splitlines()[0] in ("(a) aprovado", "(a) reprovado")
+    assert "NÃO QUALIFICANTE" in out.splitlines()[0] and "(a) reprovado" in out
 
 
 def test_cli_modo_local_falha_fechada_em_tentativa_de_rede(tmp_path):
@@ -574,7 +620,7 @@ def test_cli_modo_local_falha_fechada_em_tentativa_de_rede(tmp_path):
                 pass
             return {"status": "indisponivel"}
     rc = ex.main(["--conjunto", str(d), "--mutantes", str(dm), "--home", str(tmp_path), "--modo", "local",
-                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md)], _servico=S())
+                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--sintetico"], _servico=S())
     assert rc == 3 and not (tmp_path / "s.json").exists()
 
 
@@ -604,6 +650,18 @@ def bateria(m) -> list[str]:
         falhas.append("fundamento sem capture_id")
     if m.igual_texto("Art. 1º Texto", "art. 1º texto"):
         falhas.append("normaliza caixa")
+    nx = caso("L-c-090", "c", tipo="nao_existia_em_D")
+    ne = {"reason_code": "NAO_EXISTIA"}
+    if m.avaliar_resposta(nx, verif("unavailable", "not_found", m=ne), Svc())["resultado"] == "acerto":
+        falhas.append("indisponibilidade no numerador")
+    cad = caso("L-c-091", "c", tipo="nao_verificado_para_D", motivos_aceitos=["sem_versao_oficial_na_data"],
+               cadeia=CADEIA_GAB, ultima_versao_anterior={"ato": "original", "data": "1976-12-17"})
+    cad["data"] = "2010-01-01"
+    svo = {"reason_code": "sem_versao_oficial_na_data"}
+    um_dia = verif("unknown", "unknown", t=svo, m=svo, ultima_versao_oficial_anterior=prev_ok(),
+                   cadeia_alteracoes=chain(("10.303", 2001, "2001-11-01"), (11941, 2009, "2009-05-27")))
+    if m.avaliar_resposta(cad, um_dia, Svc())["resultado"] == "acerto":
+        falhas.append("cadeia com tolerância de data")
     return falhas
 
 
@@ -618,6 +676,8 @@ def test_bateria_passa_no_executor_correto():
      lambda f, d, svc: (isinstance(f, dict) and f.get("tipo") == "versao_oficial_na_data", "")),
     ("normaliza_caixa", "igual_texto",
      lambda a, b: isinstance(a, str) and isinstance(b, str) and ex.norm(a).lower() == ex.norm(b).lower()),
+    ("sem_veto_de_indisponibilidade", "indisponivel", lambda resp: False),
+    ("cadeia_sem_confronto", "_cadeia_confere", lambda resp, caso, d: (True, "")),
 ])
 def test_mutantes_do_executor_falham(monkeypatch, nome, alvo, mutacao):
     monkeypatch.setattr(ex, alvo, mutacao)
@@ -668,3 +728,347 @@ def test_executor_mede_b_e_e_pela_fachada_publica(svc6385):
     assert por["L-e-001"]["resultado"] == "acerto"
     # remissão resolvida fora do gabarito é confirmação indevida (iii), pela mesma fachada
     assert por["L-e-002"]["resultado"] == "erro" and por["L-e-002"]["indevidas"][0]["item"] == "iii"
+
+
+# --- B1: veto comum de indisponibilidade antes da decisão de acerto, em todas as capacidades e tipos ----------------------
+
+INDISP = [{"identity": {"status": "unavailable"}}, {"text": {"status": "unavailable"}},
+          {"temporal": {"status": "unavailable"}}, {"vigencia": {"status": "indisponivel"}},
+          {"identity": {"status": "parcial"}}, {"evidencia": {"natureza_texto": "publicacao_original",
+                                                              "status": "unavailable"}}]
+
+
+@pytest.mark.parametrize("dim", INDISP, ids=lambda d: next(iter(d)) + "-" + next(iter(d.values()))["status"])
+def test_b1_obtencao_com_dimensao_indisponivel_nunca_e_acerto(dim):
+    for cap in ("a", "b", "d"):
+        r = av(caso(f"L-{cap}-001", cap), enc(**dim))
+        assert r["resultado"] == "indisponivel", (cap, dim)
+    rev = caso("L-b-002", "b", tipo="revogado_vigente")
+    resp = {"status": "encontrada", "texto": "Art. 5º (Revogado)", "vigencia": {"status": "revogado"}, **dim}
+    if "vigencia" not in dim:
+        assert av(rev, resp)["resultado"] == "indisponivel"
+    e = caso("L-e-001", "e", alvos=ALVOS)
+    ok = [rem("Lei 6.404/1976", "art. 166"), rem("Lei 6.404/1976", "art. 170, § 2º")]
+    assert av(e, enc(remissoes=ok, **dim))["resultado"] == "indisponivel"
+
+
+@pytest.mark.parametrize("estado", ["unavailable", "indisponivel", "parcial"])
+def test_b1_estado_agregado_indisponivel_nunca_e_acerto(estado):
+    assert av(caso("L-a-001", "a"), enc(status=estado))["resultado"] == "indisponivel"
+    assert av(caso("L-d-001", "d"), {**enc(), "status": estado})["resultado"] == "indisponivel"
+
+
+def test_b1_c_todos_os_tipos_com_identidade_ou_texto_indisponivel():
+    ident = {"identity": {"status": "unavailable"}}
+    ver = caso("L-c-001", "c", tipo="verificado_para_D")
+    assert av(ver, verif(fundamento=fund()))["resultado"] == "acerto"
+    assert av(ver, {**verif(fundamento=fund()), **ident})["resultado"] == "indisponivel"
+    assert av(ver, {**verif(fundamento=fund()), "text": {"status": "unavailable"}})["resultado"] != "acerto"
+    sfp = {"reason_code": "sem_fundamento_do_periodo"}
+    nv = caso("L-c-002", "c", tipo="nao_verificado_para_D", motivos_aceitos=["sem_fundamento_do_periodo"])
+    assert av(nv, verif("unknown", "unknown", t=sfp, m=sfp))["resultado"] == "acerto"
+    assert av(nv, {**verif("unknown", "unknown", t=sfp, m=sfp), **ident})["resultado"] == "indisponivel"
+    nx = caso("L-c-003", "c", tipo="nao_existia_em_D")
+    ne = {"reason_code": "NAO_EXISTIA"}
+    assert av(nx, verif("unknown", "not_found", m=ne))["resultado"] == "acerto"
+    # a contraprova do auditor: text.status=unavailable + temporal not_found/NAO_EXISTIA era contada como acerto
+    assert av(nx, verif("unavailable", "not_found", m=ne))["resultado"] == "indisponivel"
+    assert av(nx, {**verif("unknown", "not_found", m=ne), **ident})["resultado"] == "indisponivel"
+    assert av(nx, {**verif("unknown", "not_found", m=ne), "vigencia": {"status": "unavailable"}})["resultado"] \
+        == "indisponivel"
+
+
+def test_b1_veto_preserva_a_inspecao_de_confirmacao_indevida():
+    nx = caso("L-c-001", "c", tipo="nao_existia_em_D")
+    r = av(nx, {**verif("verified", "not_found", m={"reason_code": "NAO_EXISTIA"}), "identity": {"status": "unavailable"}})
+    assert r["resultado"] == "indisponivel" and [i["item"] for i in r["indevidas"]] == ["i"]
+    r = av(caso("L-b-001", "b"), enc(texto="outro", identity={"status": "unavailable"}))
+    assert r["resultado"] == "indisponivel" and [i["item"] for i in r["indevidas"]] == ["ii"]
+
+
+def test_b1_consolidacao_de_oito_historicos_nao_existia_com_texto_indisponivel_nao_aprova():
+    cs = _conjunto("c", 8, "nao_existia_em_D")
+    resp = {c["id"]: verif("unavailable", "not_found", m={"reason_code": "NAO_EXISTIA"}) for c in cs}
+    rel = _rodar(cs, resp, _mutantes_de(cs))
+    assert rel["capacidades"]["c"]["acertos"] == 0 and not rel["capacidades"]["c"]["aprovada"]
+    resp_ok = {c["id"]: verif("unknown", "not_found", m={"reason_code": "NAO_EXISTIA"}) for c in cs}
+    assert _rodar(cs, resp_ok, _mutantes_de(cs))["capacidades"]["c"]["acertos"] == 8
+
+
+# --- B3: todas as passadas medidas examinadas; (e) independe do estado agregado ------------------------------------------
+
+
+class SvcSequencia(Svc):
+    """Responde `obter_dispositivo` na ordem dada (aquecimento + medidas); repete a última."""
+
+    def __init__(self, respostas):
+        super().__init__()
+        self.respostas, self.n = list(respostas), 0
+
+    def obter_dispositivo(self, citacao=None, work_id=None, caminho=None, data=None, versao="vigente", fonte=None):
+        r = self.respostas[min(self.n, len(self.respostas) - 1)]
+        self.n += 1
+        return r
+
+
+def test_b3_confirmacao_indevida_na_segunda_ou_terceira_passada_e_registrada():
+    for ruim in (1, 2):  # índice entre as três medidas
+        resp = [enc()] + [enc(texto="Art. 14. TEXTO ERRADO.") if i == ruim else enc() for i in range(3)]
+        rel = ex.executar([caso("L-b-001", "b")], [], SvcSequencia(resp), "remoto")
+        c = rel["capacidades"]["b"]["casos"][0]
+        assert c["resultado"] == "acerto"  # o resultado principal é o da primeira passada medida...
+        assert [i["item"] for i in c["indevidas"]] == ["ii"] and f"passada {ruim + 1}" in c["indevidas"][0]["detalhe"]
+        assert rel["confirmacoes_indevidas_total"] == 1  # ...mas o erro achado nas demais não desaparece
+        assert c["passadas"][ruim] == "erro"
+        assert set(ex.tabela(rel).values()) == {"reprovado"}
+
+
+def test_b3_o_aquecimento_e_descartado_mesmo_para_confirmacoes():
+    resp = [enc(texto="ERRADO NO AQUECIMENTO")] + [enc()] * 3
+    rel = ex.executar([caso("L-b-001", "b")], [], SvcSequencia(resp), "remoto")
+    assert rel["confirmacoes_indevidas_total"] == 0
+
+
+def test_b3_truncamento_em_passada_posterior_vale_para_o_caso():
+    seq = [enc()] * 4
+    seq[2] = enc(truncado=True)  # segunda medida
+    c = caso("L-b-001", "b")
+    c["norma_grande"] = True
+    rel = ex.executar([c], [], SvcSequencia(seq), "remoto")
+    assert rel["capacidades"]["b"]["extras"]["norma_grande_sem_truncamento"] == "0/1"
+
+
+def test_b3_e_remissao_resolvida_excedente_e_inspecionada_em_qualquer_estado():
+    c = caso("L-e-001", "e", alvos=ALVOS)
+    excedente = [rem("Lei 6.404/1976", "art. 99")]
+    for estado in ("parcial", "unavailable", "indisponivel", "unknown", "inexistente", "encontrada"):
+        r = av(c, {"status": estado, "texto": TEXTO, "remissoes": excedente})
+        assert [i["item"] for i in r["indevidas"]] == ["iii"], estado
+        assert r["resultado"] != "acerto", estado
+    assert av(c, {"status": "parcial", "remissoes": [rem("Lei 6.404/1976", "art. 99", resolvida=False)]})["indevidas"] == []
+    assert av(c, {"status": "parcial", "remissoes": "lixo"})["indevidas"] == []
+
+
+# --- B4: congelamento normativo, modo sintético, leitura única -----------------------------------------------------------
+
+
+def test_b4_so_o_congelamento_normativo_do_repositorio_e_normativo(tmp_path):
+    assert ex.congelamento_normativo(ex.CONGELAMENTO_PADRAO) is True
+    copia = tmp_path / "il1-congelamento.md"
+    copia.write_bytes(ex.CONGELAMENTO_PADRAO.read_bytes())
+    assert ex.congelamento_normativo(copia) is False  # mesmos bytes, outro caminho: não é a autoridade
+    f, md = _arquivos(tmp_path)
+    assert ex.congelamento_normativo(md) is False
+    assert ex.congelamento_normativo(tmp_path / "inexistente.md") is False
+
+
+def test_b4_congelamento_alheio_sem_sintetico_e_recusado_sem_executar(tmp_path):
+    f, md = _arquivos(tmp_path)
+
+    class Boom:
+        def __getattr__(self, n):
+            raise AssertionError("não devia executar")
+    rc = ex.main(["--conjunto", str(f["d"]), "--mutantes", str(f["dm"]), "--home", str(tmp_path), "--modo", "remoto",
+                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md)], _servico=Boom())
+    assert rc == 2 and not (tmp_path / "s.json").exists()
+
+
+def test_b4_modo_sintetico_e_marcado_nao_qualificante_no_relatorio(tmp_path, capsys):
+    d, dm, md = _montar(tmp_path, _conjunto("a", 3))
+
+    class S(Svc):
+        def obter_dispositivo(self, citacao=None, work_id=None, caminho=None, data=None, versao="vigente", fonte=None):
+            return enc()
+    rc = ex.main(["--conjunto", str(d), "--mutantes", str(dm), "--home", str(tmp_path), "--modo", "remoto",
+                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--sintetico"], _servico=S())
+    rel = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert rc == 1 and rel["qualificante"] is False and "NÃO QUALIFICANTE" in rel["aviso"]
+    assert rel["congelamento"]["normativo"] is False
+    assert "NÃO QUALIFICANTE" in capsys.readouterr().out
+
+
+def test_b4_servico_injetado_nunca_qualifica_nem_com_o_congelamento_normativo(tmp_path):
+    pl = RAIZ / "tests" / "porta_l"
+
+    class S(Svc):
+        def obter_dispositivo(self, citacao=None, work_id=None, caminho=None, data=None, versao="vigente", fonte=None):
+            return {"status": "indisponivel"}
+
+        def verificar_citacao(self, citacao, trecho=None, data=None, modo="literal", proposicao=None):
+            return {"status": "indisponivel"}
+    ex.main(["--conjunto", str(pl / "desenvolvimento.jsonl"), "--mutantes", str(pl / "mutantes.jsonl"), "--home",
+             str(tmp_path), "--modo", "remoto", "--saida", str(tmp_path / "s.json")], _servico=S())
+    rel = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert rel["qualificante"] is False and rel["congelamento"]["normativo"] is True
+
+
+def test_b4_entrada_lida_uma_vez_e_os_bytes_conferidos_sao_os_analisados(tmp_path, monkeypatch):
+    f, md = _arquivos(tmp_path)
+    original = Path.read_bytes
+    esperado = hashlib.sha256(f["d"].read_bytes()).hexdigest()
+    leituras: dict[str, int] = {}
+    trocar = {str(f["d"]): b'{"id": "trocado-depois-da-conferencia"}\n'}
+
+    def lendo(self):
+        k = str(self)
+        leituras[k] = leituras.get(k, 0) + 1
+        if leituras[k] > 1 and k in trocar:
+            return trocar[k]  # uma segunda leitura veria outros bytes
+        return original(self)
+    monkeypatch.setattr(Path, "read_bytes", lendo)
+    ent = ex.carregar_entradas(f["d"], f["dm"], md)
+    assert leituras[str(f["d"])] == 1 and leituras[str(f["dm"])] == 1 and leituras[str(md)] == 1
+    assert ent.casos == [{"id": "d"}]  # os bytes conferidos
+    assert ent.conjunto_sha256 == esperado
+    assert ent.congelamento_sha256 == hashlib.sha256(original(md)).hexdigest()
+
+
+def test_b4_relatorio_declara_os_hashes_dos_bytes_lidos_uma_vez(tmp_path, monkeypatch):
+    d, dm, md = _montar(tmp_path, _conjunto("a", 3))
+    original = Path.read_bytes
+    leituras: dict[str, int] = {}
+
+    def lendo(self):
+        leituras[str(self)] = leituras.get(str(self), 0) + 1
+        return original(self)
+    monkeypatch.setattr(Path, "read_bytes", lendo)
+    monkeypatch.setattr(Path, "read_text", lambda self, *a, **k: pytest.fail(f"reabertura por read_text: {self}"))
+
+    class S(Svc):
+        def obter_dispositivo(self, citacao=None, work_id=None, caminho=None, data=None, versao="vigente", fonte=None):
+            return enc()
+    ex.main(["--conjunto", str(d), "--mutantes", str(dm), "--home", str(tmp_path), "--modo", "remoto",
+             "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--sintetico"], _servico=S())
+    assert leituras[str(d)] == 1 and leituras[str(dm)] == 1 and leituras[str(md)] == 1
+    monkeypatch.undo()
+    rel = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert rel["conjunto_sha256"] == hashlib.sha256(d.read_bytes()).hexdigest()
+    assert rel["mutantes_sha256"] == hashlib.sha256(dm.read_bytes()).hexdigest()
+    assert rel["congelamento"]["sha256"] == hashlib.sha256(md.read_bytes()).hexdigest()
+
+
+@pytest.mark.repositorio
+def test_b4_execucao_qualificante_sobre_o_desenvolvimento_com_a_fachada_real(tmp_path):
+    pl = RAIZ / "tests" / "porta_l"
+    saida = tmp_path / "rel.json"
+    rc = ex.main(["--conjunto", str(pl / "desenvolvimento.jsonl"), "--mutantes", str(pl / "mutantes.jsonl"), "--home",
+                  str(tmp_path / "home"), "--modo", "local", "--saida", str(saida)])
+    rel = json.loads(saida.read_text(encoding="utf-8"))
+    assert rc == 1  # home vazio: nada capturado, tudo indisponível
+    assert rel["qualificante"] is True and rel["congelamento"]["normativo"] is True and "aviso" not in rel
+    assert rel["rede_bloqueada"] is True and rel["tentativas_de_rede"] == []
+    assert rel["confirmacoes_indevidas_total"] == 0
+    assert all(c["acertos"] == 0 for c in rel["capacidades"].values())
+
+
+# --- B5: bloqueio de rede cobre as primitivas de saída e o ciclo completo do serviço ------------------------------------
+
+
+def test_b5_barra_envio_conexao_e_resolucao_inclusive_em_socket_ja_conectado():
+    a, b = socket.socketpair()  # par local já conectado: nenhum pacote de rede
+    try:
+        with ex.BloqueioDeRede() as bl:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as u:
+                acoes = (lambda: u.sendto(b"x", ("127.0.0.1", 9)), lambda: u.connect(("127.0.0.1", 9)),
+                         lambda: u.connect_ex(("127.0.0.1", 9)), lambda: u.send(b"x"), lambda: u.sendall(b"x"),
+                         lambda: socket.gethostbyname("example.invalid"), lambda: socket.gethostbyaddr("127.0.0.1"),
+                         lambda: socket.getnameinfo(("127.0.0.1", 9), 0))
+                for acao in acoes:
+                    with pytest.raises(ex.RedeBloqueada):
+                        acao()
+            with pytest.raises(ex.RedeBloqueada):
+                a.send(b"x")  # socket já conectado
+            with pytest.raises(ex.RedeBloqueada):
+                a.sendall(b"x")
+            assert len(bl.tentativas) >= 10
+            with pytest.raises(ex.ViolacaoDeRede):
+                bl.verificar()
+    finally:
+        a.close()
+        b.close()
+
+
+def test_b5_restaura_o_que_herdava_do_tipo_base_sem_fixar_copia():
+    antes = "sendto" in vars(socket.socket)
+    with ex.BloqueioDeRede():
+        pass
+    assert ("sendto" in vars(socket.socket)) == antes
+    a, b = socket.socketpair()
+    try:
+        a.send(b"ok")  # fora da guarda, o envio local volta a funcionar
+        assert b.recv(2) == b"ok"
+    finally:
+        a.close()
+        b.close()
+
+
+PRIMITIVAS = [("socket", "sendto"), ("socket", "send"), ("socket", "sendall"), ("socket", "connect"),
+              ("socket", "connect_ex"), ("modulo", "create_connection"), ("modulo", "getaddrinfo"),
+              ("modulo", "gethostbyname"), ("modulo", "gethostbyname_ex"), ("modulo", "gethostbyaddr"),
+              ("modulo", "getnameinfo")]
+
+
+@pytest.mark.parametrize("onde,nome", PRIMITIVAS)
+def test_b5_autoteste_falha_se_qualquer_primitiva_escapar(onde, nome):
+    alvo = socket.socket if onde == "socket" else socket
+
+    def escapou(*a, **k):
+        raise OSError("escapou do bloqueio")  # sentinela em memória: nenhuma saída real
+    with ex.BloqueioDeRede() as b:
+        b.autoteste()  # íntegro
+        setattr(alvo, nome, escapou)  # a primitiva volta a escapar da barreira
+        with pytest.raises(ex.ViolacaoDeRede) as exc:
+            b.autoteste()
+        assert nome in str(exc.value)
+
+
+def test_b5_autoteste_falha_se_a_primitiva_nao_levanta_nada():
+    with ex.BloqueioDeRede() as b:
+        socket.socket.sendto = lambda self, *a, **k: 0  # "enviaria" sem levantar
+        with pytest.raises(ex.ViolacaoDeRede):
+            b.autoteste()
+
+
+class _FalsoVerifica:
+    """Substituto de `Verifica` que tenta a rede onde o teste mandar (e engole a falha)."""
+    onde: str = ""
+
+    def __init__(self, home=None):
+        if self.onde == "construcao":
+            self._tenta()
+
+    @staticmethod
+    def _tenta():
+        try:
+            socket.getaddrinfo("example.invalid", 443)
+        except OSError:
+            pass
+
+    def obter_dispositivo(self, citacao=None, work_id=None, caminho=None, data=None, versao="vigente", fonte=None):
+        if self.onde == "uso":
+            self._tenta()
+        return {"status": "indisponivel"}
+
+    def close(self):
+        if self.onde == "fechamento":
+            self._tenta()
+
+
+@pytest.mark.parametrize("onde", ["construcao", "uso", "fechamento"])
+def test_b5_ciclo_completo_do_servico_esta_sob_o_bloqueio(tmp_path, monkeypatch, onde):
+    import freoa_verifica.service as fachada
+    d, dm, md = _montar(tmp_path, _conjunto("a", 2))
+    monkeypatch.setattr(fachada, "Verifica", type("Falso", (_FalsoVerifica,), {"onde": onde}))
+    rc = ex.main(["--conjunto", str(d), "--mutantes", str(dm), "--home", str(tmp_path), "--modo", "local",
+                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--sintetico"])
+    assert rc == 3 and not (tmp_path / "s.json").exists()  # falha fechada, sem relatório
+
+
+def test_b5_modo_local_sem_tentativa_nenhuma_registra_rede_bloqueada(tmp_path, monkeypatch):
+    import freoa_verifica.service as fachada
+    d, dm, md = _montar(tmp_path, _conjunto("a", 2))
+    monkeypatch.setattr(fachada, "Verifica", type("Falso", (_FalsoVerifica,), {"onde": ""}))
+    rc = ex.main(["--conjunto", str(d), "--mutantes", str(dm), "--home", str(tmp_path), "--modo", "local",
+                  "--saida", str(tmp_path / "s.json"), "--congelamento", str(md), "--sintetico"])
+    rel = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    assert rc == 1 and rel["rede_bloqueada"] is True and rel["tentativas_de_rede"] == []

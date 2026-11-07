@@ -2,17 +2,23 @@
 
 Uso:
   python scripts/porta_l.py --conjunto <jsonl> --mutantes <jsonl> --home <home> --modo local|remoto --saida <relatorio.json>
-                            [--somente-tabela] [--congelamento <il1-congelamento.md>]
+                            [--somente-tabela] [--sintetico [--congelamento <outro.md>]]
 
 Sem rede própria: chama só a fachada pública Python (`obter_dispositivo`, `verificar_citacao`, `obter_evidencia`), nunca
 função interna. No modo `local` o processo bloqueia a rede e FALHA FECHADO ao detectar qualquer tentativa (código 3); no
-modo `remoto` a federação ao vivo é a do serviço. O executor não lê a reserva por caminho fixo: recebe os arquivos por
-argumento e confere o SHA-256 contra `il1-congelamento.md` antes de rodar, recusando arquivo divergente (código 2).
+modo `remoto` a federação ao vivo é a do serviço; o bloqueio cobre o ciclo completo (construção, uso e fechamento do
+serviço) e as primitivas de saída (connect, send, sendall, sendto, resolução), com autoteste que falha se alguma escapar.
+O executor não lê a reserva por caminho fixo: recebe os arquivos por argumento, lê cada um UMA vez, confere o SHA-256 desses
+bytes contra `il1-congelamento.md` e analisa e declara os mesmos bytes, recusando arquivo divergente (código 2). Só a
+execução com o congelamento normativo do repositório, o serviço real e sem `--sintetico` é QUALIFICANTE; qualquer outra
+(`--sintetico` com outro congelamento, serviço injetado) sai marcada NÃO QUALIFICANTE no relatório.
 
 A comparação textual (seção 7) é a do validador congelado, importada, não copiada: `norm` daqui é o mesmo objeto de
 `scripts/porta_l/validar_gabaritos_porta_l.py`. Denominador por unidade de independência (seção 2); confirmação indevida
 pelos quatro itens da seção 2 em todos os casos e mutantes (eliminatória, reprova todas as capacidades); mutantes da
-seção 3 pela chamada declarada no próprio mutante; p95 da seção 4 (uma passada de aquecimento descartada e três medidas,
+seção 3 pela chamada declarada no próprio mutante, examinando TODAS as passadas medidas; veto comum de indisponibilidade
+(`unavailable`, `indisponivel`, `parcial` em qualquer dimensão) antes de qualquer acerto; cadeia e predecessor confrontados
+sem tolerância com `gabarito.cadeia` e `gabarito.ultima_versao_anterior`; p95 da seção 4 (uma passada de aquecimento descartada e três medidas,
 posto mais próximo). Relatório por capacidade; `--somente-tabela` emite só aprovado/reprovado (guardião na reserva, D6).
 
 Código de saída: 0 todas as capacidades aprovadas; 1 alguma reprovada; 2 entrada ou hash recusados; 3 falha fechada
@@ -34,6 +40,7 @@ import socket
 import sys
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -45,8 +52,8 @@ PISO_ACERTO = {"a": 0.95, "b": 0.95, "c": 0.80, "d": 0.90, "e": 0.90}
 LIMITE_P95_S = {"local": 5.0, "remoto": 20.0}
 MIN_UNIDADES, MIN_NORMAS = 8, 4
 PASSADAS_AQUECIMENTO, PASSADAS_MEDIDAS = 1, 3
-TOLERANCIA_DATA_DIAS = 45  # folga entre a data do ato e a da publicação, a mesma do validador (cadeia)
 CONGELAMENTO_PADRAO = RAIZ / "docs" / "auditoria" / "1.4.0" / "il1-congelamento.md"
+CONGELAMENTO_SHA256 = "ec8702b7af393958877393b6a539a076c69e9539ffcd04fb148f0b0453264d5b"  # il1-congelamento.md (LF)
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -81,31 +88,53 @@ class ViolacaoDeRede(RuntimeError):
 
 
 class BloqueioDeRede:
-    """Bloqueia conexão e resolução de nomes no processo; guarda cada tentativa. `verificar()` levanta se houve alguma,
-    mesmo que o código chamado tenha engolido a exceção."""
+    """Bloqueia no processo toda primitiva de saída (conexão, envio, resolução de nomes); guarda cada tentativa.
+    `verificar()` levanta se houve alguma, mesmo que o código chamado tenha engolido a exceção. O autoteste exerce
+    cada primitiva e falha se qualquer uma escapar."""
+
+    # primitivas de saída bloqueadas: métodos de socket (inclusive os herdados do tipo C), funções de módulo e SSL
+    _SOCKET = ("connect", "connect_ex", "send", "sendall", "sendto", "sendmsg", "sendfile")
+    _MODULO = ("create_connection", "getaddrinfo", "gethostbyname", "gethostbyname_ex", "gethostbyaddr", "getnameinfo")
+    _SSL = ("send", "sendall", "sendto", "write")
 
     def __init__(self) -> None:
         self.tentativas: list[str] = []
-        self._orig: list[tuple[Any, str, Any]] = []
+        self._orig: list[tuple[Any, str, Any, bool]] = []
 
     def _barrar(self, nome: str):
         def barreira(*a, **k):
-            alvo = a[1] if nome.endswith("connect") and len(a) > 1 else (a[0] if a else "")
+            alvo = a[1] if nome.endswith(("connect", "connect_ex", "sendto")) and len(a) > 1 else (a[0] if a else "")
             self.tentativas.append(f"{nome}:{alvo!r}"[:200])
             raise RedeBloqueada(f"rede bloqueada no modo local ({nome})")
         return barreira
 
+    def _alvos(self) -> list[tuple[Any, str]]:
+        alvos: list[tuple[Any, str]] = [(socket.socket, n) for n in self._SOCKET]
+        alvos += [(socket, n) for n in self._MODULO]
+        try:
+            import _socket
+            alvos += [(_socket, n) for n in self._MODULO if n != "create_connection" and hasattr(_socket, n)]
+        except ImportError:  # pragma: no cover
+            pass
+        try:
+            import ssl
+            alvos += [(ssl.SSLSocket, n) for n in self._SSL if hasattr(ssl.SSLSocket, n)]
+        except ImportError:  # pragma: no cover
+            pass
+        return [(o, n) for o, n in alvos if hasattr(o, n)]
+
     def __enter__(self):
-        for obj, atributo in ((socket.socket, "connect"), (socket.socket, "connect_ex"),
-                              (socket, "create_connection"), (socket, "getaddrinfo"),
-                              (socket, "gethostbyname"), (socket, "gethostbyname_ex")):
-            self._orig.append((obj, atributo, getattr(obj, atributo)))
+        for obj, atributo in self._alvos():
+            self._orig.append((obj, atributo, getattr(obj, atributo), atributo in vars(obj)))
             setattr(obj, atributo, self._barrar(f"{getattr(obj, '__name__', 'socket')}.{atributo}"))
         return self
 
     def __exit__(self, *exc):
-        for obj, atributo, original in reversed(self._orig):
-            setattr(obj, atributo, original)
+        for obj, atributo, original, proprio in reversed(self._orig):
+            if proprio:
+                setattr(obj, atributo, original)
+            else:  # herdado do tipo base: volta a herdar em vez de fixar a cópia na subclasse
+                delattr(obj, atributo)
         self._orig.clear()
         return False
 
@@ -114,24 +143,58 @@ class BloqueioDeRede:
             raise ViolacaoDeRede(f"tentativa de rede no modo local: {self.tentativas[0]}")
 
     def autoteste(self) -> None:
-        """Falha fechada: se o bloqueio não funciona, não se roda."""
+        """Falha fechada: exerce CADA primitiva bloqueada e levanta se qualquer uma não for barrada (a barreira age antes
+        de qualquer pacote; nada sai)."""
+        alvo = ("127.0.0.1", 9)
+        provas: list[tuple[str, Any]] = [
+            ("socket.connect", lambda s: s.connect(alvo)), ("socket.connect_ex", lambda s: s.connect_ex(alvo)),
+            ("socket.send", lambda s: s.send(b"x")), ("socket.sendall", lambda s: s.sendall(b"x")),
+            ("socket.sendto", lambda s: s.sendto(b"x", alvo)),
+            ("socket.sendmsg", lambda s: s.sendmsg([b"x"], [], 0, alvo)),  # não existe em todas as plataformas
+            ("socket.sendfile", lambda s: s.sendfile(__import__("io").BytesIO(b"x"))),
+            ("socket.create_connection", lambda s: socket.create_connection(alvo, timeout=0.2)),
+            ("socket.getaddrinfo", lambda s: socket.getaddrinfo("example.invalid", 80)),
+            ("socket.gethostbyname", lambda s: socket.gethostbyname("example.invalid")),
+            ("socket.gethostbyname_ex", lambda s: socket.gethostbyname_ex("example.invalid")),
+            ("socket.gethostbyaddr", lambda s: socket.gethostbyaddr("127.0.0.1")),
+            ("socket.getnameinfo", lambda s: socket.getnameinfo(alvo, 0)),
+        ]
         try:
-            socket.create_connection(("127.0.0.1", 9), timeout=0.2)
-        except RedeBloqueada:
-            self.tentativas.clear()
-            return
-        except OSError:
+            import _socket
+            provas.append(("_socket.getaddrinfo", lambda s: _socket.getaddrinfo("example.invalid", 80)))
+        except ImportError:  # pragma: no cover
             pass
-        raise ViolacaoDeRede("o bloqueio de rede não está efetivo; o executor não roda no modo local")
+        try:
+            import ssl
+            for n in self._SSL:
+                if hasattr(ssl.SSLSocket, n):
+                    provas.append((f"ssl.{n}", lambda s, n=n: getattr(ssl.SSLSocket, n)(s, b"x")))
+        except ImportError:  # pragma: no cover
+            pass
+        escaparam: list[str] = []
+        for nome, prova in provas:
+            if nome.startswith("socket.") and not hasattr(socket.socket, nome.split(".", 1)[1])                     and not hasattr(socket, nome.split(".", 1)[1]):
+                continue  # primitiva inexistente nesta plataforma: nada a barrar
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                try:
+                    prova(s)
+                except RedeBloqueada:
+                    continue
+                except Exception:  # noqa: BLE001 - qualquer outra coisa é uma primitiva que escapou da barreira
+                    pass
+            escaparam.append(nome)
+        self.tentativas.clear()
+        if escaparam:
+            raise ViolacaoDeRede(f"o bloqueio de rede não está efetivo ({', '.join(escaparam)}); o executor não roda no "
+                                 f"modo local")
 
 
 # --------------------------------------------------------------------------------------------------------------
 # Congelamento: o executor confere os arquivos recebidos contra il1-congelamento.md (A1.8)
 # --------------------------------------------------------------------------------------------------------------
-def hashes_congelados(md: Path) -> dict[str, str]:
-    """Papel -> SHA-256 das linhas da tabela do congelamento: conjunto e mutantes do desenvolvimento e da reserva."""
+def _papeis(texto: str) -> dict[str, str]:
     papeis: dict[str, str] = {}
-    for linha in md.read_text(encoding="utf-8").splitlines():
+    for linha in texto.splitlines():
         cel = [c.strip() for c in linha.strip().strip("|").split("|")]
         if len(cel) < 3 or not re.fullmatch(r"`[0-9a-f]{64}`", cel[2]):
             continue
@@ -150,19 +213,74 @@ def hashes_congelados(md: Path) -> dict[str, str]:
     return papeis
 
 
+def hashes_congelados(md: Path) -> dict[str, str]:
+    """Papel -> SHA-256 das linhas da tabela do congelamento: conjunto e mutantes do desenvolvimento e da reserva."""
+    return _papeis(Path(md).read_bytes().decode("utf-8"))
+
+
+def sha256_bytes(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+
 def sha256_arquivo(p: Path) -> str:
-    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+    return sha256_bytes(Path(p).read_bytes())
+
+
+def congelamento_normativo(md: Path) -> bool:
+    """O congelamento é o normativo do repositório: o mesmo caminho E os mesmos bytes (fins de linha normalizados) que o
+    hash fixado aqui. Qualquer outro Markdown de hashes é só ferramenta de teste e nunca qualifica."""
+    try:
+        md = Path(md)
+        if md.resolve() != CONGELAMENTO_PADRAO.resolve():
+            return False
+        return sha256_bytes(md.read_bytes().replace(b"\r\n", b"\n")) == CONGELAMENTO_SHA256
+    except OSError:
+        return False
+
+
+@dataclass
+class Entradas:
+    """As entradas lidas UMA vez: os bytes conferidos contra o congelamento são os analisados e os do relatório."""
+    conjunto: str
+    casos: list[dict]
+    mutantes: list[dict]
+    conjunto_sha256: str
+    mutantes_sha256: str
+    congelamento_sha256: str
+
+
+def _jsonl_bytes(nome: str, dados: bytes) -> list[dict]:
+    out = []
+    for n, linha in enumerate(dados.decode("utf-8").splitlines(), 1):
+        if linha.strip():
+            try:
+                obj = json.loads(linha)
+            except ValueError as exc:
+                raise ValueError(f"{nome}:{n}: JSON inválido ({exc})") from exc
+            if not isinstance(obj, dict):
+                raise ValueError(f"{nome}:{n}: registro não é objeto")
+            out.append(obj)
+    return out
+
+
+def carregar_entradas(conjunto: Path, mutantes: Path, md: Path) -> Entradas:
+    """Lê cada arquivo uma única vez, confere os bytes lidos contra o congelamento e interpreta esses mesmos bytes.
+    Levanta se não são os arquivos congelados do MESMO conjunto."""
+    dmd = Path(md).read_bytes()
+    papeis = _papeis(dmd.decode("utf-8"))
+    bc, bm = Path(conjunto).read_bytes(), Path(mutantes).read_bytes()
+    hc, hm = sha256_bytes(bc), sha256_bytes(bm)
+    for nome in ("desenvolvimento", "reserva"):
+        if hc == papeis[f"{nome}/conjunto"] and hm == papeis[f"{nome}/mutantes"]:
+            return Entradas(nome, _jsonl_bytes(str(conjunto), bc), _jsonl_bytes(str(mutantes), bm), hc, hm,
+                            sha256_bytes(dmd))
+    raise ValueError("arquivo divergente do congelamento (il1-congelamento.md): o conjunto e os mutantes têm de ser os "
+                     "congelados do mesmo conjunto")
 
 
 def conferir_congelamento(conjunto: Path, mutantes: Path, md: Path) -> str:
     """Devolve 'desenvolvimento' ou 'reserva' se os dois arquivos são os congelados do MESMO conjunto; senão levanta."""
-    papeis = hashes_congelados(md)
-    hc, hm = sha256_arquivo(conjunto), sha256_arquivo(mutantes)
-    for nome in ("desenvolvimento", "reserva"):
-        if hc == papeis[f"{nome}/conjunto"] and hm == papeis[f"{nome}/mutantes"]:
-            return nome
-    raise ValueError("arquivo divergente do congelamento (il1-congelamento.md): o conjunto e os mutantes têm de ser os "
-                     "congelados do mesmo conjunto")
+    return carregar_entradas(conjunto, mutantes, md).conjunto
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -194,6 +312,19 @@ def eh_acerto(resultado: str) -> bool:
 def _dim(resp: dict, nome: str) -> dict:
     d = resp.get(nome) if isinstance(resp, dict) else None
     return d if isinstance(d, dict) else {}
+
+
+ESTADOS_NAO_NUMERADOR = ("unavailable", "indisponivel", "parcial")  # matriz, seção 2: nunca no numerador
+
+
+def indisponivel(resp: dict) -> bool:
+    """Veto comum (matriz, seção 2): `unavailable`, `indisponivel` ou `parcial` no estado agregado ou em QUALQUER
+    dimensão da resposta (identidade, texto, temporal, vigência, evidência...) tira o caso do numerador."""
+    if not isinstance(resp, dict):
+        return True
+    if resp.get("status") in ESTADOS_NAO_NUMERADOR:
+        return True
+    return any(isinstance(v, dict) and v.get("status") in ESTADOS_NAO_NUMERADOR for v in resp.values())
 
 
 def _verificado(resp: dict) -> bool:
@@ -241,27 +372,76 @@ def _ato_canonico(ato: Any) -> str | None:
     return None
 
 
-def _cadeia_confere(resp: dict, gab: dict, data_d: str) -> tuple[bool, str]:
-    """Última versão oficial anterior e cadeia ordenada de atos alteradores, contra `gabarito.cadeia` (1.1)."""
-    prev = resp.get("ultima_versao_oficial_anterior")
-    if not isinstance(prev, dict) or _data_iso(prev.get("data")) is None:
+def _tem_texto(x: Any) -> bool:
+    return isinstance(x, str) and bool(x.strip())
+
+
+def _evidencia_identificavel(ev: Any) -> bool:
+    """Evidência entregue com a versão ou o ato: objeto com captura recuperável (`capture_id`) ou hash do documento."""
+    if not isinstance(ev, dict):
+        return False
+    return _tem_texto(ev.get("capture_id")) or _tem_texto(ev.get("sha256")) or _tem_texto(
+        _dim(ev, "metadados").get("sha256"))
+
+
+def _predecessor_confere(prev: Any, uva: Any, caso: dict, data_d: str) -> tuple[bool, str]:
+    """Última versão oficial anterior contra `gabarito.ultima_versao_anterior` {ato, data}: data idêntica, anterior a D,
+    identificação do ato quando o gabarito não é o original, e a entrega documental (texto, caminho, evidência)."""
+    if not isinstance(uva, dict) or _data_iso(uva.get("data")) is None or not _tem_texto(uva.get("ato")):
+        return False, "gabarito sem ultima_versao_anterior {ato, data}"
+    if not isinstance(prev, dict):
         return False, "ultima_versao_oficial_anterior ausente"
-    d = _data_iso(data_d)
-    if d is None or _data_iso(prev["data"]) >= d:
+    d, dp = _data_iso(data_d), _data_iso(prev.get("data"))
+    if dp is None:
+        return False, "ultima_versao_oficial_anterior sem data"
+    if d is None or dp >= d:
         return False, "ultima_versao_oficial_anterior não é anterior a D"
+    if prev.get("data") != uva.get("data"):
+        return False, f"ultima_versao_oficial_anterior com data {prev.get('data')!r}; esperada {uva.get('data')!r}"
+    esperado = VALIDADOR.canon_norma(caso["norma"]) if uva["ato"] == "original" else _ato_canonico(uva["ato"])
+    if "ato" in prev or uva["ato"] != "original":
+        obtido = _ato_canonico(prev.get("ato")) if prev.get("ato") != "original" else VALIDADOR.canon_norma(caso["norma"])
+        if obtido is None or obtido != esperado:
+            return False, f"ato da última versão anterior {prev.get('ato')!r} diferente do esperado {uva['ato']!r}"
+    if not _tem_texto(prev.get("texto")):
+        return False, "ultima_versao_oficial_anterior sem texto"
+    cam = prev.get("caminho")
+    pc = VALIDADOR.parse_caminho(cam) if isinstance(cam, str) else None
+    pe = VALIDADOR.parse_caminho(caso.get("caminho")) if isinstance(caso.get("caminho"), str) else None
+    if pc is None or pe is None or VALIDADOR.chave_caminho(pc) != VALIDADOR.chave_caminho(pe):
+        return False, "ultima_versao_oficial_anterior sem o caminho do dispositivo pedido"
+    if not _evidencia_identificavel(prev.get("evidencia")):
+        return False, "ultima_versao_oficial_anterior sem evidência identificável"
+    return True, ""
+
+
+def _cadeia_confere(resp: dict, caso: dict, data_d: str) -> tuple[bool, str]:
+    """Última versão oficial anterior e cadeia ordenada de atos alteradores, contra `gabarito.ultima_versao_anterior` e
+    `gabarito.cadeia` (1.1), sem tolerância de data e exigindo a entrega documental de cada elo."""
+    gab = caso.get("gabarito") or {}
+    ok, motivo = _predecessor_confere(resp.get("ultima_versao_oficial_anterior"), gab.get("ultima_versao_anterior"),
+                                      caso, data_d)
+    if not ok:
+        return False, motivo
+    cadeia = resp.get("cadeia_alteracoes")
     obtida = []
-    for item in resp.get("cadeia_alteracoes") or []:
+    for item in cadeia if isinstance(cadeia, list) else []:
         item = item if isinstance(item, dict) else {}
-        obtida.append((_ato_canonico(item.get("ato")), _dim(item, "publicacao").get("data")))
+        obtida.append((_ato_canonico(item.get("ato")), _dim(item, "publicacao").get("data"), item))
     esperada = [(_ato_canonico(x.get("ato")), x.get("data")) for x in gab.get("cadeia") or [] if isinstance(x, dict)]
+    if not esperada:
+        return False, "gabarito sem cadeia"
     if len(obtida) != len(esperada):
         return False, f"cadeia com {len(obtida)} atos; esperados {len(esperada)}"
-    for (ao, do), (ae, de) in zip(obtida, esperada):
+    for (ao, do, item), (ae, de) in zip(obtida, esperada):
         if ao is None or ao != ae:
             return False, f"ato da cadeia {ao!r} diferente do esperado {ae!r} (ou fora de ordem)"
-        a, b = _data_iso(do), _data_iso(de)
-        if a is None or b is None or abs((a - b).days) > TOLERANCIA_DATA_DIAS:
-            return False, "data do ato da cadeia fora da tolerância"
+        if _data_iso(de) is None or do != de:
+            return False, f"data de publicação do ato {ae!r} é {do!r}; esperada {de!r}"
+        ato = item.get("ato") if isinstance(item.get("ato"), dict) else {}
+        if not (_tem_texto(ato.get("url")) and _tem_texto(item.get("texto"))
+                and _evidencia_identificavel(item.get("evidencia"))):
+            return False, f"entrega documental incompleta do ato {ae!r} (url, texto ou evidência)"
     return True, ""
 
 
@@ -300,8 +480,7 @@ def avaliar_resposta(caso: dict, resp: Any, svc: Any) -> dict:
         out["motivo"] = "resposta não é objeto"
         return out
     status = resp.get("status")
-    indisp = status in ("indisponivel", "unavailable") or any(
-        _dim(resp, n).get("status") == "unavailable" for n in ("identity", "text", "temporal"))
+    indisp = indisponivel(resp)
     gab_texto = gab.get("texto")
     # (ii) status encontrada com texto diferente do gabarito (qualquer chamada de obtenção)
     if cap != "c" and status == "encontrada" and isinstance(gab_texto, str) and not igual_texto(resp.get("texto"), gab_texto):
@@ -331,8 +510,8 @@ def avaliar_resposta(caso: dict, resp: Any, svc: Any) -> dict:
         esperado = alvos_esperados(gab)
         resolvidos: set[tuple] = set()
         excedentes = []
-        remissoes = (resp.get("remissoes") or []) if status == "encontrada" else []
-        for r in remissoes:
+        remissoes = resp.get("remissoes") if isinstance(resp.get("remissoes"), list) else []
+        for r in remissoes:  # afirmações de resolução são inspecionadas qualquer que seja o estado agregado
             if not isinstance(r, dict) or r.get("resolvida") is not True:
                 continue
             alvo = r.get("alvo") if isinstance(r.get("alvo"), dict) else {}
@@ -356,6 +535,8 @@ def avaliar_resposta(caso: dict, resp: Any, svc: Any) -> dict:
         _avaliar_c(caso, resp, svc, out, indisp)
     else:
         out["motivo"] = f"capacidade desconhecida: {cap!r}"
+    if indisp and out["resultado"] == "acerto":  # veto comum, depois da decisão e sem tocar nas `indevidas`
+        out.update(resultado="indisponivel", motivo="indisponibilidade em alguma dimensão: nunca no numerador")
     return out
 
 
@@ -382,7 +563,7 @@ def _avaliar_c(caso: dict, resp: dict, svc: Any, out: dict, indisp: bool) -> Non
         com_motivo = unk and all(m in aceitos for m in motivos if m is not None) and None not in motivos
         out["extra"]["nao_verificado_com_motivo"] = bool(com_motivo)
         if com_motivo and "sem_versao_oficial_na_data" in motivos:
-            ok_c, motivo_c = _cadeia_confere(resp, gab, d)
+            ok_c, motivo_c = _cadeia_confere(resp, caso, d)
             if ok_c:
                 out.update(resultado="acerto")
             else:
@@ -477,10 +658,20 @@ def executar(casos: list[dict], mutantes: list[dict], svc: Any, modo: str, *, co
             if p < aquecimento:
                 continue  # passada de aquecimento: descartada
             latencias[c["capacidade"]].append(dt)
-            if c["id"] not in avaliacoes:  # o resultado do caso é o da primeira passada medida
-                av = avaliar_resposta(c, resp, svc)
+            av = avaliar_resposta(c, resp, svc)  # TODAS as passadas medidas são examinadas (itens eliminatórios)
+            if c["id"] not in avaliacoes:  # o resultado principal do caso é o da primeira passada medida
                 av["latencias_s"] = []
+                av["passadas"] = []
                 avaliacoes[c["id"]] = av
+            else:
+                avaliacoes[c["id"]]["indevidas"].extend(
+                    {**x, "detalhe": f"passada {p - aquecimento + 1}: {x['detalhe']}"} for x in av["indevidas"])
+                ex0 = avaliacoes[c["id"]]["extra"]  # as condições por caso valem para todas as passadas medidas
+                if "truncado" in av["extra"] and av["extra"]["truncado"] is not False:
+                    ex0["truncado"] = av["extra"]["truncado"]
+                if av["extra"].get("nao_verificado_com_motivo") is False:
+                    ex0["nao_verificado_com_motivo"] = False
+            avaliacoes[c["id"]]["passadas"].append(av["resultado"])
             avaliacoes[c["id"]]["latencias_s"].append(round(dt, 6))
     res_mut: dict[str, dict] = {}
     for m in mutantes:
@@ -554,6 +745,7 @@ def consolidar(casos, mutantes, avaliacoes, res_mut, latencias, modo, conjunto, 
             "extras": extras, "aprovada": not motivos, "motivos_reprovacao": motivos,
             "casos": [{"id": c["id"], "unidade": unidade(c), "conta_no_denominador": c["id"] in rep_ids,
                        "resultado": avaliacoes[c["id"]]["resultado"], "motivo": avaliacoes[c["id"]]["motivo"],
+                       "passadas": avaliacoes[c["id"]].get("passadas", []),
                        "indevidas": avaliacoes[c["id"]]["indevidas"], "latencias_s": avaliacoes[c["id"]]["latencias_s"]}
                       for c in cs],
             "mutantes": [{"id": m["id"], "caso": m["caso"], "tipo": m["tipo"],
@@ -576,18 +768,8 @@ def tabela(relatorio: dict) -> dict[str, str]:
 # --------------------------------------------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------------------------------------------
-def _ler_jsonl(p: Path) -> list[dict]:
-    out = []
-    for n, linha in enumerate(Path(p).read_text(encoding="utf-8").splitlines(), 1):
-        if linha.strip():
-            try:
-                obj = json.loads(linha)
-            except ValueError as exc:
-                raise ValueError(f"{p}:{n}: JSON inválido ({exc})") from exc
-            if not isinstance(obj, dict):
-                raise ValueError(f"{p}:{n}: registro não é objeto")
-            out.append(obj)
-    return out
+def _recusar(msg: str, somente_tabela: bool, rotulo: str = "RECUSADO") -> None:
+    print(f"{rotulo}: {msg}" if not somente_tabela else rotulo, file=sys.stderr)
 
 
 def main(argv: list[str] | None = None, *, _servico: Any = None) -> int:
@@ -599,52 +781,74 @@ def main(argv: list[str] | None = None, *, _servico: Any = None) -> int:
     ap.add_argument("--saida", required=True, type=Path)
     ap.add_argument("--somente-tabela", action="store_true",
                     help="emite só a tabela aprovado/reprovado (uso do guardião na reserva, D6)")
-    ap.add_argument("--congelamento", type=Path, default=CONGELAMENTO_PADRAO)
+    ap.add_argument("--congelamento", type=Path, default=CONGELAMENTO_PADRAO,
+                    help="só com --sintetico: outro Markdown de hashes (ferramenta de teste; nunca qualifica)")
+    ap.add_argument("--sintetico", action="store_true",
+                    help="modo sintético: aceita outro congelamento; o relatório sai marcado NÃO QUALIFICANTE")
     a = ap.parse_args(argv)
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, OSError):
         pass
-    try:
-        conjunto = conferir_congelamento(a.conjunto, a.mutantes, a.congelamento)
-        casos, mutantes = _ler_jsonl(a.conjunto), _ler_jsonl(a.mutantes)
-    except (OSError, ValueError) as exc:
-        print(f"RECUSADO: {exc}" if not a.somente_tabela else "RECUSADO", file=sys.stderr)
+    normativo = congelamento_normativo(a.congelamento)
+    if not normativo and not a.sintetico:
+        _recusar("congelamento que não é o normativo do repositório (il1-congelamento.md); só --sintetico o aceita, "
+                 "como execução NÃO QUALIFICANTE", a.somente_tabela)
         return 2
+    qualificante = normativo and not a.sintetico and _servico is None  # serviço injetado = teste, nunca qualifica
     try:
+        entradas = carregar_entradas(a.conjunto, a.mutantes, a.congelamento)
+    except (OSError, ValueError) as exc:
+        _recusar(str(exc), a.somente_tabela)
+        return 2
+    casos, mutantes = entradas.casos, entradas.mutantes
+    try:
+        guarda = None
         if a.modo == "local":
             os.environ["FV_OFFLINE"] = "1"
+            guarda = BloqueioDeRede()
         svc = _servico
-        if svc is None:
-            sys.path.insert(0, str(RAIZ))
-            from freoa_verifica.service import Verifica
-
-            svc = Verifica(home=a.home)
         try:
-            if a.modo == "local":
-                with BloqueioDeRede() as bloq:
-                    bloq.autoteste()
-                    relatorio = executar(casos, mutantes, svc, "local", conjunto=conjunto, bloqueio=bloq)
-                    relatorio["rede_bloqueada"] = True
-                    relatorio["tentativas_de_rede"] = list(bloq.tentativas)
-            else:
-                relatorio = executar(casos, mutantes, svc, "remoto", conjunto=conjunto)
-                relatorio["rede_bloqueada"] = False
+            if guarda is not None:
+                guarda.__enter__()  # o bloqueio cobre o ciclo completo: construção, uso e fechamento do serviço
+                guarda.autoteste()
+            if svc is None:
+                sys.path.insert(0, str(RAIZ))
+                from freoa_verifica.service import Verifica
+
+                svc = Verifica(home=a.home)
+            try:
+                relatorio = executar(casos, mutantes, svc, a.modo, conjunto=entradas.conjunto, bloqueio=guarda)
+            finally:
+                if _servico is None and hasattr(svc, "close"):
+                    svc.close()
+            if guarda is not None:
+                guarda.verificar()  # inclui o que a construção e o fechamento tentaram
+                relatorio["tentativas_de_rede"] = list(guarda.tentativas)
+            relatorio["rede_bloqueada"] = guarda is not None
         finally:
-            if _servico is None and hasattr(svc, "close"):
-                svc.close()
+            if guarda is not None:
+                guarda.__exit__(None, None, None)
     except ViolacaoDeRede as exc:
-        print(f"FALHA FECHADA: {exc}" if not a.somente_tabela else "FALHA FECHADA", file=sys.stderr)
+        _recusar(str(exc), a.somente_tabela, "FALHA FECHADA")
         return 3
     except Exception as exc:  # noqa: BLE001
-        print(f"FALHA FECHADA: erro interno do executor ({type(exc).__name__})", file=sys.stderr)
+        _recusar(f"erro interno do executor ({type(exc).__name__})", a.somente_tabela, "FALHA FECHADA")
         return 3
     relatorio["hashes_conferidos"] = True
-    relatorio["conjunto_sha256"] = sha256_arquivo(a.conjunto)
-    relatorio["mutantes_sha256"] = sha256_arquivo(a.mutantes)
+    relatorio["conjunto_sha256"] = entradas.conjunto_sha256  # os mesmos bytes conferidos e executados
+    relatorio["mutantes_sha256"] = entradas.mutantes_sha256
+    relatorio["congelamento"] = {"caminho": a.congelamento.name, "sha256": entradas.congelamento_sha256,
+                                 "normativo": normativo}
+    relatorio["qualificante"] = qualificante
+    if not qualificante:
+        relatorio["aviso"] = ("NÃO QUALIFICANTE: execução sintética, com serviço injetado ou com congelamento que não é o "
+                              "normativo; o resultado não vale como apuração")
     relatorio["gerado_em"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    saida = {"tabela": tabela(relatorio)} if a.somente_tabela else relatorio
+    saida = {"tabela": tabela(relatorio), "qualificante": qualificante} if a.somente_tabela else relatorio
     a.saida.write_text(json.dumps(saida, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if not qualificante:
+        print("NÃO QUALIFICANTE (execução sintética)")
     for cap, v in tabela(relatorio).items():
         print(f"({cap}) {v}")
     return 0 if all(v == "aprovado" for v in tabela(relatorio).values()) else 1
