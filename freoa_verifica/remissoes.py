@@ -420,10 +420,11 @@ def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = 
                           "caminho": rotulo, "path": path, "duvida": duvida or obra is None, "fim": g.fim})
     if art_proprio:
         itens.extend(_do_proprio_artigo(texto, t, art_proprio, obra_propria, [(g.ini, g.fim) for g in grupos]))
-    if truncado:
+    if truncado:  # remissão que toca o corte, ou a que o corte deixa sem o que viria depois ("§ 2o do" + "art. 15")
         corte = len(texto.rstrip())
         for it in itens:
-            if it["fim"] >= corte:
+            resto = texto[it["fim"]:corte]
+            if it["fim"] >= corte or (len(resto.strip()) <= 12 and not re.search(r"[.;:]", resto)):
                 it["duvida"] = True
     return itens
 

@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 
 import pytest
 
 from freoa_verifica import remissoes as rem
 from freoa_verifica.aliases import WorkKey
+from freoa_verifica.parsers.model import Issue
 from freoa_verifica.parsers.planalto import parse_planalto
 from freoa_verifica.service import Verifica
+from freoa_verifica.store import blobs
 from tests.fixture_util import load_fixture, load_meta
 
 LSA = WorkKey("federal", "lei", "6404", 1976)
@@ -370,3 +373,188 @@ def test_b6_mutantes_sem_cada_cautela_falham_no_oraculo(monkeypatch, regex_attr,
         monkeypatch.setattr(rem, "_PROPRIA", _re.compile(rem._PROPRIA.pattern.replace("desta|deste", "desta|deste|dessa|desse"),
                                                          rem._PROPRIA.flags))
     assert _resolvidas(texto) != set(), f"a ausência de {regex_attr} passou despercebida em {nome}"
+
+
+# --- B7 (R1): a existência estrutural não é prova do alvo (próprio e externo) ----------------------------------------------
+
+L10303 = WorkKey("federal", "lei", "10303", 2001)
+
+
+@pytest.fixture
+def svc_duas_obras(svc6385):
+    """Lei 6.385/1976 (a própria) e Lei 10.303/2001 (alvo externo), as duas capturadas e indexadas."""
+    svc, rw = svc6385
+    body = load_fixture("planalto_lei_10303_2001")
+    entry = load_meta()["planalto_lei_10303_2001"]
+    doc = parse_planalto(body, base_url="https://www.planalto.gov.br/ccivil_03/leis/")
+    ext = svc.indexar_obra(source_id="planalto", work_key=L10303, document=doc, body=body, url=entry["url"],
+                           fetched_at=entry.get("capturado_em"), work_date="2001-10-31", label="Lei nº 10.303/2001",
+                           content_type="text/html; charset=windows-1252")
+    return svc, rw, ext
+
+
+TEXTO_EXT = "Art. 5º Ver o art. 1º da Lei 10.303/2001 e o art. 3º desta Lei."
+
+
+def _res(svc, rw, texto=TEXTO_EXT):
+    return {(r["alvo"]["obra"], r["alvo"]["caminho"]): r["resolvida"]
+            for r in svc._remissoes_dispositivo(rw, "art5", texto)}
+
+
+EXT_K, PROP_K = ("Lei 10.303/2001", "art. 1º"), ("Lei 6.385/1976", "art. 3º")
+
+
+def test_b7_linha_de_base_alvo_proprio_e_externo_com_prova_completa(svc_duas_obras):
+    svc, rw, ext = svc_duas_obras
+    assert _res(svc, rw) == {EXT_K: True, PROP_K: True}
+
+
+def test_b7_alvo_ambiguo_nunca_resolve_proprio_ou_externo(svc_duas_obras, monkeypatch):
+    svc, rw, ext = svc_duas_obras
+    monkeypatch.setattr(svc, "_obra_local", lambda w: ext)  # o mesmo objeto, para mutar o dispositivo
+    for dono, caminho, chave in ((ext, "art1", EXT_K), (rw, "art3", PROP_K)):
+        prov = next(p for p in dono.document.provisions if p.path == caminho)
+        prov.ambiguous = True
+        try:
+            assert _res(svc, rw)[chave] is False, caminho
+        finally:
+            prov.ambiguous = False
+    assert _res(svc, rw) == {EXT_K: True, PROP_K: True}
+
+
+@pytest.mark.parametrize("quebra", ["sem_capture_id", "sem_sha256", "sha256_diverge", "quarentena", "incompleto",
+                                    "sem_ano", "impedimento_documental", "identidade_nao_demonstrada",
+                                    "identidade_divergente"])
+def test_b7_cada_elo_da_prova_do_alvo_externo_e_necessario(svc_duas_obras, monkeypatch, quebra):
+    svc, rw, ext = svc_duas_obras
+    doc = ext.document
+    variantes = {
+        "sem_capture_id": replace(ext, capture_id=None),
+        "sem_sha256": replace(ext, sha256=None),
+        "sha256_diverge": replace(ext, sha256="0" * 64),
+        "quarentena": replace(ext, quarantined=True),
+        "incompleto": replace(ext, persisted_incomplete=True),
+        "impedimento_documental": replace(ext, document=replace(doc, issues=list(doc.issues) + [
+            Issue("TRUNCATED", None, "bloqueio documental", "document")])),
+        "identidade_nao_demonstrada": replace(ext, document=replace(doc, title="Lei sem epígrafe reconhecível")),
+        "identidade_divergente": replace(ext, document=replace(doc, title="LEI Nº 6.404, DE 15 DE DEZEMBRO DE 1976")),
+    }
+    if quebra == "sem_ano":
+        monkeypatch.setattr(svc, "_obra_local", lambda w: None)
+    else:
+        monkeypatch.setattr(svc, "_obra_local", lambda w: variantes[quebra])
+    assert _res(svc, rw)[EXT_K] is False
+    assert _res(svc, rw)[PROP_K] is True  # a prova do alvo próprio é independente da do externo
+
+
+def test_b7_captura_com_bytes_corrompidos_nao_resolve(svc_duas_obras):
+    svc, rw, ext = svc_duas_obras
+    blob = blobs.blob_path(ext.sha256, svc.home)
+    original = blob.read_bytes()
+    blob.write_bytes(original + b"adulterado")
+    try:
+        assert _res(svc, rw)[EXT_K] is False
+    finally:
+        blob.write_bytes(original)
+    assert _res(svc, rw)[EXT_K] is True
+
+
+def test_b7_cache_em_memoria_sem_captura_persistida_nao_prova(svc_duas_obras):
+    svc, rw, ext = svc_duas_obras
+    solto = replace(ext, capture_id=None, sha256=None)  # o que um cache sem captura autenticada teria
+    assert svc._alvo_provado(solto, L10303, "art1") is False
+    assert svc._alvo_provado(ext, L10303, "art1") is True
+
+
+def test_b7_rota_ou_perfil_fora_da_matriz_nao_resolve(svc_duas_obras, monkeypatch):
+    svc, rw, ext = svc_duas_obras
+    monkeypatch.setattr(svc, "_rotas_admissiveis", lambda: {("camara_legin", "camara_atualizado")})
+    assert _res(svc, rw) == {EXT_K: False, PROP_K: False}  # planalto fora da lista: nem a própria obra vale
+    monkeypatch.setattr(svc, "_rotas_admissiveis", lambda: set())
+    assert _res(svc, rw) == {EXT_K: False, PROP_K: False}
+    monkeypatch.undo()
+    # publicação original de OUTRA obra não é o texto consolidado a que a remissão se refere
+    orig = replace(ext, source_id="camara_legin", document=replace(ext.document, profile="camara_original"))
+    assert svc._alvo_provado(orig, L10303, "art1", externo=True) is False
+    assert svc._alvo_provado(orig, L10303, "art1", externo=False) is True  # a própria obra, na rota dela, vale
+
+
+def test_b7_alvo_proprio_tambem_exige_captura_e_identidade(svc_duas_obras):
+    svc, rw, ext = svc_duas_obras
+    assert svc._alvo_provado(replace(rw, capture_id=None), L6385, "art3") is False
+    assert svc._alvo_provado(replace(rw, document=replace(rw.document, title="sem epígrafe")), L6385, "art3") is False
+    assert svc._alvo_provado(rw, L6385, "art3") is True
+
+
+def test_b7_mutante_so_estrutura_aceita_tudo_e_falha_nos_oraculos(svc_duas_obras, monkeypatch):
+    """O defeito original: `existe` = documento não nulo e dispositivo encontrado. Com ele, o oráculo acima falha."""
+    svc, rw, ext = svc_duas_obras
+    from freoa_verifica.verify import _find_provision
+
+    monkeypatch.setattr(svc, "_obra_local", lambda w: ext)
+
+    monkeypatch.setattr(svc, "_alvo_provado", lambda alvo, work, p, **k: _find_provision(alvo.document, p) is not None)
+    prov = next(p for p in ext.document.provisions if p.path == "art1")
+    prov.ambiguous = True
+    try:
+        assert _res(svc, rw)[EXT_K] is True  # o mutante resolve alvo ambíguo: é exatamente o que o oráculo recusa
+    finally:
+        prov.ambiguous = False
+
+
+# --- B8 (R1): `remissoes` cobre o texto EMITIDO e existe em toda saída de obter_dispositivo ----------------------------
+
+
+def test_b8_remissao_depois_do_corte_nao_aparece_e_a_que_toca_o_corte_nao_resolve(svc6385, monkeypatch):
+    import freoa_verifica.service as fachada
+    svc, _ = svc6385
+    completo = svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")
+    assert completo["truncado"] is False and completo["remissoes"] == ESPERADO_ART9
+    texto = completo["texto"]
+    ponto = texto.index("art. 15")
+    monkeypatch.setattr(fachada, "_DEFAULT_TEXT_LIMIT", ponto - 1)  # o corte cai ANTES da remissão
+    r = svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")
+    assert r["truncado"] is True and "art. 15" not in r["texto"]
+    assert not any(x["resolvida"] for x in r["remissoes"])  # "§ 2o do" sem o artigo: nunca o artigo do próprio dispositivo
+    monkeypatch.setattr(fachada, "_DEFAULT_TEXT_LIMIT", ponto + len("art. 1"))  # o corte cai NO MEIO ("art. 1" de 15)
+    r = svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")
+    assert r["truncado"] is True and r["texto"].endswith("art. 1")
+    assert not any(x["resolvida"] for x in r["remissoes"])  # nunca resolve "art. 1" por truncar "art. 15"
+    for x in r["remissoes"]:
+        assert x["texto"] in r["texto"]  # tudo o que sai consta do texto emitido
+
+
+def test_b8_toda_saida_traz_remissoes_inclusive_as_recusas(svc6385):
+    svc, _ = svc6385
+    recusas = [svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976", versao="invalida"),
+               svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976", fonte="fonte_que_nao_existe"),
+               svc.obter_dispositivo(citacao="art. 9999 da Lei 6.385/1976"),
+               svc.obter_dispositivo(citacao="lixo"), svc.obter_dispositivo()]
+    assert recusas[0]["motivo"] == "versao_invalida" and recusas[1]["motivo"] == "fonte_invalida"
+    for r in recusas:
+        assert r["remissoes"] == [], r
+
+
+def test_b8_recusa_por_autenticacao_de_evidencia_tambem_traz_remissoes(svc6385):
+    svc, rw = svc6385
+    blob = blobs.blob_path(rw.sha256, svc.home)
+    original = blob.read_bytes()
+    blob.write_bytes(original + b"adulterado")
+    try:
+        r = svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")
+    finally:
+        blob.write_bytes(original)
+    assert r["status"] == "unavailable" and r["remissoes"] == []
+    assert svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")["remissoes"] == ESPERADO_ART9
+
+
+def test_b8_invariante_final_descarta_remissao_fora_do_texto_emitido():
+    from freoa_verifica.service import _remissoes_no_texto_emitido as fim
+    base = {"status": "encontrada", "texto": "Art. 1º Ver art. 2º desta Lei."}
+    ok = {"texto": "art. 2º desta Lei", "alvo": {"obra": "Lei 1/2000", "caminho": "art. 2º"}, "resolvida": True}
+    fora = {"texto": "art. 9º desta Lei", "alvo": {"obra": "Lei 1/2000", "caminho": "art. 9º"}, "resolvida": True}
+    assert fim({**base, "remissoes": [ok, fora]})["remissoes"] == [ok]
+    assert fim({**base, "status": "unavailable", "remissoes": [ok]})["remissoes"] == []
+    assert fim({**base, "texto": None, "remissoes": [ok]})["remissoes"] == []
+    assert fim({"status": "indisponivel"})["remissoes"] == []
+    assert fim({**base})["remissoes"] == []

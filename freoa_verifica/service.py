@@ -219,6 +219,22 @@ def _authenticated_output(method):
     return checked
 
 
+def _remissoes_no_texto_emitido(out: dict[str, Any]) -> dict[str, Any]:
+    """Invariante de emissão de `obter_dispositivo` (IL.3-a, B8): `remissoes[]` cobre só o texto EMITIDO (o `texto`
+    devolvido, truncado ou não) e existe em toda saída. Sem texto devolvido ou fora de `encontrada`, lista vazia; remissão
+    cujo trecho não consta do texto emitido sai da lista."""
+    if not isinstance(out, dict):
+        return out
+    texto = out.get("texto")
+    lista = out.get("remissoes")
+    if out.get("status") != "encontrada" or not isinstance(texto, str) or not texto or not isinstance(lista, list):
+        out["remissoes"] = []
+    else:
+        out["remissoes"] = [r for r in lista if isinstance(r, dict) and isinstance(r.get("texto"), str)
+                            and r["texto"] and r["texto"] in texto]
+    return out
+
+
 _ANAFORA = re.compile(
     r"\b(?:art(?:igo)?s?\.?|§+|par[áa]grafos?|incisos?|inc\.|al[íi]neas?)[^.;\n]{0,60}?"
     r"\b(?:d|n)[oa]\s+(?:mesm[oa]|referid[oa]|citad[oa]|supracitad[oa]|aludid[oa]|dit[oa]|anterior)\s+"
@@ -1577,8 +1593,22 @@ class Verifica:
             out["fontes_consultadas"] = resolved.fontes_consultadas
         return out
 
-    @_authenticated_output
     def obter_dispositivo(
+        self,
+        citacao: str | None = None,
+        work_id: str | None = None,
+        caminho: str | None = None,
+        data: str | None = None,
+        versao: str = "vigente",
+        fonte: str | None = None,
+    ) -> dict[str, Any]:
+        """Ponto final de emissão: `remissoes` (aditivo, IL.3-a) acompanha o texto EMITIDO e está presente em toda saída,
+        inclusive nas recusas (versão ou fonte inválida, falha de autenticação da evidência)."""
+        out = self._obter_dispositivo_autenticado(citacao, work_id, caminho, data, versao, fonte)
+        return _remissoes_no_texto_emitido(out)
+
+    @_authenticated_output
+    def _obter_dispositivo_autenticado(
         self,
         citacao: str | None = None,
         work_id: str | None = None,
@@ -1593,11 +1623,6 @@ class Verifica:
             return {"status": "formato_invalido", "motivo": "fonte_invalida", "versao": versao}
         out = self._obter_dispositivo(citacao, work_id, caminho, data, versao, fonte)
         out["versao"] = versao
-        # A2 (IL.3-a): `remissoes[]` só acompanha texto efetivamente devolvido; nos demais estados é lista vazia.
-        if out.get("status") != "encontrada" or not isinstance(out.get("texto"), str) or not out["texto"]:
-            out["remissoes"] = []
-        else:
-            out.setdefault("remissoes", [])
         vig = out.get("vigencia")
         if isinstance(vig, dict) and _historica(data) and (
                 vig.get("status") in ("verified", "vigente_na_fonte", "revogado")
@@ -1735,7 +1760,7 @@ class Verifica:
             "situacao_obra": situacao.resumo(sit),  # C2
             "caminho": path,
             "texto": text_out,
-            "remissoes": self._remissoes_dispositivo(rw, path, texto),
+            "remissoes": self._remissoes_dispositivo(rw, path, text_out, truncado=trunc),
             "texto_atual": texto_atual,
             "truncado": trunc,
             "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, rw),
@@ -1758,9 +1783,10 @@ class Verifica:
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
         }
 
-    def _remissoes_dispositivo(self, rw, path, texto) -> list[dict[str, Any]]:
-        """A2 (IL.3-a): remissões expressas do texto; `resolvida` só com a obra identificada sem ambiguidade e o caminho
-        existente no documento da obra alvo já capturado (nunca consulta a rede)."""
+    def _remissoes_dispositivo(self, rw, path, texto, *, truncado: bool = False) -> list[dict[str, Any]]:
+        """A2 (IL.3-a): remissões expressas do texto EMITIDO; `resolvida` só com a prova positiva do alvo (identidade
+        validada, captura íntegra com hash, rota/perfil admissível, caminho não ambíguo e sem bloqueador), para a obra
+        própria e para a externa, e nunca consulta a rede."""
         if not isinstance(texto, str) or not texto:
             return []
         from freoa_verifica import remissoes as _rem
@@ -1768,34 +1794,66 @@ class Verifica:
         own = rw.work_key
         raiz = (path or "").split(".")[0]
         art = raiz if re.fullmatch(r"art\d+(?:-[A-Z])?", raiz) else None
-        documentos: dict[tuple, Any] = {}
+        alvos: dict[tuple, Any] = {}
+        prov = _find_provision(rw.document, path) if path else None
+        notas = tuple(a.raw for r in (prov.redactions if prov else []) for a in r.annotations if a.raw)
 
         def existe(work, p: str) -> bool:
             chave = (work.kind, work.number, work.year)
             if chave == (own.kind, own.number, own.year):
-                doc = rw.document
+                alvo = rw
             else:
-                if chave not in documentos:
-                    documentos[chave] = self._documento_local(work)
-                doc = documentos[chave]
-            return doc is not None and _find_provision(doc, p) is not None
+                if chave not in alvos:
+                    alvos[chave] = self._obra_local(work)
+                alvo = alvos[chave]
+            return alvo is not None and self._alvo_provado(alvo, work, p, externo=alvo is not rw)
 
-        return _rem.remissoes(texto, own, existe, art, implicita="/" not in (path or ""))
+        return _rem.remissoes(texto, own, existe, art, implicita="/" not in (path or ""), notas=notas,
+                              truncado=truncado)
 
-    def _documento_local(self, work: WorkKey):
-        """Documento já capturado da obra, sem rede e sem escolher entre candidatas (ambígua ou ausente: None)."""
+    def _obra_local(self, work: WorkKey):
+        """Captura persistida da obra, sem rede e sem escolher entre candidatas (ambígua, ausente ou só em memória: None).
+        A captura canônica do banco prevalece; o cache em memória só vale se for a captura persistida (com hash)."""
         if not work.year:
             return None
         try:
-            hit = self._resolver.resolve(work)
-            if not isinstance(hit, ResolvedWork):
-                hit = self._rebuild_from_db(work, _exact=True)
-            if not isinstance(hit, ResolvedWork) or hit.persisted_incomplete:
-                return None
-            validate_identity(work, hit.document, hit.work_date)
-            return hit.document
+            hit = self._rebuild_from_db(work, _exact=True)
+            if hit is None:
+                hit = self._resolver.resolve(work)
+            return hit if isinstance(hit, ResolvedWork) else None
         except Exception:  # noqa: BLE001  - fechado: sem conferência, a remissão não é resolvida
             return None
+
+    def _rotas_admissiveis(self) -> set[tuple[str, str]]:
+        return {(r["fonte"], r["perfil"]) for r in self._carregar_qualificacao_rotas()
+                if isinstance(r, dict) and r.get("fonte") and r.get("perfil")}
+
+    def _alvo_provado(self, alvo, work: WorkKey, path: str, *, externo: bool = False) -> bool:
+        """Prova positiva de que `path` existe na obra `work` tal como capturada em `alvo`. Qualquer elo ausente é
+        `False` (nunca "existe estruturalmente" como prova): identidade declarada e confirmada, captura recuperável com
+        hash íntegro, rota/perfil previstos na matriz de rotas, dispositivo único e sem bloqueio de leitura."""
+        try:
+            if (not work.year or alvo.persisted_incomplete or alvo.quarantined or not alvo.capture_id
+                    or not alvo.sha256):
+                return False
+            doc = alvo.document
+            fonte = alvo.source_id or ("planalto" if doc.profile == "planalto" else None)
+            if (fonte, doc.profile) not in self._rotas_admissiveis():
+                return False
+            if externo and doc.profile == "camara_original":
+                return False  # a publicação original de outra obra não é o texto consolidado a que se remete
+            cap = repo.get_capture(self.conn, alvo.capture_id)
+            if not cap or cap["sha256"] != alvo.sha256:
+                return False
+            self._authenticate_capture(alvo.capture_id)  # bytes íntegros pelo hash
+            if validate_identity(work, doc, alvo.work_date) is None:  # identidade não demonstrada
+                return False
+            prov = _find_provision(doc, path)
+            if prov is None or prov.ambiguous or _reading_blockers(alvo, path):
+                return False
+            return True
+        except (SourceUnavailable, IdentityMismatch, LookupError, ValueError, TypeError, AttributeError, OSError):
+            return False
 
     def _obter_camara(self, rw, path, data, versao):
         self._revalidar_camara(rw)
