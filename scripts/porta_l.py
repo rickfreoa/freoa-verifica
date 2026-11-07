@@ -74,6 +74,7 @@ def _instalar_gancho() -> None:
     if not _gancho_instalado:
         sys.addaudithook(_gancho_de_auditoria)
         _gancho_instalado = True
+        sys._porta_l_gancho_instalado = True  # marcador do processo: a suíte confere que o pytest nunca o carrega
 
 
 def _instalar_gancho_precoce() -> None:
