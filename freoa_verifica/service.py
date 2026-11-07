@@ -1760,7 +1760,7 @@ class Verifica:
             "situacao_obra": situacao.resumo(sit),  # C2
             "caminho": path,
             "texto": text_out,
-            "remissoes": self._remissoes_dispositivo(rw, path, text_out, truncado=trunc),
+            "remissoes": self._remissoes_dispositivo(rw, path, text_out, truncado=trunc, integral=texto),
             "texto_atual": texto_atual,
             "truncado": trunc,
             "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, rw),
@@ -1783,10 +1783,12 @@ class Verifica:
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
         }
 
-    def _remissoes_dispositivo(self, rw, path, texto, *, truncado: bool = False) -> list[dict[str, Any]]:
+    def _remissoes_dispositivo(self, rw, path, texto, *, truncado: bool = False,
+                               integral: str | None = None) -> list[dict[str, Any]]:
         """A2 (IL.3-a): remissões expressas do texto EMITIDO; `resolvida` só com a prova positiva do alvo (identidade
         validada, captura íntegra com hash, rota/perfil admissível, caminho não ambíguo e sem bloqueador), para a obra
-        própria e para a externa, e nunca consulta a rede."""
+        própria e para a externa, e nunca consulta a rede. `integral` é o texto de que o emitido é o recorte: as notas
+        editoriais são localizadas nele."""
         if not isinstance(texto, str) or not texto:
             return []
         from freoa_verifica import remissoes as _rem
@@ -1809,7 +1811,7 @@ class Verifica:
             return alvo is not None and self._alvo_provado(alvo, work, p, externo=alvo is not rw)
 
         return _rem.remissoes(texto, own, existe, art, implicita="/" not in (path or ""), notas=notas,
-                              truncado=truncado)
+                              truncado=truncado, integral=integral)
 
     def _obra_local(self, work: WorkKey):
         """Captura persistida da obra, sem rede e sem escolher entre candidatas (ambígua, ausente ou só em memória: None).
@@ -1840,8 +1842,6 @@ class Verifica:
             fonte = alvo.source_id or ("planalto" if doc.profile == "planalto" else None)
             if (fonte, doc.profile) not in self._rotas_admissiveis():
                 return False
-            if externo and doc.profile == "camara_original":
-                return False  # a publicação original de outra obra não é o texto consolidado a que se remete
             cap = repo.get_capture(self.conn, alvo.capture_id)
             if not cap or cap["sha256"] != alvo.sha256:
                 return False
@@ -4312,11 +4312,13 @@ def _recibo_da_obtencao(self, out, entrada):
 def _final_da_fachada(nome: str, out: Any, versao="vigente") -> Any:
     """Último ponto antes da emissão de toda operação da fachada (Python, MCP e REST): campos aditivos de C4 em todo
     estado de `obter_dispositivo` e `verificar_citacao` (inclusive `formato_invalido`, `indisponivel`, `unknown` e a
-    recusa pelos derivados)."""
+    recusa pelos derivados) e `remissoes` (IL.3-a) em toda saída de `obter_dispositivo`: este é o ponto de emissão comum
+    a todos os retornos da fachada, inclusive a recusa pelos derivados e a identidade ambígua (`SourceAmbiguous`)."""
     if isinstance(out, dict) and nome in _COM_ADITIVOS:
         _normalizar_aditivos(out)
         if nome == "obter_dispositivo":
             out.setdefault("versao", versao)
+            _remissoes_no_texto_emitido(out)
     return out
 
 

@@ -11,10 +11,15 @@ anafórica ou genérica ("do artigo anterior", "na forma da lei", "da mesma Lei"
 `referencias_nao_resolvidas`), referência a inciso ou alínea sem artigo (o caminho dependeria do contexto) e rubrica do
 próprio dispositivo ("Art. 14." no início).
 
-Resolução por classe, não por exemplo: a expressão só é resolvida depois de consumida e validada por inteiro. Qualificador
-não reconhecido depois ou antes do artigo (inciso abreviado ou fora de caixa, faixa de incisos, alínea, item), âmbito de
-anexo, obra externa no contexto da frase ("Conforme a lei 10.406/2002, art. 5"), `dessa/desse`, nota editorial e texto
-cortado no limite do que foi devolvido => `resolvida: false` (na dúvida, abstenção).
+Resolução por GRAMÁTICA FECHADA (lista de permissão), não por padrões negativos: uma remissão só é `resolvida` quando
+toda a expressão, do início da referência até um delimitador terminal reconhecido, é consumida por produções explícitas
+(artigo, parágrafo, inciso, alínea, caput, listas e faixas simples, obra própria por `desta Lei`/`deste Código`, obra
+externa por espécie, número e ano inequívocos) e nada estrutural sobra depois dela (a leitura da cauda é feita sobre o texto
+com caixa e acentos normalizados, sem mudar posições). Qualquer token estrutural não consumido (inciso abreviado, romano
+solto, alínea, item, anexo, outra obra), contexto externo antes da referência (a frase só termina em ponto final, nunca em
+`:` ou `;`), nota editorial na expressão e texto cortado no limite do que foi devolvido => `resolvida: false` (na dúvida,
+abstenção). Notas editoriais são localizadas no texto INTEGRAL (parênteses e colchetes, inclusive aninhados e abertos pelo
+corte) e projetadas sobre o texto emitido. Obra explicitamente igual à própria obra é a própria obra.
 """
 
 from __future__ import annotations
@@ -68,19 +73,28 @@ _DESTE_ARTIGO = re.compile(r"\s*,?\s*(?:d[eo]ste|neste)\s+artigo\b", re.I)
 _DEMONSTRATIVO = re.compile(r"\s*,?\s*(?:d|n)ess[ae]s?\s+[A-Za-zÀ-ú]", re.I)  # "dessa Lei", "desse artigo": anafórico
 _ANEXO_DEPOIS = re.compile(r"\s*,?\s*(?:d|n)[oa]s?\s+anexos?(?![A-Za-zÀ-ú])(?:\s+(?:[IVXLCDM]+(?![A-Za-zÀ-ú])|\d+|[úu]nico))?",
                            re.I)
-# qualificador estrutural que a leitura do grupo não consumiu (inciso abreviado ou com outra caixa, faixa, alínea, item)
-_RESIDUO = re.compile(
-    r"\s*,?\s*(?:(?:[Ii]ncisos?|inc\.|[Aa]l[ií]neas?|al\.|[Ll]etras?|[Ii]t(?:em|ens)|[Pp]ar[áa]grafos?|par\.|§§?|[Cc]aput)"
-    r"(?![A-Za-zÀ-ú])|[IVXLCDM]+(?![A-Za-zÀ-ú0-9])|[a-z]\)|\d+\))")
+# --- leitura fechada sobre o texto normalizado (caixa e acentos dobrados, mesmas posições): o que não foi consumido por
+# uma produção e é token estrutural, ou obra, invalida a expressão inteira
+_ROMANO_PURO = r"m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})"
+_ESTRUTURAL = re.compile(
+    r"(?<![a-z0-9])(?:(?:incisos?|incs?\.?|alineas?|als?\.?|letras?|itens?|item|paragrafos?|par\.|caput|anexos?|tabelas?|"
+    r"quadros?|apendices?|leis?|decretos?|codigos?|constituicao|emendas?|medidas?|resolucao|instrucao|portarias?|"
+    r"regulamento|estatuto|consolidacao|convencao|tratado)(?![a-z0-9])|§§?|[a-z]\)|\d+\)|"
+    rf"(?=[ivxlcdm]){_ROMANO_PURO}(?![a-z0-9]))")
+_FUNCAO = re.compile(r"(?:d[oa]s?|n[oa]s?|a[os]?|o|os|as|e|ou|em|de|com|por|pelo|pela|pelos|pelas|para|ate)(?![a-z0-9])\s*,?\s*")
+_TERMINAL = re.compile(r"\s*(?:$|[.;)\]\"”])")
+_SEPARADOR = re.compile(r"[\s,:\-–—]*")
 _PREFIXO_RESIDUAL = re.compile(
-    r"(?:(?<![A-Za-zÀ-ú])(?:[Ii]ncisos?|inc\.|[Aa]l[ií]neas?|al\.|[Ll]etras?|[Ii]t(?:em|ens)|[Cc]aput|[Pp]ar[áa]grafos?|par\.)"
-    r"(?![A-Za-zÀ-ú])[^;:.]{0,25}|§§?\s*\S{1,12}|(?<![A-Za-zÀ-ú])[IVXLCDM]{1,6}(?![A-Za-zÀ-ú0-9]))"
+    r"(?:(?<![a-z0-9])(?:incisos?|incs?\.?|alineas?|als?\.?|letras?|itens?|item|caput|paragrafos?|par\.)(?![a-z0-9])[^;:.]{0,25}"
+    rf"|§§?\s*\S{{1,12}}|(?<![a-z0-9])(?=[ivxlcdm]){_ROMANO_PURO}(?![a-z0-9]))"
     r"\s*,?\s*(?:d[oa]s?|n[oa]s?)\s+$")
 _OBRA_NUMERADA = re.compile(
     r"(?<![A-Za-zÀ-ú])(?:lei(?:\s+complementar)?|decreto(?:-lei)?|medida\s+provis[óo]ria|emenda\s+constitucional|"
     r"resolu[çc][ãa]o|instru[çc][ãa]o\s+normativa|portaria)\s+(?:n[ºo°.]{0,2}\s*)?\d", re.I)
-_ANEXO = re.compile(r"(?<![A-Za-zÀ-ú])anexos?(?![A-Za-zÀ-ú])", re.I)
-_NOTA_COLCHETES = re.compile(r"\[[^\[\]]*\]")
+_NUMERO_ANO = re.compile(r"\d[\d.]*(?:-\d+)?\s*(?:/\s*\d{2,4}\b|,\s*de\s+\d)")  # "10.406/2002", "8.987, de 13 de ..."
+_SIGLA_OBRA = re.compile(r"(?<![A-Za-zÀ-ú])(?:LC|MP|EC|DL|CF|CRFB|CC|CP|CPC|CPP|CLT|CTN|CDC|ECA|RCVM|CTB|LRF|LINDB)"
+                         r"(?![A-Za-zÀ-ú])")
+_ANEXO = re.compile(r"(?<![a-z])anexos?(?![a-z])")
 _ANAFORICA = re.compile(r"\s*,?\s*(?:d|n)[oa]s?\s+(?:mesm[oa]|referid[oa]|citad[oa]|supracitad[oa]|aludid[oa]|dit[oa]|"
                         r"anterior)\b", re.I)
 _OUTRA_OBRA = re.compile(r"\s*,?\s*d[aeo]s?\s+(?:Lei|Decreto|Medida|C[óo]digo|Constitui|Resolu|Instru|Portaria|"
@@ -88,17 +102,20 @@ _OUTRA_OBRA = re.compile(r"\s*,?\s*d[aeo]s?\s+(?:Lei|Decreto|Medida|C[óo]digo|C
 _REFERENCIA_OBRA = re.compile(r"(?<![A-Za-zÀ-ú])(?:Lei|Decreto|Medida\s+Provis|C[óo]digo|Constitui[çc]|Resolu[çc]|"
                               r"Instru[çc]|Portaria|Regulamento|Estatuto|Emenda\s+Constitucional|Consolida[çc])")  # com inicial maiuscula: "constituicao" e "lei" em prosa nao qualificam obra
 _LIGACAO = re.compile(r"\s*(?:,|\be\b|\bou\b)\s*(?:(?:o|a|os|as)\s+)?")
-_FRONTEIRA = re.compile(r";|:|(?<=[a-zà-ú0-9\)])\.\s+(?=[A-ZÀ-Ú§])|\s[IVXLCDM]+\s*[-–—]\s")
+# a frase só termina em ponto final (ou marcador de inciso): `:` e `;` não mudam a obra de que se fala
+_FRONTEIRA = re.compile(r"(?<=[a-zà-ú0-9\)])\.\s+(?=[A-ZÀ-Ú§])|\s[IVXLCDM]+\s*[-–—]\s")
 
-_ANOTACAO = re.compile(
-    r"\(\s*(?:Reda[çc][ãa]o\s+dada|Inclu[ií]d[oa]s?|Acrescid[oa]s?|Acrescentad[oa]s?|Revogad[oa]s?|Vide|"
-    r"Vig[êe]ncia|Produ[çc][ãa]o\s+de\s+efeitos?|Renumerad[oa]s?|Vetad[oa]s?)\b[^()]*(?:\([^()]*\)[^()]*)*\)"
+# Início de nota editorial entre parênteses: a nota vai até o parêntese que a fecha (aninhamento contado) ou até o fim do
+# que se tem, quando o corte abriu a nota e não a fechou.
+_ABRE_NOTA = re.compile(
+    r"\(\s*(?:(?:Reda[çc][ãa]o\s+dada|Inclu[ií]d[oa]s?|Acrescid[oa]s?|Acrescentad[oa]s?|Revogad[oa]s?|Vide|Vig[êe]ncia|"
+    r"Produ[çc][ãa]o\s+de\s+efeitos?|Renumerad[oa]s?|Vetad[oa]s?|Nota|N\.\s?E\.|Obs\.?|Observa[çc][ãa]o|Coment[áa]rio)"
+    r"(?![A-Za-zÀ-ú])|NR\s*\))"
     r"|\(\s*\"?(?:Caput|Artigo|Par[aá]grafo(?:\s+[uú]nico)?|§\s*\d+\S*|Inciso(?:s)?(?:\s+[IVXLCDM]+)?|"
     r"Al[ií]nea(?:s)?(?:\s+\w)?|Item|Express[ãa]o|Palavra|Texto|Anexo|Tabela)\"?\b[^()]*?"
-    r"\b(?:acrescid|inclu[ií]d|acrescentad|revogad|reda[çc][ãa]o\s+dada|renumerad|vetad|alterad|suprimid|substitu[ií]d)"
-    r"\w*\b[^()]*(?:\([^()]*\)[^()]*)*\)"
-    r"|\(\s*(?:Nota|N\.\s?E\.|Obs\.?|Observa[çc][ãa]o|Coment[áa]rio)(?![A-Za-zÀ-ú])[^()]*(?:\([^()]*\)[^()]*)*\)"
-    r"|\(\s*NR\s*\)", re.I)
+    r"\b(?:acrescid|inclu[ií]d|acrescentad|revogad|reda[çc][ãa]o\s+dada|renumerad|vetad|alterad|suprimid|substitu[ií]d)",
+    re.I)
+_MIN_NOTA_CORTADA = 6
 
 # Natureza da expressão "desta X" por espécie da obra própria: X tem de ser a espécie da obra (ou código/estatuto da lei).
 _PROPRIA_POR_ESPECIE = {
@@ -117,19 +134,125 @@ def _dobra(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).lower()
 
 
-def _mascarar_anotacoes(texto: str, notas: tuple[str, ...] = ()) -> str:
-    """Notas editoriais saem da leitura (viram espaços; as posições do texto se mantêm): as anotações que a estrutura do
-    documento já identificou (`notas`), os padrões textuais e todo trecho entre colchetes (nota do editor)."""
+def _dobra_pos(s: str) -> str:
+    """Caixa e acentos normalizados SEM mudar o comprimento: as posições do texto normalizado valem para o original."""
+    out = []
+    for c in s:
+        if c in "ºª°§":
+            out.append(c)
+            continue
+        base = unicodedata.normalize("NFD", c)[:1] or c
+        low = base.lower()
+        out.append(low if len(low) == 1 else base)
+    return "".join(out)
+
+
+def _fecha(txt: str, ini: int, abre: str, fecha: str) -> int:
+    """Fim da nota que abre em `ini`, contando o aninhamento; nota não fechada vai até o fim do que se tem."""
+    prof = 0
+    for k in range(ini, len(txt)):
+        if txt[k] == abre:
+            prof += 1
+        elif txt[k] == fecha:
+            prof -= 1
+            if prof == 0:
+                return k + 1
+    return len(txt)
+
+
+def _spans_notas(txt: str, notas: tuple[str, ...]) -> list[tuple[int, int]]:
+    """Posições das notas editoriais em `txt`: anotações que a estrutura do documento já identificou, notas entre
+    parênteses reconhecidas e todo trecho entre colchetes, inclusive aninhados e abertos sem fechamento."""
+    spans: list[tuple[int, int]] = []
     for nota in notas:
         if isinstance(nota, str) and nota.strip():
-            texto = texto.replace(nota, " " * len(nota))
-    texto = _ANOTACAO.sub(lambda m: " " * len(m.group(0)), texto)
-    return _NOTA_COLCHETES.sub(lambda m: " " * len(m.group(0)), texto)
+            spans.extend((m.start(), m.end()) for m in re.finditer(re.escape(nota), txt))
+    spans.extend((m.start(), _fecha(txt, m.start(), "(", ")")) for m in _ABRE_NOTA.finditer(txt))
+    i = 0
+    while i < len(txt):
+        if txt[i] == "[":
+            fim = _fecha(txt, i, "[", "]")
+            spans.append((i, fim))
+            i = fim
+        else:
+            i += 1
+    return spans
 
 
-def _contexto_externo(frase: str) -> bool:
-    """A frase (antes da remissão) já fala de outra obra ou de anexo: a remissão sem obra não herda a própria."""
-    return bool(_REFERENCIA_OBRA.search(frase) or _OBRA_NUMERADA.search(frase) or _ANEXO.search(frase))
+def _mascarar_anotacoes(texto: str, notas: tuple[str, ...] = (), integral: str | None = None
+                        ) -> tuple[str, list[tuple[int, int]]]:
+    """Notas editoriais saem da leitura (viram espaços; as posições se mantêm). Elas são localizadas no texto INTEGRAL,
+    quando o emitido é um recorte dele, e projetadas sobre o emitido: a nota aberta no corte continua nota. Sem o
+    integral, a nota aberta no fim do emitido e a nota estrutural cortada no fim também valem como nota."""
+    base = integral if isinstance(integral, str) and integral.startswith(texto) else texto
+    spans = _spans_notas(base, tuple(notas))
+    if base is texto:
+        for nota in notas:
+            if isinstance(nota, str):
+                for k in range(len(nota) - 1, _MIN_NOTA_CORTADA - 1, -1):
+                    if texto.endswith(nota[:k]):
+                        spans.append((len(texto) - k, len(texto)))
+                        break
+    spans = [(a, min(b, len(texto))) for a, b in spans if a < len(texto)]
+    chars = list(texto)
+    for a, b in spans:
+        for k in range(a, b):
+            chars[k] = " "
+    return "".join(chars), spans
+
+
+def _obra_da_mencao(trecho: str) -> WorkKey | None:
+    """Obra identificada por uma menção numerada no começo de `trecho` ('lei 6.404/1976, ...'); None se não identifica."""
+    sintetico = "art. 1 da " + trecho[:160]
+    for c in extract(sintetico):
+        if c.span[0] == 0 and c.work is not None and c.work.year:
+            return c.work
+    return None
+
+
+def _contexto_externo(frase: str, frase_n: str, propria: WorkKey | None) -> bool:
+    """O trecho da frase antes da remissão fala de outra obra, de anexo ou de obra que não se prova ser a própria: a
+    remissão sem obra não herda a própria. Menção numerada a obra explicitamente IGUAL à própria não é contexto externo."""
+    def propria_da_especie(m: re.Match) -> str:  # "desta Lei" na obra que é lei: a própria obra, não contexto externo
+        especies = _PROPRIA_POR_ESPECIE.get(propria.kind if propria else "", set())
+        return " " * len(m.group(0)) if _dobra(re.sub(r"\s+", " ", m["nome"])) in especies else m.group(0)
+    frase = _PROPRIA.sub(propria_da_especie, frase)
+    frase_n = _dobra_pos(frase)
+    if _ANEXO.search(frase_n) or _SIGLA_OBRA.search(frase):
+        return True
+    mencoes = list(_OBRA_NUMERADA.finditer(frase))
+    for m in mencoes:
+        if not _mesma_obra(_obra_da_mencao(frase[m.start():]), propria):
+            return True
+    cobertas = [(m.start(), m.start() + 160) for m in mencoes]
+    if any(not any(a <= n.start() < b for a, b in cobertas) for n in _NUMERO_ANO.finditer(frase_n)):
+        return True  # número com ano que nenhuma menção identificada explica
+    inicios = {m.start() for m in mencoes}
+    return any(m.start() not in inicios for m in _REFERENCIA_OBRA.finditer(frase))  # obra nomeada sem número
+
+
+def _cauda_limpa(tn: str, fim: int, consumidos: list[tuple[int, int]] = ()) -> bool:
+    """Depois da expressão consumida só pode vir delimitador terminal (fim, `.`, `;`, `)`, `]`, aspas) ou prosa. Token
+    estrutural logo adiante (inciso, alínea, item, §, caput, anexo, romano solto, outra obra), mesmo depois de vírgula,
+    `:`, travessão ou palavras funcionais, é qualificador que a leitura não consumiu: a expressão não vale por inteiro.
+    O que cai dentro de outra expressão já reconhecida (`consumidos`) foi consumido por ela."""
+    if _TERMINAL.match(tn, fim):
+        return True
+    p = _SEPARADOR.match(tn, fim).end()
+    for _ in range(4):
+        if p >= len(tn) or any(a <= p < b for a, b in consumidos):
+            return True
+        if _ESTRUTURAL.match(tn, p):
+            return False
+        f = _FUNCAO.match(tn, p)
+        if not f:
+            return True
+        p = f.end()
+    return True
+
+
+def _toca_nota(ini: int, fim: int, spans: list[tuple[int, int]]) -> bool:
+    return any(a < fim and b > ini for a, b in spans)
 
 
 def _milhar(n: int) -> str:
@@ -284,7 +407,7 @@ def _obra_explicita(t: str, p: int) -> tuple[WorkKey | None, int, bool] | None:
     return None, m.end(), False
 
 
-def _grupos(t: str, art_proprio: str | None) -> list[_Grupo]:
+def _grupos(t: str, tn: str, art_proprio: str | None) -> list[_Grupo]:
     grupos: list[_Grupo] = []
     for km in _ART_KW.finditer(t):
         if grupos and km.start() < grupos[-1].fim:
@@ -306,10 +429,8 @@ def _grupos(t: str, art_proprio: str | None) -> list[_Grupo]:
                 g.duvida = True
             else:
                 g.subs = antes
-        if _PREFIXO_RESIDUAL.search(t[max(0, g.ini - 60):g.ini]):
+        if _PREFIXO_RESIDUAL.search(tn[max(0, g.ini - 60):g.ini]):
             g.duvida = True  # qualificador antes do artigo que a leitura não reconheceu ("inc. I do art. 5")
-        if _RESIDUO.match(t, g.fim):
-            g.duvida = True  # qualificador depois do artigo que a leitura não consumiu ("art. 5, I", "art. 5, inc. I")
         if (am := _ANEXO_DEPOIS.match(t, g.fim)):
             g.duvida, g.fim = True, am.end()  # âmbito de anexo: o caminho não é o do corpo da obra
         if _ABERTA.match(t, g.fim):
@@ -373,7 +494,8 @@ def _mesma_obra(a: WorkKey | None, b: WorkKey | None) -> bool:
 
 
 def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = None,
-            *, implicita: bool = True, notas: tuple[str, ...] = (), truncado: bool = False) -> list[dict[str, Any]]:
+            *, implicita: bool = True, notas: tuple[str, ...] = (), truncado: bool = False,
+            integral: str | None = None) -> list[dict[str, Any]]:
     """Remissões do texto, em ordem de aparição, antes da decisão de existência.
 
     Cada item: texto, obra (WorkKey|None), obra_rotulo, caminho (rótulo), path (canônico) e `duvida` (True quando a
@@ -381,13 +503,16 @@ def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = 
     "no § 2º" como referência ao artigo do próprio dispositivo; `implicita` autoriza a remissão sem qualificação de
     obra a valer como a própria obra (desligada em dispositivo de anexo). `notas` são as anotações editoriais que a
     estrutura do documento já identificou; `truncado` marca texto cortado no limite: remissão que toca o corte não
-    resolve (o que veio depois dele não foi devolvido)."""
+    resolve (o que veio depois dele não foi devolvido); `integral` é o texto de que `texto` é o recorte: as notas
+    editoriais são localizadas nele e projetadas sobre o emitido."""
     if not texto or not isinstance(texto, str):
         return []
-    t = _mascarar_anotacoes(texto, tuple(notas))
+    t, spans_notas = _mascarar_anotacoes(texto, tuple(notas), integral)
+    tn = _dobra_pos(t)
     itens: list[dict[str, Any]] = []
     inicio_rubrica = re.match(r"\s*\"?Art\.?\s*\d", t)
-    grupos = [g for g in _grupos(t, art_proprio) if not (inicio_rubrica and g.ini == 0)]
+    grupos = [g for g in _grupos(t, tn, art_proprio) if not (inicio_rubrica and g.ini == 0)]
+    ocupados_grupos = [(g.ini, g.fim) for g in grupos]
 
     def vizinho_explicito(i: int) -> bool:
         if i + 1 >= len(grupos) or not grupos[i + 1].explicita:
@@ -398,6 +523,8 @@ def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = 
         if g.anafora:
             continue
         obra, duvida = None, g.duvida or (bool(g.subs) and any(len(v) > 1 for _, v in g.subs[:-1]))
+        if _toca_nota(g.ini, g.fim, spans_notas) or not _cauda_limpa(tn, g.fim, ocupados_grupos):
+            duvida = True  # nota na expressão, ou qualificador logo depois que nenhuma produção consumiu
         if g.proprio:
             especies = _PROPRIA_POR_ESPECIE.get(obra_propria.kind if obra_propria else "", set())
             if obra_propria is not None and _dobra(re.sub(r"\s+", " ", g.nome_propria)) in especies:
@@ -409,8 +536,9 @@ def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = 
             if obra is not None and not obra.year:
                 duvida = True
         else:
-            fr = t[_inicio_da_frase(t, g.ini):g.ini]
-            if (not implicita or obra_propria is None or _contexto_externo(fr) or vizinho_explicito(i)):
+            ini_f = _inicio_da_frase(t, g.ini)
+            if (not implicita or obra_propria is None or _contexto_externo(t[ini_f:g.ini], tn[ini_f:g.ini], obra_propria)
+                    or vizinho_explicito(i)):
                 duvida = True
             else:
                 obra = obra_propria
@@ -419,7 +547,8 @@ def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = 
                           "obra_rotulo": rotulo_obra(obra) if obra is not None else None,
                           "caminho": rotulo, "path": path, "duvida": duvida or obra is None, "fim": g.fim})
     if art_proprio:
-        itens.extend(_do_proprio_artigo(texto, t, art_proprio, obra_propria, [(g.ini, g.fim) for g in grupos]))
+        itens.extend(_do_proprio_artigo(texto, t, tn, art_proprio, obra_propria, [(g.ini, g.fim) for g in grupos],
+                                        spans_notas))
     if truncado:  # remissão que toca o corte, ou a que o corte deixa sem o que viria depois ("§ 2o do" + "art. 15")
         corte = len(texto.rstrip())
         for it in itens:
@@ -429,8 +558,8 @@ def extrair(texto: str, obra_propria: WorkKey | None, art_proprio: str | None = 
     return itens
 
 
-def _do_proprio_artigo(texto: str, t: str, art_proprio: str, obra: WorkKey | None,
-                       ocupados: list[tuple[int, int]]) -> list[dict[str, Any]]:
+def _do_proprio_artigo(texto: str, t: str, tn: str, art_proprio: str, obra: WorkKey | None,
+                       ocupados: list[tuple[int, int]], spans_notas: list[tuple[int, int]]) -> list[dict[str, Any]]:
     """'no caput', 'no § 2º', 'do parágrafo único', '§ 1º deste artigo': o artigo do próprio dispositivo."""
     if obra is None or not re.fullmatch(r"art\d+(?:-[A-Z])?", art_proprio):
         return []
@@ -458,8 +587,10 @@ def _do_proprio_artigo(texto: str, t: str, art_proprio: str, obra: WorkKey | Non
         elif nome == "caput" and re.match(r"\s*d[oa]\s+(?:mesm|referid)", resto, re.I):
             continue
         externo = bool(_OUTRA_OBRA.match(t, fim) or _ANEXO_DEPOIS.match(t, fim))  # "do parágrafo único da Lei X"
-        externo = externo or (not explicito and _contexto_externo(t[_inicio_da_frase(t, ini):ini]))  # "Na Lei X, ... caput"
-        duvida = externo or bool(_RESIDUO.match(t, fim))  # "§ 2º, I": o inciso não foi consumido
+        if not explicito:
+            ini_f = _inicio_da_frase(t, ini)
+            externo = externo or _contexto_externo(t[ini_f:ini], tn[ini_f:ini], obra)  # "Na Lei X, ... caput"
+        duvida = externo or not _cauda_limpa(tn, fim, ocupados) or _toca_nota(ini, fim, spans_notas)  # "§ 2º: inciso I"
         for p in _caminhos(_Grupo(ini, fim, [(n, suf)], [(nome, vals)])):
             out.append({"texto": texto[ini:fim].strip(), "obra": None if externo else obra,
                         "obra_rotulo": None if externo else rotulo_obra(obra),
@@ -469,12 +600,13 @@ def _do_proprio_artigo(texto: str, t: str, art_proprio: str, obra: WorkKey | Non
 
 def remissoes(texto: str, obra_propria: WorkKey | None, existe: Callable[[WorkKey, str], bool],
               art_proprio: str | None = None, *, implicita: bool = True, notas: tuple[str, ...] = (),
-              truncado: bool = False) -> list[dict[str, Any]]:
+              truncado: bool = False, integral: str | None = None) -> list[dict[str, Any]]:
     """`remissoes[]` do contrato: {texto, alvo: {obra, caminho}, resolvida}. `existe(obra, path)` consulta só o que já
     está capturado (sem rede) e nunca levanta; falha dela é inexistência."""
     saida: list[dict[str, Any]] = []
     vistos: set[tuple] = set()
-    for it in extrair(texto, obra_propria, art_proprio, implicita=implicita, notas=notas, truncado=truncado):
+    for it in extrair(texto, obra_propria, art_proprio, implicita=implicita, notas=notas, truncado=truncado,
+                      integral=integral):
         resolvida = False
         if not it["duvida"] and it["obra"] is not None and it["obra_rotulo"] is not None:
             try:

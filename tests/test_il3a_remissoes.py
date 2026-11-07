@@ -257,8 +257,8 @@ def test_mcp_mesmas_regras_e_texto_da_remissao_envolvido(svc6385, monkeypatch):
 # alvos `resolvida: true` esperado é vazio: o alvo estrutural existe (existe=True), o que falta é a prova da expressão.
 
 
-def _resolvidas(texto, art="art14", obra=LSA, notas=(), truncado=False):
-    saida = rem.remissoes(texto, obra, lambda w, p: True, art, notas=notas, truncado=truncado)
+def _resolvidas(texto, art="art14", obra=LSA, notas=(), truncado=False, integral=None):
+    saida = rem.remissoes(texto, obra, lambda w, p: True, art, notas=notas, truncado=truncado, integral=integral)
     return {(r["alvo"]["obra"], r["alvo"]["caminho"]) for r in saida if r["resolvida"]}
 
 
@@ -308,12 +308,113 @@ NAO_RESOLVE = [
     ("nota_do_editor_parenteses", "Art. 14. (Nota do editor: ver art. 5 desta Lei)"),
     ("nota_ne", "Art. 14. (N.E. ver art. 5 desta Lei)"),
     ("colchetes_sem_rotulo", "Art. 14. [ver art. 5 desta Lei]"),
+    # R2-5: caixa e abreviação do qualificador (a leitura é feita sobre o texto normalizado)
+    ("inciso_em_caixa_alta", "Art. 14. Ver art. 5, INCISO I, desta Lei."),
+    ("inciso_abreviado_em_caixa_alta", "Art. 14. Ver art. 5, INC. I, desta Lei."),
+    ("incisos_abreviado_plural", "Art. 14. Ver art. 5, INCS. I e II, desta Lei."),
+    ("alinea_em_caixa_alta", "Art. 14. Ver art. 5, ALÍNEA a, desta Lei."),
+    ("item_em_caixa_alta", "Art. 14. Ver art. 5, ITEM 2, desta Lei."),
+    ("romano_minusculo_residual", "Art. 14. Ver art. 5, i, desta Lei."),
+    ("romano_minusculo_duplo", "Art. 14. Ver art. 5, ii e iii, desta Lei."),
+    # R2-5: separação por dois-pontos ou travessão
+    ("dois_pontos_e_inciso", "Art. 14. Ver art. 5: inciso I, desta Lei."),
+    ("hifen_e_inciso", "Art. 14. Ver art. 5 - inciso I, desta Lei."),
+    ("meia_risca_e_inciso", "Art. 14. Ver art. 5 – inciso I, desta Lei."),
+    ("travessao_e_inciso", "Art. 14. Ver art. 5 — inciso I, desta Lei."),
+    # R2-5: qualificador DEPOIS da identificação da obra (própria e externa)
+    ("inciso_depois_da_obra_propria", "Art. 14. Ver art. 5 desta Lei, inciso I."),
+    ("inciso_abreviado_depois_da_obra_propria", "Art. 14. Ver art. 5 desta Lei, inc. I."),
+    ("romano_depois_da_obra_propria", "Art. 14. Ver art. 5 desta Lei, I."),
+    ("alinea_depois_da_obra_propria", "Art. 14. Ver art. 5 desta Lei, alínea a."),
+    ("paragrafo_depois_da_obra_propria", "Art. 14. Ver art. 5 desta Lei, § 2º."),
+    ("caput_depois_da_obra_propria", "Art. 14. Ver art. 5 desta Lei, caput."),
+    ("item_depois_da_obra_propria", "Art. 14. Ver art. 5 desta Lei, item 2."),
+    ("inciso_depois_de_palavras_funcionais", "Art. 14. Ver art. 5 desta Lei e do inciso I."),
+    ("inciso_depois_da_obra_externa", "Art. 14. Ver art. 5 da Lei 8.987/1995, inciso I."),
+    ("romano_depois_da_obra_externa", "Art. 14. Ver art. 5 da Lei 8.987/1995, I."),
+    # R2-5: anexo depois da identificação da obra
+    ("anexo_depois_da_obra_propria", "Art. 14. Ver art. 5 desta Lei, do Anexo I."),
+    ("anexo_depois_da_obra_externa", "Art. 14. Ver art. 5 da Lei 8.987/1995, do Anexo I."),
+    # R2-5: parágrafo solto com qualificador residual
+    ("paragrafo_solto_dois_pontos_inciso", "Art. 14. O disposto no § 2º: inciso I, não se aplica."),
+    ("paragrafo_solto_hifen_inciso", "Art. 14. O disposto no § 2º - inciso I, não se aplica."),
+    ("paragrafo_solto_inciso_em_caixa_alta", "Art. 14. O disposto no § 2º, INCISO I, não se aplica."),
+    # R2-5: espécie abreviada e sigla antes da remissão (a obra não é a própria)
+    ("mp_abreviada_antes", "Art. 14. Conforme a MP 881/2019, art. 5."),
+    ("lc_abreviada_antes", "Art. 14. Conforme a LC 101/2000, art. 5."),
+    ("sigla_cc_antes", "Art. 14. Conforme o CC, aplica-se o art. 5."),
+    ("mp_abreviada_antes_do_caput", "Art. 14. Conforme a MP 881/2019, aplica-se o disposto no caput."),
+    ("lc_abreviada_antes_do_paragrafo", "Art. 14. Conforme a LC 101/2000, aplica-se o disposto no § 2º."),
+    # R2-5: contexto de anexo que a pontuação não apaga
+    ("anexo_antes_dois_pontos_artigo", "Art. 14. No Anexo I: ver art. 5."),
+    ("anexo_antes_dois_pontos_caput", "Art. 14. No Anexo I: aplica-se o disposto no caput."),
+    ("anexo_antes_ponto_e_virgula", "Art. 14. No Anexo I; ver art. 5."),
+    # R2-5: contexto externo separado por ponto e vírgula ou dois-pontos
+    ("lei_externa_ponto_e_virgula", "Art. 14. Conforme a Lei 8.987/1995; aplica-se o art. 5."),
+    ("lei_externa_dois_pontos", "Art. 14. Conforme a Lei 8.987/1995: aplica-se o art. 5."),
+    ("lei_externa_em_minuscula_ponto_e_virgula", "Art. 14. Conforme a lei 8.987/1995; aplica-se o art. 5."),
+    ("lei_externa_antes_do_caput_ponto_e_virgula", "Art. 14. Conforme a Lei 8.987/1995; aplica-se o disposto no caput."),
+    ("lei_com_data_por_extenso_antes", "Art. 14. Conforme a Lei nº 8.987, de 13 de fevereiro de 1995; ver art. 5."),
+    # R2-6: notas editoriais completas, em colchetes aninhados e fora de qualquer padrão conhecido
+    ("nota_vide_parenteses", "Art. 14. (Vide art. 5 desta Lei, conforme explicacao editorial adicional)"),
+    ("nota_editorial_parenteses", "Art. 14. (Nota editorial: art. 5 desta Lei, conforme explicacao editorial adicional)"),
+    ("nota_editorial_colchetes_longa", "Art. 14. [Nota editorial: art. 5 desta Lei, conforme explicacao editorial adicional]"),
+    ("nota_colchetes_aninhados", "Art. 14. [Nota editorial: ver art. 5 desta Lei [nota interna].]"),
+    ("nota_parenteses_aninhados", "Art. 14. (Nota editorial: ver art. 5 desta Lei (nota interna) e mais)"),
+    ("nota_dentro_da_expressao", "Art. 14. Ver art. 5 (Nota: x) desta Lei."),
+    # notas cortadas pelo truncamento (a leitura as reconhece abertas, sem o delimitador final)
+    ("nota_vide_cortada", "Art. 14. (Vide art. 5 desta Lei, conforme explicacao editorial adicional"),
+    ("nota_editorial_cortada", "Art. 14. (Nota editorial: art. 5 desta Lei, conforme explicacao editorial adicional"),
+    ("nota_colchetes_cortada", "Art. 14. [Nota editorial: art. 5 desta Lei, conforme explicacao editorial adicional"),
+    ("nota_aninhada_cortada", "Art. 14. [Nota editorial: ver art. 5 desta Lei [nota interna]."),
 ]
 
 
 @pytest.mark.parametrize("nome,texto", NAO_RESOLVE, ids=[c[0] for c in NAO_RESOLVE])
 def test_b6_classe_nunca_resolve(nome, texto):
     assert _resolvidas(texto) == set(), nome
+
+
+def test_r2_notas_cortadas_nao_resolvem_com_truncado_e_com_ou_sem_o_texto_integral():
+    """O corte retira o delimitador final da nota: a extração sobre o emitido não pode ressuscitar a remissão da nota."""
+    notas_completas = [
+        "(Vide art. 5 desta Lei, conforme explicacao editorial adicional)",
+        "(Nota editorial: art. 5 desta Lei, conforme explicacao editorial adicional)",
+        "[Nota editorial: art. 5 desta Lei, conforme explicacao editorial adicional]",
+        "[Nota editorial: ver art. 5 desta Lei [nota interna].]",
+    ]
+    for nota in notas_completas:
+        integral = f"Art. 14. O valor é fixado. {nota} Texto depois da nota."
+        assert _resolvidas(integral) == set(), nota  # a nota completa nunca resolve
+        for cortes in (len(f"Art. 14. O valor é fixado. {nota[:-1]}"), len(f"Art. 14. O valor é fixado. {nota[:-12]}")):
+            emitido = integral[:cortes]
+            assert _resolvidas(emitido, truncado=True) == set(), (nota, "só o recorte")
+            assert _resolvidas(emitido, truncado=True, integral=integral) == set(), (nota, "com o integral")
+            # fornecendo também a nota completa pela estrutura do documento (o corte não a contém inteira)
+            assert _resolvidas(emitido, truncado=True, integral=integral, notas=(nota,)) == set(), (nota, "com notas=")
+            assert _resolvidas(emitido, truncado=True, notas=(nota,)) == set(), (nota, "notas= sem integral")
+    # a referência real antes da nota, no mesmo recorte, continua resolvendo
+    integral = "Art. 14. Ver art. 7º desta Lei. (Vide art. 5 desta Lei, conforme explicacao editorial adicional)"
+    assert _resolvidas(integral[:-5], truncado=True, integral=integral) == {(LSA_R, "art. 7º")}
+
+
+def test_r2_nota_parentetica_de_um_trecho_que_nao_e_nota_nao_e_mascarada():
+    texto = "Art. 14. Ver (conforme art. 5 desta Lei) e mais."
+    assert _resolvidas(texto) == {(LSA_R, "art. 5º")}
+
+
+def test_r2_7_obra_explicitamente_igual_a_propria_e_a_propria_obra():
+    """Antes: `Conforme a lei 6.404/1976, aplica-se o art. 5` na própria Lei 6.404/1976 virava obra desconhecida."""
+    for texto in ("Art. 14. Conforme a lei 6.404/1976, aplica-se o art. 5.",
+                  "Art. 14. Conforme a Lei 6.404/1976, aplica-se o art. 5.",
+                  "Art. 14. Conforme a Lei nº 6.404, de 15 de dezembro de 1976, aplica-se o art. 5."):
+        assert _resolvidas(texto) == {(LSA_R, "art. 5º")}, texto
+    assert _resolvidas("Art. 14. Conforme a Lei 6.404/1976, aplica-se o disposto no caput.") == {(LSA_R, "art. 14, caput")}
+    # outra obra, ainda que de mesmo número ou mesmo ano, nunca é a própria
+    assert _resolvidas("Art. 14. Conforme a Lei 6.405/1976, aplica-se o art. 5.") == set()
+    assert _resolvidas("Art. 14. Conforme a Lei 6.404/1977, aplica-se o art. 5.") == set()
+    assert _resolvidas("Art. 14. Conforme a Lei 6.404/1976 e a Lei 8.987/1995, aplica-se o art. 5.") == set()
+    assert _resolvidas("Art. 14. Conforme a Lei 6.404/1976, no Anexo I, aplica-se o art. 5.") == set()
 
 
 def test_b6_controles_positivos_da_mesma_forma_continuam_resolvendo():
@@ -324,6 +425,14 @@ def test_b6_controles_positivos_da_mesma_forma_continuam_resolvendo():
     assert _resolvidas("Art. 14. Ver art. 3º da Lei 8.987/1995.") == {("Lei 8.987/1995", "art. 3º")}
     assert _resolvidas("Art. 14. O disposto no caput não se aplica.") == {(LSA_R, "art. 14, caput")}
     assert _resolvidas("Art. 14. O disposto no § 1º deste artigo.") == {(LSA_R, "art. 14, § 1º")}
+    # R2-5: prosa depois da expressão, ponto e vírgula e terminais não invalidam a remissão
+    assert _resolvidas("Art. 14. Ver art. 5 desta Lei, que regula a matéria.") == {(LSA_R, "art. 5º")}
+    assert _resolvidas("Art. 14. Ver art. 5 desta Lei, no prazo de 30 dias.") == {(LSA_R, "art. 5º")}
+    assert _resolvidas("Art. 14. Ver art. 5 desta Lei; ver art. 6 da Lei 8.987/1995.") == {(LSA_R, "art. 5º"),
+                                                                                    ("Lei 8.987/1995", "art. 6º")}
+    assert _resolvidas("Art. 14. Ver art. 5, INCISO I, desta Lei.") == set()
+    # o contexto antes da remissão em outra frase não a contamina
+    assert _resolvidas("Art. 14. Conforme a Lei 8.987/1995. Ver art. 5.") == {(LSA_R, "art. 5º")}
 
 
 def test_b6_nao_resolvida_preserva_o_texto_e_nao_inventa_alvo_mais_raso():
@@ -358,11 +467,8 @@ def test_b6_texto_cortado_no_limite_nao_resolve_a_remissao_que_toca_o_corte():
 
 
 @pytest.mark.parametrize("regex_attr,nome", [
-    ("_RESIDUO", "inciso_sem_palavra"), ("_RESIDUO", "inciso_abreviado"), ("_RESIDUO", "paragrafo_solto_com_inciso"),
-    ("_PREFIXO_RESIDUAL", "inciso_antes_abreviado"), ("_ANEXO_DEPOIS", "anexo_numerado"),
-    ("_ANEXO_DEPOIS", "paragrafo_solto_de_anexo"), ("_DEMONSTRATIVO", "dessa_lei"),
-    ("_DEMONSTRATIVO", "paragrafo_desse_artigo"), ("_NOTA_COLCHETES", "nota_editorial_colchetes"),
-    ("_OBRA_NUMERADA", "lei_minuscula_antes"), ("_OBRA_NUMERADA", "caput_em_contexto_de_lei_numerada"),
+    ("_PREFIXO_RESIDUAL", "inciso_antes_abreviado"), ("_DEMONSTRATIVO", "dessa_lei"),
+    ("_DEMONSTRATIVO", "paragrafo_desse_artigo"),
 ])
 def test_b6_mutantes_sem_cada_cautela_falham_no_oraculo(monkeypatch, regex_attr, nome):
     import re as _re
@@ -373,6 +479,52 @@ def test_b6_mutantes_sem_cada_cautela_falham_no_oraculo(monkeypatch, regex_attr,
         monkeypatch.setattr(rem, "_PROPRIA", _re.compile(rem._PROPRIA.pattern.replace("desta|deste", "desta|deste|dessa|desse"),
                                                          rem._PROPRIA.flags))
     assert _resolvidas(texto) != set(), f"a ausência de {regex_attr} passou despercebida em {nome}"
+
+
+@pytest.mark.parametrize("alvo,mutacao,nomes", [
+    # sem a leitura fechada da cauda: qualificador depois da expressão, romano solto, anexo, dois-pontos, travessão
+    ("_cauda_limpa", lambda *a, **k: True,
+     ["inciso_sem_palavra", "inciso_em_caixa_alta", "inciso_abreviado_em_caixa_alta", "romano_minusculo_residual",
+      "dois_pontos_e_inciso", "hifen_e_inciso", "inciso_depois_da_obra_propria", "romano_depois_da_obra_propria",
+      "inciso_depois_da_obra_externa", "anexo_depois_da_obra_propria", "anexo_depois_da_obra_externa",
+      "paragrafo_solto_dois_pontos_inciso", "paragrafo_solto_inciso_em_caixa_alta", "item_em_caixa_alta"]),
+    # sem o contexto externo: obra, sigla e anexo antes da remissão sem obra
+    ("_contexto_externo", lambda *a, **k: False,
+     ["lei_minuscula_antes", "mp_abreviada_antes", "lc_abreviada_antes", "anexo_antes_dois_pontos_artigo",
+      "lei_externa_ponto_e_virgula", "caput_em_contexto_de_lei_numerada", "mp_abreviada_antes_do_caput"]),
+    # sem a localização das notas
+    ("_spans_notas", lambda *a, **k: [],
+     ["nota_editorial_colchetes", "nota_vide_parenteses", "nota_colchetes_aninhados", "nota_parenteses_aninhados",
+      "nota_vide_cortada", "nota_colchetes_cortada", "nota_aninhada_cortada"]),
+    # nota entre os componentes da própria expressão
+    ("_toca_nota", lambda *a, **k: False, ["nota_dentro_da_expressao"]),
+])
+def test_r2_mutantes_da_gramatica_fechada_falham_no_oraculo(monkeypatch, alvo, mutacao, nomes):
+    textos = dict(NAO_RESOLVE)
+    for nome in nomes:
+        assert _resolvidas(textos[nome]) == set(), nome
+    monkeypatch.setattr(rem, alvo, mutacao)
+    for nome in nomes:
+        assert _resolvidas(textos[nome]) != set(), f"a ausência de {alvo} passou despercebida em {nome}"
+
+
+def test_r2_mutante_fronteira_de_frase_em_ponto_e_virgula_e_dois_pontos_falha_no_oraculo(monkeypatch):
+    import re as _re
+    textos = dict(NAO_RESOLVE)
+    nomes = ["lei_externa_ponto_e_virgula", "lei_externa_dois_pontos", "anexo_antes_dois_pontos_artigo",
+             "anexo_antes_ponto_e_virgula"]
+    for nome in nomes:
+        assert _resolvidas(textos[nome]) == set(), nome
+    monkeypatch.setattr(rem, "_FRONTEIRA", _re.compile(r";|:|" + rem._FRONTEIRA.pattern))  # o defeito original
+    for nome in nomes:
+        assert _resolvidas(textos[nome]) != set(), f"fronteira em ; e : passou despercebida em {nome}"
+
+
+def test_r2_mutante_obra_igual_a_propria_tratada_como_externa_falha_no_controle_positivo(monkeypatch):
+    texto = "Art. 14. Conforme a lei 6.404/1976, aplica-se o art. 5."
+    assert _resolvidas(texto) == {(LSA_R, "art. 5º")}
+    monkeypatch.setattr(rem, "_obra_da_mencao", lambda trecho: None)  # a igualdade deixa de ser reconhecida
+    assert _resolvidas(texto) == set()
 
 
 # --- B7 (R1): a existência estrutural não é prova do alvo (próprio e externo) ----------------------------------------------
@@ -475,8 +627,20 @@ def test_b7_rota_ou_perfil_fora_da_matriz_nao_resolve(svc_duas_obras, monkeypatc
     monkeypatch.undo()
     # publicação original de OUTRA obra não é o texto consolidado a que a remissão se refere
     orig = replace(ext, source_id="camara_legin", document=replace(ext.document, profile="camara_original"))
-    assert svc._alvo_provado(orig, L10303, "art1", externo=True) is False
-    assert svc._alvo_provado(orig, L10303, "art1", externo=False) is True  # a própria obra, na rota dela, vale
+    # R2-7: nenhum perfil é recusado em bloco; a prova do alvo (identidade, captura, rota, caminho) decide
+    assert svc._alvo_provado(orig, L10303, "art1", externo=True) is True
+    assert svc._alvo_provado(orig, L10303, "art1", externo=False) is True
+    assert svc._alvo_provado(replace(orig, capture_id=None), L10303, "art1", externo=True) is False
+    assert svc._alvo_provado(replace(orig, document=replace(orig.document, title="sem epígrafe")), L10303, "art1",
+                             externo=True) is False
+    prov = next(p for p in orig.document.provisions if p.path == "art1")
+    prov.ambiguous = True
+    try:
+        assert svc._alvo_provado(orig, L10303, "art1", externo=True) is False  # caminho ambíguo continua recusado
+    finally:
+        prov.ambiguous = False
+    monkeypatch.setattr(svc, "_rotas_admissiveis", lambda: {("planalto", "planalto")})
+    assert svc._alvo_provado(orig, L10303, "art1", externo=True) is False  # rota fora da matriz continua recusada
 
 
 def test_b7_alvo_proprio_tambem_exige_captura_e_identidade(svc_duas_obras):
@@ -546,6 +710,48 @@ def test_b8_recusa_por_autenticacao_de_evidencia_tambem_traz_remissoes(svc6385):
         blob.write_bytes(original)
     assert r["status"] == "unavailable" and r["remissoes"] == []
     assert svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")["remissoes"] == ESPERADO_ART9
+
+
+def test_r2_8_recusa_por_derivados_incompativeis_traz_remissoes(svc6385, monkeypatch):
+    import freoa_verifica.service as fachada
+    svc, _ = svc6385
+    monkeypatch.setattr(fachada._derivados, "compativel", lambda conn: False)
+    r = svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")
+    assert r["status"] == "indisponivel" and r["reason_code"] == "ACERVO_DESATUALIZADO"
+    assert r["remissoes"] == []
+
+
+def test_r2_8_identidade_ambigua_traz_remissoes(svc6385, monkeypatch):
+    from freoa_verifica.verify import SourceAmbiguous
+    svc, _ = svc6385
+
+    def ambigua(*a, **k):
+        raise SourceAmbiguous([{"work_id": "a"}, {"work_id": "b"}])
+    monkeypatch.setattr(svc, "_obter_dispositivo_autenticado", ambigua)
+    r = svc.obter_dispositivo(citacao="art. 9 da Lei 6.385/1976")
+    assert r["status"] == "ambigua" and r["motivo"] == "IDENTIDADE_AMBIGUA"
+    assert r["remissoes"] == []
+
+
+def test_r2_8_o_ponto_comum_garante_remissoes_em_qualquer_retorno_da_fachada():
+    from freoa_verifica.service import _final_da_fachada
+    for out in ({"status": "ambigua"}, {"status": "indisponivel", "reason_code": "ACERVO_DESATUALIZADO"},
+                {"status": "formato_invalido"}, {"status": "unknown", "texto": None}):
+        assert _final_da_fachada("obter_dispositivo", dict(out))["remissoes"] == []
+    assert "remissoes" not in _final_da_fachada("resolver_citacao", {"status": "encontrada"})
+
+
+def test_r2_6_nota_cortada_pelo_truncamento_no_servico_nao_resolve(svc6385):
+    svc, rw = svc6385
+    nota = "(Vide art. 3º desta Lei, conforme explicacao editorial adicional)"
+    integral = f"Art. 5º Ver o art. 1º desta Lei. {nota}"
+    emitido = integral[:-1]  # o corte retirou o parêntese que fecha a nota
+    por = {r["alvo"]["caminho"]: r["resolvida"]
+           for r in svc._remissoes_dispositivo(rw, "art5", emitido, truncado=True, integral=integral)}
+    assert por == {"art. 1º": True}  # a remissão da nota não aparece, nem resolvida
+    sem_integral = {r["alvo"]["caminho"]: r["resolvida"]
+                    for r in svc._remissoes_dispositivo(rw, "art5", emitido, truncado=True)}
+    assert sem_integral == {"art. 1º": True}
 
 
 def test_b8_invariante_final_descarta_remissao_fora_do_texto_emitido():
