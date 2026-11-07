@@ -268,7 +268,12 @@ def test_c_nao_verificado_para_D_motivo_aceito_e_cadeia():
     svo = {"reason_code": "sem_versao_oficial_na_data"}
     boa = verif("unknown", "unknown", t=svo, m=svo, ultima_versao_oficial_anterior=prev_ok(),
                 cadeia_alteracoes=chain(("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27")))
-    assert av(cad, boa)["resultado"] == "acerto"
+    # RED2/F1: o executor não confere materialmente a cadeia e o predecessor; (c) com `sem_versao_oficial_na_data` nunca é
+    # acerto, nem com a entrega completa e boa: sai `parcial` com o motivo declarado pelo supervisor
+    r_boa = av(cad, boa)
+    assert r_boa["resultado"] == "parcial" and r_boa["extra"]["nao_verificado_com_motivo"] is True
+    assert r_boa["motivo"] == "conferencia_material_da_cadeia_nao_implementada" == ex.MOTIVO_CONFERENCIA_MATERIAL_NAO_IMPLEMENTADA
+    assert r_boa["indevidas"] == []
     ruins = {
         "fora de ordem": {**boa, "cadeia_alteracoes": list(reversed(boa["cadeia_alteracoes"]))},
         "incompleta": {**boa, "cadeia_alteracoes": boa["cadeia_alteracoes"][:1]},
@@ -355,10 +360,10 @@ def test_c_nao_verificado_para_D_motivo_aceito_e_cadeia():
     for rotulo, ruim in ruins.items():
         r = av(cad, ruim)
         assert r["resultado"] == "parcial" and r["extra"]["nao_verificado_com_motivo"] is True, rotulo
-    # controles positivos: a mesma entrega com a origem declarada na evidência do predecessor continua acerto
+    # a mesma entrega com a origem declarada na evidência do predecessor também não é acerto (F1)
     assert av(cad, {**boa, "ultima_versao_oficial_anterior": prev_ok(
         evidencia={"capture_id": "cap-0", "sha256": sha_de("cap-0"), "url": "https://exemplo.gov.br/original"})}
-        )["resultado"] == "acerto"
+        )["resultado"] == "parcial"
     # a mesma resposta boa, com um serviço que não recupera as capturas: a evidência não é efetiva
     assert av(cad, boa, Svc(evid_ok()))["resultado"] == "parcial"
     # R2-1: indisponibilidade declarada em qualquer ponto da entrega nunca é acerto
@@ -379,8 +384,9 @@ def test_c_nao_verificado_para_D_motivo_aceito_e_cadeia():
             boa["cadeia_alteracoes"][1]]},
     }
     for rotulo, ruim in indisp.items():
-        assert av(cad, ruim)["resultado"] == "indisponivel", rotulo
-    assert av(cad, {**boa, "indisponibilidades_temporais": []})["resultado"] == "acerto"  # lista vazia não é falha
+        # o veto de indisponibilidade só age sobre acerto; com a redução F1 a decisão já é `parcial`, nunca acerto
+        assert av(cad, ruim)["resultado"] == "parcial", rotulo
+    assert av(cad, {**boa, "indisponibilidades_temporais": []})["resultado"] == "parcial"  # lista vazia não é falha
     # gabarito sem `ultima_versao_anterior` ou sem `cadeia`: o caso não se confronta, nunca é acerto
     sem_uva = {**cad, "gabarito": {k: v for k, v in cad["gabarito"].items() if k != "ultima_versao_anterior"}}
     assert av(sem_uva, boa)["resultado"] == "parcial"
@@ -388,7 +394,7 @@ def test_c_nao_verificado_para_D_motivo_aceito_e_cadeia():
     cad2 = {**cad, "gabarito": {**cad["gabarito"], "ultima_versao_anterior": {"ato": "lei-10303-2001",
                                                                               "data": "2001-10-31"}}}
     prev2 = prev_ok(data="2001-10-31", ato="lei-10303-2001", evidencia={"capture_id": "cap-4", "sha256": sha_de("cap-4")})
-    assert av(cad2, {**boa, "ultima_versao_oficial_anterior": prev2})["resultado"] == "acerto"
+    assert av(cad2, {**boa, "ultima_versao_oficial_anterior": prev2})["resultado"] == "parcial"
     sem_ato = {k: v for k, v in prev2.items() if k != "ato"}
     assert av(cad2, {**boa, "ultima_versao_oficial_anterior": sem_ato})["resultado"] == "parcial"
 
@@ -754,7 +760,6 @@ def test_executor_nao_le_a_reserva_por_caminho_fixo():
 # --- mutantes do executor: a bateria tem de pegá-los --------------------------------------------------------------------
 
 
-_EVIDENCIA_VALIDA_ORIGINAL = ex._evidencia_valida  # mutante: só recuperação e hash, sem vincular ao ato (R3-4)
 
 
 def bateria(m) -> list[str]:
@@ -791,8 +796,9 @@ def bateria(m) -> list[str]:
     if m.avaliar_resposta(cad, um_dia, svc_completo())["resultado"] == "acerto":
         falhas.append("cadeia com tolerância de data")
     boa = {**um_dia, "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"))}
-    if m.avaliar_resposta(cad, boa, svc_completo())["resultado"] != "acerto":
-        falhas.append("entrega completa recusada")
+    r_boa = m.avaliar_resposta(cad, boa, svc_completo())
+    if r_boa["resultado"] != "parcial" or r_boa["motivo"] != "conferencia_material_da_cadeia_nao_implementada":
+        falhas.append("entrega completa contada como acerto sem conferência material (F1)")
     ficticia = {**boa, "ultima_versao_oficial_anterior": prev_ok(evidencia={"sha256": "x"}),
                 "cadeia_alteracoes": chain(("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27"),
                                            evidencia={"sha256": "x"})}
@@ -827,10 +833,6 @@ def test_bateria_passa_no_executor_correto():
     ("normaliza_caixa", "igual_texto",
      lambda a, b: isinstance(a, str) and isinstance(b, str) and ex.norm(a).lower() == ex.norm(b).lower()),
     ("sem_veto_de_indisponibilidade", "indisponivel", lambda resp: False),
-    ("cadeia_sem_confronto", "_cadeia_confere", lambda resp, caso, d, svc: (True, "")),
-    ("evidencia_qualquer_string", "_evidencia_do_ato", lambda ev, svc, *a, **k: (isinstance(ev, dict) and bool(ev), "")),
-    ("evidencia_so_recuperavel_sem_vinculo_ao_ato", "_evidencia_do_ato",
-     lambda ev, svc, *a, **k: _EVIDENCIA_VALIDA_ORIGINAL(ev, svc)),
 ])
 def test_mutantes_do_executor_falham(monkeypatch, nome, alvo, mutacao):
     monkeypatch.setattr(ex, alvo, mutacao)
@@ -1460,3 +1462,60 @@ def test_r3_5_gancho_instalado_uma_vez_e_inerte_sem_guarda():
     assert len([n for n in ast.walk(ast.parse(fonte)) if isinstance(n, ast.Call)
                 and getattr(n.func, "attr", "") == "addaudithook"]) == 1
     assert ex._GUARDAS_ATIVAS == []
+
+
+# --- RED2 / F1: contraprovas do auditor (parecer-pr37-final) ----------------------------------------------------------
+def _cad_f1():
+    cad = caso("L-c-f1", "c", tipo="nao_verificado_para_D", motivos_aceitos=["sem_versao_oficial_na_data"],
+               cadeia=CADEIA_GAB, ultima_versao_anterior={"ato": "original", "data": "1976-12-17"})
+    cad["data"] = "2010-01-01"
+    svo = {"reason_code": "sem_versao_oficial_na_data"}
+    boa = verif("unknown", "unknown", t=svo, m=svo, ultima_versao_oficial_anterior=prev_ok(),
+                cadeia_alteracoes=chain(("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27")))
+    return cad, boa
+
+
+def test_red2_f1_contraprovas_do_auditor_e_o_positivo_anterior_dao_parcial_nunca_acerto():
+    cad, boa = _cad_f1()
+    ate = ("10.303", 2001, "2001-10-31"), (11941, 2009, "2009-05-27")
+    contraprovas = {
+        "positivo anterior": boa,
+        "ação inventada": {**boa, "cadeia_alteracoes": chain(*ate, acao="REVOGACAO TOTAL INVENTADA")},
+        "dispositivo 9999": {**boa, "cadeia_alteracoes": chain(*ate, dispositivo_atingido="art. 9999")},
+        "texto 'Lei' no elo": {**boa, "cadeia_alteracoes": chain(*ate, texto="Lei")},
+        "texto 'Lei' no predecessor": {**boa, "ultima_versao_oficial_anterior": prev_ok(texto="Lei")},
+    }
+    # o material entregue é de outro dispositivo (art. 99) e a captura do predecessor o contém; sem conferência material
+    # do dispositivo declarado (art. 14) não há acerto
+    outro = "Art. 99. Material de outro dispositivo."
+    svc = Svc({**evid_ok(), **evid_cadeia()})
+    contraprovas["captura com material de outro dispositivo"] = {
+        **boa, "ultima_versao_oficial_anterior": prev_ok(texto=outro, caminho="art. 14")}
+    for rotulo, resp in contraprovas.items():
+        for servico in (svc_completo(), svc):
+            r = av(cad, resp, servico)
+            assert r["resultado"] == "parcial" and r["resultado"] != "acerto", rotulo
+            assert r["motivo"] == "conferencia_material_da_cadeia_nao_implementada", (rotulo, r["motivo"])
+            assert r["indevidas"] == [], rotulo
+
+
+def test_red2_f1_a_confirmacao_indevida_e_a_condicao_adicional_de_c_ficam_inalteradas():
+    cad, boa = _cad_f1()
+    # confirmação indevida: verified onde o gabarito é não verificado continua apontada (item i) e vira erro
+    r = av(cad, verif("verified", "verified", fundamento=fund()))
+    assert [i["item"] for i in r["indevidas"]] == ["i"] and r["resultado"] == "erro"
+    # motivo fora dos aceitos: continua erro, não parcial da redução
+    ruim = verif("unknown", "unknown", t={"reason_code": "OUTRO"}, m={"reason_code": "OUTRO"})
+    assert av(cad, ruim)["resultado"] == "erro"
+    # a condição adicional (100% dos casos sem fundamento devolvidos como não verificados, com motivo) segue aferida
+    # pelos estados e motivos, e `nao_verificado_com_motivo` é verdadeiro mesmo quando o resultado é `parcial`
+    assert av(cad, boa)["extra"]["nao_verificado_com_motivo"] is True
+    cs = _conjunto("c", 8, "nao_verificado_para_D")
+    for c in cs:
+        c["gabarito"].update(motivos_aceitos=["sem_versao_oficial_na_data"], cadeia=CADEIA_GAB,
+                             ultima_versao_anterior={"ato": "original", "data": "1976-12-17"})
+        c["data"] = "2010-01-01"
+    resp = {c["id"]: boa for c in cs}
+    c_ = _rodar(cs, resp, _mutantes_de(cs))["capacidades"]["c"]
+    assert c_["aprovada"] is False  # abstenção do instrumento: reprova por acerto insuficiente, nunca aprova
+    assert c_["extras"]["sem_fundamento_devolvidos_como_nao_verificados"] == "8/8"

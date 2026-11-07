@@ -49,6 +49,7 @@ from urllib.parse import urlsplit
 RAIZ = Path(__file__).resolve().parents[1]
 VERSAO_EXECUTOR = "1"
 CAPS = ("a", "b", "c", "d", "e")
+MOTIVO_CONFERENCIA_MATERIAL_NAO_IMPLEMENTADA = "conferencia_material_da_cadeia_nao_implementada"
 FUNCOES = {"obter_dispositivo", "verificar_citacao", "obter_evidencia"}
 PISO_ACERTO = {"a": 0.95, "b": 0.95, "c": 0.80, "d": 0.90, "e": 0.90}
 LIMITE_P95_S = {"local": 5.0, "remoto": 20.0}
@@ -741,11 +742,10 @@ def _avaliar_c(caso: dict, resp: dict, svc: Any, out: dict, indisp: bool) -> Non
         com_motivo = unk and all(m in aceitos for m in motivos if m is not None) and None not in motivos
         out["extra"]["nao_verificado_com_motivo"] = bool(com_motivo)
         if com_motivo and "sem_versao_oficial_na_data" in motivos:
-            ok_c, motivo_c = _cadeia_confere(resp, caso, d, svc)
-            if ok_c:
-                out.update(resultado="acerto")
-            else:
-                out.update(resultado="parcial", motivo=motivo_c)
+            # Segunda redução de escopo (F1, decisão do supervisor): o executor não confere materialmente o texto, a ação
+            # e o dispositivo atingido entregues no predecessor e na cadeia; logo o acerto, que depende dessa entrega
+            # (matriz IL.1, 1.1), nunca é concedido. `_cadeia_confere` fica preservada, sem uso, para a retomada.
+            out.update(resultado="parcial", motivo=MOTIVO_CONFERENCIA_MATERIAL_NAO_IMPLEMENTADA)
         elif com_motivo:
             out.update(resultado="acerto")
         else:
