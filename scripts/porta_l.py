@@ -22,29 +22,90 @@ sem tolerância com `gabarito.cadeia` e `gabarito.ultima_versao_anterior`; p95 d
 posto mais próximo). Relatório por capacidade; `--somente-tabela` emite só aprovado/reprovado (guardião na reserva, D6).
 
 Código de saída: 0 todas as capacidades aprovadas; 1 alguma reprovada; 2 entrada ou hash recusados; 3 falha fechada
-(rede detectada no modo local, ou erro interno do executor).
+(rede detectada no modo local, ou erro interno do executor); 4 modo local recusado por haver socket preexistente.
+
+Garantia do modo local (RED2/F2): iniciado pela CLI (`python scripts/porta_l.py`), o gancho de auditoria é a primeira
+instrução efetiva do processo, antes de importar `freoa_verifica` ou qualquer módulo de rede, e a CLI recusa executar (código
+4, sem relatório) se um socket já existir na instalação da guarda. Logo nenhum socket nasce sem passar pelo evento
+`socket.__new__`, auditado e barrado. Fora da garantia: `send`/`sendall` sobre socket criado antes do gancho ou fora do
+processo do executor, e o uso do módulo como biblioteca (importado por outro processo, sem gancho precoce).
 """
 
 from __future__ import annotations
 
-import argparse
-import datetime
-import hashlib
-import importlib
-import importlib.util
-import inspect
-import json
-import math
-import os
-import re
-import socket
 import sys
-import time
-from collections import defaultdict
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
-from urllib.parse import urlsplit
+
+# Mecanismo PRINCIPAL (R3-5): gancho de auditoria do CPython (PEP 578). O interpretador dispara o evento em TODA operação de
+# rede, qualquer que seja o nome, alias ou referência usada para chegar ao tipo C (`socket.socket`, `socket.SocketType`,
+# `_socket.socket`, referência guardada antes da guarda): o gancho é por EVENTO. `sys.addaudithook` não tem remoção; por
+# isso o gancho é instalado uma vez e só age enquanto há uma guarda ativa (fora dela é inerte). Registra a tentativa e
+# aborta (`RedeBloqueada`); `verificar()` falha o executor mesmo que o chamador tenha engolido a exceção. A substituição
+# de métodos abaixo é camada adicional (também barra a chamada de módulo antes do evento) e não é a garantia.
+EVENTOS_DE_REDE = ("socket.__new__", "socket.bind", "socket.connect", "socket.sendto", "socket.sendmsg",
+                   "socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr", "socket.getnameinfo",
+                   "http.client.connect", "http.client.send", "urllib.Request")
+_EVENTO_COM_SOCKET_NO_ARG0 = ("socket.__new__", "socket.bind", "socket.connect", "socket.sendto", "socket.sendmsg")
+_EVENTOS_BARRADOS = EVENTOS_DE_REDE  # o que o gancho barra (variável própria: o teste de mutante a reduz num subprocesso)
+_GUARDAS_ATIVAS: list[Any] = []
+_gancho_instalado = False
+_GANCHO_PRECOCE = False  # verdadeiro só quando o gancho foi instalado como primeira instrução efetiva do processo (CLI)
+_CRIADOS_ANTES: list[str] = []  # eventos `socket.__new__` vistos fora de qualquer guarda desde a instalação do gancho
+
+
+def _gancho_de_auditoria(evento: str, args: tuple) -> None:
+    if not _GUARDAS_ATIVAS:
+        if evento == "socket.__new__" and len(_CRIADOS_ANTES) < 8:
+            _CRIADOS_ANTES.append(repr(args[1:])[:80])  # criação observada antes de qualquer guarda (F2)
+        return
+    if evento not in _EVENTOS_BARRADOS:
+        return
+    # `sys.modules`, não `socket`: o gancho pode estar instalado antes de o módulo ser importado (F2)
+    af_unix = getattr(sys.modules.get("socket"), "AF_UNIX", None)
+    if evento == "socket.__new__" and len(args) > 1 and af_unix is not None and args[1] == af_unix:
+        return  # soquete local do sistema (sem rede): a criação de AF_INET/AF_INET6/outros é que é barrada
+    resto = args[1:] if evento in _EVENTO_COM_SOCKET_NO_ARG0 else args
+    for guarda in list(_GUARDAS_ATIVAS):
+        guarda.tentativas.append(f"audit:{evento}:{resto!r}"[:200])
+    raise RedeBloqueada(f"rede bloqueada no modo local (evento de auditoria {evento})")
+
+
+def _instalar_gancho() -> None:
+    global _gancho_instalado
+    if not _gancho_instalado:
+        sys.addaudithook(_gancho_de_auditoria)
+        _gancho_instalado = True
+
+
+def _instalar_gancho_precoce() -> None:
+    """RED2/F2. Chamada ANTES de importar `freoa_verifica` ou qualquer módulo de rede (só `sys` foi importado). Desde aqui
+    todo evento `socket.__new__` do processo passa pelo gancho: sem guarda ativa ele é só registrado em `_CRIADOS_ANTES`; com
+    guarda é barrado. `main` recusa o modo local (código 4, sem relatório) se algum foi registrado ou se, na instalação da
+    guarda, o coletor de lixo ainda enxerga objeto de socket com descritor aberto (detecção sem criar socket)."""
+    global _GANCHO_PRECOCE
+    _instalar_gancho()
+    _GANCHO_PRECOCE = True
+
+
+if __name__ == "__main__":  # primeira instrução efetiva da CLI: antes dos demais imports (F2)
+    _instalar_gancho_precoce()
+
+import argparse  # noqa: E402
+import datetime  # noqa: E402
+import hashlib  # noqa: E402
+import importlib  # noqa: E402
+import importlib.util  # noqa: E402
+import inspect  # noqa: E402
+import json  # noqa: E402
+import math  # noqa: E402
+import os  # noqa: E402
+import re  # noqa: E402
+import socket  # noqa: E402
+import time  # noqa: E402
+from collections import defaultdict  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
+from urllib.parse import urlsplit  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parents[1]
 VERSAO_EXECUTOR = "1"
@@ -95,39 +156,6 @@ def _modulo_opcional(nome: str) -> Any:
         return importlib.import_module(nome)
     except ImportError:  # plataforma sem o módulo: não há primitiva a barrar
         return None
-
-
-# Mecanismo PRINCIPAL (R3-5): gancho de auditoria do CPython (PEP 578). O interpretador dispara o evento em TODA operação de
-# rede, qualquer que seja o nome, alias ou referência usada para chegar ao tipo C (`socket.socket`, `socket.SocketType`,
-# `_socket.socket`, referência guardada antes da guarda): o gancho é por EVENTO. `sys.addaudithook` não tem remoção; por
-# isso o gancho é instalado uma vez e só age enquanto há uma guarda ativa (fora dela é inerte). Registra a tentativa e
-# aborta (`RedeBloqueada`); `verificar()` falha o executor mesmo que o chamador tenha engolido a exceção. A substituição
-# de métodos abaixo é camada adicional (também barra a chamada de módulo antes do evento) e não é a garantia.
-EVENTOS_DE_REDE = ("socket.__new__", "socket.bind", "socket.connect", "socket.sendto", "socket.sendmsg",
-                   "socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr", "socket.getnameinfo",
-                   "http.client.connect", "http.client.send", "urllib.Request")
-_EVENTO_COM_SOCKET_NO_ARG0 = ("socket.__new__", "socket.bind", "socket.connect", "socket.sendto", "socket.sendmsg")
-_EVENTOS_BARRADOS = EVENTOS_DE_REDE  # o que o gancho barra (variável própria: o teste de mutante a reduz num subprocesso)
-_GUARDAS_ATIVAS: list[Any] = []
-_gancho_instalado = False
-
-
-def _gancho_de_auditoria(evento: str, args: tuple) -> None:
-    if not _GUARDAS_ATIVAS or evento not in _EVENTOS_BARRADOS:
-        return
-    if evento == "socket.__new__" and len(args) > 1 and args[1] == getattr(socket, "AF_UNIX", None):
-        return  # soquete local do sistema (sem rede): a criação de AF_INET/AF_INET6/outros é que é barrada
-    resto = args[1:] if evento in _EVENTO_COM_SOCKET_NO_ARG0 else args
-    for guarda in list(_GUARDAS_ATIVAS):
-        guarda.tentativas.append(f"audit:{evento}:{resto!r}"[:200])
-    raise RedeBloqueada(f"rede bloqueada no modo local (evento de auditoria {evento})")
-
-
-def _instalar_gancho() -> None:
-    global _gancho_instalado
-    if not _gancho_instalado:
-        sys.addaudithook(_gancho_de_auditoria)
-        _gancho_instalado = True
 
 
 class BloqueioDeRede:
@@ -946,6 +974,26 @@ def tabela(relatorio: dict) -> dict[str, str]:
 # --------------------------------------------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------------------------------------------
+def socket_preexistente() -> str | None:
+    """RED2/F2. Motivo da recusa se já existe socket no processo quando a guarda vai ser instalada; `None` se não. Só vale
+    com o gancho precoce (CLI): (1) algum evento `socket.__new__` registrado desde a instalação do gancho; (2) objeto de
+    socket com descritor aberto visto pelo coletor de lixo (`gc.get_objects`, sem criar socket). Limitação documentada:
+    objeto criado por `SocketType.__new__` sem `__init__` não tem descritor e CPython só dispara o evento na inicialização;
+    ele não é detectado, mas também não pode enviar (sem descritor, `send` falha no sistema)."""
+    if not _GANCHO_PRECOCE:
+        return None
+    if _CRIADOS_ANTES:
+        return f"socket criado antes da guarda ({_CRIADOS_ANTES[0]})"
+    tipo = getattr(sys.modules.get("_socket"), "socket", None)
+    if tipo is not None:
+        import gc
+
+        for obj in gc.get_objects():
+            if isinstance(obj, tipo) and obj.fileno() != -1:
+                return "descritor de socket aberto no processo antes da guarda"
+    return None
+
+
 def _recusar(msg: str, somente_tabela: bool, rotulo: str = "RECUSADO") -> None:
     print(f"{rotulo}: {msg}" if not somente_tabela else rotulo, file=sys.stderr)
 
@@ -964,6 +1012,11 @@ def main(argv: list[str] | None = None, *, _servico: Any = None) -> int:
     ap.add_argument("--sintetico", action="store_true",
                     help="modo sintético: aceita outro congelamento; o relatório sai marcado NÃO QUALIFICANTE")
     a = ap.parse_args(argv)
+    if a.modo == "local":
+        pre = socket_preexistente()
+        if pre is not None:  # F2: sem relatório; código próprio (4), distinto de recusa de entrada (2) e falha fechada (3)
+            _recusar(f"modo local recusado: {pre}", a.somente_tabela, "RECUSADO (socket preexistente)")
+            return 4
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, OSError):

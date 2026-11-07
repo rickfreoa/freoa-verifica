@@ -1519,3 +1519,94 @@ def test_red2_f1_a_confirmacao_indevida_e_a_condicao_adicional_de_c_ficam_inalte
     c_ = _rodar(cs, resp, _mutantes_de(cs))["capacidades"]["c"]
     assert c_["aprovada"] is False  # abstenção do instrumento: reprova por acerto insuficiente, nunca aprova
     assert c_["extras"]["sem_fundamento_devolvidos_como_nao_verificados"] == "8/8"
+
+
+# --- RED2 / F2: gancho precoce na CLI e recusa por socket preexistente -------------------------------------------------
+_DRIVER_F2 = r"""
+import json, runpy, sys, types
+SCRIPT, d, dm, md, home, saida, resultado, cenario = sys.argv[1:9]
+argv = ["--conjunto", d, "--mutantes", dm, "--home", home, "--modo", "local", "--saida", saida,
+        "--congelamento", md, "--sintetico"]
+assert "socket" not in sys.modules and "_socket" not in sys.modules  # nada de rede importado antes da CLI
+
+
+class Verifica:  # `main` a importa depois de instalar a guarda: aqui roda o código dentro do processo da CLI
+    def __init__(self, home=None):
+        import socket, _socket
+        res = {}
+        for rotulo, tipo in (("socket.socket", socket.socket), ("socket.SocketType", socket.SocketType),
+                             ("_socket.socket", _socket.socket)):
+            try:
+                tipo(65535, socket.SOCK_STREAM)  # família inválida: sem a barreira falha por OSError, sem descritor
+                res[rotulo] = "criado"
+            except OSError as exc:
+                res[rotulo] = "bloqueada" if type(exc).__name__ == "RedeBloqueada" else "OSError:" + type(exc).__name__
+        open(resultado, "w").write(json.dumps(res))
+        raise SystemExit(77)
+
+
+pacote = types.ModuleType("freoa_verifica"); pacote.__path__ = []
+serv = types.ModuleType("freoa_verifica.service"); serv.Verifica = Verifica
+sys.modules.update({"freoa_verifica": pacote, "freoa_verifica.service": serv})
+if cenario == "cli":
+    sys.argv = [SCRIPT] + argv
+    runpy.run_path(SCRIPT, run_name="__main__")
+else:
+    g = runpy.run_path(SCRIPT, run_name="porta_l_sonda")  # carrega sem instalar o gancho precoce
+    g["_instalar_gancho_precoce"]()
+    import socket
+    if cenario == "preexistente":
+        # CPython emite `socket.__new__` na inicialização de qualquer socket com descritor; o evento é reproduzido sem criar
+        sys.audit("socket.__new__", None, socket.AF_INET, socket.SOCK_STREAM, 0)
+    else:
+        socket.SocketType.__new__(socket.SocketType)  # como o auditor: sem descritor, sem evento
+    rc = g["main"](argv)
+    print("SAIDA=" + json.dumps({"rc": rc, "criados": g["_CRIADOS_ANTES"]}))
+"""
+
+
+def _rodar_driver_f2(tmp_path, cenario):
+    import subprocess
+    d, dm, md = _montar(tmp_path, _conjunto("a", 2))
+    prog = tmp_path / "driver_f2.py"
+    prog.write_text(_DRIVER_F2, encoding="utf-8")
+    res, saida = tmp_path / "res.json", tmp_path / "s.json"
+    r = subprocess.run([sys.executable, "-B", str(prog), str(SCRIPT), str(d), str(dm), str(md), str(tmp_path),
+                        str(saida), str(res), cenario], capture_output=True, text=True, timeout=120, cwd=str(tmp_path))
+    return r, res, saida
+
+
+def test_red2_f2_processo_da_cli_bloqueia_criacao_de_socket_por_qualquer_alias(tmp_path):
+    r, res, saida = _rodar_driver_f2(tmp_path, "cli")
+    assert r.returncode == 77, (r.returncode, r.stdout[-1500:], r.stderr[-1500:])  # chegou ao serviço, dentro da guarda
+    assert json.loads(res.read_text()) == {"socket.socket": "bloqueada", "socket.SocketType": "bloqueada",
+                                           "_socket.socket": "bloqueada"}
+    assert not saida.exists()
+
+
+def test_red2_f2_recusa_o_modo_local_se_ja_ha_socket_criado_antes_da_guarda(tmp_path):
+    r, res, saida = _rodar_driver_f2(tmp_path, "preexistente")
+    linha = [ln for ln in r.stdout.splitlines() if ln.startswith("SAIDA=")]
+    assert linha, (r.returncode, r.stdout[-1500:], r.stderr[-1500:])
+    s = json.loads(linha[0][6:])
+    assert s["rc"] == 4 and len(s["criados"]) == 1
+    assert "socket preexistente" in r.stderr
+    assert not saida.exists() and not res.exists()  # sem relatório e sem chegar ao serviço
+
+
+def test_red2_f2_limitacao_objeto_sem_descritor_nao_dispara_evento_e_nao_e_recusado(tmp_path):
+    # `SocketType.__new__` sem `__init__` não emite `socket.__new__` em CPython: não é detectável pelo gancho (limitação
+    # documentada); como não tem descritor, não pode enviar nada. A execução segue até o serviço.
+    r, res, saida = _rodar_driver_f2(tmp_path, "sem_descritor")
+    assert r.returncode == 77 and res.exists(), (r.returncode, r.stdout[-1500:], r.stderr[-1500:])
+
+
+def test_red2_f2_cli_instala_o_gancho_antes_dos_imports_de_rede():
+    import ast
+    arvore = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    corpo = arvore.body
+    inicio = next(i for i, n in enumerate(corpo) if isinstance(n, ast.If) and "_instalar_gancho_precoce" in ast.dump(n))
+    antes = [n for n in corpo[:inicio] if isinstance(n, (ast.Import, ast.ImportFrom))]
+    assert [getattr(n, "module", None) or n.names[0].name for n in antes] == ["__future__", "sys"]
+    assert ex._GANCHO_PRECOCE is False  # importado como biblioteca: sem gancho precoce, sem recusa
+    assert ex.socket_preexistente() is None
