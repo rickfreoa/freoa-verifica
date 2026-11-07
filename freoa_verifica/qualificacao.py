@@ -78,8 +78,8 @@ def erros_do_relatorio(rota: str, capacidade: str, item: dict[str, Any], dados: 
     if hashlib.sha256(dados).hexdigest() != item.get("relatorio_sha256"):
         return ["bytes do relatório não conferem com relatorio_sha256"]
     try:
-        rel = json.loads(dados.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+        rel = json.loads(dados)  # bytes: o próprio json detecta a codificação; sem decode avulso (garantia estrutural 3)
+    except ValueError:  # inclui UnicodeDecodeError
         return ["relatório de apuração não é JSON"]
     if not isinstance(rel, dict) or set(rel) != CAMPOS_RELATORIO:
         return [f"relatório de apuração fora do esquema (campos devem ser exatamente {sorted(CAMPOS_RELATORIO)})"]
