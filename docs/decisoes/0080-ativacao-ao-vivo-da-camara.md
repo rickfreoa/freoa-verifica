@@ -1,6 +1,6 @@
 # 0080 — Ativação ao vivo da rota Câmara (Legislação Informatizada)
 
-Supervisor (Opus). Versão 3, 08/11/2026, depois dos pareceres do Codex sobre a v1 (achados 1–11) e a v2 (achados 12–15). Trilha IL.3-b (`docs/auditoria/1.4.0/il3-especificacao.md`). Normativos: `AGENTS.md`; 0045, 0048, 0075, 0077, 0078, 0079; matriz IL.1; D6. Não altera matriz, pisos, reserva, mutantes, `transport.py` nem `CONTRATO_VERSAO`. Qualificação continua `nao_apurada` até o IL.3-c.
+Supervisor (Opus). Versão 3, 08/11/2026, depois dos pareceres do Codex sobre a v1 (achados 1–11) e a v2 (achados 12–15), com ajuste pontual depois da r3 (achados 16–18). Trilha IL.3-b (`docs/auditoria/1.4.0/il3-especificacao.md`). Normativos: `AGENTS.md`; 0045, 0048, 0075, 0077, 0078, 0079; matriz IL.1; D6. Não altera matriz, pisos, reserva, mutantes, `transport.py` nem `CONTRATO_VERSAO`. Qualificação continua `nao_apurada` até o IL.3-c.
 
 ## 1. Objeto
 
@@ -43,12 +43,14 @@ O conector `camara_legin` deixa de responder `ativacao_ao_vivo_pendente` e passa
 | 401, 403, 429, desafio (inclusive com HTTP 200), robots proibindo | host | persistente | só por decisão registrada (comando com identificador da decisão), seguida de nova leitura de robots |
 | qualquer 3xx, corpo vazio, MIME ou perfil incompatível | recurso (URL) persistente; host pelo restante da chamada ou da sessão do instrumento | persistente para o recurso | revisão registrada do recurso |
 | timeout, 5xx, ausência de resposta, falha de conexão | host | 1 h | automática após 1 h, com nova leitura de robots se expirada |
-| robots ausente, malformado ou inconclusivo, `Crawl-delay` inválido | host | até nova leitura válida, no mínimo 1 h | nova leitura válida |
+| robots ausente, malformado ou inconclusivo, `Crawl-delay` inválido | host (conteúdo e termo) | até leitura válida | decorrida 1 h, uma única tentativa de revalidação só de `/robots.txt`, sob a trava e o ritmo; se falhar, próxima tentativa após o dobro do prazo anterior, até 24 h; conteúdo e termo permanecem bloqueados até persistir política válida |
 | falha local de persistência ou de interpretação | chamada (ou sessão do instrumento) | não persiste | nova chamada |
 | teto de sessão/chamada atingido | sessão/chamada | não persiste | nova sessão/chamada |
+| residual: qualquer outro status ou resposta não classificada acima (inclusive 1xx, 202 sem marcador de desafio, 404, 410 e demais 4xx de conteúdo) | recurso (URL) persistente; host pelo restante da chamada ou da sessão do instrumento | persistente para o recurso | revisão registrada do recurso |
 
-3. Registrar com motivo estável e categoria só quando demonstrada (0045; 401 como recusa identificada). Testes provam nenhuma emissão posterior na unidade, inclusive em processos concorrentes, após reinício e dentro da mesma chamada do transporte.
-4. Material parcial nunca vira zero resultados, inexistência de alteração ou atendimento integral; a indisponibilidade aparece na resposta (0077). Sem troca de UA, IP, host ou rota; sem fallback para Senado, DOU, LexML ou Planalto; sem sessão assistida implícita.
+3. Precedência das classes, da mais específica à residual: 401/403/429/desafio; 3xx; timeout/5xx/ausência de resposta/falha de conexão; robots; corpo vazio, MIME ou perfil; residual. Testes incluem 202 sem marcador e 404/410 de conteúdo.
+4. Registrar com motivo estável e categoria só quando demonstrada (0045; 401 como recusa identificada). Testes provam nenhuma emissão posterior na unidade, inclusive em processos concorrentes, após reinício e dentro da mesma chamada do transporte.
+5. Material parcial nunca vira zero resultados, inexistência de alteração ou atendimento integral; a indisponibilidade aparece na resposta (0077). Sem troca de UA, IP, host ou rota; sem fallback para Senado, DOU, LexML ou Planalto; sem sessão assistida implícita.
 
 ## 7. Atribuição
 
@@ -58,7 +60,7 @@ Cada evidência de origem Câmara ganha o campo aditivo `atribuicao`: `{"fonte":
 
 1. **Inventário.** O inventário é de normas (espécie, número, ano), não de URLs. As URLs são obtidas só pela cadeia de descoberta da 0077 (busca → página de norma → links publicados), preservando `href`, URL e hash da página de origem em cada passo. Não há fase de descoberta irrestrita. O inventário do desenvolvimento é revisado pelo auditor antes da obtenção.
 2. **Desenvolvimento.** Capturado pelo supervisor/codificador, com home próprio de desenvolvimento.
-3. **Reserva.** Capturada pelo guardião em sessão própria, com home, inventário, recibos, corpos, logs e snapshot sob guarda separada (`Claude_Externos/freoa-verifica/porta-l/reserva-home/`), inacessíveis ao supervisor e ao codificador. Durante ajustes, ao supervisor chega apenas o que o D6 permite: `captura da reserva concluída: sim/não`, sem contagens, categorias, URLs, identificações ou hashes. Contagens, categorias e eventual compromisso ficam com o guardião e vão ao titular no relatório integral; se houver compromisso, é HMAC-SHA-256 sobre serialização canônica (JSON ordenado dos hashes individuais) com chave aleatória de 256 bits gerada e guardada pelo guardião, revelada só ao titular. Correções do produto só a partir do desenvolvimento. Contaminação segue o D6.
+3. **Reserva.** Capturada pelo guardião em sessão própria, com home, inventário, recibos, corpos, logs e snapshot sob guarda separada (`Claude_Externos/freoa-verifica/porta-l/reserva-home/`), inacessíveis ao supervisor e ao codificador. Nenhuma informação sobre a captura da reserva chega ao supervisor ou ao codificador, nem mesmo se foi concluída; ao supervisor chega apenas, quando houver apuração, a tabela aprovado/reprovado por capacidade que o D6 e a matriz IL.1 §8 autorizam. Contagens, categorias e eventual compromisso ficam com o guardião e vão ao titular no relatório integral; se houver compromisso, é HMAC-SHA-256 sobre serialização canônica (JSON ordenado dos hashes individuais) com chave aleatória de 256 bits gerada e guardada pelo guardião, revelada só ao titular. Correções do produto só a partir do desenvolvimento. Contaminação segue o D6.
 4. **Snapshot.** Recibos e vínculos recuperáveis, hashes conferidos na instalação, evidência adulterada recusada, `captured_at` e procedência originais preservados; instalação e reprocessamento não renovam captura nem qualificam rota; recursos fora da gramática ficam inventariados como não obtidos; modo local sem rede. O snapshot da reserva não é publicado nem misturado ao de desenvolvimento.
 
 ## 9. Regressões exigidas na implementação
