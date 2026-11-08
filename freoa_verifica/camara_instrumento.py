@@ -19,6 +19,7 @@ from freoa_verifica.connectors.camara_estado import Estado, Relogio, iso
 from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
 from freoa_verifica.connectors.camara_policy import HOSTS
 from freoa_verifica.connectors.camara_portao import Portao
+from freoa_verifica.connectors.guarda import da_chamada
 
 CHAVE_HMAC_MINIMA = 32  # bytes (256 bits)
 _CLASSES_GERAIS = (("robots", "robots"), ("teto", "teto"), ("persistencia", "persistencia"),
@@ -135,50 +136,54 @@ def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
     destino = Path(destino)
     hashes: list[str] = []
     obtidas = 0
-    falhas: list[Unavailable] = []
-    for norma in normas:
-        try:
-            cand = con.resolve(norma)
-            con.fetch(cand)
-            inv = con.inventarios[cand.url]
-            for versao in ("publicacao_original",):
+    falhas: list[dict] = []
+    with da_chamada():  # a sessão do instrumento é uma guarda só: host que recusou não é consultado de novo
+        for norma in normas:
+            try:
+                cand = con.resolve(norma)
+                con.fetch(cand)
+                inv = con.inventarios[cand.url]
                 if any(r["recurso"] == "original" and r["admitido"] for r in inv["recursos"]):
-                    con.fetch(type(cand)(cand.source_id, cand.key, cand.title, cand.url, metadata={"versao": versao}))
-        except Unavailable as exc:
-            falhas.append(exc)
-            if exc.reason in {"teto_de_sessao"} or exc.evidencia.get("bloqueio") in {"host_persistente"}:
-                break
-            continue
-        except Exception as exc:  # noqa: BLE001  AmbiguousCandidates e afins: não obtido, nunca silencioso
-            falhas.append(Unavailable(f"inventario_norma_nao_obtida:{type(exc).__name__}"))
-            continue
-        for url, resp in list(con.paginas.items()):
-            if "/robots.txt" in url:
+                    con.fetch(type(cand)(cand.source_id, cand.key, cand.title, cand.url,
+                                         metadata={"versao": "publicacao_original"}))
+            except Unavailable as exc:
+                falhas.append({"motivo": exc.reason, "categoria": exc.categoria,
+                               "bloqueio": exc.evidencia.get("bloqueio")})
+                if exc.reason == "teto_de_sessao" or exc.evidencia.get("bloqueio") == "host_persistente":
+                    break
                 continue
-            origem = con.links.get(url)
+            except Exception as exc:  # noqa: BLE001  AmbiguousCandidates e afins: não obtido, nunca silencioso
+                falhas.append({"motivo": f"inventario_norma_nao_obtida:{type(exc).__name__}", "categoria": None,
+                               "bloqueio": None})
+                continue
             pasta = destino / f"{norma['kind']}-{norma['number']}-{norma['year']}"
-            pasta.mkdir(parents=True, exist_ok=True)
-            nome = hashlib.sha256(url.encode()).hexdigest()[:16]
-            (pasta / f"{nome}.corpo").write_bytes(resp.body)
-            recibo = {"url": url, "sha256": resp.sha256, "fetched_at": resp.fetched_at, "status": resp.status,
-                      "mime": resp.mime, "politica_robots_sha256": portao.politica_de.get(url),
-                      "origem": None if origem is None else {"href": origem[1], "rotulo": origem[2],
-                                                             "url": origem[0].final_url, "sha256": origem[0].sha256}}
-            (pasta / f"{nome}.recibo.json").write_text(json.dumps(recibo, ensure_ascii=False, sort_keys=True, indent=1),
-                                                        encoding="utf-8")
-            hashes.append(resp.sha256)
-        obtidas += 1
-        con.paginas.clear()
+            for url, resp in list(con.paginas.items()):
+                if "/robots.txt" in url:
+                    continue
+                origem = con.links.get(url)
+                pasta.mkdir(parents=True, exist_ok=True)
+                nome = hashlib.sha256(url.encode()).hexdigest()[:16]
+                (pasta / f"{nome}.corpo").write_bytes(resp.body)
+                recibo = {"url": url, "sha256": resp.sha256, "fetched_at": resp.fetched_at, "status": resp.status,
+                          "mime": resp.mime, "politica_robots_sha256": portao.politica_de.get(url),
+                          "origem": None if origem is None else {"href": origem[1], "rotulo": origem[2],
+                                                                 "url": origem[0].final_url,
+                                                                 "sha256": origem[0].sha256}}
+                (pasta / f"{nome}.recibo.json").write_text(
+                    json.dumps(recibo, ensure_ascii=False, sort_keys=True, indent=1), encoding="utf-8")
+                hashes.append(resp.sha256)
+            obtidas += 1
+            con.paginas.clear()
     if chave is not None:
         destino.mkdir(parents=True, exist_ok=True)
         (destino / "compromisso.json").write_text(
             json.dumps({"hmac_sha256": compromisso_hmac(chave, sorted(set(hashes))), "n": len(set(hashes))}), encoding="utf-8")
     nao_obtidas = len(normas) - obtidas
     if reserva:
-        return {"resultado": "ok" if not nao_obtidas else "falha", **({"classe": classe_geral(falhas[0].reason)}
+        return {"resultado": "ok" if not nao_obtidas else "falha", **({"classe": classe_geral(falhas[0]["motivo"])}
                                                                       if nao_obtidas and falhas else {})}
     return {"resultado": "ok" if not nao_obtidas else "parcial", "obtidas": obtidas, "nao_obtidas": nao_obtidas,
-            "falhas": [{"motivo": f.reason, "categoria": f.categoria} for f in falhas]}
+            "falhas": [{"motivo": f["motivo"], "categoria": f["categoria"]} for f in falhas]}
 
 
 def executar(args, *, transporte=None, relogio=None, out=None) -> int:

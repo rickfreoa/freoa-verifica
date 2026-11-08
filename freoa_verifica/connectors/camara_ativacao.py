@@ -22,6 +22,8 @@ from freoa_verifica.connectors.camara_estado import Estado, Relogio, iso, sha256
 from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL
 from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
+from freoa_verifica.texto_resposta import texto_do_response
+from freoa_verifica.transport import RespostaInvalida
 
 CAMINHOS_DE_CONTEUDO = {
     "www2.camara.leg.br": (urlsplit(TERMO_URL).path,
@@ -61,7 +63,10 @@ def capturar(portao: Portao, estado: Estado, relogio: Relogio | None = None) -> 
     resposta = portao.obter(TERMO_URL)
     if resposta.status != 200 or resposta.final_url != TERMO_URL or resposta.redirects or not resposta.body:
         raise AtivacaoRecusada("termo_resposta_invalida")
-    texto = resposta.body.decode("utf-8", "replace")
+    try:
+        texto = texto_do_response(resposta)
+    except RespostaInvalida as exc:
+        raise AtivacaoRecusada("termo_resposta_invalida") from exc
     recibo = {"url": resposta.url, "capturado_em": resposta.fetched_at, "status": resposta.status, "mime": resposta.mime,
               "bytes": len(resposta.body), "sha256": resposta.sha256, "data_ou_versao_exibida": _data_exibida(texto),
               "politica_robots_sha256": portao.politica_de.get(TERMO_URL), "user_agent": USER_AGENT_IDENTIFICADO}
@@ -81,9 +86,9 @@ def registrar(estado: Estado, revisao_arquivo: Path | str, relogio: Relogio | No
     if not pre:
         raise AtivacaoRecusada("pre_condicoes_nao_cumpridas")
     try:
-        bruto = Path(revisao_arquivo).read_bytes()
-        revisao = json.loads(bruto)
-    except (OSError, ValueError) as exc:
+        revisao = json.loads(Path(revisao_arquivo).read_text("utf-8"))
+        revisao_sha = sha256(Path(revisao_arquivo).read_bytes())
+    except (OSError, ValueError) as exc:  # inclui UnicodeDecodeError e JSON inválido
         raise AtivacaoRecusada("revisao_do_auditor_ausente_ou_ilegivel") from exc
     if not isinstance(revisao, dict) or not all(isinstance(revisao.get(k), str) and revisao[k].strip()
                                                  for k in ("auditor", "revisado_em", "termo_sha256", "resultado")):
@@ -98,7 +103,7 @@ def registrar(estado: Estado, revisao_arquivo: Path | str, relogio: Relogio | No
             raise AtivacaoRecusada("robots_mudou_desde_a_captura")
     registro = {"termo_sha256": pre["termo_sha256"], "termo_url": TERMO_URL, "robots_sha256": pre["robots_sha256"],
                 "versao_produto": __version__, "instante": iso(relogio.agora()),
-                "revisao": {"sha256": sha256(bruto), "auditor": revisao["auditor"],
+                "revisao": {"sha256": revisao_sha, "auditor": revisao["auditor"],
                             "revisado_em": revisao["revisado_em"], "resultado": "conforme",
                             "termo_sha256": revisao["termo_sha256"]}}
     registro["registro_sha256"] = _selo(registro)

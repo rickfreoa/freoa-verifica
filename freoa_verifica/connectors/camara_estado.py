@@ -69,7 +69,7 @@ def _escrever(caminho: Path, dados: bytes) -> None:
 
 def _json_de(caminho: Path, padrao):
     try:
-        return json.loads(caminho.read_bytes())
+        return json.loads(caminho.read_text("utf-8"))
     except FileNotFoundError:
         return padrao
     except (OSError, ValueError) as exc:
@@ -145,12 +145,13 @@ class Estado:
     def politica(self, host: str) -> dict | None:
         return self._ler(f"robots-{host}.json", None)
 
-    def gravar_politica(self, host: str, registro: dict, corpo: bytes) -> None:
+    def gravar_politica(self, host: str, registro: dict, texto: str) -> None:
+        """`texto` é o robots já interpretado pela leitura textual única (`texto_do_response`)."""
         self._gravar(f"robots-{host}.json", registro)
         if self.home is not None:
-            _escrever(self.pasta / f"robots-{host}-{registro['sha256']}.txt", corpo)
+            _escrever(self.pasta / f"robots-{host}-{registro['sha256']}.txt", texto.encode("utf-8"))
         else:
-            self._memoria[f"corpo-{registro['sha256']}"] = corpo.decode("utf-8", "replace")
+            self._memoria[f"corpo-{registro['sha256']}"] = texto
 
     def descartar_politica(self, host: str) -> None:
         if self.home is None:
@@ -293,7 +294,7 @@ class Estado:
             return guardado["recibo"] if guardado and sha256(guardado["corpo"]) == digest else None  # type: ignore[index]
         try:
             corpo = (self.pasta / "termo" / f"{digest}.html").read_bytes()
-            recibo = json.loads((self.pasta / "termo" / f"{digest}.recibo.json").read_bytes())
+            recibo = json.loads((self.pasta / "termo" / f"{digest}.recibo.json").read_text("utf-8"))
         except (OSError, ValueError):
             return None
         return recibo if sha256(corpo) == digest and recibo.get("sha256") == digest else None

@@ -214,7 +214,8 @@ def transporte(url, **kw):
     corpo = b"User-agent: *\n" if "robots" in url else b"<html>ok</html>"
     log.open("a").write(f"{time.time():.6f} fim {quem}\n")
     return Response(url, url, 200, {}, corpo, hashlib.sha256(corpo).hexdigest(), "2026-11-08T12:00:00+00:00", [],
-                    "text/plain" if "robots" in url else "text/html", size=len(corpo), content_type="x")
+                    "text/plain" if "robots" in url else "text/html", size=len(corpo),
+                    content_type="text/plain; charset=utf-8" if "robots" in url else "text/html; charset=utf-8")
 p = Portao(transporte, estado=Estado(home))
 base = "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&ano=1976&geral=&numero="
 for n in range(3):

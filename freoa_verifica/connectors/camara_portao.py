@@ -20,6 +20,8 @@ from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL, validar_te
 from freoa_verifica.connectors.guarda import ativa as guarda_ativa
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.limites import restante
+from freoa_verifica.texto_resposta import texto_do_response
+from freoa_verifica.transport import RespostaInvalida
 
 INTERVALO_MINIMO = 10.0
 TETO_SESSAO_INSTRUMENTO = 200
@@ -221,12 +223,12 @@ class Portao:
         anterior = self.estado.politica(host)
         resp = self._emitir(url, {"recurso": "robots", "mime": "text/plain"}, host, None,
                             atraso=float(anterior.get("crawl_delay", 0)) if anterior else 0.0)
-        corpo = resp.body
         try:
-            grupos = rb.interpretar(corpo.decode("utf-8"))
-        except (UnicodeDecodeError, rb.RobotsInconclusivo) as exc:
-            raise self._robots_inconclusivo(host, getattr(exc, "args", ["robots_inconclusivo"])[0] if isinstance(
-                exc, rb.RobotsInconclusivo) else "robots_inconclusivo", resp.sha256, agora) from exc
+            texto = texto_do_response(resp)  # interpretação textual única; charset inválido é inconclusivo
+            grupos = rb.interpretar(texto)
+        except (RespostaInvalida, rb.RobotsInconclusivo) as exc:
+            motivo = exc.args[0] if isinstance(exc, rb.RobotsInconclusivo) else "robots_inconclusivo"
+            raise self._robots_inconclusivo(host, motivo, resp.sha256, agora) from exc
         geral = rb.decidir(grupos, "/")
         if geral.estado == rb.INCONCLUSIVO:
             raise self._robots_inconclusivo(host, geral.motivo or "robots_inconclusivo", resp.sha256, agora)
@@ -235,8 +237,8 @@ class Portao:
                     "valido_ate": iso(instante + VALIDADE_ROBOTS), "user_agent": USER_AGENT_IDENTIFICADO,
                     "tokens": list(rb.TOKENS), "grupos_considerados": [list(g) for g in geral.grupos_considerados],
                     "crawl_delay": geral.crawl_delay, "status": resp.status, "mime": resp.mime,
-                    "bytes": len(corpo), "decisoes": {}}
-        self.estado.gravar_politica(host, registro, corpo)
+                    "bytes": len(resp.body), "decisoes": {}}
+        self.estado.gravar_politica(host, registro, texto)
         self.estado.limpar_robots_inconclusivo(host)
         return registro
 
