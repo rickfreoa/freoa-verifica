@@ -365,12 +365,51 @@ def test_r33_rotulo_colidente_sem_como_identificar_a_obra_nao_recebe_texto_nem_a
     _, resp = _obra_extra(svc, rotulo=rotulo, texto=texto, caminho=caminho, fonte="camara_legin", resp=resp,
                           **identidade)
     Estado(svc.home).registrar_obtencao(_registro(resp.sha256, resp.url, TERMO_SHA, resp.fetched_at, home=svc.home))
-    itens = _itens(svc, texto, caminho, fonte="__somente_local__")
-    assert itens
-    for item in itens:
-        assert item["nao_indexado"] is True and item["motivo"] == "OBRA_AMBIGUA"
-        assert item["work_id"] is None and "atribuicao" not in item and "atribuicoes" not in item
-        assert item["trecho"] is None  # a obra candidata é de origem Câmara: sem atribuição não há texto Câmara
+    q = " ".join(texto.split()[:6])
+    out = svc.buscar_legislacao(q, limite=50, fonte="__somente_local__")
+    _exige_ambiguidade_declarada(out, caminho)
+    _exige_ambiguidade_por_mcp_e_rest(svc, q, caminho)
+
+
+def _exige_ambiguidade_declarada(out, caminho):
+    """F-1: o item ambíguo não sai (nenhum `trecho` nulo, nenhuma obra escolhida); a parcialidade é explícita."""
+    assert [i for i in out["itens"] if i["caminho"] == caminho] == []
+    assert all(i["trecho"] is not None and isinstance(i["trecho"], str) for i in out["itens"])
+    assert out["status"] in {"parcial", "indisponivel"}  # nunca `ok` nem zero resultados silencioso
+    assert out["fontes_indisponiveis"] == {"acervo_local": "OBRA_AMBIGUA"}
+    assert out["fontes"]["acervo_local"]["motivo"] == "OBRA_AMBIGUA" and out["fontes"]["acervo_local"]["omitidos"] >= 1
+    if out["status"] == "indisponivel":
+        assert out["motivo"] == "OBRA_AMBIGUA" and not out["itens"]
+    assert "OBRA_AMBIGUA" not in json.dumps(out["itens"])  # nenhuma obra identificada como escolhida
+
+
+def _exige_ambiguidade_por_mcp_e_rest(svc, q, caminho):
+    pytest.importorskip("mcp")
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from freoa_verifica import mcp_server as ms
+    from freoa_verifica.mcp_server import create_mcp
+    from freoa_verifica.rest import create_app
+    from tests.contrato import harness as h
+
+    home = svc.home
+    mp = pytest.MonkeyPatch()
+    try:
+        mp.setenv("FV_HOME", str(home))
+        mp.setenv("FV_OFFLINE", "1")
+        mp.delenv("FV_API_TOKEN", raising=False)
+        mp.setitem(ms._servicos, str(home), svc)
+        mcp = create_mcp(home=str(home))
+        app = create_app(home=str(home), token=None)
+        args = {"q": q, "limite": 50, "fonte": "__somente_local__"}
+        with TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1") as rest:
+            via_mcp = h.chamar_mcp(mcp, "buscar_legislacao", args)
+            via_rest = h.chamar_rest(rest, "buscar_legislacao", args)
+    finally:
+        mp.undo()
+    for via in (via_mcp, via_rest):
+        _exige_ambiguidade_declarada(via, caminho)
 
 
 def test_r33_controle_obra_unica_pelo_rotulo_continua_identificada_e_sem_atribuicao_alheia(verifica_populada, tmp_path):
@@ -413,11 +452,11 @@ def test_r33_duas_obras_camara_de_mesmo_rotulo_nunca_trocam_de_atribuicao(verifi
                     resp=resp)
         Estado(svc.home).registrar_obtencao(_registro(resp.sha256, resp.url, TERMO_SHA, resp.fetched_at,
                                                       home=svc.home))
-    itens = _itens(svc, texto, caminho, fonte="camara_legin")
-    assert itens
-    for item in itens:  # duas obras Câmara são candidatas do mesmo item: nenhuma é escolhida por ordem
-        assert item["nao_indexado"] is True and item["motivo"] == "OBRA_AMBIGUA" and item["work_id"] is None
-        assert "atribuicao" not in item and "atribuicoes" not in item and item["trecho"] is None
+    # duas obras Câmara são candidatas do mesmo item: nenhuma é escolhida por ordem, e o item não sai
+    out = svc.buscar_legislacao(" ".join(texto.split()[:6]), limite=50, fonte="camara_legin")
+    assert [i for i in out["itens"] if i["caminho"] == caminho] == []
+    assert out["status"] in {"parcial", "indisponivel"}
+    assert out["fontes_indisponiveis"]["acervo_local"] == "OBRA_AMBIGUA"
 
 
 # --- R3-4 e R3-5: falhas depois da obtenção do termo -------------------------------------------------------------------------

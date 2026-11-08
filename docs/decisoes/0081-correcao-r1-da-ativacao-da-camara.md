@@ -146,8 +146,9 @@ vínculo ambíguo de uma mesma captura sob dois termos fica nulo em vez de escol
    reparada fora dela. Restos de captura interrompida (corpo de termo sem nenhum recibo) continuam não sendo evidência.
 3. **Obra da busca sem `LIMIT 1` (R3-3).** As obras que sustentam o item são as que têm o rótulo (ou número), o caminho e a
    redação do item e, com `fonte`, ocorrência capturada nela. Uma só: identificada, com os recibos **dela**. Mais de uma: o
-   item sai `nao_indexado`, `motivo: "OBRA_AMBIGUA"`, `work_id: null`, sem recibos nem atribuição, e sem `trecho` se alguma
-   candidata tem captura de origem Câmara. Não há migração: a identidade da obra não viaja no índice FTS, e a ambiguidade é
+   item **não é devolvido** (correção F-1 do passe final: `trecho: null` mudaria o tipo de campo estável sem ciclo
+   `deprecated`); a resposta declara a parcialidade (`parcial`, ou `indisponivel` se nada mais restou, com
+   `fontes_indisponiveis: {"acervo_local": "OBRA_AMBIGUA"}`), sem recibos, atribuição nem obra escolhida. Não há migração: a identidade da obra não viaja no índice FTS, e a ambiguidade é
    **declarada**, não resolvida.
 4. **Falha ao preservar o termo (R3-4).** Falha de `guardar_termo` ou `gravar_pre_ativacao` alimenta a condição terminal do
    portão (`falha_local_de_estado`) antes de propagar: os dois hosts não emitem mais naquela sessão, mesmo com o armazenamento

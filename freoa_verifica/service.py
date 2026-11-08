@@ -1329,15 +1329,6 @@ class Verifica:
             "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
             "WHERE r.text=? AND p.path=? AND p.work_id=?", (row["text"], row["path"], work_id)).fetchall()
 
-    def _candidata_camara(self, candidatas: list, row: dict) -> bool:
-        """Alguma das obras candidatas tem captura de origem Câmara que sustenta o item."""
-        for obra in candidatas:
-            for recibo in self._recibos_da_obra(obra["id"], row):
-                cap = repo.get_capture(self.conn, recibo[0])
-                if cap and cap.get("source_id") == "camara_legin":
-                    return True
-        return False
-
     @_authenticated_output
     def buscar_legislacao(
         self,
@@ -1366,18 +1357,19 @@ class Verifica:
                 r["_staging"] = True
                 local.append(r)
         items: list[dict[str, Any]] = []
+        omitidos_ambiguos = 0
         for row in local:
             candidatas = self._obras_do_item(row, filtro_fonte)
+            if len(candidatas) > 1:  # obra não identificável: o item não sai (nem com `trecho: null`); a parcialidade é declarada
+                omitidos_ambiguos += 1
+                continue
             work_row = candidatas[0] if len(candidatas) == 1 else None
             # As evidências do item são as da OBRA e da ocorrência que o sustentam, por identidade exclusiva da obra: texto e
             # caminho iguais em outra norma (ou em outra fonte) não são evidência deste item e não lhe emprestam atribuição.
             # Obra que não se identifica sem ambiguidade (rótulo repetido) não recebe recibo nem atribuição algum.
             receipts = self._recibos_da_obra(work_row["id"], row) if work_row else []
-            ambigua = len(candidatas) > 1
             rebaixo = None
             try:
-                if ambigua:
-                    raise SourceUnavailable("OBRA_AMBIGUA")
                 if not receipts:
                     raise SourceUnavailable("EVIDENCIA_AUSENTE")
                 for receipt in receipts:
@@ -1415,7 +1407,7 @@ class Verifica:
                     "obra": row["work_label"],
                     "caminho": row["path"],
                     "rotulo": row["work_label"],
-                    "trecho": None if ambigua and self._candidata_camara(candidatas, row) else _highlight(row["text"], q),
+                    "trecho": _highlight(row["text"], q),
                     "url_oficial": None,
                     "capture_id": None,
                     "vigencia": vigencia,
@@ -1431,6 +1423,9 @@ class Verifica:
 
         fontes = [fonte] if fonte and fonte != "__somente_local__" else list(_LEGIS_CONNECTORS)
         fontes_status: dict[str, dict[str, Any]] = {}
+        if omitidos_ambiguos:
+            fontes_status["acervo_local"] = {"status": "unavailable", "motivo": "OBRA_AMBIGUA", "parcial": True,
+                                             "omitidos": omitidos_ambiguos}
 
         def nao_consultada(cid, motivo):
             fontes_status[cid] = {"status": "nao_consultada", "motivo": motivo, "parcial": False}
