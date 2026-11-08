@@ -11,6 +11,7 @@ from freoa_verifica.connectors.camara_legin import CamaraLeginConnector, politic
 from freoa_verifica.connectors.camara_policy import validar_url
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.transport import Response
+from tests._camara_util import RelogioFalso
 
 FIX = Path(__file__).parent / "fixtures" / "camara_legin"
 LSA = "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html"
@@ -32,7 +33,7 @@ def servidor(monkeypatch, proibir_rede):
     responses = {response(p.stem.removeprefix("camara_").removesuffix(".captura")).url:
                  response(p.stem.removeprefix("camara_").removesuffix(".captura"))
                  for p in FIX.glob("*.captura.json")}
-    calls = []
+    calls = type("Chamadas", (list,), {})()
     def fetch(url, **kw):
         calls.append((url, kw))
         assert kw["max_redirects"] == 0
@@ -43,8 +44,10 @@ def servidor(monkeypatch, proibir_rede):
     monkeypatch.setattr("freoa_verifica.connectors.httputil.transport_fetch", fetch)
     from freoa_verifica.connectors.httputil import connector_fetch
     init = CamaraLeginConnector.__init__
+    relogio = RelogioFalso()
     monkeypatch.setattr(CamaraLeginConnector, "__init__",
-                        lambda self: init(self, transporte_offline=connector_fetch))
+                        lambda self: init(self, transporte_offline=connector_fetch, relogio=relogio))
+    calls.relogio = relogio
     return responses, calls
 
 
@@ -87,7 +90,8 @@ def test_c2_zero_envio_negativas(servidor, url):
     ("User-agent: *\nDisallow: /\nAllow: /legin/", "/legin/fed/lei/a", True),
     ("User-agent: *\nDisallow: /*.html$", "/legin/a.html", False),
     ("User-agent: *\nDisallow: /*.html$", "/legin/a.htmlx", True),
-    ("User-agent: *\nDisallow: /\nUser-agent: freoa-verifica\nAllow: /", "/legin/a", True),
+    # 0080 §4.1: permitir só ao token do produto não basta; os tokens de IA caem em `*` e o conjunto proíbe.
+    ("User-agent: *\nDisallow: /\nUser-agent: freoa-verifica\nAllow: /", "/legin/a", False),
     ("User-agent: *\nAllow: /\nUser-agent: freoa-verifica\nDisallow: /", "/legin/a", False),
 ])
 def test_c3_robots_sinteticos_em_memoria(text, path, allowed):
@@ -106,7 +110,7 @@ def test_c3_proibicao_impede_conteudo(servidor):
     robot = responses["https://www.camara.leg.br/robots.txt"]
     raw = b"User-agent: *\nDisallow: /legislacao/"
     responses[robot.url] = replace(robot, body=raw, sha256=hashlib.sha256(raw).hexdigest(), headers={}, size=len(raw))
-    with pytest.raises(Unavailable, match="robots_proibido"):
+    with pytest.raises(Unavailable, match="robots_recusa"):
         CamaraLeginConnector().search("Lei 6404/1976")
     assert [c[0] for c in calls] == [robot.url]
 
@@ -422,7 +426,8 @@ def test_c3_c14_falha_robots_encerra_sem_fallback(monkeypatch, proibir_rede, sta
     with pytest.raises(Unavailable) as error:
         CamaraLeginConnector(transporte_offline=connector_fetch).search("Lei 6404/1976")
     assert error.value.categoria == categoria
-    assert error.value.reason == f"http_{status}"
+    # 0080 §4.4: robots ausente (404) é decisão fechada `robots_inconclusivo`; os demais mantêm a classe do §6.
+    assert error.value.reason == ("robots_inconclusivo" if status == 404 else f"http_{status}")
     assert [c[0] for c in calls] == ["https://www.camara.leg.br/robots.txt"]
     assert calls[0][1]["max_redirects"] == 0
     assert calls[0][1]["headers"]["User-Agent"] == USER_AGENT_IDENTIFICADO

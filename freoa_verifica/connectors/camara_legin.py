@@ -4,17 +4,20 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import time
-from urllib.parse import urlencode, urlsplit
+from pathlib import Path
+from urllib.parse import urlencode
 
 from lxml import html
 
 from freoa_verifica.connectors.base import (AmbiguousCandidates, Candidate, CandidateList, Connector, HealthProbe,
                                            HealthReport, Unavailable, register, sob_guarda)
+from freoa_verifica.connectors.camara_ativacao import ativacao
+from freoa_verifica.connectors.camara_estado import Estado, Relogio
 from freoa_verifica.connectors.camara_policy import HOSTS, validar_url, url_publicada
-from freoa_verifica.connectors.httputil import _revalidar
-from freoa_verifica.identidade_http import UA_POR_CONECTOR, USER_AGENT_IDENTIFICADO
-from freoa_verifica.limites import restante
+from freoa_verifica.connectors.camara_portao import Portao
+from freoa_verifica.connectors.camara_robots import politica_robots  # noqa: F401  (assinatura da IL.2-c)
+from freoa_verifica.connectors.httputil import _revalidar, connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.texto_resposta import corpo_binario, texto_do_response
 from freoa_verifica.transport import Response
 
@@ -38,58 +41,6 @@ def arvore(resp):
 
 def compacto(el):
     return " ".join("".join(el.itertext()).split())
-
-
-def politica_robots(texto: str, caminho: str) -> tuple[bool, float]:
-    """Grupos mais específicos, maior correspondência e Allow no empate; sem permissão implícita."""
-    groups, agents, rules, delay = [], [], [], 0.0
-    seen_rule = False
-    for original in texto.splitlines():
-        line = original.split("#", 1)[0].strip()
-        if not line:
-            continue
-        if ":" not in line:
-            raise ValueError("robots_inconclusivo")
-        key, value = (v.strip() for v in line.split(":", 1))
-        key = key.lower()
-        if key == "user-agent":
-            if not value:
-                raise ValueError("robots_inconclusivo")
-            if seen_rule:
-                groups.append((agents, rules, delay))
-                agents, rules, delay, seen_rule = [], [], 0.0, False
-            agents.append(value.lower())
-        elif key in {"allow", "disallow", "crawl-delay"}:
-            if not agents:
-                raise ValueError("robots_inconclusivo")
-            seen_rule = True
-            if key == "crawl-delay":
-                delay = float(value)
-                if not 0 <= delay <= 3600:
-                    raise ValueError("robots_inconclusivo")
-            elif value:
-                if not value.startswith("/"):
-                    raise ValueError("robots_inconclusivo")
-                rules.append((key, value))
-        elif key != "sitemap":
-            raise ValueError("robots_diretiva_nao_suportada")
-    if agents:
-        groups.append((agents, rules, delay))
-    product = USER_AGENT_IDENTIFICADO.split("/", 1)[0].lower()
-    applicable = [(max((len(a) if a != "*" else 0 for a in aa if a == "*" or a in product), default=-1), rr, dd)
-                  for aa, rr, dd in groups]
-    specificity = max((g[0] for g in applicable), default=-1)
-    if specificity < 0:
-        raise ValueError("robots_sem_grupo_aplicavel")
-    selected = [g for g in applicable if g[0] == specificity]
-    matches = []
-    for _, rr, _ in selected:
-        for action, pattern in rr:
-            terminal = pattern.endswith("$")
-            expr = "^" + re.escape(pattern[:-1] if terminal else pattern).replace(r"\*", ".*") + ("$" if terminal else "")
-            if re.search(expr, caminho):
-                matches.append((len(pattern.replace("*", "").rstrip("$")), action == "allow"))
-    return (max(matches)[1] if matches else True), max(g[2] for g in selected)
 
 
 def inventario(resp: Response) -> dict:
@@ -162,14 +113,36 @@ class CamaraLeginConnector(Connector):
                 "inteiro_teor": True, "ementa": True, "periodo": "perfis demonstrados; sem exaustividade",
                 "atualizacao": "sob demanda; licença e política pendentes", "qualificacao": "nao_apurada"}
 
-    def __init__(self, *, transporte_offline=None):
-        # Não há opção de ativação ao vivo. A injeção serve ao replay de capturas locais.
+    def __init__(self, *, transporte_offline=None, home=None, relogio: Relogio | None = None,
+                 portao: Portao | None = None):
+        # Ao vivo só com ativação registrada (0080 §2). A injeção serve ao replay e aos testes com transporte
+        # simulado; `portao` é o do instrumento (sessão própria, teto de 200).
         self._transporte_offline = transporte_offline
+        self._portao_injetado = portao
+        self._portao: Portao | None = portao
+        self._relogio = relogio
+        self.home = None if home is None else Path(home)
         self.paginas = {}
         self.links = {}
         self.inventarios = {}
         self.politicas = []
-        self._last_request = {}
+
+    def _portao_da_rota(self) -> Portao:
+        if self._portao is not None:
+            return self._portao
+        if self._transporte_offline is not None:
+            self._portao = Portao(self._transporte_offline, estado=Estado(self.home), relogio=self._relogio)
+            return self._portao
+        from freoa_verifica.store.db import data_home
+        estado = Estado(self.home or data_home())
+        if ativacao(estado) is None:
+            raise Unavailable("ativacao_ao_vivo_pendente")
+        self._portao = Portao(connector_fetch, estado=estado, relogio=self._relogio)
+        return self._portao
+
+    def atribuicao(self, autoria: str | None = None) -> dict:
+        from freoa_verifica.connectors.camara_atribuicao import atribuicao
+        return atribuicao(self.home, autoria)
 
     def _validar_response(self, resp, url):
         try:
@@ -206,34 +179,15 @@ class CamaraLeginConnector(Connector):
 
     @sob_guarda
     def _obter_recurso(self, url):
-        if self._transporte_offline is None:
-            raise Unavailable("ativacao_ao_vivo_pendente")
         try:
-            route = self._admitir(url)  # antes inclusive do robots e do cache
+            self._admitir(url)  # gramática e vínculo de descoberta, antes inclusive do robots e do cache
         except ValueError as exc:
             raise Unavailable(str(exc)) from exc
-        if route["recurso"] != "robots":
-            host = urlsplit(url).netloc
-            robot = self._obter_recurso(f"https://{host}/robots.txt")
-            try:
-                parts = urlsplit(url)
-                target = parts.path + ("?" + parts.query if parts.query else "")
-                allowed, delay = politica_robots(texto_do_response(robot), target)
-            except (ValueError, OverflowError) as exc:
-                raise Unavailable("robots_inconclusivo", evidencia={"url": robot.url, "sha256": robot.sha256}) from exc
-            self.politicas.append({"url": url, "permitido": allowed, "robots_url": robot.url,
-                                   "sha256": robot.sha256, "fetched_at": robot.fetched_at})
-            if not allowed:
-                raise Unavailable("robots_proibido", evidencia=self.politicas[-1])
-            wait = delay - (time.monotonic() - self._last_request.get(host, float("-inf")))
-            if wait > 0:
-                if wait > min(restante(60), 60):
-                    raise Unavailable("orcamento")
-                time.sleep(wait)
-        resp = self._transporte_offline(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
-                               mimes=frozenset({route["mime"]}), user_agent=self.user_agent,
-                               max_redirects=0, repeticao=0, max_bytes=30 * 1024**2, timeout=60)
-        self._last_request[urlsplit(url).netloc] = time.monotonic()
+        portao = self._portao_da_rota()
+        resp = portao.obter(url)
+        politica = portao.politica_de.get(url)
+        if politica is not None:
+            self.politicas.append({"url": url, "politica_sha256": politica})
         self._validar_response(resp, url)
         self.paginas[url] = resp
         return resp
@@ -447,5 +401,8 @@ class CamaraLeginConnector(Connector):
         return {"materiais": materials, "pendencias": pending, "indisponibilidades": failures, "cadeia_completa": False}
 
     def health(self):
-        # Termos/licença ainda pendentes; não transformar robots em capacidade aprovada.
-        return HealthReport(self.id, (HealthProbe("documento", "unavailable", "ativacao_ao_vivo_pendente"),))
+        # Robots e termo não são capacidade aprovada: a qualificação segue `nao_apurada` (0080).
+        from freoa_verifica.store.db import data_home
+        ativa = self._portao_injetado is not None or ativacao(Estado(self.home or data_home())) is not None
+        return HealthReport(self.id, (HealthProbe("documento", "unavailable",
+                                                  "ativada_sem_sonda_de_saude" if ativa else "ativacao_ao_vivo_pendente"),))

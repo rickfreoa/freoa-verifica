@@ -228,6 +228,27 @@ def build_parser() -> argparse.ArgumentParser:
                     help="apaga o banco original (movido para purgados/) após a troca bem-sucedida; sem a opção, o original fica para exclusão manual")
     _add_json_flag(pp)
 
+    p = sub.add_parser("camara", help="instrumento da rota Câmara (decisão 0080): ativação, reabertura, inventário")
+    cam = p.add_subparsers(dest="camara_cmd", required=True)
+    pa = cam.add_parser("ativar", help="fluxo de pré-condições: --capturar (robots e termo) e depois --registrar")
+    fase = pa.add_mutually_exclusive_group(required=True)
+    fase.add_argument("--capturar", action="store_true", help="etapas 1-2: robots e termo (exceção administrativa)")
+    fase.add_argument("--registrar", action="store_true", help="etapas 3-4: confere a revisão do auditor e ativa")
+    pa.add_argument("--revisao", metavar="ARQ", help="arquivo de revisão do auditor (com o hash do termo conferido)")
+    pa.add_argument("--reserva", action="store_true", help="saída sem URL, identificação ou hash individual (D6)")
+    pr = cam.add_parser("reabrir", help="reabertura registrada de host (decisão) ou de recurso (revisão)")
+    pr.add_argument("--host")
+    pr.add_argument("--decisao", help="identificador da decisão que reabre o host")
+    pr.add_argument("--url")
+    pr.add_argument("--revisao-recurso", dest="revisao_recurso", help="identificador da revisão do recurso")
+    pi = cam.add_parser("inventariar", help="obtém normas (espécie, número, ano) pela cadeia de descoberta")
+    pi.add_argument("normas", help="JSON: [{\"kind\": \"lei\", \"number\": \"6404\", \"year\": 1976}]")
+    pi.add_argument("--destino", required=True)
+    pi.add_argument("--reserva", action="store_true", help="saída sem URL, identificação ou hash individual (D6)")
+    pi.add_argument("--chave-hmac", dest="chave_hmac", metavar="ARQ", help="chave de 256 bits do guardião (compromisso HMAC)")
+    pe = cam.add_parser("estado", help="ativação, bloqueios e política de robots vigentes")
+    pe.add_argument("--reserva", action="store_true")
+
     return parser
 
 
@@ -243,6 +264,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.sem_registro and args.registro_completo:
         parser.error("--sem-registro e --registro-completo são excludentes")
     registro = "completo" if args.registro_completo else ("sem_conteudo" if args.sem_registro else None)
+
+    if args.cmd == "camara":
+        from freoa_verifica.camara_instrumento import executar
+
+        raise SystemExit(executar(args))
 
     if args.cmd == "serve-mcp":
         from freoa_verifica.mcp_server import run_server
