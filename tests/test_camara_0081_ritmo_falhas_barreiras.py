@@ -177,7 +177,7 @@ def test_teto_da_sessao_do_instrumento_nao_ultrapassa_200_entre_hosts_sob_concor
     threads = [threading.Thread(target=chamar, args=(u,)) for u in (BUSCA, LEI)]
     [th.start() for th in threads]
     [th.join(30) for th in threads]
-    assert p.emitidas <= 200 and len(t.chamadas) <= 10 and "teto_de_sessao" in resultados
+    assert p.emitidas == 200 and len(t.chamadas) == 10 and "teto_de_sessao" in resultados  # as 10 vagas, nenhuma a mais
 
 
 # --- achado 5: falha local é terminal para a chamada ou sessão, nos dois hosts ---------------------------------------------

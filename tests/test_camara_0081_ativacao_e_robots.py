@@ -251,7 +251,7 @@ def test_c21_corpo_do_robots_substituido_mantendo_o_hash_nao_autoriza_nada_em_di
     with pytest.raises(Unavailable, match="robots_recusa"):
         p.obter(BUSCA)
     politica = estado.politica(WWW)
-    assert politica is None or politica["sha256"] == hashlib.sha256(PROIBE_BUSCA.encode()).hexdigest()
+    assert politica["sha256"] == hashlib.sha256(PROIBE_BUSCA.encode()).hexdigest()  # a política que recusou ficou preservada
     # nova política legítima que permite, depois o corpo é trocado por outro que não bate com o hash
     p2, t2, relogio2, estado2 = portao(tmp_path / "b", {ROBOTS_WWW: robots_resp(ROBOTS_WWW, "User-agent: *\nAllow: /\n"),
                                                          **rotas_www(BUSCA)})

@@ -112,7 +112,7 @@ def test_limiares_do_ritmo_9_9s_espera_so_o_resto_e_10s_nao_espera():
     p.obter(BUSCA)
     relogio.avancar(9.9)
     p.obter(BUSCA2)
-    assert relogio.dormidas[-1] == pytest.approx(0.1, abs=1e-6) or relogio.dormidas[-1] > 0
+    assert relogio.dormidas[-1] == pytest.approx(0.1, abs=1e-6)  # só o resto do intervalo, não 10 s nem qualquer valor
     antes = len(relogio.dormidas)
     relogio.avancar(10.0)
     p.obter(BUSCA3)

@@ -67,7 +67,7 @@ def test_falha_em_qualquer_etapa_impede_a_ativacao_e_nada_e_gravado(tmp_path, ro
     p, t, relogio, estado = portao(tmp_path / "home", rotas, instrumento=True)
     with pytest.raises(Unavailable) as erro:
         ativ.capturar(p, estado, relogio)
-    assert erro.value.reason == motivo or motivo in erro.value.reason
+    assert erro.value.reason == motivo
     assert estado.ler_pre_ativacao() is None and estado.ler_ativacao() is None
     if motivo.startswith("robots_"):
         assert TERMO_URL not in t.urls  # robots recusado ou inconclusivo: o termo nem é pedido

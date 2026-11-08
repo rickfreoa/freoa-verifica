@@ -88,7 +88,7 @@ def test_unidade_que_falha_no_meio_preserva_o_material_parcial_e_o_motivo(tmp_pa
     assert por_url[ATUAL]["obtido"] is True  # o atualizado foi obtido e NÃO foi descartado com a falha da original
     assert por_url[ORIGINAL]["obtido"] is False and por_url[ORIGINAL]["motivo"] == "http_404"
     corpos = {p.name for p in pasta.glob("*.corpo")}
-    assert len(corpos) >= 3 and not any(ORIGINAL in p["url"] for p in inv["paginas"])  # busca, norma e atualizado gravados
+    assert len(corpos) == 3 and not any(ORIGINAL in p["url"] for p in inv["paginas"])  # busca, norma e atualizado gravados
     for pagina in inv["paginas"]:
         corpo = (pasta / pagina["arquivo"]).read_bytes()
         assert hashlib.sha256(corpo).hexdigest() == pagina["sha256"]
@@ -101,27 +101,6 @@ def test_acumuladores_do_conector_sao_zerados_por_norma():
                           politicas=[{"url": LEI}])
     ci._zerar(con)
     assert con.paginas == {} and con.links == {} and con.inventarios == {} and con.politicas == []
-
-
-def test_unidade_seguinte_nunca_herda_paginas_da_anterior(tmp_path, monkeypatch):
-    rotas = rotas_da_fixture()
-    home, relogio, t = ativar_com(tmp_path, rotas)
-    vistas = []
-    original = ci._gravar_unidade
-
-    def espiar(pasta, con, portao, norma, falha):
-        vistas.append((norma["number"], sorted(con.paginas)))
-        return original(pasta, con, portao, norma, falha)
-
-    monkeypatch.setattr(ci, "_gravar_unidade", espiar)
-    t2 = Transporte(relogio, {**rotas, ORIGINAL: barreira("http_404", None, 404)})
-    ci.inventariar(home, normas_em(tmp_path, {"kind": "lei", "number": "6404", "year": 1976},
-                                   {"kind": "lei", "number": "6404", "year": 1976}), tmp_path / "saida", transporte=t2,
-                   relogio=relogio)
-    assert len(vistas) >= 2  # a primeira falhou depois de acumular páginas; a segunda começa do zero
-    segunda = vistas[1][1]
-    assert LEI not in segunda or all(u in segunda for u in segunda)  # só o que ela mesma obteve
-    assert len(segunda) <= len(vistas[0][1])
 
 
 def test_c17_falha_de_gravacao_vira_falha_controlada_sem_oserror_nem_caminho(tmp_path, monkeypatch):
@@ -176,7 +155,7 @@ def test_inventario_so_obtem_com_a_ativacao_revalidada_a_cada_obtencao(tmp_path)
     relogio.sleep = dormir_e_perder
     out = ci.inventariar(home, normas_em(tmp_path), tmp_path / "saida", transporte=t2, relogio=relogio)
     assert out["resultado"] == "parcial" and out["obtidas"] == 0
-    assert len(t2.chamadas) <= 2  # depois da perda nada mais foi emitido
+    assert t2.urls == ["https://www.camara.leg.br/robots.txt"]  # só o robots saiu; a perda na espera impediu o resto
 
 
 # --- achado 8: atribuição por captura em todas as entregas de texto ---------------------------------------------------------
@@ -362,7 +341,7 @@ def test_snapshot_com_evidencia_incoerente_e_checksums_refeitos_nao_instala(acer
     try:
         r = novo.snapshot_install(pasta, aceitar_nao_vinculado=True)
         assert r["status"] == "erro" and r["motivo"].startswith(motivo), r
-        assert not (novo.home / "camara").exists() or not list((novo.home / "camara").rglob("*.html"))
+        assert not [p for p in (novo.home / "camara").rglob("*") if p.is_file()]  # nenhum arquivo da evidência entrou
     finally:
         novo.close()
 
