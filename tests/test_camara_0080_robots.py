@@ -114,10 +114,17 @@ def test_crawl_delay_e_o_maior_valor_valido_entre_os_grupos_aplicados():
     assert decidir(texto, "/x").crawl_delay == 30.0
 
 
-@pytest.mark.parametrize("valor", ["abc", "-1", "nan", "inf", "99999", ""])
+@pytest.mark.parametrize("valor", ["abc", "-1", "nan", "inf", ""])
 def test_crawl_delay_invalido_em_grupo_aplicado_e_inconclusivo(valor):
     decisao = decidir(f"User-agent: *\nCrawl-delay: {valor}", "/x")
     assert decisao.estado == rb.INCONCLUSIVO and decisao.motivo == "crawl_delay_invalido"
+
+
+@pytest.mark.parametrize("valor", ["3601", "99999", "86400"])
+def test_crawl_delay_maior_que_o_teto_operacional_e_valido_e_honrado(valor):
+    """Atraso acima do teto atual não é sintaticamente inválido (parecer r1, achado 3): a política o registra."""
+    decisao = decidir(f"User-agent: *\nCrawl-delay: {valor}", "/x")
+    assert decisao.estado == rb.PERMITIDO and decisao.crawl_delay == float(valor)
 
 
 @pytest.mark.parametrize("texto", ["isto não é robots", "Disallow: /x", "User-agent:\nAllow: /",
@@ -142,3 +149,48 @@ def test_lista_fechada_de_tokens_da_decisao():
 def test_token_de_ia_nao_listado_nao_e_inferido_de_comentario():
     texto = "# GPTBot e SuperBot de IA\nUser-agent: *\nAllow: /\nUser-agent: SuperBot\nDisallow: /"
     assert decidir(texto, "/x").estado == rb.PERMITIDO
+
+
+# --- RFC 9309 §2.2.2: comparação e especificidade sobre octetos normalizados (parecer r1, achado 3) --------------------------
+@pytest.mark.parametrize("regra,caminho,estado", [
+    ("Disallow: /legislacao/%62usca", "/legislacao/busca", rb.PROIBIDO),  # C01: %62 é `b`, não reservado: decodificado
+    ("Disallow: /legislacao/busca", "/legislacao/%62usca", rb.PROIBIDO),  # a equivalência vale nos dois sentidos
+    ("Disallow: /a%3cd.html", "/a%3Cd.html", rb.PROIBIDO),  # hexadecimal sem distinção de caixa
+    ("Disallow: /a%3Cd.html", "/a%3cd.html", rb.PROIBIDO),
+    ("Disallow: /~joe", "/%7Ejoe", rb.PROIBIDO),  # `~` é não reservado
+    ("Disallow: /%7Ejoe", "/~joe", rb.PROIBIDO),
+    ("Disallow: /SanJoséSellers", "/SanJos%C3%A9Sellers", rb.PROIBIDO),  # octetos fora do ASCII
+    ("Disallow: /SanJos%C3%A9Sellers", "/SanJoséSellers", rb.PROIBIDO),
+    ("Disallow: /SanJos%c3%a9", "/SanJos%C3%A9", rb.PROIBIDO),
+    ("Disallow: /a%2fb", "/a/b", rb.PERMITIDO),  # `/` é reservado: `%2F` NÃO é decodificado
+    ("Disallow: /a/b", "/a%2fb", rb.PERMITIDO),
+    ("Disallow: /a%2Fb", "/a%2fb", rb.PROIBIDO),
+    ("Disallow: /x%2A", "/x%2a", rb.PROIBIDO),  # `*` codificado é octeto literal, não curinga
+    ("Disallow: /x%2A", "/xyz", rb.PERMITIDO),
+    ("Disallow: /x%24", "/x", rb.PERMITIDO),  # `$` codificado não ancora o fim
+    ("Disallow: /%41%42", "/AB", rb.PROIBIDO),  # letras decodificadas
+    ("Disallow: /q?a=%62", "/q?a=b", rb.PROIBIDO),  # na query também
+    ("Disallow: /*.pdf$", "/x%2Epdf", rb.PROIBIDO),  # `.` é não reservado
+    ("Disallow: /ab%zz", "/ab%zz", rb.PROIBIDO),  # `%` inválido segue literal, igual nos dois lados
+])
+def test_rfc9309_comparacao_por_octetos_normalizados(regra, caminho, estado):
+    assert decidir(f"User-agent: *\n{regra}", caminho).estado == estado
+
+
+def test_especificidade_e_medida_em_octetos_normalizados_e_allow_vence_o_empate():
+    # `Allow` mais longo em octetos vence o `Disallow` mais curto, ainda que escrito com percent-encoding
+    texto = "User-agent: *\nDisallow: /p\nAllow: /p%61th"
+    assert decidir(texto, "/path").estado == rb.PERMITIDO
+    # a mesma regra por extenso e por codificação empata em octetos: `Allow` prevalece
+    assert decidir("User-agent: *\nDisallow: /path\nAllow: /p%61th", "/path").estado == rb.PERMITIDO
+    # `Disallow` mais específico (em octetos) que o `Allow` prevalece
+    assert decidir("User-agent: *\nAllow: /p\nDisallow: /p%61th", "/path").estado == rb.PROIBIDO
+    # octeto fora do ASCII conta como três octetos (`%C3%A9`) na regra normalizada: vence o Allow de 4
+    texto = "User-agent: *\nAllow: /abc\nDisallow: /é"
+    assert decidir(texto, "/é").estado == rb.PROIBIDO
+
+
+def test_normalizar_e_idempotente_e_so_decodifica_nao_reservados():
+    assert rb.normalizar(b"/a%62c") == b"/abc"
+    assert rb.normalizar(b"/a%2fc") == b"/a%2Fc"
+    assert rb.normalizar(rb.normalizar("/é%7E".encode())) == rb.normalizar("/é%7E".encode()) == b"/%C3%A9~"
