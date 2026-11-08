@@ -265,12 +265,12 @@ def campos_evidencia(capture_id: str | None, sha256: str | None, url: str | None
     }
 
 
-def _atribuicao_camara(source_id, home, document) -> dict | None:
-    """Atribuição do §7 da 0080 no caminho de captura viva, com o home de quem capturou."""
+def _atribuicao_camara(source_id, home, document, sha256=None, url=None) -> dict | None:
+    """Atribuição do §7 da 0080 no caminho de captura viva, com o home de quem capturou e o vínculo da captura."""
     if source_id != "camara_legin":
         return None
     from freoa_verifica.connectors.camara_atribuicao import atribuicao, autoria_declarada
-    return atribuicao(home, autoria_declarada(getattr(document, "text", None)))
+    return atribuicao(home, autoria_declarada(getattr(document, "text", None)), sha256=sha256, url=url)
 
 
 def origem_camara(rw: ResolvedWork) -> bool:
@@ -281,7 +281,7 @@ def campos_evidencia_obra(rw: ResolvedWork, acervo_ate: str | None) -> dict[str,
     atribuicao = rw.atribuicao
     if atribuicao is None and origem_camara(rw):  # obra montada fora do serviço: home padrão, autoria declarada
         from freoa_verifica.connectors.camara_atribuicao import atribuicao as montar, autoria_declarada
-        atribuicao = montar(None, autoria_declarada(getattr(rw.document, "text", None)))
+        atribuicao = montar(None, autoria_declarada(getattr(rw.document, "text", None)), sha256=rw.sha256, url=rw.url)
     return campos_evidencia(
         rw.capture_id, rw.sha256, rw.url, rw.fetched_at,
         source_kind=_inferir_source_kind(rw.work_key), natureza_texto=_inferir_natureza_texto(rw),
@@ -1293,5 +1293,5 @@ def populate_from_parsed(
         # C6: a marca persistida da captura (a existente prevalece sobre a regravação idêntica).
         procedencia_tipo=(conn.execute("SELECT procedencia FROM capture WHERE id=?", (capture_id,)).fetchone()[0]
                           or "nao_identificado"),
-        atribuicao=_atribuicao_camara(source_id, home, document),
+        atribuicao=_atribuicao_camara(source_id, home, document, digest, url),
     )

@@ -846,7 +846,8 @@ class Verifica:
             fontes_consultadas=([{"fonte": "camara_legin", "resultado": "acervo", "motivo": None, "categoria": None}]
                                if source_id == "camara_legin" else []),
             procedencia_tipo=(cap.get("procedencia") if cap else None) or "nao_identificado",
-            atribuicao=self._atribuicao_camara(doc.text) if source_id == "camara_legin" else None,
+            atribuicao=(self._atribuicao_camara(doc.text, cap["sha256"], cap["url"])
+                        if source_id == "camara_legin" and cap else None),
         )
         if source_id == "camara_legin":
             self._revalidar_camara(rw)
@@ -857,10 +858,19 @@ class Verifica:
         from freoa_verifica.connectors.camara_estado import Estado
         return ativacao(Estado(self.home)) is not None
 
-    def _atribuicao_camara(self, texto: str | None = None) -> dict:
-        """Atribuição do §7 da 0080 com o home deste serviço; autoria só se o próprio documento a declara."""
+    def _atribuicao_camara(self, texto: str | None = None, sha256: str | None = None, url: str | None = None) -> dict:
+        """Atribuição do §7 da 0080 POR CAPTURA (`sha256`/`url` do conteúdo entregue), com o home deste serviço;
+        autoria só se o próprio documento a declara."""
         from freoa_verifica.connectors.camara_atribuicao import atribuicao, autoria_declarada
-        return atribuicao(self.home, autoria_declarada(texto))
+        return atribuicao(self.home, autoria_declarada(texto), sha256=sha256, url=url)
+
+    def _atribuicao_das_capturas(self, capture_ids, texto: str | None = None) -> dict | None:
+        """Atribuição da primeira captura de origem Câmara entre as que sustentam o item entregue; senão None."""
+        for capture_id in capture_ids:
+            cap = repo.get_capture(self.conn, capture_id)
+            if cap and cap.get("source_id") == "camara_legin":
+                return self._atribuicao_camara(texto, cap["sha256"], cap["url"])
+        return None
 
     def _revalidar_camara(self, rw):
         """Releitura não amplia a política: corpo, página de origem e href recuperáveis."""
@@ -1367,6 +1377,7 @@ class Verifica:
                     vigencia = {"status": "unknown", "motivo": exc.reason, **exc.classificacao()}
                 except Exception:  # noqa: BLE001
                     vigencia = {"status": "unknown"}
+            atribuicao = self._atribuicao_das_capturas([r[0] for r in receipts], row["text"])
             items.append(
                 {
                     "obra": row["work_label"],
@@ -1380,6 +1391,7 @@ class Verifica:
                     "pertinencia": row["pertinencia"],
                     "correspondencia": row["correspondencia"],
                     "candidato_ao_vivo": bool(row.get("_staging")),
+                    **({"atribuicao": atribuicao} if atribuicao else {}),
                     **({"nao_indexado": True, "motivo": rebaixo} if rebaixo else {}),
                 }
             )
@@ -1467,6 +1479,7 @@ class Verifica:
         classificacao: dict[str, Any] = {}
         path = None
         trecho = cand.snippet or ""
+        atribuicao = None
         try:
             resp = connector.fetch(cand)
             parse_candidate = getattr(connector, "parse_candidate", None)
@@ -1513,6 +1526,7 @@ class Verifica:
                 if connector.id == "camara_legin":
                     for page in connector.paginas.values():
                         repo.save_capture(self.conn, page, connector.id, home=self.home)
+                    atribuicao = self._atribuicao_camara(parsed.text, rw.sha256, rw.url)
                 if connector.id == "cvm_normas":  # C2
                     situacao.registrar_cvm(self.conn, self.home, connector, cand, rw)
                 if parsed.provisions:
@@ -1538,6 +1552,7 @@ class Verifica:
             "vigencia": None,
             "fonte": connector.id,
             "truncado": trunc,
+            **({"atribuicao": atribuicao} if atribuicao else {}),
         }
 
     # ------------------------------------------------------------------
@@ -3772,7 +3787,8 @@ class Verifica:
             "offset": offset,
             "max_chars": max_chars,
             "cursor": str(offset + max_chars) if truncado else None,
-            **({"atribuicao": self._atribuicao_camara()} if cap.get("source_id") == "camara_legin" else {}),
+            **({"atribuicao": self._atribuicao_camara(text, cap["sha256"], cap["url"])}
+               if cap.get("source_id") == "camara_legin" else {}),
             **({} if ctype else {"proveniencia": {
                 "interpretacao": ORIGEM_LEGADO_CONFERIDO if conferida is not None else ORIGEM_LEGADO}}),
         }
