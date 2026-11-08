@@ -15,7 +15,7 @@ from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
 from freoa_verifica.connectors.camara_policy import TERMO_URL
 from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.connectors.guarda import da_chamada
-from tests._camara_util import (BUSCA, LEI, ROBOTS_WWW, ROBOTS_WWW2, RelogioFalso, Transporte, barreira, da_fixture,
+from tests._camara_util import (BUSCA, LEI, ROBOTS_WWW, ROBOTS_WWW2, RelogioFalso, barreira, da_fixture,
                                 portao, resposta, robots_resp)
 from tests.test_camara_legin import ATUAL, ORIGINAL
 

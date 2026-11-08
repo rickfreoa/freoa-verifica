@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import threading
 import weakref
-from datetime import datetime, timedelta
+from datetime import timedelta
 from urllib.parse import urlsplit
 
 from freoa_verifica.connectors.base import Unavailable

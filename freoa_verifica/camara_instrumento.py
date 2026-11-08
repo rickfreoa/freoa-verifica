@@ -19,7 +19,7 @@ from pathlib import Path
 
 from freoa_verifica.connectors import camara_ativacao as ativ
 from freoa_verifica.connectors.base import Unavailable
-from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel, Relogio, _escrever, iso
+from freoa_verifica.connectors.camara_estado import Estado, Relogio, _escrever, iso
 from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
 from freoa_verifica.connectors.camara_policy import HOSTS
 from freoa_verifica.connectors.camara_portao import Portao

@@ -16,7 +16,7 @@ from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel
 from freoa_verifica.connectors.camara_policy import TERMO_URL
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.service import Verifica
-from tests._camara_util import (BUSCA, LEI, TERMO_HTML, RelogioFalso, Transporte, barreira, da_fixture, portao,
+from tests._camara_util import (LEI, TERMO_HTML, RelogioFalso, Transporte, barreira, da_fixture, portao,
                                 resposta)
 from tests.test_camara_0080_atribuicao import (ART, TERMO_SHA, acervo, ativar_home, esperada, exportar,  # noqa: F401
                                                refazer_checksums)

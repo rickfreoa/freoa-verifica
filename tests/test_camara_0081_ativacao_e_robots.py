@@ -14,10 +14,9 @@ from freoa_verifica.connectors import camara_ativacao as ativ
 from freoa_verifica.connectors import camara_estado as ce
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel
-from freoa_verifica.connectors.camara_policy import TERMO_URL
 from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.connectors.guarda import da_chamada
-from tests._camara_util import (BUSCA, LEI, ROBOTS_WWW, ROBOTS_WWW2, RelogioFalso, Transporte, barreira, portao,
+from tests._camara_util import (BUSCA, ROBOTS_WWW, RelogioFalso, portao,
                                 resposta, robots_resp)
 
 BUSCA2 = BUSCA.replace("numero=6404", "numero=6405")
