@@ -199,7 +199,11 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         data_out = svc_().obter_dispositivo(
             citacao=citacao, work_id=work_id, caminho=caminho, data=data, versao=versao, fonte=fonte
         )
-        return _wrap_result_text(data_out, ("texto",))
+        out = _wrap_result_text(data_out, ("texto",))
+        if isinstance(out.get("remissoes"), list):  # A2: o trecho da remissão é texto do documento (dado, não instrução)
+            out["remissoes"] = [{**r, "texto": _wrap_oficial(r["texto"])} if isinstance(r, dict)
+                                and isinstance(r.get("texto"), str) else r for r in out["remissoes"]]
+        return out
 
     @mcp.tool()
     def historico_dispositivo(citacao: Consulta) -> dict[str, Any]:

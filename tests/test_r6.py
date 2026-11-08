@@ -155,7 +155,7 @@ def test_auxiliary_facades_authenticate(populated, attack, monkeypatch):
                 if name=='obter_dispositivo':  # IL.0-R r2 (C4): campos aditivos em todo estado
                     esperado.update(fundamento_temporal=None,correspondencia_textual=None,
                                     ultima_versao_oficial_anterior=None,cadeia_alteracoes=[],
-                                    cadeia_completa=False,pendencias_temporais=[],versao='vigente')
+                                    cadeia_completa=False,pendencias_temporais=[],versao='vigente',remissoes=[])
                     # IL.2-c C12 autentica também a obtenção recusada, sem alegar confronto.
                     recibo = svc.obter_registro(result.pop('run_id'))
                     assert recibo['integridade']['confere'] is True
