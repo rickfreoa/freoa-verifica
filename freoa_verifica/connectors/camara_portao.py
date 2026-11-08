@@ -1,14 +1,19 @@
-"""Portão da rota Câmara (decisão 0080): admissão exata, robots por token, ritmo, tetos e barreiras.
+"""Portão da rota Câmara (decisão 0080; correções da 0081): admissão exata, robots por token, ritmo, tetos e barreiras.
 
 Tudo o que a rota emite passa por `Portao.obter`, fora de `transport.py` (que não é alterado). Ordem, sob a
-trava de arquivo do host: admissão da URL (antes do transporte) → bloqueios persistidos → política de robots
-(lida de novo se expirou) → decisão do caminho → teto → ritmo → uma única emissão, sem repetição interna e sem
-seguir redirecionamento → classificação do desfecho pela tabela do §6 e persistência.
+trava de arquivo do host: estado terminal da chamada → admissão da URL (antes do transporte) → ativação revalidada
+→ bloqueios persistidos → política de robots (lida de novo se expirou; `/robots.txt` segue o MESMO fluxo) → decisão do
+caminho → reserva atômica do teto → ritmo (marca monotônica persistida) → uma única emissão, sem repetição interna e
+sem seguir redirecionamento → classificação do desfecho pela tabela do §6 e persistência.
+
+Falha local (persistência, esquema persistido ou interpretação local) é terminal para a chamada pública ou para a
+sessão do instrumento, nos dois hosts: nada mais é emitido naquele escopo (§6, linha "falha local").
 """
 from __future__ import annotations
 
+import threading
 import weakref
-from datetime import timedelta
+from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
 from freoa_verifica.connectors.base import Unavailable
@@ -20,7 +25,7 @@ from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL, validar_te
 from freoa_verifica.connectors.guarda import ativa as guarda_ativa
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.limites import restante
-from freoa_verifica.texto_resposta import texto_do_response
+from freoa_verifica.texto_resposta import content_type_do_response, texto_da_resposta, texto_do_response
 from freoa_verifica.transport import RespostaInvalida
 
 INTERVALO_MINIMO = 10.0
@@ -31,6 +36,7 @@ PREFIXOS = {"www.camara.leg.br": ("/legislacao", "/robots.txt"),
             "www2.camara.leg.br": ("/legin/fed/", "/robots.txt")}
 PREFIXOS_TERMO = {"www2.camara.leg.br": (_TERMO_PATH,)}
 _LIMITE_BYTES = {"robots": 1024**2, "termo": 2 * 1024**2}
+_ROTA_ROBOTS = {"recurso": "robots", "mime": "text/plain"}
 
 # Classes da tabela do §6, da mais específica à residual (precedência do item 3).
 A_HOST, TRES_XX, TRANSITORIA, ROBOTS, CORPO_MIME, RESIDUAL = (
@@ -56,21 +62,43 @@ def _copia(registro: dict, **extra) -> Unavailable:
                        {**registro.get("evidencia", {}), "bloqueio": registro["classe"], **extra})
 
 
+def _clonar(exc: Unavailable) -> Unavailable:
+    return Unavailable(exc.reason, exc.categoria, exc.evidencia)
+
+
+class Escopo:
+    """Estado compartilhado de uma chamada pública (todas as instâncias participantes) ou da sessão do instrumento."""
+
+    def __init__(self) -> None:
+        self.trava = threading.Lock()
+        self.usadas = 0  # requisições emitidas no escopo (teto por chamada)
+        self.hosts: dict[str, Unavailable] = {}  # host bloqueado pelo restante do escopo
+        self.terminal: Unavailable | None = None  # falha local: nada mais é emitido
+
+
+_ESCOPOS: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+_ESCOPOS_TRAVA = threading.Lock()
+
+
 class Portao:
     def __init__(self, transporte, *, estado: Estado | None = None, relogio: Relogio | None = None,
-                 instrumento: bool = False, teto_sessao: int | None = None, teto_chamada: int | None = None):
+                 instrumento: bool = False, teto_sessao: int | None = None, teto_chamada: int | None = None,
+                 ativacao=None, exigir_ativacao: bool = True):
+        """`ativacao`: função sem argumentos que devolve o registro de ativação válido (ou None). Com
+        `exigir_ativacao` (padrão) é revalidada antes de TODA obtenção viva; sem ela (replay e testes com transporte
+        simulado) só informa o termo vigente. O hash do termo vigente vai em cada obtenção registrada."""
         self.transporte = transporte
         self.estado = estado if estado is not None else Estado(None)
         self.relogio = relogio or Relogio()
         self.instrumento = instrumento
         self.teto_sessao = teto_sessao if teto_sessao is not None else (TETO_SESSAO_INSTRUMENTO if instrumento else None)
         self.teto_chamada = teto_chamada if teto_chamada is not None else (None if instrumento else TETO_CHAMADA_PRODUTO)
+        self.ativacao = ativacao
+        self.exigir_ativacao = exigir_ativacao
         self.emitidas = 0  # requisições efetivamente emitidas por este portão
         self.politica_de: dict[str, str] = {}  # url -> sha256 do robots que autorizou a última obtenção
-        self._ultimo_inicio: dict[str, float] = {}
-        self._por_chamada: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
-        self._hosts_do_escopo: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
-        self._hosts_da_sessao: dict[str, Unavailable] = {}
+        self._orcamento = threading.Lock()
+        self._sessao = Escopo()
 
     # --- admissão --------------------------------------------------------------------------------------------
     @staticmethod
@@ -86,70 +114,114 @@ class Portao:
             raise Unavailable(str(primeira)) from primeira
 
     # --- escopos ---------------------------------------------------------------------------------------------
-    def _bloqueios_do_escopo(self) -> dict[str, Unavailable]:
+    def _escopo(self) -> Escopo:
         if self.instrumento:
-            return self._hosts_da_sessao
+            return self._sessao
         guarda = guarda_ativa()
         if guarda is None:
-            return {}
-        return self._hosts_do_escopo.setdefault(guarda, {})
+            return Escopo()  # sem chamada pública não há escopo que sobreviva ao uso
+        with _ESCOPOS_TRAVA:
+            return _ESCOPOS.setdefault(guarda, Escopo())
 
-    def _contar_chamada(self) -> None:
-        guarda = guarda_ativa()
-        if guarda is None or self.teto_chamada is None:
-            return
-        usadas = self._por_chamada.get(guarda, 0)
-        if usadas >= self.teto_chamada:
-            raise Unavailable("teto_de_chamada", evidencia={"limite": self.teto_chamada})
-        self._por_chamada[guarda] = usadas + 1
+    @staticmethod
+    def _checar_terminal(escopo: Escopo) -> None:
+        if escopo.terminal is not None:
+            raise _clonar(escopo.terminal)
+
+    def _local(self, motivo: str, exc: BaseException | None = None, **evidencia) -> Unavailable:
+        """Falha local: encerra o escopo inteiro (os dois hosts) e devolve a indisponibilidade tipada."""
+        if exc is not None:
+            evidencia.setdefault("causa", type(exc).__name__)
+        falha = Unavailable(motivo, None, evidencia)
+        self._escopo().terminal = _clonar(falha)
+        return falha
+
+    def _exigir_ativacao(self) -> dict | None:
+        if self.ativacao is None:
+            return None
+        try:
+            registro = self.ativacao()
+        except (OSError, KeyError, TypeError, ValueError):
+            registro = None
+        if registro is None and self.exigir_ativacao:
+            raise Unavailable("ativacao_ao_vivo_pendente")
+        return registro
 
     # --- API -------------------------------------------------------------------------------------------------
+    def _executar(self, host: str, funcao):
+        escopo = self._escopo()
+        self._checar_terminal(escopo)
+        try:
+            with self.estado.trava_do_host(host):
+                return funcao()
+        except EstadoIndisponivel as exc:
+            raise self._local("persistencia_local_falhou", exc) from exc
+        except (KeyError, TypeError, ValueError) as exc:  # estrutura persistida ou interpretação local
+            raise self._local("interpretacao_local_falhou", exc) from exc
+
     def obter(self, url: str):
         rota = self.admitir(url)
         host = urlsplit(url).netloc
-        try:
-            with self.estado.trava_do_host(host):
-                return self._obter(url, rota, host)
-        except EstadoIndisponivel as exc:
-            raise Unavailable("persistencia_local_falhou") from exc
+        return self._executar(host, lambda: self._obter(url, rota, host))
 
-    def garantir_politica(self, host: str) -> dict:
-        """Política de robots vigente do host, lida de novo se expirou (usada pelo fluxo de ativação)."""
+    def verificar_caminhos(self, host: str, caminhos) -> dict:
+        """Política vigente do host (lida de novo se expirou) e decisão de cada caminho pelo MESMO fluxo do
+        `obter` (decisão persistida, bloqueio do host se proibido). Usada pelo fluxo de ativação."""
         if host not in HOSTS:
             raise Unavailable("host_nao_admitido")
+
+        def passo():
+            agora = self.relogio.agora()
+            self._checar_bloqueios(host, f"https://{host}/robots.txt", agora)
+            politica = self._politica(host, agora)
+            for caminho in caminhos:
+                self._decidir_caminho(host, politica, caminho, f"https://{host}{caminho}", agora)
+            return politica
+        return self._executar(host, passo)
+
+    def garantir_politica(self, host: str) -> dict:
+        """Política de robots vigente do host, lida de novo se expirou (sem decidir caminhos)."""
+        return self.verificar_caminhos(host, ())
+
+    def falha_de_resposta(self, exc: Unavailable, url: str) -> Unavailable:
+        """Falha de perfil ou de resposta detectada DEPOIS do portão: alimenta o mesmo classificador e o mesmo
+        estado de barreiras (recurso persistente; host pelo restante do escopo), sem bloquear por entrada inválida."""
+        host = urlsplit(url).netloc
+        if host not in HOSTS:
+            return exc
         try:
-            with self.estado.trava_do_host(host):
-                agora = self.relogio.agora()
-                self._checar_bloqueios(host, f"https://{host}/robots.txt", agora)
-                return self._politica(host, agora)
-        except EstadoIndisponivel as exc:
-            raise Unavailable("persistencia_local_falhou") from exc
+            recurso = self.admitir(url)["recurso"]
+        except Unavailable:
+            return exc
+
+        def passo():
+            return self._registrar_falha(exc, url, host, recurso, classe=CORPO_MIME)
+        try:
+            return self._executar(host, passo)
+        except Unavailable as falha:
+            return falha
+
+    def falha_local_de_interpretacao(self, exc: Unavailable) -> Unavailable:
+        """Falha local do parser: terminal para o escopo, sem culpar o servidor."""
+        self._escopo().terminal = _clonar(exc)
+        return exc
 
     # --- núcleo ----------------------------------------------------------------------------------------------
     def _obter(self, url, rota, host):
         agora = self.relogio.agora()
-        eh_robots = rota["recurso"] == "robots"
+        ativacao = self._exigir_ativacao()
         self._checar_bloqueios(host, url, agora)
-        politica = None
-        if not eh_robots:
-            politica = self._politica(host, agora)
-            partes = urlsplit(url)
-            caminho = partes.path + ("?" + partes.query if partes.query else "")
-            decisao = rb.decidir(self._grupos(politica), caminho)
-            self._registrar_decisao(host, politica, caminho, decisao.estado)
-            if decisao.estado == rb.PROIBIDO:
-                registro = self._registro("host_persistente", "robots_recusa", None,
-                                          {"url": url, "robots_sha256": politica["sha256"],
-                                           "robots_url": politica["url"]}, agora)
-                self._bloquear_host(host, registro)
-                raise _copia(registro)
-            if decisao.estado == rb.INCONCLUSIVO:
-                raise self._robots_inconclusivo(host, decisao.motivo or "robots_inconclusivo", politica["sha256"], agora)
-        resp = self._emitir(url, rota, host, politica)
-        if politica is not None:
-            self.politica_de[url] = politica["sha256"]
-            self.estado.registrar_obtencao({"url": url, "sha256": resp.sha256, "politica_sha256": politica["sha256"],
-                                            "politica_obtida_em": politica["obtido_em"], "em": iso(self.relogio.agora())})
+        if rota["recurso"] == "robots":  # leitura direta de robots: mesmo fluxo de validação, persistência e backoff
+            return self._ler_robots(host, agora)[1]
+        politica = self._politica(host, agora)
+        partes = urlsplit(url)
+        caminho = partes.path + ("?" + partes.query if partes.query else "")
+        self._decidir_caminho(host, politica, caminho, url, agora)
+        resp = self._emitir(url, rota, host)
+        self.politica_de[url] = politica["sha256"]
+        self.estado.registrar_obtencao({"url": url, "sha256": resp.sha256, "politica_sha256": politica["sha256"],
+                                        "politica_obtida_em": politica["obtido_em"], "em": iso(self.relogio.agora()),
+                                        "termo_sha256": ativacao["termo_sha256"] if ativacao else None})
         return resp
 
     def _registro(self, classe, motivo, categoria, evidencia, agora, ate=None) -> dict:
@@ -159,49 +231,58 @@ class Portao:
     def _bloquear_host(self, host, registro) -> None:
         try:
             self.estado.bloquear_host(host, registro)
-        except EstadoIndisponivel:
-            self._bloqueios_do_escopo()[host] = _copia(registro)  # falha local: vale só para esta chamada/sessão
-            raise
+        except EstadoIndisponivel as exc:
+            raise self._local("persistencia_local_falhou", exc, bloqueio_pretendido=registro["classe"]) from exc
 
     def _checar_bloqueios(self, host, url, agora) -> None:
-        escopo = self._bloqueios_do_escopo().get(host)
+        escopo = self._escopo().hosts.get(host)
         if escopo is not None:
-            raise escopo
+            raise _clonar(escopo)
         bloqueio = self.estado.bloqueio_do_host(host, agora)
         if bloqueio is not None:
             if bloqueio["classe"] == "robots_inconclusivo":
                 # Uma única tentativa de revalidação, só de /robots.txt, vencida a espera (§6, linha 4).
                 revalidacao = self.estado.revalidacao(host)
                 if revalidacao and agora >= _de_iso(revalidacao["proxima"]):
-                    return  # só /robots.txt é emitido: sem política vigente, `_politica` lê o robots e nada mais
+                    return  # sem política vigente, `_politica` lê o robots antes de qualquer conteúdo
             raise _copia(bloqueio)
         recurso = self.estado.bloqueio_do_recurso(host, url)
         if recurso is not None:
             raise _copia(recurso)
 
+    # --- robots ----------------------------------------------------------------------------------------------
     def _grupos(self, politica) -> list:
-        return rb.interpretar(self._corpo(politica))
-
-    def _corpo(self, politica) -> str:
-        if self.estado.home is None:
-            return self.estado._memoria[f"corpo-{politica['sha256']}"]
+        """Bytes originais, com o hash conferido em toda releitura, e interpretação textual única."""
+        corpo = self.estado.corpo_da_politica(politica["host"], politica["sha256"])
         try:
-            return (self.estado.pasta / f"robots-{politica['host']}-{politica['sha256']}.txt").read_text("utf-8")
-        except OSError as exc:
-            raise EstadoIndisponivel("corpo do robots ausente") from exc
+            return rb.interpretar(texto_da_resposta(corpo, politica["content_type"]))
+        except (RespostaInvalida, rb.RobotsInconclusivo) as exc:
+            raise EstadoIndisponivel("politica_persistida_nao_interpretavel") from exc
 
     def _registrar_decisao(self, host, politica, caminho, estado) -> None:
         decisoes = politica.setdefault("decisoes", {})
-        if decisoes.get(caminho) == estado or len(decisoes) >= 500:
+        if decisoes.get(caminho) == estado:
             return
-        decisoes[caminho] = estado
-        self.estado._gravar(f"robots-{host}.json", politica)
+        decisoes[caminho] = estado  # sem teto: o recibo é renovado a cada 24 h e nenhuma decisão é descartada
+        self.estado.regravar_politica(host, politica)
+
+    def _decidir_caminho(self, host, politica, caminho, url, agora) -> None:
+        decisao = rb.decidir(self._grupos(politica), caminho)
+        self._registrar_decisao(host, politica, caminho, decisao.estado)
+        if decisao.estado == rb.PROIBIDO:
+            registro = self._registro(A_HOST, "robots_recusa", None,
+                                      {"url": url, "robots_sha256": politica["sha256"],
+                                       "robots_url": politica["url"]}, agora)
+            self._bloquear_host(host, registro)
+            raise _copia(registro)
+        if decisao.estado == rb.INCONCLUSIVO:
+            raise self._robots_inconclusivo(host, decisao.motivo or "robots_inconclusivo", politica["sha256"], agora)
 
     def _politica(self, host, agora) -> dict:
         vigente = self.estado.politica_valida(host, agora)
         if vigente is not None:
             return vigente
-        return self._ler_robots(host, agora)
+        return self._ler_robots(host, agora)[0]
 
     def _robots_inconclusivo(self, host, motivo, sha, agora, evidencia=None) -> Unavailable:
         ev = {"robots_sha256": sha, **(evidencia or {})}
@@ -212,17 +293,22 @@ class Portao:
         registro = self._registro(ROBOTS, motivo if motivo.startswith("robots") else "robots_inconclusivo",
                                   None, ev, agora)
         try:
-            self.estado.bloquear_host(host, registro)
-            self.estado.agendar_revalidacao(host, agora + intervalo, intervalo)
-        except EstadoIndisponivel:
-            self._bloqueios_do_escopo()[host] = _copia(registro)
+            self.estado.bloquear_robots_inconclusivo(host, registro, agora + intervalo, intervalo)
+        except EstadoIndisponivel as exc:  # a proteção persistente falhou: a falha local é declarada e encerra o escopo
+            return self._local("persistencia_local_falhou", exc, bloqueio_pretendido=ROBOTS, motivo_original=motivo)
         return _copia(registro)
 
-    def _ler_robots(self, host, agora) -> dict:
+    def _ler_robots(self, host, agora) -> tuple[dict, object]:
         url = f"https://{host}/robots.txt"
         anterior = self.estado.politica(host)
-        resp = self._emitir(url, {"recurso": "robots", "mime": "text/plain"}, host, None,
+        reaproveitada = self._em_cache(url)
+        resp = self._emitir(url, _ROTA_ROBOTS, host,
                             atraso=float(anterior.get("crawl_delay", 0)) if anterior else 0.0)
+        if reaproveitada:
+            # Resposta reaproveitada da guarda NÃO é nova obtenção: vale pelo instante original, nunca renova.
+            obtido = min(_de_iso(resp.fetched_at), self.relogio.agora())
+            if obtido + VALIDADE_ROBOTS <= self.relogio.agora():
+                raise Unavailable("robots_expirado_sem_nova_obtencao", None, {"obtido_em": iso(obtido)})
         try:
             texto = texto_do_response(resp)  # interpretação textual única; charset inválido é inconclusivo
             grupos = rb.interpretar(texto)
@@ -232,18 +318,19 @@ class Portao:
         geral = rb.decidir(grupos, "/")
         if geral.estado == rb.INCONCLUSIVO:
             raise self._robots_inconclusivo(host, geral.motivo or "robots_inconclusivo", resp.sha256, agora)
-        instante = self.relogio.agora()
+        instante = obtido if reaproveitada else self.relogio.agora()
         registro = {"host": host, "url": url, "sha256": resp.sha256, "obtido_em": iso(instante),
                     "valido_ate": iso(instante + VALIDADE_ROBOTS), "user_agent": USER_AGENT_IDENTIFICADO,
                     "tokens": list(rb.TOKENS), "grupos_considerados": [list(g) for g in geral.grupos_considerados],
                     "crawl_delay": geral.crawl_delay, "status": resp.status, "mime": resp.mime,
+                    "content_type": content_type_do_response(resp) or resp.mime,
                     "bytes": len(resp.body), "decisoes": {}}
-        self.estado.gravar_politica(host, registro, texto)
+        self.estado.gravar_politica(host, registro, resp.body)
         self.estado.limpar_robots_inconclusivo(host)
-        return registro
+        return registro, resp
 
     # --- emissão ---------------------------------------------------------------------------------------------
-    def _em_cache(self, url, rota) -> bool:
+    def _em_cache(self, url) -> bool:
         guarda = guarda_ativa()
         if guarda is None:
             return False
@@ -257,29 +344,58 @@ class Portao:
         return max(INTERVALO_MINIMO, float(registro.get("crawl_delay", 0)) if registro else 0.0)
 
     def _esperar(self, host, intervalo) -> None:
-        espera = 0.0
-        ultimo = self.estado.ultimo_inicio(host)
-        if ultimo is not None:
-            decorrido = max(0.0, (self.relogio.agora() - ultimo).total_seconds())
-            espera = max(espera, intervalo - decorrido)
-        if host in self._ultimo_inicio:
-            espera = max(espera, intervalo - (self.relogio.monotonic() - self._ultimo_inicio[host]))
-        if espera > 0:
-            if espera > restante(3600):
-                raise Unavailable("orcamento")
-            self.relogio.sleep(espera)
+        """Espera o resto do intervalo medido pela marca persistida: vale o MENOR entre o decorrido monotônico e o
+        civil; recuo do relógio civil ou reinício da marca monotônica contam como nada decorrido (conservador)."""
+        marca = self.estado.ultimo_inicio(host)
+        if marca is None:
+            return
+        civil, mono = marca
+        decorrido = max(0.0, min((self.relogio.agora() - civil).total_seconds(), self.relogio.monotonic() - mono))
+        espera = intervalo - decorrido
+        if espera <= 0:
+            return
+        if espera > rb.TETO_OPERACIONAL_DO_ATRASO:  # válido, honrado, mas fora do teto operacional: abstenção declarada
+            raise Unavailable("crawl_delay_acima_do_teto_operacional", None,
+                              {"intervalo_s": intervalo, "teto_s": rb.TETO_OPERACIONAL_DO_ATRASO})
+        if espera > restante(3600):
+            raise Unavailable("orcamento")
+        self.relogio.sleep(espera)
 
-    def _emitir(self, url, rota, host, politica, atraso: float | None = None):
-        recurso = rota["recurso"]
-        em_cache = self._em_cache(url, rota)
-        if not em_cache:
+    def _reservar(self, escopo: Escopo) -> bool:
+        """Reserva atômica da vaga nos tetos (sessão e chamada, somando os hosts) ANTES de esperar e emitir."""
+        chamada = guarda_ativa() is not None and self.teto_chamada is not None
+        with self._orcamento:
             if self.teto_sessao is not None and self.emitidas >= self.teto_sessao:
                 raise Unavailable("teto_de_sessao", evidencia={"limite": self.teto_sessao})
-            self._contar_chamada()
-            self._esperar(host, self._atraso_do_host(host, atraso))
-            self._ultimo_inicio[host] = self.relogio.monotonic()
-            self.estado.marcar_inicio(host, self.relogio.agora())
+            with escopo.trava:
+                if chamada and escopo.usadas >= self.teto_chamada:
+                    raise Unavailable("teto_de_chamada", evidencia={"limite": self.teto_chamada})
+                if chamada:
+                    escopo.usadas += 1
             self.emitidas += 1
+        return chamada
+
+    def _devolver(self, escopo: Escopo, chamada: bool) -> None:
+        with self._orcamento:
+            self.emitidas -= 1
+            if chamada:
+                with escopo.trava:
+                    escopo.usadas -= 1
+
+    def _emitir(self, url, rota, host, atraso: float | None = None):
+        recurso = rota["recurso"]
+        escopo = self._escopo()
+        if not self._em_cache(url):
+            self._exigir_ativacao()
+            chamada = self._reservar(escopo)
+            try:
+                self._esperar(host, self._atraso_do_host(host, atraso))
+                self._checar_terminal(escopo)  # a espera pode ter durado: outra thread pode ter falhado localmente
+                self._exigir_ativacao()
+                self.estado.marcar_inicio(host, self.relogio.agora(), self.relogio.monotonic())
+            except BaseException:
+                self._devolver(escopo, chamada)
+                raise
         try:
             resp = self.transporte(
                 url, hosts=HOSTS, path_prefixes=PREFIXOS_TERMO if recurso == "termo" else PREFIXOS,
@@ -309,28 +425,32 @@ class Portao:
             return Unavailable("transporte_RespostaInvalida", "resposta_inesperada", {**ev, "mime": resp.mime})
         return None
 
-    def _registrar_falha(self, exc: Unavailable, url, host, recurso) -> Unavailable:
-        if exc.reason in {"teto_de_sessao", "teto_de_chamada", "orcamento", "persistencia_local_falhou"}:
+    def _registrar_falha(self, exc: Unavailable, url, host, recurso, classe: str | None = None) -> Unavailable:
+        if exc.reason in {"teto_de_sessao", "teto_de_chamada", "orcamento", "persistencia_local_falhou",
+                          "interpretacao_local_falhou", "ativacao_ao_vivo_pendente",
+                          "crawl_delay_acima_do_teto_operacional"}:
             return exc
-        classe = classificar(exc)
+        classe = classe or classificar(exc)
         agora = self.relogio.agora()
         registro = self._registro(classe, exc.reason, exc.categoria, {**exc.evidencia, "url": url}, agora)
-        escopo = self._bloqueios_do_escopo()
+        escopo = self._escopo()
         try:
             if classe == A_HOST:
-                self._bloquear_host(host, registro)
+                self.estado.bloquear_host(host, registro)
             elif classe == TRANSITORIA:
                 registro["ate"] = iso(agora + BLOQUEIO_TRANSITORIO)
-                self._bloquear_host(host, registro)
+                self.estado.bloquear_host(host, registro)
             elif recurso == "robots" and classe in {CORPO_MIME, RESIDUAL}:
                 return self._robots_inconclusivo(host, "robots_inconclusivo", None, agora,
                                                  {"motivo_original": exc.reason, "status": exc.evidencia.get("status")})
             else:  # redirecionamento, corpo/MIME ou residual: recurso persistente, host pelo escopo
                 self.estado.bloquear_recurso(host, url, registro)
-                escopo[host] = _copia(registro)
-        except EstadoIndisponivel:
-            escopo[host] = _copia(registro)
+                escopo.hosts[host] = _copia(registro)
+        except EstadoIndisponivel as falha:
+            # A proteção persistente não pôde ser gravada: a falha local é explícita e encerra o escopo inteiro.
+            return self._local("persistencia_local_falhou", falha, bloqueio_pretendido=classe,
+                               falha_original=exc.reason)
         return Unavailable(exc.reason, exc.categoria, {**exc.evidencia, "url": url, "bloqueio": classe})
 
 
-__all__ = ["Portao", "classificar"]
+__all__ = ["Portao", "classificar", "Escopo"]

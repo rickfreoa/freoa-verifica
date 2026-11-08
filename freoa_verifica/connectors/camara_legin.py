@@ -1,6 +1,7 @@
 """Câmara/Legin: descoberta publicada, política estrita e versões sem reconstrução."""
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
@@ -100,6 +101,17 @@ def inventario(resp: Response) -> dict:
             "pagina": {"url": resp.final_url, "sha256": resp.sha256, "fetched_at": resp.fetched_at}}
 
 
+def _classifica(funcao):
+    """Falhas de perfil/resposta dos métodos públicos alimentam o estado de barreiras do portão (0080 §6)."""
+    @functools.wraps(funcao)
+    def interno(self, *args, **kwargs):
+        try:
+            return funcao(self, *args, **kwargs)
+        except Unavailable as exc:
+            self._relancar(exc)
+    return interno
+
+
 @register
 class CamaraLeginConnector(Connector):
     id = "camara_legin"
@@ -131,18 +143,47 @@ class CamaraLeginConnector(Connector):
         if self._portao is not None:
             return self._portao
         if self._transporte_offline is not None:
-            self._portao = Portao(self._transporte_offline, estado=Estado(self.home), relogio=self._relogio)
+            estado = Estado(self.home)  # replay/testes: a ativação não é exigida, mas o termo vigente é registrado
+            self._portao = Portao(self._transporte_offline, estado=estado, relogio=self._relogio,
+                                  ativacao=lambda: ativacao(estado), exigir_ativacao=False)
             return self._portao
         from freoa_verifica.store.db import data_home
         estado = Estado(self.home or data_home())
         if ativacao(estado) is None:
             raise Unavailable("ativacao_ao_vivo_pendente")
-        self._portao = Portao(connector_fetch, estado=estado, relogio=self._relogio)
+        # A ativação é revalidada pelo portão antes de CADA obtenção viva, não só ao criá-lo.
+        self._portao = Portao(connector_fetch, estado=estado, relogio=self._relogio,
+                              ativacao=lambda: ativacao(estado))
         return self._portao
 
-    def atribuicao(self, autoria: str | None = None) -> dict:
+    def _perfil(self, exc: Unavailable) -> Unavailable:
+        """Falha de perfil ou de resposta detectada DEPOIS do portão: alimenta o mesmo classificador e o mesmo estado
+        de barreiras (recurso persistente; host pelo escopo). Entrada inválida do chamador e formatos não habilitados
+        não têm categoria de resposta e passam intactos; falha local do parser encerra o escopo sem culpar a fonte."""
+        portao = self._portao
+        if portao is None or "bloqueio" in exc.evidencia:
+            return exc
+        if exc.categoria == "resposta_inesperada" and isinstance(exc.evidencia.get("url"), str):
+            return portao.falha_de_resposta(exc, exc.evidencia["url"])
+        if exc.reason == "falha_parser_camara":
+            return portao.falha_local_de_interpretacao(exc)
+        return exc
+
+    def _relancar(self, exc: Unavailable):
+        novo = self._perfil(exc)
+        if novo is exc:
+            raise exc
+        raise novo from exc
+
+    def _inventario(self, page):
+        try:
+            return inventario(page)
+        except Unavailable as exc:
+            self._relancar(exc)
+
+    def atribuicao(self, autoria: str | None = None, *, sha256: str | None = None, url: str | None = None) -> dict:
         from freoa_verifica.connectors.camara_atribuicao import atribuicao
-        return atribuicao(self.home, autoria)
+        return atribuicao(self.home, autoria, sha256=sha256, url=url)
 
     def _validar_response(self, resp, url):
         try:
@@ -188,10 +229,14 @@ class CamaraLeginConnector(Connector):
         politica = portao.politica_de.get(url)
         if politica is not None:
             self.politicas.append({"url": url, "politica_sha256": politica})
-        self._validar_response(resp, url)
+        try:
+            self._validar_response(resp, url)
+        except Unavailable as exc:
+            self._relancar(exc)
         self.paginas[url] = resp
         return resp
 
+    @_classifica
     def search(self, q: str, **filtros):
         from freoa_verifica.citation import parse_one
         cite = parse_one(q)
@@ -224,6 +269,7 @@ class CamaraLeginConnector(Connector):
             raise _erro("busca_sem_marcador_zero_validado", resp)
         return CandidateList(candidates, total=None)
 
+    @_classifica
     def resolve(self, key):
         from freoa_verifica.aliases import WorkKey
         from freoa_verifica.identity import validate_identity
@@ -238,7 +284,7 @@ class CamaraLeginConnector(Connector):
         matches = []
         for cand in found:
             page = self._obter_recurso(cand.url)
-            inv = inventario(page)
+            inv = self._inventario(page)
             doc = ParsedDocument("camara_norma", "1", inv["titulo"], None, "")
             try:
                 if validate_identity(wk, doc) is None:
@@ -260,6 +306,7 @@ class CamaraLeginConnector(Connector):
             if r["admitido"]:
                 self.links[r["url"]] = (page, r["href"], r["rotulo"])
 
+    @_classifica
     def fetch(self, candidate):
         version = candidate.metadata.get("versao", "vigente")
         if version not in {"vigente", "publicacao_original"}:
@@ -268,7 +315,7 @@ class CamaraLeginConnector(Connector):
         inv = self.inventarios.get(candidate.url)
         if inv is None:
             page = self._obter_recurso(candidate.url)
-            inv = inventario(page)
+            inv = self._inventario(page)
             from freoa_verifica.aliases import WorkKey
             from freoa_verifica.identity import validate_identity
             from freoa_verifica.parsers.model import ParsedDocument
@@ -285,6 +332,7 @@ class CamaraLeginConnector(Connector):
             raise Unavailable("versao_ausente_ou_ambigua")
         return self._obter_recurso(choices[0]["url"])
 
+    @_classifica
     def parse(self, resp):
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
         self._admitir(resp.final_url)
@@ -308,7 +356,7 @@ class CamaraLeginConnector(Connector):
         # A epígrafe pode faltar no atualizado. Identidade só pelo vínculo exato à página capturada.
         from freoa_verifica.parsers.model import EditorialBlock
         source = self.links[resp.final_url][0]
-        inv = self.inventarios.get(source.final_url) or inventario(source)
+        inv = self.inventarios.get(source.final_url) or self._inventario(source)
         from freoa_verifica.identity import declared_identity
         page_doc = type(doc)("camara_norma", "1", inv["titulo"], None, "")
         text_key, _ = declared_identity(doc)
@@ -337,6 +385,7 @@ class CamaraLeginConnector(Connector):
         return doc
 
     @sob_guarda
+    @_classifica
     def fetch_anexo(self, candidate):
         self._admitir(candidate.url)
         inv = self.inventarios.get(candidate.url)
@@ -377,7 +426,7 @@ class CamaraLeginConnector(Connector):
                     remaining -= 1
                     try:
                         page = self._obter_recurso(url)
-                        own = inventario(page)
+                        own = self._inventario(page)
                         self.inventarios[url] = own
                         self._descobrir(page, own)
                         original = [r for r in own["recursos"] if r["recurso"] == "original" and r["admitido"]]
