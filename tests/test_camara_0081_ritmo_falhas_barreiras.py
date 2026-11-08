@@ -340,6 +340,7 @@ def test_c05_busca_com_200_sem_perfil_bloqueia_o_recurso_e_o_host_pelo_restante_
             con.search("Lei 6404/1976")
         assert erro.value.reason == motivo
         bloqueio = estado.bloqueio_do_recurso(WWW, BUSCA)
+        assert bloqueio is not None  # primeiro a existência do bloqueio (sem `TypeError` ao indexar None), depois os campos
         assert bloqueio["classe"] == "corpo_ou_mime" and bloqueio["motivo"] == motivo  # persistente para o recurso
         emitidas = list(t.urls)
         with pytest.raises(Unavailable) as depois:
@@ -369,7 +370,9 @@ def test_pagina_de_norma_sem_perfil_bloqueia_o_recurso_e_o_host_da_norma(tmp_pat
         with pytest.raises(Unavailable) as erro:
             con.resolve({"kind": "lei", "number": "6404", "year": 1976})
         assert erro.value.reason == motivo
-        assert estado.bloqueio_do_recurso(WWW2, LEI)["classe"] == "corpo_ou_mime"
+        bloqueio = estado.bloqueio_do_recurso(WWW2, LEI)
+        assert bloqueio is not None
+        assert bloqueio["classe"] == "corpo_ou_mime"
         emitidas = list(t.urls)
         with pytest.raises(Unavailable) as depois:
             p.obter(ORIGINAL)  # outro recurso de www2 na mesma chamada
