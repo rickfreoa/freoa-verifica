@@ -1310,6 +1310,34 @@ class Verifica:
     # Busca legislação
     # ------------------------------------------------------------------
 
+    def _obras_do_item(self, row: dict, fonte: str | None) -> list:
+        """Obras que sustentam o item do índice (rótulo, caminho e texto): identidade exclusiva por obra, nunca
+        `LIMIT 1` por rótulo ou número. Com `fonte`, só as obras com ocorrência capturada nela. Mais de uma = ambígua."""
+        sql = ("SELECT DISTINCT w.id, w.label, w.authority, w.kind, w.number, w.year FROM work w "
+               "JOIN provision p ON p.work_id=w.id JOIN redaction r ON r.provision_id=p.id "
+               "WHERE (w.label=? OR w.number=?) AND p.path=? AND r.text=?")
+        params: list = [row["work_label"], row["work_label"], row["path"], row["text"]]
+        if fonte:
+            sql += (" AND EXISTS (SELECT 1 FROM occurrence o JOIN extract e ON e.id=o.extract_id "
+                    "JOIN capture c ON c.id=e.capture_id WHERE o.redaction_id=r.id AND c.source_id=?)")
+            params.append(fonte)
+        return self.conn.execute(sql + " ORDER BY w.id", params).fetchall()
+
+    def _recibos_da_obra(self, work_id: str, row: dict) -> list:
+        return self.conn.execute(
+            "SELECT DISTINCT e.capture_id FROM redaction r JOIN provision p ON p.id=r.provision_id "
+            "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
+            "WHERE r.text=? AND p.path=? AND p.work_id=?", (row["text"], row["path"], work_id)).fetchall()
+
+    def _candidata_camara(self, candidatas: list, row: dict) -> bool:
+        """Alguma das obras candidatas tem captura de origem Câmara que sustenta o item."""
+        for obra in candidatas:
+            for recibo in self._recibos_da_obra(obra["id"], row):
+                cap = repo.get_capture(self.conn, recibo[0])
+                if cap and cap.get("source_id") == "camara_legin":
+                    return True
+        return False
+
     @_authenticated_output
     def buscar_legislacao(
         self,
@@ -1339,24 +1367,17 @@ class Verifica:
                 local.append(r)
         items: list[dict[str, Any]] = []
         for row in local:
-            work_row = self.conn.execute(
-                "SELECT id, label, authority, kind, number, year FROM work WHERE label=? LIMIT 1",
-                (row["work_label"],),
-            ).fetchone()
-            if work_row is None:
-                work_row = self.conn.execute(
-                    "SELECT id, label, authority, kind, number, year FROM work WHERE number=? LIMIT 1",
-                    (row["work_label"],),
-                ).fetchone()
-            # As evidências do item são as da OBRA e da ocorrência que o sustentam: texto e caminho iguais em outra norma
-            # (ou em outra fonte) não são evidência deste item e não lhe emprestam atribuição.
-            receipts = self.conn.execute(
-                "SELECT DISTINCT e.capture_id FROM redaction r JOIN provision p ON p.id=r.provision_id "
-                "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
-                "WHERE r.text=? AND p.path=? AND (? IS NULL OR p.work_id=?)",
-                (row["text"], row["path"], work_row and work_row["id"], work_row and work_row["id"])).fetchall()
+            candidatas = self._obras_do_item(row, filtro_fonte)
+            work_row = candidatas[0] if len(candidatas) == 1 else None
+            # As evidências do item são as da OBRA e da ocorrência que o sustentam, por identidade exclusiva da obra: texto e
+            # caminho iguais em outra norma (ou em outra fonte) não são evidência deste item e não lhe emprestam atribuição.
+            # Obra que não se identifica sem ambiguidade (rótulo repetido) não recebe recibo nem atribuição algum.
+            receipts = self._recibos_da_obra(work_row["id"], row) if work_row else []
+            ambigua = len(candidatas) > 1
             rebaixo = None
             try:
+                if ambigua:
+                    raise SourceUnavailable("OBRA_AMBIGUA")
                 if not receipts:
                     raise SourceUnavailable("EVIDENCIA_AUSENTE")
                 for receipt in receipts:
@@ -1394,7 +1415,7 @@ class Verifica:
                     "obra": row["work_label"],
                     "caminho": row["path"],
                     "rotulo": row["work_label"],
-                    "trecho": _highlight(row["text"], q),
+                    "trecho": None if ambigua and self._candidata_camara(candidatas, row) else _highlight(row["text"], q),
                     "url_oficial": None,
                     "capture_id": None,
                     "vigencia": vigencia,
