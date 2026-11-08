@@ -1,8 +1,9 @@
-# 0081 — Correção r1 e r2 da ativação ao vivo da Câmara (pareceres do PR #39)
+# 0081 — Correção r1, r2 e r3 da ativação ao vivo da Câmara (pareceres do PR #39)
 
 Codificador (Sonnet), 08/11/2026, sobre o parecer COM BLOQUEADOR do auditor (r1: achados 1–10, contraprovas C01–C22; r2:
-R2-1 a R2-8, §8). Onde este texto foi mais forte do que o código na r1, a r2 o corrigiu no código e aqui (§8) e as
-afirmações abaixo valem **como estão redigidas depois da r2**. Não altera
+R2-1 a R2-8, §8; r3: R3-1 a R3-6, §9). Onde este texto foi mais forte do que o código na r1 ou na r2, a rodada seguinte o
+corrigiu no código e aqui (§§8 e 9) e as afirmações abaixo valem **como estão redigidas depois da r3**, com os limites do
+§9.8. Não altera
 a 0080, a matriz IL.1, os pisos, a reserva, os mutantes, `transport.py`, `CONTRATO_VERSAO` nem o consumidor FREOA. Registra as
 escolhas de implementação que a 0080 deixava abertas e as regras que o parecer tornou explícitas. Qualificação continua
 `nao_apurada` até o IL.3-c.
@@ -79,9 +80,9 @@ escolhas de implementação que a 0080 deixava abertas e as regras que o parecer
    caminho; `obter_evidencia` extrai a `autoria`.
 2. O snapshot transporta, sob o inventário de hashes, termo, recibo, revisão, política (bytes e recibos, com as decisões por
    caminho), obtenções e os registros de ativação como **evidência** (instalar não ativa). A validação confere nome-hash,
-   recibo, a coerência de cada recibo de política com os seus bytes e o **fechamento dos vínculos** (obtenção → termo com
-   corpo e recibo → política com corpo, recibo e instante); referência quebrada é recusada ainda que os checksums sejam
-   refeitos. A exportação recusa home com evidência incoerente. `captured_at` e procedência originais permanecem. A
+   recibo, a coerência de cada recibo de política com os seus bytes e o **fechamento dos vínculos** (§9.1: obtenção → termo
+   com corpo e recibo → política com corpo, recibo, instante, validade na emissão e decisão do caminho recomposta dos
+   bytes); referência quebrada ou política que não autorizava o caminho é recusada ainda que os checksums sejam refeitos. A exportação recusa home com evidência incoerente. `captured_at` e procedência originais permanecem. A
    instalação é transacional (§8, R2-7).
 
 ## 7. Limites declarados
@@ -117,11 +118,58 @@ escolhas de implementação que a 0080 deixava abertas e as regras que o parecer
 6. **Snapshot (R2-6).** Fechamento dos vínculos validado (§6.2) e decisões por caminho gravadas também no recibo arquivado
    (`politicas/<host>-<sha>-<instante>.json`), que é o que viaja; ao instalar, decisões da mesma política de homes diferentes
    são unidas e decisão contrária é conflito.
-7. **Instalação transacional (R2-7).** `Publicacao` faz o preflight de **todos** os conflitos e da união com o home sem escrever
-   nele, prepara em staging e publica com diário; entra na mesma publicação do banco e dos blobs de `snapshot_install` e é
+7. **Instalação transacional (R2-7).** `Publicacao` faz o preflight de **todos** os conflitos (e, desde a r3, a validação da
+   união com o home, §9.2) sem escrever nele, prepara em staging e publica com diário; entra na mesma publicação do banco e dos blobs de `snapshot_install` e é
    desfeita pela mesma recuperação (falha de escrita no meio, conflito tardio e falha posterior ao banco).
 8. **Cobertura (R2-8).** A regressão de contaminação entre unidades usa normas distintas e página exclusiva; o mutante sem
    zeragem a mata. As asserções tautológicas ou frouxas dos testes novos foram trocadas por exatas.
 
 Limites que permanecem: travas entre processos reais e o fluxo com a reserva real seguem como pendências operacionais; o
 vínculo ambíguo de uma mesma captura sob dois termos fica nulo em vez de escolher um.
+
+## 9. Correção r3 (parecer r3 do PR #39, R3-1 a R3-6)
+
+1. **Fechamento semântico da evidência (R3-1).** Para cada obtenção, o validador (`camara_evidencias._validar`, a mesma que
+   serve à exportação, ao preflight da instalação e ao snapshot) recompõe dos **bytes** da política apontada a gramática e a
+   decisão do caminho (mesmo motor RFC 9309 por token do portão) e exige: decisão recomposta `permitido` **e** decisão persistida
+   no recibo igual; política obtida antes da emissão e válida nela (`obtido_em <= emitida_em < valido_ate`); `capturado_em`
+   não anterior à obtenção da política; termo (por **conteúdo e recibo**) existente, capturado antes da emissão e sob uma
+   política cuja validade o cobria e que permitia o caminho do termo; nome do recibo arquivado coerente com o instante
+   declarado. A obtenção passa a registrar `emitida_em` (instante em que a política foi reconfirmada válida, imediatamente
+   antes do envio): `em`, escrito depois da resposta, só precisa não preceder a emissão e segui-la em até 5 minutos
+   (`JANELA_DO_REGISTRO`, acima do `timeout` de 60 s do transporte); nunca é comparado ao vencimento. `termo_sha256=null` só
+   com o marcador explícito `sem_termo: "portao_sem_ativacao_exigida"` (replay e instrumento sem ativação); sem marcador, ou
+   com marcador e termo, é recusado.
+2. **União antes de publicar (R3-2).** `Publicacao.preparar` valida, pela mesma `_validar`, o conjunto home + pacote (decisões e
+   obtenções já unidas) antes de escrever qualquer coisa. Regra explícita: **home incoerente com pacote íntegro é recusado**
+   (`EvidenciaInvalida`, nada escrito); a instalação não conserta nem herda referência quebrada do destino, que precisa ser
+   reparada fora dela. Restos de captura interrompida (corpo de termo sem nenhum recibo) continuam não sendo evidência.
+3. **Obra da busca sem `LIMIT 1` (R3-3).** As obras que sustentam o item são as que têm o rótulo (ou número), o caminho e a
+   redação do item e, com `fonte`, ocorrência capturada nela. Uma só: identificada, com os recibos **dela**. Mais de uma: o
+   item sai `nao_indexado`, `motivo: "OBRA_AMBIGUA"`, `work_id: null`, sem recibos nem atribuição, e sem `trecho` se alguma
+   candidata tem captura de origem Câmara. Não há migração: a identidade da obra não viaja no índice FTS, e a ambiguidade é
+   **declarada**, não resolvida.
+4. **Falha ao preservar o termo (R3-4).** Falha de `guardar_termo` ou `gravar_pre_ativacao` alimenta a condição terminal do
+   portão (`falha_local_de_estado`) antes de propagar: os dois hosts não emitem mais naquela sessão, mesmo com o armazenamento
+   recuperado; só uma nova unidade retoma.
+5. **Termo ilegível (R3-5).** Resposta do termo com interpretação inválida (charset declarado incompatível com os bytes)
+   alimenta `falha_de_resposta`: recurso persistente, host pelo restante da sessão, `termo_resposta_invalida` com a evidência;
+   não é falha local. `termo_hash_divergente` permanece fora do classificador.
+6. **Identidade do conteúdo e da obtenção do termo (R3-6).** O corpo continua nomeado pelo hash do conteúdo
+   (`termo/<sha>.html`); cada recibo é nomeado pelo hash dos seus próprios bytes (`termo/<sha>.<selo>.recibo.json`), e a
+   pré-ativação, o registro de ativação e a obtenção apontam `termo_recibo_sha256`. Recapturar os mesmos bytes em outro
+   instante ou sob outra política cria outro recibo e **não sobrescreve** o histórico; a ativação anterior continua válida.
+   Recibo adulterado no lugar não confere com o hash do nome.
+7. **Testes e F8.** `tests/test_camara_0081_r3.py` traz as variantes do auditor como negativos (política que proíbe o caminho,
+   instantes deslocados, decisões removidas, sufixo temporal, termo por recibo, `sem_termo`), a união com home incoerente, a
+   busca com colisões de rótulo, ano, autoridade, tipo e fonte, a sessão terminal após falha de preservação, o termo
+   ilegível e as recapturas/snapshots com termo idêntico; cada correção tem mutante que o teste mata. O teste de `_perfil`
+   afirma a existência do bloqueio antes dos campos. O F8 confere recibos e bytes dos robots **também depois de reabrir o
+   home**, e a validação administrativa do que está em disco (não é prova global de integridade administrativa).
+8. **Limites que permanecem.** (a) `emitida_em` é declarado pelo portão no instante da reconfirmação: o validador prova a
+   coerência do registro, não que o envio ocorreu naquele instante. (b) `capturado_em` só é comparado à obtenção da política
+   (o carimbo do transporte é de outro relógio); não se exige `capturado_em >= emitida_em`. (c) Para o termo basta que uma das
+   obtenções da política que cobria o instante tenha a decisão persistida. (d) Registros anteriores à r3 (obtenção sem
+   `emitida_em`, recibo de termo sem hash no nome, ativação sem `termo_recibo_sha256`) não são lidos: a rota não foi
+   liberada, e um home capturado antes precisa ser recapturado. (e) Filesystem real com travas entre processos, reserva real
+   e o F8 por MCP e REST seguem sem execução nesta rodada.
