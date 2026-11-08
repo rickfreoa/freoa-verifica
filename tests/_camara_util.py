@@ -106,3 +106,17 @@ def portao(tmp_path=None, rotas=None, *, relogio=None, home="auto", **kw):
     transporte = Transporte(relogio, rotas)
     estado = Estado(tmp_path if home == "auto" else home)
     return Portao(transporte, estado=estado, relogio=relogio, **kw), transporte, relogio, estado
+
+
+FETCHED_PADRAO = "2026-11-08T12:00:00+00:00"  # `fetched_at` das respostas sintéticas de `resposta()`
+
+
+def obter_vinculado(home, rotas, relogio, url):
+    """Obtenção REAL pelo portão de um home já ativado (instrumento): grava o vínculo captura → política → termo como
+    o produto grava. Devolve `(resposta, transporte)`."""
+    from freoa_verifica.connectors import camara_ativacao as ativ
+    from freoa_verifica.connectors.camara_portao import Portao
+    estado = Estado(home)
+    transporte = Transporte(relogio, rotas)
+    p = Portao(transporte, estado=estado, relogio=relogio, instrumento=True, ativacao=lambda: ativ.ativacao(estado))
+    return p.obter(url), transporte

@@ -846,7 +846,7 @@ class Verifica:
             fontes_consultadas=([{"fonte": "camara_legin", "resultado": "acervo", "motivo": None, "categoria": None}]
                                if source_id == "camara_legin" else []),
             procedencia_tipo=(cap.get("procedencia") if cap else None) or "nao_identificado",
-            atribuicao=(self._atribuicao_camara(doc.text, cap["sha256"], cap["url"])
+            atribuicao=(self._atribuicao_camara(doc.text, cap["sha256"], cap["url"], cap["fetched_at"])
                         if source_id == "camara_legin" and cap else None),
         )
         if source_id == "camara_legin":
@@ -855,22 +855,30 @@ class Verifica:
 
     def _camara_ativada(self) -> bool:
         from freoa_verifica.connectors.camara_ativacao import ativacao
-        from freoa_verifica.connectors.camara_estado import Estado
-        return ativacao(Estado(self.home)) is not None
+        from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel
+        try:
+            return ativacao(Estado(self.home)) is not None
+        except EstadoIndisponivel:
+            return False  # sem leitura da documentação não se afirma ativação
 
-    def _atribuicao_camara(self, texto: str | None = None, sha256: str | None = None, url: str | None = None) -> dict:
-        """Atribuição do §7 da 0080 POR CAPTURA (`sha256`/`url` do conteúdo entregue), com o home deste serviço;
-        autoria só se o próprio documento a declara."""
+    def _atribuicao_camara(self, texto: str | None = None, sha256: str | None = None, url: str | None = None,
+                           fetched_at: str | None = None) -> dict:
+        """Atribuição do §7 da 0080 POR CAPTURA (`sha256`, `url` e `fetched_at` da captura entregue, a tripla do banco),
+        com o home deste serviço; autoria só se o próprio documento a declara."""
         from freoa_verifica.connectors.camara_atribuicao import atribuicao, autoria_declarada
-        return atribuicao(self.home, autoria_declarada(texto), sha256=sha256, url=url)
+        return atribuicao(self.home, autoria_declarada(texto), sha256=sha256, url=url, fetched_at=fetched_at)
 
-    def _atribuicao_das_capturas(self, capture_ids, texto: str | None = None) -> dict | None:
-        """Atribuição da primeira captura de origem Câmara entre as que sustentam o item entregue; senão None."""
+    def _atribuicoes_das_capturas(self, capture_ids, texto: str | None = None) -> list[dict]:
+        """Atribuição de CADA captura de origem Câmara que sustenta o item entregue, sem repetir atribuições idênticas;
+        as de outras fontes não geram atribuição. Várias origens distintas ficam separadas, nunca fundidas."""
+        saida: list[dict] = []
         for capture_id in capture_ids:
             cap = repo.get_capture(self.conn, capture_id)
             if cap and cap.get("source_id") == "camara_legin":
-                return self._atribuicao_camara(texto, cap["sha256"], cap["url"])
-        return None
+                atribuicao = self._atribuicao_camara(texto, cap["sha256"], cap["url"], cap["fetched_at"])
+                if atribuicao not in saida:
+                    saida.append(atribuicao)
+        return saida
 
     def _revalidar_camara(self, rw):
         """Releitura não amplia a política: corpo, página de origem e href recuperáveis."""
@@ -1331,18 +1339,6 @@ class Verifica:
                 local.append(r)
         items: list[dict[str, Any]] = []
         for row in local:
-            receipts = self.conn.execute(
-                "SELECT DISTINCT e.capture_id FROM redaction r JOIN provision p ON p.id=r.provision_id "
-                "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
-                "WHERE r.text=? AND p.path=?", (row["text"], row["path"])).fetchall()
-            rebaixo = None
-            try:
-                if not receipts:
-                    raise SourceUnavailable("EVIDENCIA_AUSENTE")
-                for receipt in receipts:
-                    self._authenticate_capture(receipt[0])
-            except SourceUnavailable as exc:
-                rebaixo = exc.reason
             work_row = self.conn.execute(
                 "SELECT id, label, authority, kind, number, year FROM work WHERE label=? LIMIT 1",
                 (row["work_label"],),
@@ -1352,6 +1348,21 @@ class Verifica:
                     "SELECT id, label, authority, kind, number, year FROM work WHERE number=? LIMIT 1",
                     (row["work_label"],),
                 ).fetchone()
+            # As evidências do item são as da OBRA e da ocorrência que o sustentam: texto e caminho iguais em outra norma
+            # (ou em outra fonte) não são evidência deste item e não lhe emprestam atribuição.
+            receipts = self.conn.execute(
+                "SELECT DISTINCT e.capture_id FROM redaction r JOIN provision p ON p.id=r.provision_id "
+                "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
+                "WHERE r.text=? AND p.path=?" + (" AND p.work_id=?" if work_row else ""),
+                (row["text"], row["path"]) + ((work_row["id"],) if work_row else ())).fetchall()
+            rebaixo = None
+            try:
+                if not receipts:
+                    raise SourceUnavailable("EVIDENCIA_AUSENTE")
+                for receipt in receipts:
+                    self._authenticate_capture(receipt[0])
+            except SourceUnavailable as exc:
+                rebaixo = exc.reason
             vigencia = None
             if work_row and data and not rebaixo:
                 wk = WorkKey(
@@ -1377,7 +1388,7 @@ class Verifica:
                     vigencia = {"status": "unknown", "motivo": exc.reason, **exc.classificacao()}
                 except Exception:  # noqa: BLE001
                     vigencia = {"status": "unknown"}
-            atribuicao = self._atribuicao_das_capturas([r[0] for r in receipts], row["text"])
+            atribuicoes = self._atribuicoes_das_capturas([r[0] for r in receipts], row["text"]) if work_row else []
             items.append(
                 {
                     "obra": row["work_label"],
@@ -1391,7 +1402,8 @@ class Verifica:
                     "pertinencia": row["pertinencia"],
                     "correspondencia": row["correspondencia"],
                     "candidato_ao_vivo": bool(row.get("_staging")),
-                    **({"atribuicao": atribuicao} if atribuicao else {}),
+                    **({"atribuicao": atribuicoes[0]} if len(atribuicoes) == 1 else {}),
+                    **({"atribuicoes": atribuicoes} if len(atribuicoes) > 1 else {}),
                     **({"nao_indexado": True, "motivo": rebaixo} if rebaixo else {}),
                 }
             )
@@ -1526,7 +1538,7 @@ class Verifica:
                 if connector.id == "camara_legin":
                     for page in connector.paginas.values():
                         repo.save_capture(self.conn, page, connector.id, home=self.home)
-                    atribuicao = self._atribuicao_camara(parsed.text, rw.sha256, rw.url)
+                    atribuicao = self._atribuicao_camara(parsed.text, rw.sha256, rw.url, rw.fetched_at)
                 if connector.id == "cvm_normas":  # C2
                     situacao.registrar_cvm(self.conn, self.home, connector, cand, rw)
                 if parsed.provisions:
@@ -3787,7 +3799,7 @@ class Verifica:
             "offset": offset,
             "max_chars": max_chars,
             "cursor": str(offset + max_chars) if truncado else None,
-            **({"atribuicao": self._atribuicao_camara(text, cap["sha256"], cap["url"])}
+            **({"atribuicao": self._atribuicao_camara(text, cap["sha256"], cap["url"], cap["fetched_at"])}
                if cap.get("source_id") == "camara_legin" else {}),
             **({} if ctype else {"proveniencia": {
                 "interpretacao": ORIGEM_LEGADO_CONFERIDO if conferida is not None else ORIGEM_LEGADO}}),

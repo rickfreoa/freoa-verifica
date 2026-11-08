@@ -16,8 +16,8 @@ from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel
 from freoa_verifica.connectors.camara_policy import TERMO_URL
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.service import Verifica
-from tests._camara_util import (LEI, TERMO_HTML, RelogioFalso, Transporte, barreira, da_fixture, portao,
-                                resposta)
+from tests._camara_util import (FETCHED_PADRAO, LEI, TERMO_HTML, RelogioFalso, Transporte, barreira, da_fixture,
+                                obter_vinculado, portao, resposta)
 from tests.test_camara_0080_atribuicao import (ART, TERMO_SHA, acervo, ativar_home, esperada, exportar,  # noqa: F401
                                                refazer_checksums)
 from tests.test_camara_legin import ATUAL, ORIGINAL, servidor  # noqa: F401
@@ -214,9 +214,13 @@ def test_obter_evidencia_extrai_a_autoria_do_documento_correspondente(acervo, mo
     assert com["atribuicao"] == esperada(autoria="Comissão de Estudos") and "Autoria" in com["texto"]
 
 
-def _registro(sha, url, termo):
-    return {"url": url, "sha256": sha, "politica_sha256": "a" * 64, "politica_obtida_em": "2026-11-08T12:00:00+00:00",
-            "em": "2026-11-08T12:00:10+00:00", "termo_sha256": termo}
+CAP_EM = "2026-11-08T12:00:05+00:00"
+
+
+def _registro(sha, url, termo, capturado_em=CAP_EM):
+    return {"url": url, "sha256": sha, "capturado_em": capturado_em, "politica_sha256": "a" * 64,
+            "politica_obtida_em": "2026-11-08T12:00:00+00:00", "em": "2026-11-08T12:00:10+00:00",
+            "termo_sha256": termo}
 
 
 def _guardar_termo2(estado):
@@ -236,8 +240,8 @@ def test_atribuicao_e_por_captura_e_nao_pelo_termo_corrente_do_home(tmp_path):
     a, b = hashlib.sha256(b"a").hexdigest(), hashlib.sha256(b"b").hexdigest()
     estado.registrar_obtencao(_registro(a, "https://www2.camara.leg.br/a", TERMO_SHA))
     estado.registrar_obtencao(_registro(b, "https://www2.camara.leg.br/b", t2))
-    assert atribuicao(home, sha256=a, url="https://www2.camara.leg.br/a")["termo_sha256"] == TERMO_SHA
-    assert atribuicao(home, sha256=b, url="https://www2.camara.leg.br/b")["termo_sha256"] == t2  # não vira T1
+    assert atribuicao(home, sha256=a, url="https://www2.camara.leg.br/a", fetched_at=CAP_EM)["termo_sha256"] == TERMO_SHA
+    assert atribuicao(home, sha256=b, url="https://www2.camara.leg.br/b", fetched_at=CAP_EM)["termo_sha256"] == t2  # não vira T1
 
 
 def test_termo_herdado_sem_conferencia_nao_gera_atribuicao_e_o_indice_acompanha_o_arquivo(tmp_path):
@@ -245,11 +249,12 @@ def test_termo_herdado_sem_conferencia_nao_gera_atribuicao_e_o_indice_acompanha_
     ativar_home(home, tmp_path)
     (home / "camara" / "termo-de-snapshot.json").write_text(json.dumps({"termo_url": TERMO_URL, "termo_sha256": TERMO_SHA}))
     conteudo = hashlib.sha256(b"novo").hexdigest()
-    assert termo_da_captura(home, conteudo, "https://www2.camara.leg.br/n") is None  # arquivo solto não vale
-    Estado(home).registrar_obtencao(_registro(conteudo, "https://www2.camara.leg.br/n", TERMO_SHA))
-    assert termo_da_captura(home, conteudo, "https://www2.camara.leg.br/n") == TERMO_SHA  # índice renovado
+    n = "https://www2.camara.leg.br/n"
+    assert termo_da_captura(home, conteudo, n, CAP_EM) is None  # arquivo solto não vale
+    Estado(home).registrar_obtencao(_registro(conteudo, n, TERMO_SHA))
+    assert termo_da_captura(home, conteudo, n, CAP_EM) == TERMO_SHA  # índice renovado
     (home / "camara" / "termo" / f"{TERMO_SHA}.recibo.json").write_text("{}")
-    assert termo_da_captura(home, conteudo, "https://www2.camara.leg.br/n") is None  # alteração interna é vista
+    assert termo_da_captura(home, conteudo, n, CAP_EM) is None  # alteração interna é vista
 
 
 # --- achado 9 (snapshot): evidência administrativa, reexportação, anexação -------------------------------------------------
@@ -300,14 +305,17 @@ def test_instalacao_recupera_a_evidencia_administrativa_completa(acervo, tmp_pat
         novo.close()
 
 
-def _tres_homes_com_termos_diferentes(tmp_path):
+def _homes_com_termos_diferentes(tmp_path):
+    """Dois homes ativados com termos diferentes; cada um obtém, pelo portão, um conteúdo seu (vínculo real)."""
     a, b = tmp_path / "a", tmp_path / "b"
-    ativar_com(tmp_path / "ta", {TERMO_URL: resposta(TERMO_URL, TERMO_HTML)}, home=a)
-    ativar_com(tmp_path / "tb", {TERMO_URL: resposta(TERMO_URL, TERMO2)}, home=b)
+    ra = {TERMO_URL: resposta(TERMO_URL, TERMO_HTML), LEI: resposta(LEI, b"capa")}
+    rb = {TERMO_URL: resposta(TERMO_URL, TERMO2), LEI: resposta(LEI, b"capb")}
+    _, rel_a, _ = ativar_com(tmp_path / "ta", ra, home=a)
+    _, rel_b, _ = ativar_com(tmp_path / "tb", rb, home=b)
+    obter_vinculado(a, ra, rel_a, LEI)
+    obter_vinculado(b, rb, rel_b, LEI)
     ca, cb = hashlib.sha256(b"capa").hexdigest(), hashlib.sha256(b"capb").hexdigest()
     ta, tb = hashlib.sha256(TERMO_HTML).hexdigest(), hashlib.sha256(TERMO2).hexdigest()
-    Estado(a).registrar_obtencao(_registro(ca, "https://www2.camara.leg.br/a", ta))
-    Estado(b).registrar_obtencao(_registro(cb, "https://www2.camara.leg.br/b", tb))
     return a, b, (ca, ta), (cb, tb)
 
 
@@ -317,14 +325,14 @@ def _empacotar(home, destino):
 
 
 def test_anexacao_de_snapshots_com_termos_diferentes_preserva_a_atribuicao_de_cada_captura(tmp_path):
-    a, b, (ca, ta), (cb, tb) = _tres_homes_com_termos_diferentes(tmp_path)
+    a, b, (ca, ta), (cb, tb) = _homes_com_termos_diferentes(tmp_path)
     c = tmp_path / "c"
     for home, nome in ((a, "sa"), (b, "sb")):
         destino = tmp_path / nome
         manifesto = _empacotar(home, destino)
         ev.instalar(c, ev.preparar(destino, manifesto))
-    assert termo_da_captura(c, ca, "https://www2.camara.leg.br/a") == ta  # a anexação de B não troca o termo de A
-    assert termo_da_captura(c, cb, "https://www2.camara.leg.br/b") == tb
+    assert termo_da_captura(c, ca, LEI, FETCHED_PADRAO) == ta  # a anexação de B não troca o termo de A
+    assert termo_da_captura(c, cb, LEI, FETCHED_PADRAO) == tb
     assert {ca, cb} <= {r["sha256"] for r in Estado(c).obtencoes()}
     antes = len(Estado(c).obtencoes())
     ev.instalar(c, ev.preparar(tmp_path / "sa2", _empacotar(a, tmp_path / "sa2")))  # idempotente

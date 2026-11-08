@@ -20,8 +20,8 @@ from urllib.parse import urlsplit
 from freoa_verifica import __version__
 from freoa_verifica.connectors import camara_robots as rb
 from freoa_verifica.connectors.base import Unavailable
-from freoa_verifica.connectors.camara_estado import (Estado, EstadoIndisponivel, Relogio, _de_iso, eh_sha256, iso,
-                                                     json_de_bytes, sha256)
+from freoa_verifica.connectors.camara_estado import (Estado, EstadoIndisponivel, LeituraLocalFalhou, Relogio, _de_iso,
+                                                     eh_sha256, iso, json_de_bytes, sha256)
 from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL
 from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
@@ -99,21 +99,25 @@ def _pre_valida(pre) -> bool:
             and set(pre["robots_sha256"]) == set(HOSTS) and all(eh_sha256(v) for v in pre["robots_sha256"].values()))
 
 
-def _content_type_preservado(estado: Estado, host: str, digest: str) -> str:
-    """Content-Type do recibo da política que tem este hash (vigente ou arquivada)."""
+def _politica_preservada(estado: Estado, host: str, digest: str) -> dict:
+    """Recibo da política que tem este hash (vigente ou arquivada), JÁ validado como evidência dos bytes preservados
+    (estado, status, tamanho, MIME, UA, tokens, grupos, atraso e decisões coerentes com eles)."""
+    arquivadas = estado.politicas_arquivadas(host)  # TODAS validadas contra os bytes: nenhum recibo do host pode divergir
     atual = estado.politica(host)
     if atual and atual["sha256"] == digest:
-        return atual["content_type"]
-    for registro in estado.politicas_arquivadas(host):
+        return atual
+    for registro in arquivadas:
         if registro["sha256"] == digest:
-            return registro["content_type"]
+            return registro
     raise EstadoIndisponivel("recibo_da_politica_ausente")
 
 
 def _politica_decide_o_conteudo(estado: Estado, host: str, digest: str) -> bool:
-    """Bytes preservados do robots (hash conferido) permitem os caminhos de conteúdo do host (0080 §2.1)."""
+    """Bytes preservados do robots (hash conferido) e o recibo coerente com eles permitem os caminhos de conteúdo do
+    host (0080 §2.1)."""
+    recibo = _politica_preservada(estado, host, digest)
     corpo = estado.corpo_da_politica(host, digest)
-    grupos = rb.interpretar(texto_da_resposta(corpo, _content_type_preservado(estado, host, digest)))
+    grupos = rb.interpretar(texto_da_resposta(corpo, recibo["content_type"]))
     return all(rb.decidir(grupos, c).estado == rb.PERMITIDO for c in CAMINHOS_DE_CONTEUDO[host])
 
 
@@ -136,7 +140,11 @@ def registrar(estado: Estado, revisao_arquivo: Path | str, relogio: Relogio | No
         raise AtivacaoRecusada("revisao_do_auditor_incompleta")
     if revisao["resultado"] != "conforme":
         raise AtivacaoRecusada("termo_divergente_exige_revisao_da_decisao")
-    if revisao["termo_sha256"] != pre["termo_sha256"] or estado.termo_preservado(pre["termo_sha256"]) is None:
+    try:
+        termo_conferido = estado.termo_preservado(pre["termo_sha256"]) is not None
+    except EstadoIndisponivel as exc:
+        raise _local(exc) from exc
+    if revisao["termo_sha256"] != pre["termo_sha256"] or not termo_conferido:
         raise AtivacaoRecusada("termo_revisado_difere_do_preservado")
     agora = relogio.agora()
     try:
@@ -150,6 +158,8 @@ def registrar(estado: Estado, revisao_arquivo: Path | str, relogio: Relogio | No
             if not _politica_decide_o_conteudo(estado, host, digest):
                 raise AtivacaoRecusada("robots_nao_permite_o_conteudo")
         revisao_sha = estado.guardar_revisao(dados)
+    except LeituraLocalFalhou as exc:
+        raise _local(exc) from exc
     except (EstadoIndisponivel, rb.RobotsInconclusivo, RespostaInvalida) as exc:
         raise AtivacaoRecusada("robots_preservado_invalido", None, {"causa": type(exc).__name__}) from exc
     registro = {"termo_sha256": pre["termo_sha256"], "termo_url": TERMO_URL, "robots_sha256": pre["robots_sha256"],
@@ -207,20 +217,23 @@ def validar_registro(estado: Estado, registro) -> bool:
         if recibo is None or recibo["politica_robots_sha256"] != registro["robots_sha256"]["www2.camara.leg.br"]:
             return False
         return all(_politica_decide_o_conteudo(estado, host, digest) for host, digest in registro["robots_sha256"].items())
-    except (OSError, KeyError, TypeError, ValueError, RespostaInvalida):
+    except LeituraLocalFalhou:
+        raise  # falha local ao LER a documentação não é registro inválido: é terminal para quem chama
+    except (OSError, LookupError, TypeError, ValueError, ArithmeticError, RespostaInvalida):
         return False
 
 
 def ativacao(estado: Estado) -> dict | None:
-    """Registro de ativação válido (`validar_registro`); senão None (rota pendente)."""
-    try:
-        registro = estado.ler_ativacao()
-    except OSError:
-        return None
+    """Registro de ativação válido (`validar_registro`); ausente ou inválido é None (rota pendente). Falha local ao LER
+    qualquer arquivo da documentação levanta `LeituraLocalFalhou`: não se converte em pendência (0080 §6)."""
+    registro = estado.ler_ativacao()
     return registro if validar_registro(estado, registro) else None
 
 
 def atribuicao_do_termo(estado: Estado) -> tuple[str, str | None]:
     """(URL, SHA-256) do termo da ativação deste home; o hash é None se não houve captura registrada."""
-    registro = ativacao(estado)
+    try:
+        registro = ativacao(estado)
+    except LeituraLocalFalhou:
+        registro = None  # informativo: sem leitura não há vínculo conferido
     return TERMO_URL, (registro["termo_sha256"] if registro else None)

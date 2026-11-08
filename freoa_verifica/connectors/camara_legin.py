@@ -13,7 +13,7 @@ from lxml import html
 from freoa_verifica.connectors.base import (AmbiguousCandidates, Candidate, CandidateList, Connector, HealthProbe,
                                            HealthReport, Unavailable, register, sob_guarda)
 from freoa_verifica.connectors.camara_ativacao import ativacao
-from freoa_verifica.connectors.camara_estado import Estado, Relogio
+from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel, Relogio
 from freoa_verifica.connectors.camara_policy import HOSTS, validar_url, url_publicada
 from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.connectors.camara_robots import politica_robots  # noqa: F401  (assinatura da IL.2-c)
@@ -29,6 +29,16 @@ TIPOS = {"lei": "Lei Ordinária", "lei_complementar": "Lei Complementar"}
 def _erro(reason, resp=None):
     return Unavailable(reason, "resposta_inesperada", {} if resp is None else {
         "url": resp.final_url, "status": resp.status, "sha256": resp.sha256})
+
+
+def _endereco_da_norma(url, wk) -> bool:
+    """O endereço da página de norma é o da obra pedida (família, número e ano)."""
+    try:
+        info = validar_url(url)
+    except ValueError:
+        return False
+    familia = {"lei": "lei", "leicom": "lei_complementar"}.get(info.get("familia"))
+    return familia == wk.kind and str(info.get("numero")) == str(wk.number) and str(info.get("ano")) == str(wk.year)
 
 
 def arvore(resp):
@@ -149,11 +159,16 @@ class CamaraLeginConnector(Connector):
             return self._portao
         from freoa_verifica.store.db import data_home
         estado = Estado(self.home or data_home())
-        if ativacao(estado) is None:
-            raise Unavailable("ativacao_ao_vivo_pendente")
         # A ativação é revalidada pelo portão antes de CADA obtenção viva, não só ao criá-lo.
-        self._portao = Portao(connector_fetch, estado=estado, relogio=self._relogio,
-                              ativacao=lambda: ativacao(estado))
+        portao = Portao(connector_fetch, estado=estado, relogio=self._relogio, ativacao=lambda: ativacao(estado))
+        portao.checar_terminal()  # falha local anterior nesta chamada: nada mais é lido nem emitido
+        try:
+            registro = ativacao(estado)
+        except EstadoIndisponivel as exc:  # falha local ao LER a documentação: terminal, nunca pendência (0080 §6)
+            raise portao.falha_local_de_estado(exc) from exc
+        if registro is None:
+            raise Unavailable("ativacao_ao_vivo_pendente")
+        self._portao = portao
         return self._portao
 
     def _perfil(self, exc: Unavailable) -> Unavailable:
@@ -181,9 +196,10 @@ class CamaraLeginConnector(Connector):
         except Unavailable as exc:
             self._relancar(exc)
 
-    def atribuicao(self, autoria: str | None = None, *, sha256: str | None = None, url: str | None = None) -> dict:
+    def atribuicao(self, autoria: str | None = None, *, sha256: str | None = None, url: str | None = None,
+                   fetched_at: str | None = None) -> dict:
         from freoa_verifica.connectors.camara_atribuicao import atribuicao
-        return atribuicao(self.home, autoria, sha256=sha256, url=url)
+        return atribuicao(self.home, autoria, sha256=sha256, url=url, fetched_at=fetched_at)
 
     def _validar_response(self, resp, url):
         try:
@@ -282,14 +298,18 @@ class CamaraLeginConnector(Connector):
         name = "Lei Complementar" if kind == "lei_complementar" else "Lei"
         found = self.search(f"{name} {number}/{year}")
         matches = []
+        divergente = None  # página que o endereço diz ser a norma pedida e cujo conteúdo diz outra coisa
         for cand in found:
             page = self._obter_recurso(cand.url)
             inv = self._inventario(page)
             doc = ParsedDocument("camara_norma", "1", inv["titulo"], None, "")
             try:
-                if validate_identity(wk, doc) is None:
-                    continue
+                confirmada = validate_identity(wk, doc) is not None
             except ValueError:
+                confirmada = False
+            if not confirmada:
+                if _endereco_da_norma(cand.url, wk):
+                    divergente = page
                 continue
             self.inventarios[cand.url] = inv
             self._descobrir(page, inv)
@@ -298,7 +318,9 @@ class CamaraLeginConnector(Connector):
         if len(matches) > 1:
             raise AmbiguousCandidates(matches)
         if not matches:
-            raise Unavailable("identidade_nao_confirmada")
+            if divergente is not None:  # perfil incompatível: evidência da resposta, mesmo classificador das barreiras
+                raise _erro("identidade_nao_confirmada", divergente)
+            raise Unavailable("identidade_nao_confirmada")  # nenhuma página da norma pedida: ausência demonstrada
         return matches[0]
 
     def _descobrir(self, page, inv):
@@ -322,8 +344,12 @@ class CamaraLeginConnector(Connector):
             info = validar_url(candidate.url)
             kind = {"lei": "lei", "leicom": "lei_complementar"}[info["familia"]]
             key = WorkKey("federal", kind, info["numero"], int(info["ano"]))
-            if validate_identity(key, ParsedDocument("camara_norma", "1", inv["titulo"], None, "")) is None:
-                raise Unavailable("identidade_nao_confirmada")
+            try:
+                confirmada = validate_identity(key, ParsedDocument("camara_norma", "1", inv["titulo"], None, "")) is not None
+            except ValueError:
+                confirmada = False
+            if not confirmada:  # o endereço é o da norma e a página declara outra: perfil incompatível, com evidência
+                raise _erro("identidade_nao_confirmada", page)
             self.inventarios[candidate.url] = inv
             self._descobrir(page, inv)
         role = "atualizado" if version == "vigente" else "original"
@@ -452,6 +478,9 @@ class CamaraLeginConnector(Connector):
     def health(self):
         # Robots e termo não são capacidade aprovada: a qualificação segue `nao_apurada` (0080).
         from freoa_verifica.store.db import data_home
-        ativa = self._portao_injetado is not None or ativacao(Estado(self.home or data_home())) is not None
+        try:
+            ativa = self._portao_injetado is not None or ativacao(Estado(self.home or data_home())) is not None
+        except EstadoIndisponivel:
+            ativa = False  # sem leitura da documentação não se afirma ativação
         return HealthReport(self.id, (HealthProbe("documento", "unavailable",
                                                   "ativada_sem_sonda_de_saude" if ativa else "ativacao_ao_vivo_pendente"),))

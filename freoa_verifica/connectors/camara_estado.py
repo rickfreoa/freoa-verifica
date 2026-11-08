@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from freoa_verifica import trava
+from freoa_verifica.connectors import camara_robots as rb
 from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.texto_resposta import texto_da_resposta
@@ -39,6 +40,13 @@ _HEX64 = re.compile(r"[0-9a-f]{64}")
 
 class EstadoIndisponivel(OSError):
     """Falha local de persistência, de leitura ou de esquema do estado."""
+
+
+class LeituraLocalFalhou(EstadoIndisponivel):
+    """O sistema de arquivos não deixou LER um arquivo que existe (permissão, E/S, diretório no lugar do arquivo).
+
+    É falha local terminal e nunca se confunde com registro AUSENTE ou INVÁLIDO (documentação que não existe ou não
+    confere), que é condição documental: a rota segue pendente, sem encerrar a unidade (0081 r2, R2-3)."""
 
 
 class Relogio:
@@ -66,7 +74,8 @@ def _de_iso(texto) -> datetime:
     """Instante com fuso; qualquer outra coisa é esquema inválido (nunca `ValueError`/`TypeError` soltos)."""
     try:
         instante = datetime.fromisoformat(texto)
-    except (TypeError, ValueError):
+        instante.astimezone(timezone.utc)  # fuso fora do intervalo representável é falha de esquema, não OverflowError
+    except (TypeError, ValueError, OverflowError):
         _invalido("instante")
     if instante.tzinfo is None:
         _invalido("instante_sem_fuso")
@@ -78,9 +87,17 @@ def eh_sha256(valor) -> bool:
 
 
 def _numero(valor, *, minimo: float = 0.0) -> float:
-    if isinstance(valor, bool) or not isinstance(valor, (int, float)) or not math.isfinite(valor) or valor < minimo:
+    """Número finito e não menor que `minimo`. Total: inteiro JSON grande demais para `float` é esquema inválido, não
+    `OverflowError` solto (0081 r2, R2-3)."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
         _invalido("numero")
-    return float(valor)
+    try:
+        numero = float(valor)
+    except (OverflowError, ValueError):
+        _invalido("numero")
+    if not math.isfinite(numero) or numero < minimo:
+        _invalido("numero")
+    return numero
 
 
 def _texto(valor) -> str:
@@ -116,7 +133,9 @@ def _json_de(caminho: Path, padrao):
         return json_de_bytes(caminho.read_bytes())
     except FileNotFoundError:
         return padrao
-    except (OSError, ValueError) as exc:
+    except OSError as exc:
+        raise LeituraLocalFalhou(f"leitura local falhou: {caminho.name}") from exc
+    except ValueError as exc:
         raise EstadoIndisponivel(f"estado ilegível: {caminho.name}") from exc
 
 
@@ -125,8 +144,38 @@ def _json_bytes(valor) -> bytes:
 
 
 # --- esquemas persistidos ---------------------------------------------------------------------------------------------
-def validar_politica(registro, host: str | None = None) -> dict:
-    """Esquema do recibo de política (0080 §4.4). Estrutura inválida é falha local, não `KeyError`."""
+_LIMITE_ROBOTS = 1024**2
+
+
+def _media(content_type: str) -> str:
+    return content_type.split(";", 1)[0].strip().lower()
+
+
+def _conferir_com_o_corpo(registro: dict, corpo: bytes) -> None:
+    """O recibo da política como EVIDÊNCIA dos bytes preservados (0081 r2, R2-2): hash, status 200, tamanho, MIME, UA
+    efetivo, tokens, grupos considerados, atraso e decisões por caminho têm de ser exatamente os que os bytes produzem.
+    O recibo nunca é fonte de verdade sobre o que os bytes dizem."""
+    if sha256(corpo) != registro["sha256"]:
+        _invalido("corpo_do_robots_diverge_do_hash")
+    if (registro["status"] != 200 or registro["bytes"] != len(corpo) or not 0 < len(corpo) <= _LIMITE_ROBOTS
+            or registro["mime"] != "text/plain" or _media(registro["content_type"]) != "text/plain"
+            or registro["user_agent"] != USER_AGENT_IDENTIFICADO or registro["tokens"] != list(rb.TOKENS)):
+        _invalido("politica_recibo_incoerente")
+    try:
+        grupos = rb.interpretar(texto_da_resposta(corpo, registro["content_type"]))
+    except (RespostaInvalida, rb.RobotsInconclusivo):
+        _invalido("politica_corpo_nao_interpretavel")
+    geral = rb.decidir(grupos, "/")
+    if (geral.estado == rb.INCONCLUSIVO or registro["grupos_considerados"] != [list(g) for g in geral.grupos_considerados]
+            or float(registro["crawl_delay"]) != geral.crawl_delay):
+        _invalido("politica_derivados_divergem_dos_bytes")
+    if any(rb.decidir(grupos, caminho).estado != estado for caminho, estado in registro["decisoes"].items()):
+        _invalido("politica_decisoes_divergem_dos_bytes")
+
+
+def validar_politica(registro, host: str | None = None, corpo: bytes | None = None) -> dict:
+    """Esquema do recibo de política (0080 §4.4). Estrutura inválida é falha local, não `KeyError`. Com `corpo`
+    (bytes originais preservados) confere também a coerência integral do recibo com eles."""
     if not isinstance(registro, dict):
         _invalido("politica")
     if (not isinstance(registro.get("host"), str) or (host is not None and registro["host"] != host)
@@ -135,7 +184,11 @@ def validar_politica(registro, host: str | None = None) -> dict:
     if not eh_sha256(registro.get("sha256")):
         _invalido("politica_sha256")
     obtido, valido = _de_iso(registro.get("obtido_em")), _de_iso(registro.get("valido_ate"))
-    if not obtido < valido <= obtido + VALIDADE_ROBOTS:
+    try:
+        limite = obtido + VALIDADE_ROBOTS
+    except OverflowError:
+        _invalido("politica_validade")
+    if not obtido < valido <= limite:
         _invalido("politica_validade")
     _numero(registro.get("crawl_delay"))
     for campo in ("user_agent", "mime", "content_type"):
@@ -149,6 +202,8 @@ def validar_politica(registro, host: str | None = None) -> dict:
     if (isinstance(registro.get("status"), bool) or not isinstance(registro.get("status"), int)
             or isinstance(registro.get("bytes"), bool) or not isinstance(registro.get("bytes"), int)):
         _invalido("politica_recibo")
+    if corpo is not None:
+        _conferir_com_o_corpo(registro, corpo)
     return registro
 
 
@@ -193,11 +248,13 @@ def _validar_bloqueios(dados, host: str) -> dict:
 
 
 def validar_obtencao(registro) -> dict:
+    """Vínculo de uma obtenção: identifica a CAPTURA pela tripla (`sha256`, `url`, `capturado_em`) que o banco usa, a
+    política que a autorizou (hash e instante) e o termo vigente NA EMISSÃO (0081 r2, R2-5)."""
     if (not isinstance(registro, dict) or not isinstance(registro.get("url"), str)
             or not eh_sha256(registro.get("sha256")) or not eh_sha256(registro.get("politica_sha256"))
             or (registro.get("termo_sha256") is not None and not eh_sha256(registro["termo_sha256"]))):
         _invalido("obtencao")
-    _de_iso(registro.get("politica_obtida_em")), _de_iso(registro.get("em"))
+    _de_iso(registro.get("politica_obtida_em")), _de_iso(registro.get("em")), _de_iso(registro.get("capturado_em"))
     return registro
 
 
@@ -249,7 +306,7 @@ class Estado:
         except FileNotFoundError:
             return None
         except OSError as exc:
-            raise EstadoIndisponivel(f"estado ilegível: {nome}") from exc
+            raise LeituraLocalFalhou(f"leitura local falhou: {nome}") from exc
 
     def _gravar_bytes(self, nome: str, dados: bytes) -> None:
         if self.home is None:
@@ -304,23 +361,45 @@ class Estado:
 
     # --- robots --------------------------------------------------------------------------------------------------
     def politica(self, host: str) -> dict | None:
+        """Recibo vigente validado COMO EVIDÊNCIA dos bytes preservados (hash, status, tamanho, MIME, UA, tokens, grupos,
+        atraso e decisões recomputados dos bytes); qualquer divergência é falha local, nunca valor aceito."""
         registro = self._ler(f"robots-{host}.json", None)
-        return None if registro is None else validar_politica(registro, host)
+        if registro is None:
+            return None
+        validar_politica(registro, host)
+        return validar_politica(registro, host, self.corpo_da_politica(host, registro["sha256"]))
+
+    @staticmethod
+    def _nome_arquivado(host: str, registro: dict) -> str:
+        try:
+            instante = int(_de_iso(registro["obtido_em"]).timestamp())
+        except (OverflowError, OSError, ValueError):
+            _invalido("politica_instante")
+        return f"politicas/{host}-{registro['sha256']}-{instante}.json"
 
     def gravar_politica(self, host: str, registro: dict, corpo: bytes) -> None:
-        """`corpo` são os bytes ORIGINAIS da resposta; o hash do registro tem de ser o deles."""
-        if sha256(corpo) != registro["sha256"]:
-            _invalido("corpo_do_robots_diverge_do_hash")
-        validar_politica(registro, host)
+        """`corpo` são os bytes ORIGINAIS da resposta; o recibo tem de ser coerente com eles (hash, tamanho, derivados)."""
+        validar_politica(registro, host, corpo)
+        nome = self._nome_arquivado(host, registro)
         self._gravar_bytes(f"robots-{host}-{registro['sha256']}.txt", corpo)
-        instante = int(_de_iso(registro["obtido_em"]).timestamp())
-        self._gravar(f"politicas/{host}-{registro['sha256']}-{instante}.json", registro)
+        self._gravar(nome, registro)
         self._gravar(f"robots-{host}.json", registro)
 
     def regravar_politica(self, host: str, registro: dict) -> None:
-        """Atualiza o recibo vigente (decisões por caminho); o corpo e o hash não mudam."""
-        validar_politica(registro, host)
+        """Atualiza o recibo vigente E o arquivado de mesmo nome (decisões por caminho): o artefato arquivado é o que
+        viaja no snapshot e não pode ficar com as decisões iniciais. O corpo e o hash não mudam."""
+        validar_politica(registro, host, self.corpo_da_politica(host, registro["sha256"]))
+        self._gravar(self._nome_arquivado(host, registro), registro)
         self._gravar(f"robots-{host}.json", registro)
+
+    def atraso_da_politica(self, registro: dict) -> float:
+        """Atraso aplicável RECOMPUTADO dos bytes conferidos (nunca o campo declarado no recibo)."""
+        corpo = self.corpo_da_politica(registro["host"], registro["sha256"])
+        try:
+            grupos = rb.interpretar(texto_da_resposta(corpo, registro["content_type"]))
+        except (RespostaInvalida, rb.RobotsInconclusivo):
+            _invalido("politica_corpo_nao_interpretavel")
+        return rb.decidir(grupos, "/").crawl_delay
 
     def corpo_da_politica(self, host: str, digest: str) -> bytes:
         """Bytes originais do robots, conferidos contra o hash do recibo em TODA releitura."""
@@ -335,13 +414,15 @@ class Estado:
         """Recibos de todas as políticas já obtidas para o host (a vigente e as anteriores)."""
         if self.home is None:
             nomes = sorted(n for n in self._memoria if n.startswith(f"politicas/{host}-"))
-            return [validar_politica(self._memoria[n], host) for n in nomes]  # type: ignore[arg-type]
-        pasta = self.pasta / "politicas"
-        try:
-            arquivos = sorted(pasta.glob(f"{host}-*.json"))
-        except OSError as exc:
-            raise EstadoIndisponivel(str(exc)) from exc
-        return [validar_politica(_json_de(a, None), host) for a in arquivos]
+            registros = [self._memoria[n] for n in nomes]
+        else:
+            try:
+                arquivos = sorted((self.pasta / "politicas").glob(f"{host}-*.json"))
+            except OSError as exc:
+                raise LeituraLocalFalhou(str(exc)) from exc
+            registros = [_json_de(a, None) for a in arquivos]
+        return [validar_politica(r, host, self.corpo_da_politica(host, r["sha256"])
+                                 if isinstance(r, dict) and eh_sha256(r.get("sha256")) else None) for r in registros]
 
     def descartar_politica(self, host: str) -> None:
         if self.home is None:
@@ -460,9 +541,16 @@ class Estado:
 
     # --- ativação (§2) -------------------------------------------------------------------------------------------
     def ler_ativacao(self) -> dict | None:
+        """Registro gravado; ausente OU ilegível como JSON é `None` (não há registro válido). Falha local ao LER o arquivo
+        existente levanta `LeituraLocalFalhou` (terminal), nunca vira ausência."""
         if self.home is None:
             return self._memoria.get(ATIVACAO)  # type: ignore[return-value]
-        return _json_de(self.home / ATIVACAO, None)
+        try:
+            return _json_de(self.home / ATIVACAO, None)
+        except LeituraLocalFalhou:
+            raise
+        except EstadoIndisponivel:
+            return None
 
     def gravar_ativacao(self, registro: dict) -> None:
         if self.home is None:
@@ -484,13 +572,13 @@ class Estado:
         política) não é termo preservado."""
         if not eh_sha256(digest):
             return None
+        corpo = self._bytes(f"termo/{digest}.html")  # falha local de leitura NÃO é ausência: propaga
+        bruto = self._bytes(f"termo/{digest}.recibo.json")
+        if corpo is None or bruto is None or sha256(corpo) != digest:
+            return None
         try:
-            corpo = self._bytes(f"termo/{digest}.html")
-            bruto = self._bytes(f"termo/{digest}.recibo.json")
-            if corpo is None or bruto is None or sha256(corpo) != digest:
-                return None
             return validar_recibo_do_termo(json_de_bytes(bruto), digest, len(corpo))
-        except (OSError, ValueError):
+        except (EstadoIndisponivel, ValueError):
             return None
 
     def guardar_revisao(self, dados: bytes) -> str:
@@ -502,10 +590,7 @@ class Estado:
         """Bytes da revisão do auditor se conferem com o hash; senão None."""
         if not eh_sha256(digest):
             return None
-        try:
-            dados = self._bytes(f"revisao/{digest}.json")
-        except OSError:
-            return None
+        dados = self._bytes(f"revisao/{digest}.json")  # falha local de leitura NÃO é ausência: propaga
         return dados if dados is not None and sha256(dados) == digest else None
 
     def gravar_pre_ativacao(self, registro: dict) -> None:

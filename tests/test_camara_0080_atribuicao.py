@@ -77,16 +77,19 @@ def test_atribuicao_carrega_o_hash_do_termo_vinculado_a_captura(tmp_path):
     ativar_home(home, tmp_path)
     estado = Estado(home)
     conteudo = hashlib.sha256(b"conteudo").hexdigest()
-    estado.registrar_obtencao({"url": "https://www2.camara.leg.br/x", "sha256": conteudo,
+    x, y, em = "https://www2.camara.leg.br/x", "https://www2.camara.leg.br/y", "2026-11-08T12:00:05+00:00"
+    estado.registrar_obtencao({"url": x, "sha256": conteudo, "capturado_em": em,
                                "politica_sha256": "a" * 64, "politica_obtida_em": "2026-11-08T12:00:00+00:00",
                                "em": "2026-11-08T12:00:10+00:00", "termo_sha256": TERMO_SHA})
-    assert atribuicao(home, sha256=conteudo, url="https://www2.camara.leg.br/x")["termo_sha256"] == TERMO_SHA
-    # o termo corrente do home NÃO substitui o vínculo: captura sem registro ou de outra URL não herda o hash
+    assert atribuicao(home, sha256=conteudo, url=x, fetched_at=em)["termo_sha256"] == TERMO_SHA
+    # o termo corrente do home NÃO substitui o vínculo: captura sem registro, de outra URL ou de outro instante não herda
     assert atribuicao(home)["termo_sha256"] is None
-    assert atribuicao(home, sha256=hashlib.sha256(b"outro").hexdigest())["termo_sha256"] is None
-    assert atribuicao(home, sha256=conteudo, url="https://www2.camara.leg.br/y")["termo_sha256"] is None
+    assert atribuicao(home, sha256=hashlib.sha256(b"outro").hexdigest(), url=x, fetched_at=em)["termo_sha256"] is None
+    assert atribuicao(home, sha256=conteudo, url=y, fetched_at=em)["termo_sha256"] is None
+    assert atribuicao(home, sha256=conteudo, url=x, fetched_at="2026-11-08T12:00:06+00:00")["termo_sha256"] is None
+    assert atribuicao(home, sha256=conteudo, url=x)["termo_sha256"] is None  # sem o instante não há captura identificada
     (home / "camara" / "termo" / f"{TERMO_SHA}.html").write_bytes(TERMO_HTML + b" adulterado")  # termo não confere
-    assert atribuicao(home, sha256=conteudo, url="https://www2.camara.leg.br/x")["termo_sha256"] is None
+    assert atribuicao(home, sha256=conteudo, url=x, fetched_at=em)["termo_sha256"] is None
 
 
 def test_origem_preservada_em_respostas_compostas_com_varias_fontes(verifica_populada, acervo):

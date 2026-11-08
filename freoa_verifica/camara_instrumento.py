@@ -184,7 +184,11 @@ def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
     """Obtém as normas do inventário pela cadeia de descoberta (busca → página → links publicados)."""
     relogio = relogio or Relogio()
     estado = Estado(home)
-    if ativ.ativacao(estado) is None:
+    try:
+        registrada = ativ.ativacao(estado) is not None
+    except OSError as exc:  # falha local ao ler a documentação: terminal, nunca pendência
+        return _falha_local(exc)
+    if not registrada:
         return _saida({}, falha=Unavailable("ativacao_ao_vivo_pendente"))
     try:
         normas = [_norma(i) for i in json.loads(Path(normas_arquivo).read_text("utf-8"))]

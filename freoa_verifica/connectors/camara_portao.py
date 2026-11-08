@@ -37,6 +37,7 @@ PREFIXOS = {"www.camara.leg.br": ("/legislacao", "/robots.txt"),
 PREFIXOS_TERMO = {"www2.camara.leg.br": (_TERMO_PATH,)}
 _LIMITE_BYTES = {"robots": 1024**2, "termo": 2 * 1024**2}
 _ROTA_ROBOTS = {"recurso": "robots", "mime": "text/plain"}
+_TENTATIVAS_DE_POLITICA = 4  # renovações/trocas de política durante as esperas de UMA emissão (limite de segurança)
 
 # Classes da tabela do §6, da mais específica à residual (precedência do item 3).
 A_HOST, TRES_XX, TRANSITORIA, ROBOTS, CORPO_MIME, RESIDUAL = (
@@ -137,15 +138,22 @@ class Portao:
         return falha
 
     def _exigir_ativacao(self) -> dict | None:
+        """Registro de ativação válido AGORA. Registro ausente ou inválido é pendência documental; falha local ao ler a
+        documentação (`EstadoIndisponivel`) NÃO é ausência: propaga e `_executar` a torna terminal (0081 r2, R2-3)."""
         if self.ativacao is None:
             return None
-        try:
-            registro = self.ativacao()
-        except (OSError, KeyError, TypeError, ValueError):
-            registro = None
+        registro = self.ativacao()
         if registro is None and self.exigir_ativacao:
             raise Unavailable("ativacao_ao_vivo_pendente")
         return registro
+
+    def checar_terminal(self) -> None:
+        """Levanta a falha local que já encerrou o escopo desta chamada ou sessão, se houve."""
+        self._checar_terminal(self._escopo())
+
+    def falha_local_de_estado(self, exc: BaseException) -> Unavailable:
+        """Falha local ao ler ou validar estado FORA de `obter` (criação do conector, por exemplo): encerra o escopo."""
+        return self._local("persistencia_local_falhou", exc)
 
     # --- API -------------------------------------------------------------------------------------------------
     def _executar(self, host: str, funcao):
@@ -154,9 +162,9 @@ class Portao:
         try:
             with self.estado.trava_do_host(host):
                 return funcao()
-        except EstadoIndisponivel as exc:
+        except (EstadoIndisponivel, OSError) as exc:
             raise self._local("persistencia_local_falhou", exc) from exc
-        except (KeyError, TypeError, ValueError) as exc:  # estrutura persistida ou interpretação local
+        except (LookupError, TypeError, ValueError, ArithmeticError) as exc:  # estrutura persistida ou interpretação local
             raise self._local("interpretacao_local_falhou", exc) from exc
 
     def obter(self, url: str):
@@ -217,9 +225,12 @@ class Portao:
         partes = urlsplit(url)
         caminho = partes.path + ("?" + partes.query if partes.query else "")
         self._decidir_caminho(host, politica, caminho, url, agora)
-        resp = self._emitir(url, rota, host)
+        # A política e a ativação do vínculo são as REVALIDADAS imediatamente antes da emissão (podem diferir das
+        # lidas acima se a espera atravessou o vencimento ou se a ativação mudou): R2-1 e R2-5.
+        resp, politica, ativacao = self._emitir(url, rota, host, politica=politica, caminho=caminho)
         self.politica_de[url] = politica["sha256"]
-        self.estado.registrar_obtencao({"url": url, "sha256": resp.sha256, "politica_sha256": politica["sha256"],
+        self.estado.registrar_obtencao({"url": url, "sha256": resp.sha256, "capturado_em": resp.fetched_at,
+                                        "politica_sha256": politica["sha256"],
                                         "politica_obtida_em": politica["obtido_em"], "em": iso(self.relogio.agora()),
                                         "termo_sha256": ativacao["termo_sha256"] if ativacao else None})
         return resp
@@ -303,7 +314,7 @@ class Portao:
         anterior = self.estado.politica(host)
         reaproveitada = self._em_cache(url)
         resp = self._emitir(url, _ROTA_ROBOTS, host,
-                            atraso=float(anterior.get("crawl_delay", 0)) if anterior else 0.0)
+                            atraso=self.estado.atraso_da_politica(anterior) if anterior else 0.0)[0]
         if reaproveitada:
             # Resposta reaproveitada da guarda NÃO é nova obtenção: vale pelo instante original, nunca renova.
             obtido = min(_de_iso(resp.fetched_at), self.relogio.agora())
@@ -337,11 +348,11 @@ class Portao:
         cabecalhos = {"\0user-agent-modo": "identified"}
         return guarda.em_cache("GET", url, None, cabecalhos)
 
-    def _atraso_do_host(self, host, atraso_extra: float | None = None) -> float:
-        if atraso_extra is not None:
-            return max(INTERVALO_MINIMO, atraso_extra)
-        registro = self.estado.politica(host)
-        return max(INTERVALO_MINIMO, float(registro.get("crawl_delay", 0)) if registro else 0.0)
+    def _atraso_do_host(self, politica: dict | None, atraso: float | None = None) -> float:
+        """`max(10 s, Crawl-delay)` com o atraso RECOMPUTADO dos bytes conferidos da política que autoriza a emissão (ou o
+        `atraso` da política anterior, na leitura de robots); nunca o campo declarado no recibo."""
+        base = self.estado.atraso_da_politica(politica) if politica is not None else (atraso or 0.0)
+        return max(INTERVALO_MINIMO, base)
 
     def _esperar(self, host, intervalo) -> None:
         """Espera o resto do intervalo medido pela marca persistida: vale o MENOR entre o decorrido monotônico e o
@@ -382,20 +393,63 @@ class Portao:
                 with escopo.trava:
                     escopo.usadas -= 1
 
-    def _emitir(self, url, rota, host, atraso: float | None = None):
+    def _reconfirmar(self, host, politica, caminho, url) -> dict | None:
+        """Imediatamente antes da emissão, sob a trava do host: a política vigente é lida de novo (integridade contra os
+        bytes preservados) e o caminho é decidido de novo. `None` = não há política válida (venceu na espera): precisa
+        ser renovada. Pode devolver política diferente da usada até aqui, caso em que o ritmo é recomputado."""
+        agora = self.relogio.agora()
+        vigente = self.estado.politica_valida(host, agora)
+        if vigente is None:
+            return None
+        self._decidir_caminho(host, vigente, caminho, url, agora)
+        return vigente
+
+    def _renovar(self, host, caminho, url) -> dict:
+        """Política vencida durante a espera: nova leitura do robots (com ritmo, tetos e ativação próprios) e nova decisão
+        do caminho; a recusa ou a inconclusão persistem o bloqueio como em qualquer leitura."""
+        agora = self.relogio.agora()
+        self._checar_bloqueios(host, url, agora)
+        politica = self._ler_robots(host, agora)[0]
+        self._decidir_caminho(host, politica, caminho, url, agora)
+        return politica
+
+    def _emitir(self, url, rota, host, atraso: float | None = None, *, politica: dict | None = None,
+                caminho: str | None = None):
+        """Uma única emissão. Devolve `(resposta, política, ativação)`: a política e a ativação com que a emissão foi
+        AUTORIZADA, revalidadas (validade, integridade, decisão do caminho e ativação) depois de toda espera e antes do
+        envio. Se a política venceu na espera, é renovada e o ritmo recomputado a partir dela (0080 §4.4, R2-1)."""
         recurso = rota["recurso"]
         escopo = self._escopo()
-        if not self._em_cache(url):
-            self._exigir_ativacao()
-            chamada = self._reservar(escopo)
-            try:
-                self._esperar(host, self._atraso_do_host(host, atraso))
-                self._checar_terminal(escopo)  # a espera pode ter durado: outra thread pode ter falhado localmente
+        cache = self._em_cache(url)
+        reservou = chamada = False
+        ativacao = None
+        try:
+            if not cache:
                 self._exigir_ativacao()
+                chamada, reservou = self._reservar(escopo), True
+            for _ in range(_TENTATIVAS_DE_POLITICA):
+                if not cache:
+                    self._esperar(host, self._atraso_do_host(politica, atraso))
+                    self._checar_terminal(escopo)  # a espera pode ter durado: outra thread pode ter falhado localmente
+                ativacao = self._exigir_ativacao()
+                if politica is not None:
+                    vigente = self._reconfirmar(host, politica, caminho, url)
+                    if vigente is None:
+                        politica = self._renovar(host, caminho, url)
+                        continue
+                    mudou = (vigente["sha256"], vigente["obtido_em"]) != (politica["sha256"], politica["obtido_em"])
+                    politica = vigente
+                    if mudou:
+                        continue
+                break
+            else:
+                raise Unavailable("politica_de_robots_nao_estabilizou")
+            if not cache:
                 self.estado.marcar_inicio(host, self.relogio.agora(), self.relogio.monotonic())
-            except BaseException:
+        except BaseException:
+            if reservou:
                 self._devolver(escopo, chamada)
-                raise
+            raise
         try:
             resp = self.transporte(
                 url, hosts=HOSTS, path_prefixes=PREFIXOS_TERMO if recurso == "termo" else PREFIXOS,
@@ -406,7 +460,7 @@ class Portao:
         invalida = self._resposta_invalida(resp, url, rota)
         if invalida is not None:
             raise self._registrar_falha(invalida, url, host, recurso) from None
-        return resp
+        return resp, politica, ativacao
 
     @staticmethod
     def _resposta_invalida(resp, url, rota) -> Unavailable | None:

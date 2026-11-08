@@ -306,7 +306,9 @@ def test_politica_persistida_cujo_corpo_nao_e_interpretavel_e_falha_local_tipada
     import hashlib
     corpo = b"isto nao e robots"
     registro = {**registro, "sha256": hashlib.sha256(corpo).hexdigest()}
-    estado.gravar_politica(WWW, registro, corpo)  # hash confere, mas o conteúdo não é interpretável
+    # adulteração local escrita POR BAIXO da validação: o hash confere, mas o conteúdo não é interpretável
+    estado._gravar_bytes(f"robots-{WWW}-{registro['sha256']}.txt", corpo)
+    estado._gravar(f"robots-{WWW}.json", registro)
     relogio.avancar(20)
     antes = list(t.urls)
     with pytest.raises(Unavailable, match="persistencia_local_falhou"):

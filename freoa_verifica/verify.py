@@ -265,12 +265,13 @@ def campos_evidencia(capture_id: str | None, sha256: str | None, url: str | None
     }
 
 
-def _atribuicao_camara(source_id, home, document, sha256=None, url=None) -> dict | None:
+def _atribuicao_camara(source_id, home, document, sha256=None, url=None, fetched_at=None) -> dict | None:
     """Atribuição do §7 da 0080 no caminho de captura viva, com o home de quem capturou e o vínculo da captura."""
     if source_id != "camara_legin":
         return None
     from freoa_verifica.connectors.camara_atribuicao import atribuicao, autoria_declarada
-    return atribuicao(home, autoria_declarada(getattr(document, "text", None)), sha256=sha256, url=url)
+    return atribuicao(home, autoria_declarada(getattr(document, "text", None)), sha256=sha256, url=url,
+                      fetched_at=fetched_at)
 
 
 def origem_camara(rw: ResolvedWork) -> bool:
@@ -1293,5 +1294,5 @@ def populate_from_parsed(
         # C6: a marca persistida da captura (a existente prevalece sobre a regravação idêntica).
         procedencia_tipo=(conn.execute("SELECT procedencia FROM capture WHERE id=?", (capture_id,)).fetchone()[0]
                           or "nao_identificado"),
-        atribuicao=_atribuicao_camara(source_id, home, document, digest, url),
+        atribuicao=_atribuicao_camara(source_id, home, document, digest, url, resp.fetched_at),
     )
