@@ -1353,8 +1353,8 @@ class Verifica:
             receipts = self.conn.execute(
                 "SELECT DISTINCT e.capture_id FROM redaction r JOIN provision p ON p.id=r.provision_id "
                 "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
-                "WHERE r.text=? AND p.path=?" + (" AND p.work_id=?" if work_row else ""),
-                (row["text"], row["path"]) + ((work_row["id"],) if work_row else ())).fetchall()
+                "WHERE r.text=? AND p.path=? AND (? IS NULL OR p.work_id=?)",
+                (row["text"], row["path"], work_row and work_row["id"], work_row and work_row["id"])).fetchall()
             rebaixo = None
             try:
                 if not receipts:

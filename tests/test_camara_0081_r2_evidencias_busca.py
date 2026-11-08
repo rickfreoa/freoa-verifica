@@ -13,16 +13,15 @@ import pytest
 from freoa_verifica import camara_instrumento as ci
 from freoa_verifica import snapshot as snapshot_mod
 from freoa_verifica.connectors import camara_evidencias as ev
-from freoa_verifica.connectors.camara_estado import Estado, _de_iso
-from freoa_verifica.connectors.camara_policy import TERMO_URL
+from freoa_verifica.connectors.camara_estado import Estado
 from freoa_verifica.connectors.camara_legin import inventario
 from freoa_verifica.service import Verifica
 from freoa_verifica.store import repo
-from tests._camara_util import FETCHED_PADRAO, LEI, TERMO_HTML, Transporte, barreira, da_fixture, obter_vinculado, resposta
+from tests._camara_util import LEI, Transporte, barreira, da_fixture, obter_vinculado, resposta
 from tests.test_camara_0080_atribuicao import (ART, TERMO_SHA, acervo, ativar_home, esperada, exportar,  # noqa: F401
                                                refazer_checksums)
-from tests.test_camara_0081_atribuicao_inventario_snapshot import (CAP_EM, TERMO2, _empacotar, _guardar_termo2, _registro,
-                                                                    ativar_com, normas_em, rotas_da_fixture)
+from tests.test_camara_0081_atribuicao_inventario_snapshot import (_empacotar, _guardar_termo2, _registro, ativar_com,
+                                                                    normas_em, rotas_da_fixture)
 from tests.test_camara_legin import ATUAL, ORIGINAL, servidor  # noqa: F401
 
 WWW, WWW2 = "www.camara.leg.br", "www2.camara.leg.br"
@@ -408,5 +407,5 @@ def test_r28_unidade_seguinte_nunca_herda_paginas_exclusivas_da_anterior(tmp_pat
 def test_r28_o_mutante_sem_zeragem_e_morto_exatamente_por_este_teste(tmp_path, monkeypatch):
     monkeypatch.setattr(ci, "_zerar", lambda con: None)  # o mutante: nada é zerado entre as unidades
     vistas = _inventario_de_duas_normas(tmp_path, monkeypatch)
-    primeira, segunda = vistas[0][1], vistas[1][1]
+    segunda = vistas[1][1]
     assert {ATUAL, ORIGINAL, LEI} & segunda  # sem zerar, a segunda herda as páginas da primeira: a regressão acima falharia
