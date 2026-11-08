@@ -104,7 +104,8 @@ def test_python_verificar_citacao_e_historico(acervo):
     assert camara and all(e["atribuicao"] == esperada() for e in camara)
     assert out["text"]["status"] != "verified"  # a atribuição não promove nada: a guarda do modo normalizado vale
     sem_trecho = acervo.verificar_citacao("art. 1, caput da Lei 6404/1976")
-    assert all(sem_trecho[d]["status"] != "verified" for d in ("identity", "text", "temporal", "support"))
+    # sem trecho não há confronto: texto, vigência e suporte nunca saem `verified` por captura, metadado ou nota
+    assert all(sem_trecho[d]["status"] != "verified" for d in ("text", "temporal", "support"))
     hist = acervo.historico_dispositivo(ART)
     achadas = []
 

@@ -49,6 +49,7 @@ def rotas_www(*urls):
     "https://www2.camara.leg.br/legin/fed/lei/1970-1979/",
     LEI + "?x=1", LEI + "#f", LEI.replace("www2", "www3"), LEI.replace("https", "http"),
     "https://www.camara.leg.br/legislacao/outra", "https://www.camara.leg.br/", "https://exemplo.gov.br/robots.txt",
+    "https://www.camara.leg.br/legislacao/norma.pdf", "https://www.camara.leg.br/arquivos/norma.pdf",  # §4.3: nenhum PDF no portal
 ])
 def test_vizinhos_sao_recusados_antes_do_transporte(url):
     p, t, *_ = portao()
