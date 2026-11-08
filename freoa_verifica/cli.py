@@ -235,7 +235,9 @@ def build_parser() -> argparse.ArgumentParser:
     fase.add_argument("--capturar", action="store_true", help="etapas 1-2: robots e termo (exceção administrativa)")
     fase.add_argument("--registrar", action="store_true", help="etapas 3-4: confere a revisão do auditor e ativa")
     pa.add_argument("--revisao", metavar="ARQ", help="arquivo de revisão do auditor (com o hash do termo conferido)")
-    pa.add_argument("--reserva", action="store_true", help="saída sem URL, identificação ou hash individual (D6)")
+    pa.add_argument("--reserva", action="store_true", help="modo reserva (D6): nada em stdout, stderr ou código de saída")
+    pa.add_argument("--saida-privada", dest="saida_privada", metavar="ARQ",
+                    help="arquivo do guardião que recebe o resultado integral no modo reserva")
     pr = cam.add_parser("reabrir", help="reabertura registrada de host (decisão) ou de recurso (revisão)")
     pr.add_argument("--host")
     pr.add_argument("--decisao", help="identificador da decisão que reabre o host")
@@ -244,10 +246,14 @@ def build_parser() -> argparse.ArgumentParser:
     pi = cam.add_parser("inventariar", help="obtém normas (espécie, número, ano) pela cadeia de descoberta")
     pi.add_argument("normas", help="JSON: [{\"kind\": \"lei\", \"number\": \"6404\", \"year\": 1976}]")
     pi.add_argument("--destino", required=True)
-    pi.add_argument("--reserva", action="store_true", help="saída sem URL, identificação ou hash individual (D6)")
+    pi.add_argument("--reserva", action="store_true", help="modo reserva (D6): nada em stdout, stderr ou código de saída")
+    pi.add_argument("--saida-privada", dest="saida_privada", metavar="ARQ",
+                    help="arquivo do guardião que recebe o resultado integral no modo reserva")
     pi.add_argument("--chave-hmac", dest="chave_hmac", metavar="ARQ", help="chave de 256 bits do guardião (compromisso HMAC)")
     pe = cam.add_parser("estado", help="ativação, bloqueios e política de robots vigentes")
-    pe.add_argument("--reserva", action="store_true")
+    pe.add_argument("--reserva", action="store_true", help="modo reserva (D6): nada em stdout, stderr ou código de saída")
+    pe.add_argument("--saida-privada", dest="saida_privada", metavar="ARQ",
+                    help="arquivo do guardião que recebe o resultado integral no modo reserva")
 
     return parser
 
@@ -267,6 +273,9 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "camara":
         from freoa_verifica.camara_instrumento import executar
+
+        if getattr(args, "reserva", False) and not getattr(args, "saida_privada", None):
+            parser.error("--reserva exige --saida-privada (o resultado integral vai só ao arquivo do guardião)")
 
         raise SystemExit(executar(args))
 

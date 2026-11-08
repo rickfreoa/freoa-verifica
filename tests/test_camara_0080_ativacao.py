@@ -123,9 +123,9 @@ def test_termo_nao_preservado_impede_a_ativacao_e_a_invalida_depois(tmp_path):
     arquivo = tmp_path / "home" / "camara" / "termo" / f"{pre['termo_sha256']}.html"
     arquivo.unlink()  # termo capturado mas não preservado
     with pytest.raises(Unavailable, match="termo_revisado_difere_do_preservado"):
-        ativ.registrar(estado, revisao_arquivo(tmp_path, pre["termo_sha256"]))
+        ativ.registrar(estado, revisao_arquivo(tmp_path, pre["termo_sha256"]), relogio)
     arquivo.write_bytes(TERMO_HTML)
-    registro = ativ.registrar(estado, revisao_arquivo(tmp_path, pre["termo_sha256"]))
+    registro = ativ.registrar(estado, revisao_arquivo(tmp_path, pre["termo_sha256"]), relogio)
     assert ativ.ativacao(estado) == registro
     arquivo.write_bytes(TERMO_HTML + b" adulterado")  # bytes preservados que não conferem com o hash
     assert ativ.ativacao(estado) is None
@@ -137,7 +137,7 @@ def test_robots_que_mudou_depois_da_captura_exige_refazer(tmp_path):
     relogio.avancar(25 * 3600)
     p.garantir_politica("www2.camara.leg.br")  # releitura com outro conteúdo
     with pytest.raises(Unavailable, match="robots_mudou_desde_a_captura"):
-        ativ.registrar(estado, revisao_arquivo(tmp_path, pre["termo_sha256"]))
+        ativ.registrar(estado, revisao_arquivo(tmp_path, pre["termo_sha256"]), relogio)
 
 
 def test_registro_valido_grava_hashes_versao_instante_e_revisao(tmp_path):
@@ -264,27 +264,55 @@ def test_reabertura_registrada_pelo_comando(tmp_path):
 PADRAO_PROIBIDO = re.compile(r"camara\.leg\.br|https?://|[0-9a-f]{64}|6404|1976|lei", re.I)
 
 
-def test_modo_reserva_nao_emite_url_identificacao_nem_hash_individual(tmp_path):
-    relogio = RelogioFalso()
-    t = Transporte(relogio, {TERMO_URL: barreira("http_403", "recusa_identificado", 403)})
-    codigo, saida = rodar(["ativar", "--capturar", "--reserva"], tmp_path, t, relogio)
-    assert codigo == 1 and json.loads(saida) == {"resultado": "falha", "classe": "barreira"}
-    assert not PADRAO_PROIBIDO.search(saida)
-    ok = Transporte(RelogioFalso())
-    codigo, saida = rodar(["ativar", "--capturar", "--reserva"], tmp_path / "outro", ok, ok.relogio)
-    assert codigo == 0 and json.loads(saida) == {"resultado": "ok"} and not PADRAO_PROIBIDO.search(saida)
-    codigo, saida = rodar(["estado", "--reserva"], tmp_path / "outro", ok, ok.relogio)
-    assert not PADRAO_PROIBIDO.search(saida)
+def rodar_reserva(args, tmp_path, transporte, relogio, capsys, privado="privado.json"):
+    """Executa em `--reserva`; devolve (código, stdout, stderr, conteúdo do arquivo privado do guardião)."""
+    destino = tmp_path / privado
+    parsed = build_parser().parse_args(["--home", str(tmp_path / "home"), "camara", *args, "--reserva",
+                                        "--saida-privada", str(destino)])
+    capsys.readouterr()
+    codigo = ci.executar(parsed, transporte=transporte, relogio=relogio)
+    visto = capsys.readouterr()
+    return codigo, visto.out, visto.err, json.loads(destino.read_text("utf-8")) if destino.exists() else None
 
 
-def test_modo_comum_traz_o_diagnostico_e_o_modo_reserva_o_suprime(tmp_path):
+def test_modo_reserva_nao_comunica_predicado_operacional_por_nenhum_canal(tmp_path, capsys):
+    """D6 (0080 §8.3): nem ok/falha, nem classe, nem ativação, nem bloqueio em stdout, stderr ou código de saída;
+    falha e sucesso são indistinguíveis por esses canais."""
+    relogio = RelogioFalso()
+    falha_t = Transporte(relogio, {TERMO_URL: barreira("http_403", "recusa_identificado", 403)})
+    ok_t = Transporte(RelogioFalso())
+    r_falha = rodar_reserva(["ativar", "--capturar"], tmp_path / "f", falha_t, relogio, capsys)
+    r_ok = rodar_reserva(["ativar", "--capturar"], tmp_path / "o", ok_t, ok_t.relogio, capsys)
+    assert r_falha[:3] == r_ok[:3] == (0, "", "")  # código, stdout e stderr idênticos para falha e sucesso
+    assert r_falha[3]["resultado"] == "falha" and r_ok[3]["resultado"] == "ok"  # o guardião recebe o integral
+    estado = rodar_reserva(["estado"], tmp_path / "o", ok_t, ok_t.relogio, capsys)
+    registrar = rodar_reserva(["ativar", "--registrar"], tmp_path / "o", ok_t, ok_t.relogio, capsys)
+    assert estado[:3] == registrar[:3] == (0, "", "")
+    assert "ativacao" in estado[3] and registrar[3]["resultado"] == "falha"
+
+
+def test_modo_reserva_contem_falhas_inesperadas_sem_caminho_nem_traceback(tmp_path, monkeypatch, capsys):
+    def explode(*a, **k):
+        raise OSError(f"{tmp_path}/lei-6404-1976 inacessivel")
+    monkeypatch.setattr(ci, "ativar", explode)
+    relogio = RelogioFalso()
+    r = rodar_reserva(["ativar", "--capturar"], tmp_path, Transporte(relogio), relogio, capsys)
+    assert r[:3] == (0, "", "")
+    assert "6404" not in json.dumps(r[3]) and str(tmp_path) not in json.dumps(r[3])  # só o tipo, nunca o caminho
+
+
+def test_modo_reserva_sem_saida_privada_e_recusado_pelo_cli():
+    from freoa_verifica.cli import main
+    with pytest.raises(SystemExit) as erro:
+        main(["camara", "estado", "--reserva"])
+    assert erro.value.code == 2
+
+
+def test_modo_comum_traz_o_diagnostico(tmp_path):
     relogio = RelogioFalso()
     t = Transporte(relogio, {TERMO_URL: barreira("http_403", "recusa_identificado", 403)})
-    _, comum = rodar(["ativar", "--capturar"], tmp_path / "a", t, relogio)
-    assert "http_403" in comum and "camara.leg.br" in comum
-    t2 = Transporte(RelogioFalso(), {TERMO_URL: barreira("http_403", "recusa_identificado", 403)})
-    _, reserva = rodar(["ativar", "--capturar", "--reserva"], tmp_path / "b", t2, t2.relogio)
-    assert "http_403" not in reserva and "camara.leg.br" not in reserva
+    codigo, comum = rodar(["ativar", "--capturar"], tmp_path / "a", t, relogio)
+    assert codigo == 1 and "http_403" in comum and "camara.leg.br" in comum
 
 
 @pytest.mark.parametrize("item", [
@@ -348,29 +376,45 @@ def test_inventario_pela_cadeia_de_descoberta_preserva_origem_e_gera_hmac(tmp_pa
     assert all(u in respostas for u in chamadas)
 
 
-def test_inventario_reserva_nao_imprime_url_identificacao_nem_hash(tmp_path, monkeypatch, proibir_rede):
+def test_inventario_reserva_nao_comunica_nada_e_o_integral_vai_ao_arquivo_privado(tmp_path, monkeypatch, proibir_rede,
+                                                                                     capsys):
     home, relogio, respostas, chamadas = ativado(tmp_path, monkeypatch)
     normas = tmp_path / "normas.json"
     normas.write_text(json.dumps([{"kind": "lei", "number": "6404", "year": 1976}]))
     chave = tmp_path / "chave.bin"
     chave.write_bytes(bytes(range(32)))
-    out = ci.inventariar(home, normas, tmp_path / "reserva", relogio=relogio, reserva=True, chave_hmac=chave)
-    assert out == {"resultado": "ok"}
-    assert (tmp_path / "reserva" / "compromisso.json").exists()  # compromisso fica com o guardião, não na saída
+    capsys.readouterr()
+    parsed = build_parser().parse_args(["--home", str(home), "camara", "inventariar", str(normas), "--destino",
+                                        str(tmp_path / "reserva"), "--chave-hmac", str(chave), "--reserva",
+                                        "--saida-privada", str(tmp_path / "guardiao.json")])
+    assert ci.executar(parsed, relogio=relogio) == 0
+    visto = capsys.readouterr()
+    assert (visto.out, visto.err) == ("", "")
+    assert json.loads((tmp_path / "guardiao.json").read_text("utf-8"))["resultado"] == "ok"
+    assert (tmp_path / "reserva" / "compromisso.json").exists()  # compromisso fica com o guardião
     curta = tmp_path / "curta.bin"
     curta.write_bytes(b"x" * 8)
-    falha = ci.inventariar(home, normas, tmp_path / "r2", relogio=relogio, reserva=True, chave_hmac=curta)
-    assert set(falha) <= {"resultado", "classe"} and falha["resultado"] == "falha"
-    assert not PADRAO_PROIBIDO.search(json.dumps(falha))
+    parsed = build_parser().parse_args(["--home", str(home), "camara", "inventariar", str(normas), "--destino",
+                                        str(tmp_path / "r2"), "--chave-hmac", str(curta), "--reserva",
+                                        "--saida-privada", str(tmp_path / "guardiao2.json")])
+    assert ci.executar(parsed, relogio=relogio) == 0  # falha também com o mesmo código
+    visto = capsys.readouterr()
+    assert (visto.out, visto.err) == ("", "")
+    assert json.loads((tmp_path / "guardiao2.json").read_text("utf-8"))["resultado"] == "falha"
 
 
 # --- testes causais (§9): a proteção removida tem de fazer o teste correspondente falhar ----------------------------------
+VIZINHOS = ("https://www2.camara.leg.br/termo-de-uso-e-politica-de-privacidade", TERMO_URL + "?x=1", TERMO_URL + "/")
+FALHA_DO_TESTE = pytest.fail.Exception  # `pytest.raises(Unavailable)` que não vê a exceção: a asserção do teste em si
+
+
 def _admissao_do_termo():
-    p, t, *_ = portao()
-    for url in ("https://www2.camara.leg.br/termo-de-uso-e-politica-de-privacidade",
-                TERMO_URL + "?x=1", TERMO_URL + "/"):
-        with pytest.raises(Unavailable):
+    """Os vizinhos do termo têm resposta válida no dublê: sem a recusa o portão emitiria e `raises` falharia."""
+    p, t, *_ = portao(rotas={u: resposta(u, b"<html>x</html>") for u in VIZINHOS})
+    for url in VIZINHOS:
+        with pytest.raises(Unavailable) as erro:
             p.obter(url)
+        assert erro.value.reason in {"termo_url_nao_admitida", "rota_camara_nao_admitida", "url_camara_invalida"}
     assert t.chamadas == []
 
 
@@ -378,9 +422,8 @@ def test_causal_liberar_caminho_vedado_quebra_a_admissao(monkeypatch):
     _admissao_do_termo()
     from freoa_verifica.connectors import camara_portao as cp
     monkeypatch.setattr(cp, "validar_termo", lambda url: {"recurso": "termo", "mime": "text/html"})
-    with pytest.raises((AssertionError, Exception)) as erro:
+    with pytest.raises(FALHA_DO_TESTE):  # a falha é a do predicado de admissão, não de um dublê sem rota
         _admissao_do_termo()
-    assert erro.type is not None
 
 
 def _ritmo():
@@ -402,10 +445,35 @@ def test_causal_aceitar_termo_nao_preservado_quebra_a_ativacao(tmp_path, monkeyp
     p, t, relogio, estado, pre = capturado(tmp_path)
     (tmp_path / "home" / "camara" / "termo" / f"{pre['termo_sha256']}.html").unlink()
     arquivo = revisao_arquivo(tmp_path, pre["termo_sha256"])
-    with pytest.raises(Unavailable):
-        ativ.registrar(estado, arquivo)
-    monkeypatch.setattr(Estado, "termo_preservado", lambda self, digest: {"sha256": digest})
-    assert ativ.registrar(estado, arquivo)  # com a proteção removida a ativação passaria: o teste acima falharia
+    with pytest.raises(Unavailable, match="termo_revisado_difere_do_preservado"):
+        ativ.registrar(estado, arquivo, relogio)
+    www2 = pre["robots_sha256"]["www2.camara.leg.br"]
+    monkeypatch.setattr(Estado, "termo_preservado", lambda self, digest: {"sha256": digest, "politica_robots_sha256": www2})
+    assert ativ.registrar(estado, arquivo, relogio)  # com a proteção removida a ativação passaria: o teste acima falharia
+
+
+DESTINO_3XX = "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html"
+
+
+def _redireciona():
+    from dataclasses import replace
+    return replace(resposta(BUSCA, b"x"), status=302, redirects=[DESTINO_3XX], final_url=DESTINO_3XX)
+
+
+def test_3xx_nunca_e_seguido_e_nenhum_destino_e_emitido():
+    p, t, *_ = portao(rotas={BUSCA: _redireciona(), DESTINO_3XX: resposta(DESTINO_3XX, b"<html>destino</html>")})
+    with pytest.raises(Unavailable) as erro:
+        p.obter(BUSCA)
+    assert erro.value.evidencia["bloqueio"] == "redirecionamento"
+    assert DESTINO_3XX not in t.urls  # nenhum destino de redirecionamento é obtido, ainda que do mesmo host
+
+
+def test_causal_aceitar_3xx_como_resposta_quebra_a_regra(monkeypatch):
+    monkeypatch.setattr(Portao, "_resposta_invalida", staticmethod(lambda resp, url, rota: None))
+    p, t, *_ = portao(rotas={BUSCA: _redireciona()})
+    with pytest.raises(FALHA_DO_TESTE):  # sem a classificação do 3xx o portão entrega a resposta
+        with pytest.raises(Unavailable):
+            p.obter(BUSCA)
 
 
 def test_causal_seguir_redirecionamento_quebra_a_regra_do_transporte(monkeypatch):
@@ -413,23 +481,28 @@ def test_causal_seguir_redirecionamento_quebra_a_regra_do_transporte(monkeypatch
     p.obter(BUSCA)
     original = Portao._emitir
 
-    def com_redirecionamento(self, url, rota, host, politica, atraso=None):
+    def com_redirecionamento(self, url, rota, host, atraso=None):
         self_transporte = self.transporte
         self.transporte = lambda u, **kw: self_transporte(u, **{**kw, "max_redirects": 3})
-        return original(self, url, rota, host, politica, atraso)
+        return original(self, url, rota, host, atraso)
 
     monkeypatch.setattr(Portao, "_emitir", com_redirecionamento)
     p2, t2, *_ = portao(rotas={BUSCA: resposta(BUSCA, b"x")})
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="repetição e redirecionamento"):
         p2.obter(BUSCA)
 
 
-def test_causal_expor_diagnostico_da_reserva_quebra_o_d6(tmp_path, monkeypatch):
+def test_causal_expor_ok_ou_falha_da_reserva_quebra_o_d6(tmp_path, monkeypatch, capsys):
     t = Transporte(RelogioFalso(), {TERMO_URL: barreira("http_403", "recusa_identificado", 403)})
-    _, saida = rodar(["ativar", "--capturar", "--reserva"], tmp_path / "a", t, t.relogio)
-    assert not PADRAO_PROIBIDO.search(saida)
-    monkeypatch.setattr(ci, "_saida", lambda dados, *, reserva, falha=None: {"resultado": "falha", "motivo": falha.reason,
-                                                                          "evidencia": falha.evidencia})
+    r = rodar_reserva(["ativar", "--capturar"], tmp_path / "a", t, t.relogio, capsys)
+    assert r[:3] == (0, "", "")
+    original = ci._executar_reserva
+
+    def vaza(args, transporte, relogio):  # variante defeituosa: devolve o predicado operacional como código de saída
+        original(args, transporte, relogio)
+        return 1
+
+    monkeypatch.setattr(ci, "_executar_reserva", vaza)
     t2 = Transporte(RelogioFalso(), {TERMO_URL: barreira("http_403", "recusa_identificado", 403)})
-    _, vazada = rodar(["ativar", "--capturar", "--reserva"], tmp_path / "b", t2, t2.relogio)
-    assert "http_403" in vazada  # com a proteção removida o diagnóstico vaza: o teste D6 acima falharia
+    r2 = rodar_reserva(["ativar", "--capturar"], tmp_path / "b", t2, t2.relogio, capsys)
+    assert r2[0] == 1  # com a proteção removida o canal do código de saída vazaria: o teste D6 acima falharia
