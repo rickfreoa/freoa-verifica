@@ -16,7 +16,7 @@ from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel
 from freoa_verifica.connectors.camara_policy import TERMO_URL
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.service import Verifica
-from tests._camara_util import (FETCHED_PADRAO, LEI, TERMO_HTML, RelogioFalso, Transporte, barreira, da_fixture,
+from tests._camara_util import (BUSCA, FETCHED_PADRAO, LEI, TERMO_HTML, RelogioFalso, Transporte, barreira, da_fixture,
                                 obter_vinculado, portao, resposta)
 from tests.test_camara_0080_atribuicao import (ART, TERMO_SHA, acervo, ativar_home, esperada, exportar,  # noqa: F401
                                                refazer_checksums)
@@ -155,7 +155,7 @@ def test_inventario_so_obtem_com_a_ativacao_revalidada_a_cada_obtencao(tmp_path)
     relogio.sleep = dormir_e_perder
     out = ci.inventariar(home, normas_em(tmp_path), tmp_path / "saida", transporte=t2, relogio=relogio)
     assert out["resultado"] == "parcial" and out["obtidas"] == 0
-    assert t2.urls == ["https://www.camara.leg.br/robots.txt"]  # só o robots saiu; a perda na espera impediu o resto
+    assert t2.urls == [BUSCA]  # só a busca saiu; a ativação se perdeu na espera da página seguinte e nada mais foi emitido
 
 
 # --- achado 8: atribuição por captura em todas as entregas de texto ---------------------------------------------------------
