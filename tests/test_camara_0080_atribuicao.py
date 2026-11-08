@@ -6,6 +6,7 @@ o termo usado na ativação é o corpo sintético de `tests/_camara_util.py`.
 import copy
 import hashlib
 import json
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
@@ -71,9 +72,21 @@ def test_autoria_so_se_o_proprio_documento_declara(texto, autoria):
     assert autoria_declarada(texto) == autoria
 
 
-def test_atribuicao_carrega_o_hash_do_termo_da_ativacao(tmp_path):
-    ativar_home(tmp_path / "h", tmp_path)
-    assert atribuicao(tmp_path / "h")["termo_sha256"] == TERMO_SHA
+def test_atribuicao_carrega_o_hash_do_termo_vinculado_a_captura(tmp_path):
+    home = tmp_path / "h"
+    ativar_home(home, tmp_path)
+    estado = Estado(home)
+    conteudo = hashlib.sha256(b"conteudo").hexdigest()
+    estado.registrar_obtencao({"url": "https://www2.camara.leg.br/x", "sha256": conteudo,
+                               "politica_sha256": "a" * 64, "politica_obtida_em": "2026-11-08T12:00:00+00:00",
+                               "em": "2026-11-08T12:00:10+00:00", "termo_sha256": TERMO_SHA})
+    assert atribuicao(home, sha256=conteudo, url="https://www2.camara.leg.br/x")["termo_sha256"] == TERMO_SHA
+    # o termo corrente do home NÃO substitui o vínculo: captura sem registro ou de outra URL não herda o hash
+    assert atribuicao(home)["termo_sha256"] is None
+    assert atribuicao(home, sha256=hashlib.sha256(b"outro").hexdigest())["termo_sha256"] is None
+    assert atribuicao(home, sha256=conteudo, url="https://www2.camara.leg.br/y")["termo_sha256"] is None
+    (home / "camara" / "termo" / f"{TERMO_SHA}.html").write_bytes(TERMO_HTML + b" adulterado")  # termo não confere
+    assert atribuicao(home, sha256=conteudo, url="https://www2.camara.leg.br/x")["termo_sha256"] is None
 
 
 def test_origem_preservada_em_respostas_compostas_com_varias_fontes(verifica_populada, acervo):
@@ -210,7 +223,9 @@ def test_snapshot_instala_offline_preserva_captured_at_e_a_atribuicao(acervo, tm
     antes = acervo.obter_dispositivo(ART, versao="publicacao_original")
     pasta = exportar(acervo, tmp_path / "snap")
     manifesto = json.loads((pasta / "MANIFEST.json").read_text("utf-8"))
-    assert manifesto["camara_termo"] == {"termo_url": TERMO_URL, "termo_sha256": TERMO_SHA}
+    assert manifesto["camara_evidencias"]["termos"] == [TERMO_SHA]
+    assert "camara/obtencoes.jsonl" in manifesto["camara_evidencias"]["arquivos"]
+    assert all(a in manifesto["arquivos_sha256"] for a in manifesto["camara_evidencias"]["arquivos"])
     monkeypatch.setenv("FV_OFFLINE", "1")
     novo = Verifica(home=tmp_path / "instalado")
     try:
@@ -229,8 +244,9 @@ def test_snapshot_instala_offline_preserva_captured_at_e_a_atribuicao(acervo, tm
         from freoa_verifica.connectors.camara_ativacao import ativacao
         assert ativacao(Estado(novo.home)) is None and novo._get("camara_legin").health().probes[0].detail == \
             "ativacao_ao_vivo_pendente"
-        matriz = json.loads((Path(__file__).resolve().parents[1] / "freoa_verifica" / "data" / "qualificacao.json").read_text("utf-8"))
-        rotas = json.loads((Path(__file__).resolve().parents[1] / "freoa_verifica" / "data" / "qualificacao_rotas.json").read_text("utf-8"))
+        pacote = files("freoa_verifica")  # recurso do pacote: vale no checkout e na wheel instalada
+        matriz = json.loads(pacote.joinpath("data/qualificacao.json").read_text(encoding="utf-8"))
+        rotas = json.loads(pacote.joinpath("data/qualificacao_rotas.json").read_text(encoding="utf-8"))
         assert {e["estado"] for e in matriz} == {"nao_apurada"} and '"aprovada"' not in json.dumps(rotas)
     finally:
         novo.close()
@@ -252,16 +268,44 @@ def test_snapshot_com_blob_adulterado_e_recusado(acervo, tmp_path, monkeypatch):
         novo.close()
 
 
+def refazer_checksums(pasta: Path) -> None:
+    """Adversário que adultera um arquivo e refaz o inventário, o SHA256SUMS e o MANIFEST.sha256."""
+    manifesto = json.loads((pasta / "MANIFEST.json").read_text("utf-8"))
+    for nome in manifesto["arquivos_sha256"]:
+        manifesto["arquivos_sha256"][nome] = hashlib.sha256((pasta / nome).read_bytes()).hexdigest()
+    bruto = json.dumps(manifesto, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    (pasta / "MANIFEST.json").write_bytes(bruto)
+    resumo = hashlib.sha256(bruto).hexdigest()
+    (pasta / "MANIFEST.sha256").write_bytes((resumo + "\n").encode("ascii"))
+    soma = {**manifesto["arquivos_sha256"], "MANIFEST.json": resumo}
+    (pasta / "SHA256SUMS").write_bytes(("\n".join(f"{h}  {n}" for n, h in sorted(soma.items())) + "\n").encode("utf-8"))
+
+
+def test_snapshot_com_evidencia_administrativa_adulterada_e_checksums_refeitos_e_recusado(acervo, tmp_path, monkeypatch):
+    pasta = exportar(acervo, tmp_path / "snap")
+    termo = pasta / "camara" / "termo" / f"{TERMO_SHA}.html"
+    termo.write_bytes(TERMO_HTML + b" adulterado")
+    refazer_checksums(pasta)
+    monkeypatch.setenv("FV_OFFLINE", "1")
+    novo = Verifica(home=tmp_path / "instalado")
+    try:
+        r = novo.snapshot_install(pasta, aceitar_nao_vinculado=True)
+        assert r["status"] != "ok" and "camara_evidencia_hash_diverge" in r["motivo"]
+        assert not (Path(novo.home) / "camara" / "termo").exists()  # nada foi instalado
+    finally:
+        novo.close()
+
+
 def test_snapshot_com_manifesto_adulterado_e_recusado(acervo, tmp_path, monkeypatch):
     pasta = exportar(acervo, tmp_path / "snap")
     manifesto = json.loads((pasta / "MANIFEST.json").read_text("utf-8"))
-    manifesto["camara_termo"]["termo_sha256"] = "0" * 64  # tentativa de trocar o termo declarado
+    manifesto["camara_evidencias"]["termos"] = ["0" * 64]  # tentativa de trocar o termo declarado
     (pasta / "MANIFEST.json").write_text(json.dumps(manifesto, ensure_ascii=False, indent=2, sort_keys=True), "utf-8")
     monkeypatch.setenv("FV_OFFLINE", "1")
     novo = Verifica(home=tmp_path / "instalado")
     try:
         assert novo.snapshot_install(pasta, aceitar_nao_vinculado=True)["status"] != "ok"
-        assert not (Path(novo.home) / "camara" / "termo-de-snapshot.json").exists()
+        assert not (Path(novo.home) / "camara" / "termo").exists()
     finally:
         novo.close()
 

@@ -446,6 +446,14 @@ def export_snapshot(
             rel = f.relative_to(destino).as_posix()
             file_hashes[rel] = _sha256_file(f)
 
+    from freoa_verifica.connectors import camara_evidencias
+
+    try:  # termo, revisão, política, obtenções e ativação como evidência (0080 §8.4): viajam sob o inventário de hashes
+        camara_hashes, camara_entrada = camara_evidencias.exportar(home, destino)
+    except camara_evidencias.EvidenciaInvalida as exc:
+        return {"status": "erro", "motivo": str(exc)}
+    file_hashes.update(camara_hashes)
+
     manifest = {
         "formato": "freoa-verifica-snapshot-1",
         "gerado_em": _now(),
@@ -468,7 +476,7 @@ def export_snapshot(
         "parser_version_por_capture": _parser_versions(conn),
         "cobertura_por_fonte": _cobertura(conn),
         "atribuicoes": atrib,
-        **_termo_camara_do_home(home),
+        **({"camara_evidencias": camara_entrada} if camara_entrada else {}),
         "licenca_metadados": "CC-BY-4.0",
         "autenticidade": AUTHENTICITY_NOTE,
         "arquivos_sha256": file_hashes,
@@ -497,26 +505,6 @@ def export_snapshot(
         "blobs_completos": blobs_completos,
         "autenticidade": AUTHENTICITY_NOTE,
     }
-
-
-def _termo_camara_do_home(home: Path) -> dict[str, Any]:
-    """Hash do termo da Câmara capturado na ativação deste home (0080 §7): viaja no manifesto, que o SHA256SUMS cobre."""
-    from freoa_verifica.connectors.camara_ativacao import atribuicao_do_termo
-    from freoa_verifica.connectors.camara_estado import Estado
-
-    url, digest = atribuicao_do_termo(Estado(home))
-    return {"camara_termo": {"termo_url": url, "termo_sha256": digest}} if digest else {}
-
-
-def _gravar_termo_camara(home: Path, manifest: dict[str, Any]) -> None:
-    """Registra no home instalado o termo declarado pelo manifesto já conferido; sem ele, não grava nada."""
-    from freoa_verifica.connectors.camara_estado import Estado, sha256 as _sha  # noqa: F401
-    from freoa_verifica.connectors.camara_policy import TERMO_URL
-
-    termo = manifest.get("camara_termo")
-    if (isinstance(termo, dict) and termo.get("termo_url") == TERMO_URL and isinstance(termo.get("termo_sha256"), str)
-            and re.fullmatch(r"[0-9a-f]{64}", termo["termo_sha256"])):
-        Estado(home)._gravar("termo-de-snapshot.json", {"termo_url": TERMO_URL, "termo_sha256": termo["termo_sha256"]})
 
 
 def _find_db(origem: Path, manifest: dict[str, Any]) -> Path:
@@ -1007,6 +995,12 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
     sum_err = _verify_sums(origem, manifest)
     if sum_err:
         return {"status": "erro", "motivo": sum_err}
+    from freoa_verifica.connectors import camara_evidencias
+
+    try:  # evidência administrativa da Câmara conferida ANTES de qualquer mudança no home (0080 §8.4)
+        camara_arquivos = camara_evidencias.preparar(origem, manifest)
+    except (camara_evidencias.EvidenciaInvalida, OSError) as exc:
+        return {"status": "erro", "motivo": str(exc)[:200] or "camara_evidencia_ilegivel"}
 
     local_schema = sorted(
         r[0] for r in svc.conn.execute("SELECT version FROM schema_version").fetchall()
@@ -1125,6 +1119,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
         finally:
             check.close()
 
+        camara_evidencias.instalar(svc.home, camara_arquivos)  # aditivo e idempotente; falha aqui ainda desfaz tudo
         # So agora fechar e guardar os originais completos antes de publicar.
         svc._close_all_conns(strict=True)
         closed = True
@@ -1149,7 +1144,6 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
         manifest["snapshot_derived_version"] = manifest.get("snapshot_derived_version") or manifest.get("derived_version")
         manifest["derived_version"] = acervo.derived_version(svc.conn)
         acervo.save_installed(svc.home, manifest)
-        _gravar_termo_camara(svc.home, manifest)
         return {
             "status": "ok",
             "backup": str(backup_db) if backup_db.exists() else None,
