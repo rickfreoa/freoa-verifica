@@ -689,6 +689,8 @@ class Verifica:
             if connector_id == "stj":
                 self._connectors[connector_id].db_path = self.home / "stj_fts.sqlite"
                 self._connectors[connector_id].resource_dir = self.home / "stj-resources"
+            if connector_id == "camara_legin":
+                self._connectors[connector_id].home = self.home
         return self._connectors[connector_id]
 
     def registrar(self, rw: ResolvedWork) -> None:
@@ -844,10 +846,21 @@ class Verifica:
             fontes_consultadas=([{"fonte": "camara_legin", "resultado": "acervo", "motivo": None, "categoria": None}]
                                if source_id == "camara_legin" else []),
             procedencia_tipo=(cap.get("procedencia") if cap else None) or "nao_identificado",
+            atribuicao=self._atribuicao_camara(doc.text) if source_id == "camara_legin" else None,
         )
         if source_id == "camara_legin":
             self._revalidar_camara(rw)
         return rw
+
+    def _camara_ativada(self) -> bool:
+        from freoa_verifica.connectors.camara_ativacao import ativacao
+        from freoa_verifica.connectors.camara_estado import Estado
+        return ativacao(Estado(self.home)) is not None
+
+    def _atribuicao_camara(self, texto: str | None = None) -> dict:
+        """Atribuição do §7 da 0080 com o home deste serviço; autoria só se o próprio documento a declara."""
+        from freoa_verifica.connectors.camara_atribuicao import atribuicao, autoria_declarada
+        return atribuicao(self.home, autoria_declarada(texto))
 
     def _revalidar_camara(self, rw):
         """Releitura não amplia a política: corpo, página de origem e href recuperáveis."""
@@ -3759,6 +3772,7 @@ class Verifica:
             "offset": offset,
             "max_chars": max_chars,
             "cursor": str(offset + max_chars) if truncado else None,
+            **({"atribuicao": self._atribuicao_camara()} if cap.get("source_id") == "camara_legin" else {}),
             **({} if ctype else {"proveniencia": {
                 "interpretacao": ORIGEM_LEGADO_CONFERIDO if conferida is not None else ORIGEM_LEGADO}}),
         }
@@ -3779,7 +3793,7 @@ class Verifica:
             n, capturado = self.conn.execute(
                 "SELECT COUNT(*), MAX(fetched_at) FROM capture WHERE source_id=?", (cid,)).fetchone()
             recorte = {"capturas": n, "capturado_em": capturado}
-            vivo = cid not in {"planalto", "camara_legin"}  # legado / ativação pendente
+            vivo = cid != "planalto" and (cid != "camara_legin" or self._camara_ativada())  # legado / ativação pendente
         return ("ambos" if n and vivo else "acervo" if n else "ao_vivo" if vivo else "nenhuma"), recorte
 
     def obter_registro(

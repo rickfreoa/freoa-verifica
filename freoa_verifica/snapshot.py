@@ -468,6 +468,7 @@ def export_snapshot(
         "parser_version_por_capture": _parser_versions(conn),
         "cobertura_por_fonte": _cobertura(conn),
         "atribuicoes": atrib,
+        **_termo_camara_do_home(home),
         "licenca_metadados": "CC-BY-4.0",
         "autenticidade": AUTHENTICITY_NOTE,
         "arquivos_sha256": file_hashes,
@@ -496,6 +497,26 @@ def export_snapshot(
         "blobs_completos": blobs_completos,
         "autenticidade": AUTHENTICITY_NOTE,
     }
+
+
+def _termo_camara_do_home(home: Path) -> dict[str, Any]:
+    """Hash do termo da Câmara capturado na ativação deste home (0080 §7): viaja no manifesto, que o SHA256SUMS cobre."""
+    from freoa_verifica.connectors.camara_ativacao import atribuicao_do_termo
+    from freoa_verifica.connectors.camara_estado import Estado
+
+    url, digest = atribuicao_do_termo(Estado(home))
+    return {"camara_termo": {"termo_url": url, "termo_sha256": digest}} if digest else {}
+
+
+def _gravar_termo_camara(home: Path, manifest: dict[str, Any]) -> None:
+    """Registra no home instalado o termo declarado pelo manifesto já conferido; sem ele, não grava nada."""
+    from freoa_verifica.connectors.camara_estado import Estado, sha256 as _sha  # noqa: F401
+    from freoa_verifica.connectors.camara_policy import TERMO_URL
+
+    termo = manifest.get("camara_termo")
+    if (isinstance(termo, dict) and termo.get("termo_url") == TERMO_URL and isinstance(termo.get("termo_sha256"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", termo["termo_sha256"])):
+        Estado(home)._gravar("termo-de-snapshot.json", {"termo_url": TERMO_URL, "termo_sha256": termo["termo_sha256"]})
 
 
 def _find_db(origem: Path, manifest: dict[str, Any]) -> Path:
@@ -1128,6 +1149,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
         manifest["snapshot_derived_version"] = manifest.get("snapshot_derived_version") or manifest.get("derived_version")
         manifest["derived_version"] = acervo.derived_version(svc.conn)
         acervo.save_installed(svc.home, manifest)
+        _gravar_termo_camara(svc.home, manifest)
         return {
             "status": "ok",
             "backup": str(backup_db) if backup_db.exists() else None,
