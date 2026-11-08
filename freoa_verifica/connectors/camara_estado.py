@@ -26,6 +26,8 @@ from pathlib import Path
 from freoa_verifica import trava
 from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
+from freoa_verifica.texto_resposta import texto_da_resposta
+from freoa_verifica.transport import RespostaInvalida
 
 ATIVACAO = "camara_ativacao.json"
 VALIDADE_ROBOTS = timedelta(hours=24)
@@ -91,6 +93,14 @@ def sha256(dados: bytes) -> str:
     return hashlib.sha256(dados).hexdigest()
 
 
+def json_de_bytes(dados: bytes):
+    """JSON de bytes preservados pela interpretação textual única (nunca bytes direto ao parser); inválido é ValueError."""
+    try:
+        return json.loads(texto_da_resposta(dados, "application/json; charset=utf-8"))
+    except RespostaInvalida as exc:
+        raise ValueError("json_ilegivel") from exc
+
+
 def _escrever(caminho: Path, dados: bytes) -> None:
     try:
         caminho.parent.mkdir(parents=True, exist_ok=True)
@@ -103,7 +113,7 @@ def _escrever(caminho: Path, dados: bytes) -> None:
 
 def _json_de(caminho: Path, padrao):
     try:
-        return json.loads(caminho.read_bytes().decode("utf-8"))
+        return json_de_bytes(caminho.read_bytes())
     except FileNotFoundError:
         return padrao
     except (OSError, ValueError) as exc:
@@ -444,7 +454,7 @@ class Estado:
         if dados is None:
             return []
         try:
-            return [validar_obtencao(json.loads(linha)) for linha in dados.decode("utf-8").splitlines() if linha]
+            return [validar_obtencao(json_de_bytes(linha)) for linha in dados.splitlines() if linha]
         except ValueError as exc:
             raise EstadoIndisponivel("obtencoes ilegíveis") from exc
 
@@ -479,7 +489,7 @@ class Estado:
             bruto = self._bytes(f"termo/{digest}.recibo.json")
             if corpo is None or bruto is None or sha256(corpo) != digest:
                 return None
-            return validar_recibo_do_termo(json.loads(bruto.decode("utf-8")), digest, len(corpo))
+            return validar_recibo_do_termo(json_de_bytes(bruto), digest, len(corpo))
         except (OSError, ValueError):
             return None
 

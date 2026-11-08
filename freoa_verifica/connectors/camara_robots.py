@@ -134,7 +134,7 @@ def _compilar(padrao: str) -> tuple["re.Pattern[bytes]", int]:
 def _casa(padrao: str, caminho: bytes) -> int | None:
     """Especificidade se o padrão alcança o caminho (já normalizado em octetos); senão None."""
     expressao, tamanho = _compilar(padrao)
-    return tamanho if expressao.search(caminho) is not None else None
+    return tamanho if expressao.match(caminho) is not None else None
 
 
 def _grupos_do_token(grupos: list[Grupo], token: str) -> list[Grupo] | None:

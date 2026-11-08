@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 
 from freoa_verifica.connectors import camara_ativacao as ativ
-from freoa_verifica.connectors.camara_estado import (ATIVACAO, Estado, _escrever, sha256, validar_obtencao, validar_politica,
+from freoa_verifica.connectors.camara_estado import (ATIVACAO, Estado, _escrever, json_de_bytes, sha256, validar_obtencao, validar_politica,
                                                      validar_recibo_do_termo)
 
 _H = r"[0-9a-f]{64}"
@@ -63,7 +63,7 @@ def _arquivos_do_home(estado: Estado) -> dict[str, bytes]:
         if (pasta / "evidencias").is_dir() else []
     for bruto in registros:
         try:
-            registro = json.loads(bruto.decode("utf-8"))
+            registro = json_de_bytes(bruto)
         except ValueError:
             continue
         if isinstance(registro, dict) and isinstance(registro.get("registro_sha256"), str):
@@ -95,20 +95,20 @@ def _validar(arquivos: dict[str, bytes]) -> None:
             if tipo == "termo_recibo":
                 if m.group(1) not in termos:
                     raise EvidenciaInvalida(f"camara_recibo_sem_termo:{relativo}")
-                validar_recibo_do_termo(json.loads(dados.decode("utf-8")), m.group(1), len(termos[m.group(1)]))
+                validar_recibo_do_termo(json_de_bytes(dados), m.group(1), len(termos[m.group(1)]))
             elif tipo == "politica":
-                registro = validar_politica(json.loads(dados.decode("utf-8")), m.group(1))
+                registro = validar_politica(json_de_bytes(dados), m.group(1))
                 if registro["sha256"] != m.group(2) or (m.group(1), m.group(2)) not in politicas_corpo:
                     raise EvidenciaInvalida(f"camara_politica_incoerente:{relativo}")
-                memoria._memoria[relativo] = json.loads(dados.decode("utf-8"))
+                memoria._memoria[relativo] = json_de_bytes(dados)
             elif tipo == "obtencoes":
-                for linha in dados.decode("utf-8").splitlines():
+                for linha in dados.splitlines():
                     if linha:
-                        validar_obtencao(json.loads(linha))
+                        validar_obtencao(json_de_bytes(linha))
         for relativo, dados in arquivos.items():
             tipo, m = _tipo(relativo)
             if tipo == "ativacao":
-                registro = json.loads(dados.decode("utf-8"))
+                registro = json_de_bytes(dados)
                 if registro.get("registro_sha256") != m.group(1) or not ativ.validar_registro(memoria, registro):
                     raise EvidenciaInvalida(f"camara_ativacao_evidencia_invalida:{relativo}")
     except (ValueError, OSError, KeyError, TypeError) as exc:
@@ -183,10 +183,10 @@ def instalar(home: Path, arquivos: dict[str, bytes]) -> None:
     existentes = estado.obtencoes()
     vistos = {json.dumps(r, sort_keys=True, ensure_ascii=False) for r in existentes}
     linhas = [json.dumps(r, sort_keys=True, ensure_ascii=False) for r in existentes]
-    for linha in novas.decode("utf-8").splitlines():
+    for linha in novas.splitlines():
         if not linha:
             continue
-        canonica = json.dumps(json.loads(linha), sort_keys=True, ensure_ascii=False)
+        canonica = json.dumps(json_de_bytes(linha), sort_keys=True, ensure_ascii=False)
         if canonica not in vistos:
             vistos.add(canonica)
             linhas.append(canonica)

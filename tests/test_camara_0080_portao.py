@@ -226,7 +226,8 @@ for n in range(3):
 
 def test_serializacao_por_host_entre_processos_do_mesmo_home(tmp_path):
     log = tmp_path / "log.txt"
-    env = {**__import__("os").environ, "PYTHONPATH": str(RAIZ)}
+    ambiente = __import__("os").environ
+    env = {**ambiente, "PYTHONPATH": ambiente.get("PYTHONPATH", "") + __import__("os").pathsep + str(RAIZ)}
     filhos = [subprocess.Popen([sys.executable, "-c", _FILHO, str(tmp_path / "home"), str(log), str(i)], env=env,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE) for i in (1, 2)]
     saidas = [f.communicate(timeout=120) for f in filhos]

@@ -21,7 +21,7 @@ from freoa_verifica import __version__
 from freoa_verifica.connectors import camara_robots as rb
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.connectors.camara_estado import (Estado, EstadoIndisponivel, Relogio, _de_iso, eh_sha256, iso,
-                                                     sha256)
+                                                     json_de_bytes, sha256)
 from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL
 from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
@@ -128,7 +128,7 @@ def registrar(estado: Estado, revisao_arquivo: Path | str, relogio: Relogio | No
         raise AtivacaoRecusada("pre_condicoes_nao_cumpridas")
     try:
         dados = Path(revisao_arquivo).read_bytes()  # lido UMA vez: o hash registrado é o dos bytes interpretados
-        revisao = json.loads(dados.decode("utf-8"))
+        revisao = json_de_bytes(dados)
     except (OSError, ValueError) as exc:  # inclui UnicodeDecodeError e JSON inválido
         raise AtivacaoRecusada("revisao_do_auditor_ausente_ou_ilegivel") from exc
     if not isinstance(revisao, dict) or not all(isinstance(revisao.get(k), str) and revisao[k].strip()
@@ -199,7 +199,7 @@ def validar_registro(estado: Estado, registro) -> bool:
         bytes_da_revisao = estado.revisao_preservada(revisao["sha256"])
         if bytes_da_revisao is None:
             return False
-        original = json.loads(bytes_da_revisao.decode("utf-8"))
+        original = json_de_bytes(bytes_da_revisao)
         if (not isinstance(original, dict)
                 or any(original.get(k) != revisao[k] for k in ("auditor", "revisado_em", "resultado", "termo_sha256"))):
             return False
