@@ -387,12 +387,13 @@ class RelogioQueTrocaAAtivacao(RelogioFalso):
 
 def test_r25_termo_registrado_e_o_da_ativacao_valida_na_emissao(tmp_path):
     t1, t2 = hashlib.sha256(b"termo 1").hexdigest(), hashlib.sha256(b"termo 2").hexdigest()
-    vigente = {"termo_sha256": t1}
-    relogio = RelogioQueTrocaAAtivacao(lambda: vigente.update(termo_sha256=t2))
+    r1, r2 = hashlib.sha256(b"recibo 1").hexdigest(), hashlib.sha256(b"recibo 2").hexdigest()
+    vigente = {"termo_sha256": t1, "termo_recibo_sha256": r1}
+    relogio = RelogioQueTrocaAAtivacao(lambda: vigente.update(termo_sha256=t2, termo_recibo_sha256=r2))
     p, t, _, estado = portao(tmp_path, rotas_www(BUSCA, BUSCA2), relogio=relogio, ativacao=lambda: dict(vigente),
                              exigir_ativacao=False)
     p.obter(BUSCA)  # a primeira emissão já esperou (robots → conteúdo): a ativação virou T2 durante a espera
-    assert [o["termo_sha256"] for o in estado.obtencoes()] == [t2]  # T2: o termo vigente na emissão, não o da admissão
+    assert [(o["termo_sha256"], o["termo_recibo_sha256"]) for o in estado.obtencoes()] == [(t2, r2)]  # o vigente na emissão
 
 
 # --- R2-1 e R2-5 juntos: nenhuma regressão de contagem de robots em fluxo normal ---------------------------------------

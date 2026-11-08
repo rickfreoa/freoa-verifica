@@ -17,7 +17,7 @@ from freoa_verifica.connectors.camara_estado import Estado
 from freoa_verifica.connectors.camara_legin import inventario
 from freoa_verifica.service import Verifica
 from freoa_verifica.store import repo
-from tests._camara_util import LEI, Transporte, barreira, da_fixture, obter_vinculado, resposta
+from tests._camara_util import LEI, Transporte, barreira, da_fixture, obter_vinculado, resposta, selo_do_termo
 from tests.test_camara_0080_atribuicao import (ART, TERMO_SHA, acervo, ativar_home, esperada, exportar,  # noqa: F401
                                                refazer_checksums)
 from tests.test_camara_0081_atribuicao_inventario_snapshot import (_empacotar, _guardar_termo2, _registro, ativar_com,
@@ -57,7 +57,7 @@ def test_r25_busca_nao_empresta_atribuicao_de_outra_obra_com_o_mesmo_texto_e_cam
     resp_b = resposta("https://www2.camara.leg.br/legin/fed/lei/1990-1999/b.html", corpo_b)
     _ocorrencia_em_outra_obra(svc, texto=texto, caminho=caminho, fonte="camara_legin", numero="9999", ano=1999,
                               resp=resp_b)
-    Estado(svc.home).registrar_obtencao(_registro(resp_b.sha256, resp_b.url, TERMO_SHA, resp_b.fetched_at))
+    Estado(svc.home).registrar_obtencao(_registro(resp_b.sha256, resp_b.url, TERMO_SHA, resp_b.fetched_at, home=svc.home))
     out = svc.buscar_legislacao(" ".join(texto.split()[:6]), fonte="__somente_local__", limite=50)
     itens_a = [i for i in out["itens"] if i["caminho"] == caminho and i["work_id"] == rw.work_id]
     assert itens_a  # o item da obra A (Planalto) existe...
@@ -80,7 +80,7 @@ def test_r25_busca_preserva_separadas_as_origens_camara_distintas_da_mesma_obra(
         acervo.conn.execute("INSERT INTO extract(id, capture_id, parser_version, text_sha256) VALUES (?,?,?,?)",
                             ("e-2", capture_id, "t", hashlib.sha256(texto.encode()).hexdigest()))
         acervo.conn.execute("INSERT INTO occurrence(id, redaction_id, extract_id) VALUES (?,?,?)", ("o-2", redacao, "e-2"))
-    estado.registrar_obtencao(_registro(resp2.sha256, resp2.url, t2, resp2.fetched_at))
+    estado.registrar_obtencao(_registro(resp2.sha256, resp2.url, t2, resp2.fetched_at, home=acervo.home))
     out = acervo.buscar_legislacao(" ".join(texto.split()[:6]), fonte="__somente_local__", limite=50)
     item = next(i for i in out["itens"] if i["caminho"] == caminho and i["trecho"])
     assert "atribuicao" not in item  # duas origens com termos diferentes: nenhuma é escolhida por ordem
@@ -165,6 +165,9 @@ def test_r26_referencia_cruzada_quebrada_com_checksums_refeitos_nao_instala(acer
     arquivo = pasta / "camara" / "obtencoes.jsonl"
     linhas = [json.loads(linha) for linha in arquivo.read_bytes().splitlines() if linha]
     linhas[0][campo] = valor
+    if campo == "termo_sha256":  # a primeira obtenção é anterior à ativação (sem termo): agora aponta um termo que não existe
+        linhas[0].pop("sem_termo", None)
+        linhas[0]["termo_recibo_sha256"] = valor
     arquivo.write_bytes(b"".join(json.dumps(linha, sort_keys=True).encode() + b"\n" for linha in linhas))
     refazer_checksums(pasta)
     monkeypatch.setenv("FV_OFFLINE", "1")
@@ -188,7 +191,7 @@ def _remover_do_snapshot(pasta: Path, nome: str):
 
 def test_r26_snapshot_sem_o_recibo_do_termo_com_checksums_refeitos_nao_instala(acervo, tmp_path, monkeypatch):  # noqa: F811
     pasta = exportar(acervo, tmp_path / "snap")
-    _remover_do_snapshot(pasta, f"camara/termo/{TERMO_SHA}.recibo.json")
+    _remover_do_snapshot(pasta, f"camara/termo/{next((pasta / 'camara' / 'termo').glob(f'{TERMO_SHA}.*.recibo.json')).name}")
     monkeypatch.setenv("FV_OFFLINE", "1")
     novo = Verifica(home=tmp_path / "novo")
     try:
@@ -343,7 +346,7 @@ def test_r27_instalacao_integral_continua_funcionando_e_e_idempotente(acervo, tm
     try:
         assert novo.snapshot_install(pasta, aceitar_nao_vinculado=True)["status"] == "ok"
         primeiro = _estado_do_camara(novo.home)
-        assert primeiro and Estado(novo.home).termo_preservado(TERMO_SHA)
+        assert primeiro and Estado(novo.home).termo_preservado(TERMO_SHA, selo_do_termo(novo.home, TERMO_SHA))
         assert novo.snapshot_install(pasta, aceitar_nao_vinculado=True)["status"] == "ok"  # idempotente
         assert _estado_do_camara(novo.home) == primeiro
     finally:
@@ -356,9 +359,12 @@ def test_r27_decisoes_por_caminho_de_snapshots_diferentes_sao_unidas_e_a_contrar
     registro = json.loads(arquivos[nome])
     caminho_novo = "/legin/fed/outra-norma.html"
     local = tmp_path / "local"
-    (local / "camara" / "politicas").mkdir(parents=True)
-    (local / "camara" / nome).write_text(json.dumps({**registro, "decisoes": {caminho_novo: "permitido"}}), "utf-8")
-    pub = ev.Publicacao(local, {nome: arquivos[nome]}, tmp_path / "stg").preparar()
+    for relativo, dados in arquivos.items():  # home COERENTE na união: o mesmo conjunto, só com outra decisão por caminho
+        alvo = local / "camara" / relativo
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        alvo.write_bytes(json.dumps({**registro, "decisoes": {caminho_novo: "permitido"}}).encode("utf-8")
+                         if relativo == nome else dados)
+    pub = ev.Publicacao(local, arquivos, tmp_path / "stg").preparar()
     pub.publicar()
     unidas = json.loads((local / "camara" / nome).read_bytes())["decisoes"]
     assert unidas == {**registro["decisoes"], caminho_novo: "permitido"}  # a união; nenhuma decisão se perde

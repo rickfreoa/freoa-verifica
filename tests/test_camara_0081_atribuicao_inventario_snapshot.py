@@ -17,7 +17,7 @@ from freoa_verifica.connectors.camara_policy import TERMO_URL
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 from freoa_verifica.service import Verifica
 from tests._camara_util import (BUSCA, FETCHED_PADRAO, LEI, TERMO_HTML, RelogioFalso, Transporte, barreira, da_fixture,
-                                obter_vinculado, portao, resposta)
+                                obter_vinculado, portao, resposta, selo_do_termo)
 from tests.test_camara_0080_atribuicao import (ART, TERMO_SHA, acervo, ativar_home, esperada, exportar,  # noqa: F401
                                                refazer_checksums)
 from tests.test_camara_legin import ATUAL, ORIGINAL, servidor  # noqa: F401
@@ -33,7 +33,7 @@ def _boom(*a, **k):
 
 
 def rotas_da_fixture(**sobrescrever):
-    rotas = {r.url: r for r in (da_fixture(k) for k in CHAVES_FIXTURE)}
+    rotas = {r.url: r for r in (da_fixture(k, fetched_at=FETCHED_PADRAO) for k in CHAVES_FIXTURE)}
     return {**rotas, **sobrescrever}
 
 
@@ -196,10 +196,13 @@ def test_obter_evidencia_extrai_a_autoria_do_documento_correspondente(acervo, mo
 CAP_EM = "2026-11-08T12:00:05+00:00"
 
 
-def _registro(sha, url, termo, capturado_em=CAP_EM):
+def _registro(sha, url, termo, capturado_em=CAP_EM, *, home=None):
+    """Registro de obtenção sintético; o recibo do termo (identidade da obtenção do termo) é o preservado no `home`."""
+    vinculo = ({"termo_sha256": termo, "termo_recibo_sha256": selo_do_termo(home, termo)} if termo
+               else {"termo_sha256": None, "termo_recibo_sha256": None, "sem_termo": "portao_sem_ativacao_exigida"})
     return {"url": url, "sha256": sha, "capturado_em": capturado_em, "politica_sha256": "a" * 64,
-            "politica_obtida_em": "2026-11-08T12:00:00+00:00", "em": "2026-11-08T12:00:10+00:00",
-            "termo_sha256": termo}
+            "politica_obtida_em": "2026-11-08T12:00:00+00:00", "emitida_em": "2026-11-08T12:00:08+00:00",
+            "em": "2026-11-08T12:00:10+00:00", **vinculo}
 
 
 def _guardar_termo2(estado):
@@ -217,8 +220,8 @@ def test_atribuicao_e_por_captura_e_nao_pelo_termo_corrente_do_home(tmp_path):
     estado = Estado(home)
     t2 = _guardar_termo2(estado)
     a, b = hashlib.sha256(b"a").hexdigest(), hashlib.sha256(b"b").hexdigest()
-    estado.registrar_obtencao(_registro(a, "https://www2.camara.leg.br/a", TERMO_SHA))
-    estado.registrar_obtencao(_registro(b, "https://www2.camara.leg.br/b", t2))
+    estado.registrar_obtencao(_registro(a, "https://www2.camara.leg.br/a", TERMO_SHA, home=home))
+    estado.registrar_obtencao(_registro(b, "https://www2.camara.leg.br/b", t2, home=home))
     assert atribuicao(home, sha256=a, url="https://www2.camara.leg.br/a", fetched_at=CAP_EM)["termo_sha256"] == TERMO_SHA
     assert atribuicao(home, sha256=b, url="https://www2.camara.leg.br/b", fetched_at=CAP_EM)["termo_sha256"] == t2  # não vira T1
 
@@ -230,9 +233,9 @@ def test_termo_herdado_sem_conferencia_nao_gera_atribuicao_e_o_indice_acompanha_
     conteudo = hashlib.sha256(b"novo").hexdigest()
     n = "https://www2.camara.leg.br/n"
     assert termo_da_captura(home, conteudo, n, CAP_EM) is None  # arquivo solto não vale
-    Estado(home).registrar_obtencao(_registro(conteudo, n, TERMO_SHA))
+    Estado(home).registrar_obtencao(_registro(conteudo, n, TERMO_SHA, home=home))
     assert termo_da_captura(home, conteudo, n, CAP_EM) == TERMO_SHA  # índice renovado
-    (home / "camara" / "termo" / f"{TERMO_SHA}.recibo.json").write_text("{}")
+    (home / "camara" / "termo" / f"{TERMO_SHA}.{selo_do_termo(home, TERMO_SHA)}.recibo.json").write_text("{}")
     assert termo_da_captura(home, conteudo, n, CAP_EM) is None  # alteração interna é vista
 
 
@@ -273,8 +276,8 @@ def test_instalacao_recupera_a_evidencia_administrativa_completa(acervo, tmp_pat
         assert novo.snapshot_install(pasta, aceitar_nao_vinculado=True)["status"] == "ok"
         camara = novo.home / "camara"
         assert (camara / "termo" / f"{TERMO_SHA}.html").read_bytes() == TERMO_HTML
-        assert Estado(novo.home).termo_preservado(TERMO_SHA)["politica_robots_sha256"]
         ativacao = acervo._camara_ativada() and Estado(acervo.home).ler_ativacao()
+        assert Estado(novo.home).termo_preservado(TERMO_SHA, ativacao["termo_recibo_sha256"])["politica_robots_sha256"]
         assert (camara / "revisao" / f"{ativacao['revisao']['sha256']}.json").exists()
         for host, digest in ativacao["robots_sha256"].items():
             assert Estado(novo.home).corpo_da_politica(host, digest)  # bytes originais com o hash conferido
@@ -320,17 +323,37 @@ def test_anexacao_de_snapshots_com_termos_diferentes_preserva_a_atribuicao_de_ca
     assert sorted(reexport["camara_evidencias"]["termos"]) == sorted([ta, tb])
 
 
+def _recibo_do_snapshot(pasta):
+    return next((pasta / "camara" / "termo").glob(f"{TERMO_SHA}.*.recibo.json"))
+
+
+def _adulterar_recibo(pasta, renomear):
+    """Recibo com status 403. `renomear`: o arquivo passa a se chamar pelo hash dos novos bytes (checksums refeitos), de
+    modo que só o CONTEÚDO do recibo o recusa; sem renomear, o nome (hash do recibo) já não confere."""
+    arquivo = _recibo_do_snapshot(pasta)
+    dados = json.dumps({**json.loads(arquivo.read_text("utf-8")), "status": 403}).encode("utf-8")
+    arquivo.write_bytes(dados)
+    if renomear:
+        novo = arquivo.with_name(f"{TERMO_SHA}.{hashlib.sha256(dados).hexdigest()}.recibo.json")
+        arquivo.rename(novo)
+        manifesto = json.loads((pasta / "MANIFEST.json").read_text("utf-8"))
+        antigo, novo_nome = f"camara/termo/{arquivo.name}", f"camara/termo/{novo.name}"
+        manifesto["arquivos_sha256"][novo_nome] = manifesto["arquivos_sha256"].pop(antigo)
+        manifesto["camara_evidencias"]["arquivos"] = sorted(
+            novo_nome if n == antigo else n for n in manifesto["camara_evidencias"]["arquivos"])
+        (pasta / "MANIFEST.json").write_text(json.dumps(manifesto, ensure_ascii=False, indent=2, sort_keys=True), "utf-8")
+
+
 @pytest.mark.parametrize("adulterar,motivo", [
-    (lambda pasta, h: (pasta / "camara" / "termo" / f"{TERMO_SHA}.recibo.json").write_text(
-        json.dumps({**json.loads((pasta / "camara" / "termo" / f"{TERMO_SHA}.recibo.json").read_text("utf-8")),
-                    "status": 403})), "camara_evidencia_ilegivel"),
+    (lambda pasta, h: _adulterar_recibo(pasta, False), "camara_evidencia_hash_diverge"),
+    (lambda pasta, h: _adulterar_recibo(pasta, True), "camara_evidencia_ilegivel"),
     (lambda pasta, h: (pasta / "camara" / "obtencoes.jsonl").write_text('{"url": 1}\n'), "camara_evidencia_ilegivel"),
     (lambda pasta, h: [p.write_bytes(p.read_bytes() + b" x") for p in (pasta / "camara").glob("robots-*.txt")],
      "camara_evidencia_hash_diverge"),
     (lambda pasta, h: [p.write_text(p.read_text("utf-8").replace('"auditor"', '"auditor_"'))
                        for p in (pasta / "camara" / "evidencias").glob("ativacao-*.json")],
      "camara_ativacao_evidencia_invalida"),
-], ids=["recibo_incompativel", "obtencao_invalida", "robots_adulterado", "ativacao_incoerente"])
+], ids=["recibo_adulterado_no_lugar", "recibo_incompativel", "obtencao_invalida", "robots_adulterado", "ativacao_incoerente"])
 def test_snapshot_com_evidencia_incoerente_e_checksums_refeitos_nao_instala(acervo, tmp_path, monkeypatch,  # noqa: F811
                                                                            adulterar, motivo):
     pasta = exportar(acervo, tmp_path / "snap")
@@ -347,7 +370,7 @@ def test_snapshot_com_evidencia_incoerente_e_checksums_refeitos_nao_instala(acer
 
 
 def test_exportacao_recusa_home_com_evidencia_administrativa_incoerente(acervo, tmp_path):  # noqa: F811
-    (acervo.home / "camara" / "termo" / f"{TERMO_SHA}.recibo.json").write_text(
+    next((acervo.home / "camara" / "termo").glob(f"{TERMO_SHA}.*.recibo.json")).write_text(
         json.dumps({"url": "https://alheio.invalid"}), encoding="utf-8")
     saida = acervo.snapshot_export(tmp_path / "snap")
     assert saida["status"] == "erro" and saida["motivo"].startswith("camara_evidencia")  # nada é omitido em silêncio

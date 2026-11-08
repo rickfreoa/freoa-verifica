@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.connectors.camara_estado import (BLOQUEIO_TRANSITORIO, REVALIDACAO_INICIAL, REVALIDACAO_MAXIMA,
-                                                     VALIDADE_ROBOTS, Estado, EstadoIndisponivel, Relogio, _de_iso,
+                                                     SEM_TERMO, VALIDADE_ROBOTS, Estado, EstadoIndisponivel, Relogio, _de_iso,
                                                      iso)
 from freoa_verifica.connectors import camara_robots as rb
 from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL, validar_termo, validar_url
@@ -227,12 +227,14 @@ class Portao:
         self._decidir_caminho(host, politica, caminho, url, agora)
         # A política e a ativação do vínculo são as REVALIDADAS imediatamente antes da emissão (podem diferir das
         # lidas acima se a espera atravessou o vencimento ou se a ativação mudou): R2-1 e R2-5.
-        resp, politica, ativacao = self._emitir(url, rota, host, politica=politica, caminho=caminho)
+        resp, politica, ativacao, emitida_em = self._emitir(url, rota, host, politica=politica, caminho=caminho)
         self.politica_de[url] = politica["sha256"]
+        termo = ({"termo_sha256": ativacao["termo_sha256"], "termo_recibo_sha256": ativacao["termo_recibo_sha256"]}
+                 if ativacao else {"termo_sha256": None, "termo_recibo_sha256": None, "sem_termo": SEM_TERMO})
         self.estado.registrar_obtencao({"url": url, "sha256": resp.sha256, "capturado_em": resp.fetched_at,
                                         "politica_sha256": politica["sha256"],
-                                        "politica_obtida_em": politica["obtido_em"], "em": iso(self.relogio.agora()),
-                                        "termo_sha256": ativacao["termo_sha256"] if ativacao else None})
+                                        "politica_obtida_em": politica["obtido_em"], "emitida_em": iso(emitida_em),
+                                        "em": iso(self.relogio.agora()), **termo})
         return resp
 
     def _registro(self, classe, motivo, categoria, evidencia, agora, ate=None) -> dict:
@@ -415,9 +417,9 @@ class Portao:
 
     def _emitir(self, url, rota, host, atraso: float | None = None, *, politica: dict | None = None,
                 caminho: str | None = None):
-        """Uma única emissão. Devolve `(resposta, política, ativação)`: a política e a ativação com que a emissão foi
-        AUTORIZADA, revalidadas (validade, integridade, decisão do caminho e ativação) depois de toda espera e antes do
-        envio. Se a política venceu na espera, é renovada e o ritmo recomputado a partir dela (0080 §4.4, R2-1)."""
+        """Uma única emissão. Devolve `(resposta, política, ativação, emitida_em)`: a política e a ativação com que a
+        emissão foi AUTORIZADA, revalidadas (validade, integridade, decisão do caminho e ativação) depois de toda espera e
+        antes do envio, e o instante em que a política foi reconfirmada válida (a emissão declarada, R3-1). Se a política venceu na espera, é renovada e o ritmo recomputado a partir dela (0080 §4.4, R2-1)."""
         recurso = rota["recurso"]
         escopo = self._escopo()
         cache = self._em_cache(url)
@@ -432,6 +434,7 @@ class Portao:
                     self._esperar(host, self._atraso_do_host(politica, atraso))
                     self._checar_terminal(escopo)  # a espera pode ter durado: outra thread pode ter falhado localmente
                 ativacao = self._exigir_ativacao()
+                instante = self.relogio.agora()
                 if politica is not None:
                     vigente = self._reconfirmar(host, politica, caminho, url)
                     if vigente is None:
@@ -460,7 +463,7 @@ class Portao:
         invalida = self._resposta_invalida(resp, url, rota)
         if invalida is not None:
             raise self._registrar_falha(invalida, url, host, recurso) from None
-        return resp, politica, ativacao
+        return resp, politica, ativacao, instante
 
     @staticmethod
     def _resposta_invalida(resp, url, rota) -> Unavailable | None:

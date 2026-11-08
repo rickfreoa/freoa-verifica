@@ -2,6 +2,7 @@
 import hashlib
 import json
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -40,7 +41,8 @@ def servidor(monkeypatch, proibir_rede):
         assert kw["headers"]["User-Agent"] == USER_AGENT_IDENTIFICADO
         if url not in responses:
             raise AssertionError(f"URL não documentada: {url}")
-        return responses[url]
+        # o transporte vivo carimba o instante do recebimento; os bytes e o hash são os da captura real, intactos
+        return replace(responses[url], fetched_at=datetime.now(timezone.utc).isoformat())
     monkeypatch.setattr("freoa_verifica.connectors.httputil.transport_fetch", fetch)
     from freoa_verifica.connectors.httputil import connector_fetch
     init = CamaraLeginConnector.__init__

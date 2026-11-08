@@ -64,7 +64,7 @@ def test_c22_ativacao_removida_depois_da_criacao_recoloca_o_portao_em_pendente(t
     lambda h, r: (h / "camara" / "revisao" / f"{r['revisao']['sha256']}.json").unlink(),
     lambda h, r: (h / "camara" / "revisao" / f"{r['revisao']['sha256']}.json").write_bytes(b"{}"),
     lambda h, r: (h / "camara" / f"robots-{WWW2}-{r['robots_sha256'][WWW2]}.txt").write_bytes(b"User-agent: *\nAllow: /\n"),
-    lambda h, r: (h / "camara" / "termo" / f"{r['termo_sha256']}.recibo.json").unlink(),
+    lambda h, r: (h / "camara" / "termo" / f"{r['termo_sha256']}.{r['termo_recibo_sha256']}.recibo.json").unlink(),
 ], ids=["registro_removido", "termo_adulterado", "revisao_removida", "revisao_adulterada", "robots_adulterado",
         "recibo_removido"])
 def test_ativacao_e_revalidada_antes_de_cada_obtencao_viva_por_toda_a_evidencia(tmp_path, dano):
@@ -148,24 +148,43 @@ RECIBO_VICIADO = [
 ]
 
 
+def _regravar_recibo(estado, registro, mutar) -> str:
+    """Substitui o recibo do termo por um adulterado, NOMEADO pelo hash dos novos bytes, e religa a ativação a ele (selo
+    refeito): só a validação do CONTEÚDO do recibo (ou do vínculo à política) pode recusá-lo. Devolve o novo selo."""
+    pasta = home_de(estado) / "camara" / "termo"
+    recibo = json.loads((pasta / f"{registro['termo_sha256']}.{registro['termo_recibo_sha256']}.recibo.json")
+                        .read_text("utf-8"))
+    mutar(recibo)
+    dados = json.dumps(recibo).encode("utf-8")
+    selo = hashlib.sha256(dados).hexdigest()
+    (pasta / f"{registro['termo_sha256']}.{selo}.recibo.json").write_bytes(dados)
+    _regravar_com_selo(estado, lambda r: r.update(termo_recibo_sha256=selo))
+    return selo
+
+
 @pytest.mark.parametrize("campo,valor", RECIBO_VICIADO)
 def test_c18_recibo_do_termo_incompativel_nao_e_termo_preservado(tmp_path, campo, valor):
     registro, estado, relogio, t = ativar_em(tmp_path)
-    arquivo = home_de(estado) / "camara" / "termo" / f"{registro['termo_sha256']}.recibo.json"
+    selo = _regravar_recibo(estado, registro, lambda r: r.update({campo: valor}))  # hash do corpo e `sha256` corretos
+    assert estado.termo_preservado(registro["termo_sha256"], selo) is None
+    assert ativ.ativacao(estado) is None
+
+
+def test_c18_recibo_adulterado_no_mesmo_arquivo_nao_confere_com_o_hash_do_proprio_nome(tmp_path):
+    registro, estado, relogio, t = ativar_em(tmp_path)
+    arquivo = (home_de(estado) / "camara" / "termo"
+               / f"{registro['termo_sha256']}.{registro['termo_recibo_sha256']}.recibo.json")
     recibo = json.loads(arquivo.read_text("utf-8"))
-    recibo[campo] = valor  # o hash do corpo e `recibo.sha256` continuam corretos
+    recibo["data_ou_versao_exibida"] = "01/01/2000"  # ainda um recibo válido, mas não é o recibo desta identidade
     arquivo.write_text(json.dumps(recibo), encoding="utf-8")
-    assert estado.termo_preservado(registro["termo_sha256"]) is None
+    assert estado.termo_preservado(registro["termo_sha256"], registro["termo_recibo_sha256"]) is None
     assert ativ.ativacao(estado) is None
 
 
 def test_c18_recibo_de_outra_politica_nao_vincula_o_termo_a_ativacao(tmp_path):
     registro, estado, relogio, t = ativar_em(tmp_path)
-    arquivo = home_de(estado) / "camara" / "termo" / f"{registro['termo_sha256']}.recibo.json"
-    recibo = json.loads(arquivo.read_text("utf-8"))
-    recibo["politica_robots_sha256"] = "9" * 64  # bem formado, mas não é a política de www2 da ativação
-    arquivo.write_text(json.dumps(recibo), encoding="utf-8")
-    assert estado.termo_preservado(registro["termo_sha256"]) is not None
+    selo = _regravar_recibo(estado, registro, lambda r: r.update(politica_robots_sha256="9" * 64))  # bem formado,
+    assert estado.termo_preservado(registro["termo_sha256"], selo) is not None  # mas não é a política de www2 da ativação
     assert ativ.ativacao(estado) is None
 
 
@@ -181,10 +200,13 @@ def test_c13_variante_em_memoria_recibo_com_hash_correto_e_url_alheia_invalida_a
         arquivo.write_text(json.dumps(revisao))
         ativ.registrar(estado, arquivo, relogio)
     assert ativ.ativacao(estado) is not None
-    chave = f"termo/{pre['termo_sha256']}.recibo.json"
+    chave = f"termo/{pre['termo_sha256']}.{pre['termo_recibo_sha256']}.recibo.json"
     recibo = json.loads(estado._memoria[chave].decode("utf-8"))
     recibo.update(url="https://alheio.invalid", status=403)
-    estado._memoria[chave] = json.dumps(recibo).encode("utf-8")
+    adulterado = json.dumps(recibo).encode("utf-8")
+    selo = hashlib.sha256(adulterado).hexdigest()  # nomeado pelo hash dos novos bytes e religado: só o conteúdo o recusa
+    estado._memoria[f"termo/{pre['termo_sha256']}.{selo}.recibo.json"] = adulterado
+    _regravar_com_selo(estado, lambda r: r.update(termo_recibo_sha256=selo))
     assert ativ.ativacao(estado) is None
 
 

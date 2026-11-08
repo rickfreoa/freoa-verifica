@@ -58,12 +58,14 @@ def robots_resp(host_url, texto):
     return resposta(host_url, texto.encode(), mime="text/plain")
 
 
-def da_fixture(chave):
+def da_fixture(chave, *, fetched_at=None):
+    """Captura real intacta (bytes e hash) servida por dublê. `fetched_at` simula o carimbo do transporte vivo, que é o
+    instante do recebimento: sem ele vale o da captura histórica (que precede qualquer política obtida hoje)."""
     meta = json.loads((FIX / f"camara_{chave}.captura.json").read_bytes())
     original = meta["importacao_offline"]["recibo_original"]
     corpo = (FIX / f"camara_{chave}{Path(original['arquivo']).suffix}").read_bytes()
     return Response(meta["url"], meta["url_final"], meta["status"], meta["cabecalhos"], corpo, meta["sha256"],
-                    meta["capturado_em"], [], meta["content_type"], size=len(corpo),
+                    fetched_at or meta["capturado_em"], [], meta["content_type"], size=len(corpo),
                     content_type=meta["cabecalhos"]["content-type"])
 
 
@@ -106,6 +108,13 @@ def portao(tmp_path=None, rotas=None, *, relogio=None, home="auto", **kw):
     transporte = Transporte(relogio, rotas)
     estado = Estado(tmp_path if home == "auto" else home)
     return Portao(transporte, estado=estado, relogio=relogio, **kw), transporte, relogio, estado
+
+
+def selo_do_termo(home, digest):
+    """Hash do (único) recibo preservado do termo `digest` no home (identidade da OBTENÇÃO do termo)."""
+    nomes = sorted((Path(home) / "camara" / "termo").glob(f"{digest}.*.recibo.json"))
+    assert len(nomes) == 1, nomes
+    return nomes[0].name.split(".")[1]
 
 
 FETCHED_PADRAO = "2026-11-08T12:00:00+00:00"  # `fetched_at` das respostas sintéticas de `resposta()`

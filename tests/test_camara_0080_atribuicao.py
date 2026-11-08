@@ -18,7 +18,7 @@ from freoa_verifica.connectors.camara_estado import Estado
 from freoa_verifica.connectors.camara_policy import TERMO_URL
 from freoa_verifica.service import Verifica
 from freoa_verifica.verify import campos_evidencia_obra
-from tests._camara_util import TERMO_HTML, portao
+from tests._camara_util import TERMO_HTML, portao, selo_do_termo
 from tests.test_camara_legin import servidor  # noqa: F401
 
 TERMO_SHA = hashlib.sha256(TERMO_HTML).hexdigest()
@@ -80,7 +80,8 @@ def test_atribuicao_carrega_o_hash_do_termo_vinculado_a_captura(tmp_path):
     x, y, em = "https://www2.camara.leg.br/x", "https://www2.camara.leg.br/y", "2026-11-08T12:00:05+00:00"
     estado.registrar_obtencao({"url": x, "sha256": conteudo, "capturado_em": em,
                                "politica_sha256": "a" * 64, "politica_obtida_em": "2026-11-08T12:00:00+00:00",
-                               "em": "2026-11-08T12:00:10+00:00", "termo_sha256": TERMO_SHA})
+                               "emitida_em": "2026-11-08T12:00:08+00:00", "em": "2026-11-08T12:00:10+00:00",
+                               "termo_sha256": TERMO_SHA, "termo_recibo_sha256": selo_do_termo(home, TERMO_SHA)})
     assert atribuicao(home, sha256=conteudo, url=x, fetched_at=em)["termo_sha256"] == TERMO_SHA
     # o termo corrente do home NÃO substitui o vínculo: captura sem registro, de outra URL ou de outro instante não herda
     assert atribuicao(home)["termo_sha256"] is None

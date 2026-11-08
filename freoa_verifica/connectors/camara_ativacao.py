@@ -21,7 +21,7 @@ from freoa_verifica import __version__
 from freoa_verifica.connectors import camara_robots as rb
 from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.connectors.camara_estado import (Estado, EstadoIndisponivel, LeituraLocalFalhou, Relogio, _de_iso,
-                                                     eh_sha256, iso, json_de_bytes, sha256)
+                                                     eh_sha256, iso, json_de_bytes, selo_do_recibo, sha256)
 from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL
 from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
@@ -33,7 +33,7 @@ CAMINHOS_DE_CONTEUDO = {
                            "/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html"),
     "www.camara.leg.br": ("/legislacao", "/legislacao/busca"),
 }
-_CAMPOS = ("termo_sha256", "termo_url", "robots_sha256", "versao_produto", "instante", "revisao", "registro_sha256")
+_CAMPOS = ("termo_sha256", "termo_recibo_sha256", "termo_url", "robots_sha256", "versao_produto", "instante", "revisao", "registro_sha256")
 _CAMPOS_DA_REVISAO = {"sha256", "auditor", "revisado_em", "resultado", "termo_sha256"}
 
 
@@ -76,7 +76,12 @@ def capturar(portao: Portao, estado: Estado, relogio: Relogio | None = None) -> 
     try:
         texto = texto_do_response(resposta)
     except RespostaInvalida as exc:
-        raise AtivacaoRecusada("termo_resposta_invalida") from exc
+        # Resposta do termo incompatível com o perfil DEPOIS do portão: mesma classificação de barreiras do recurso
+        # (recurso persistente, host pelo restante do escopo), distinta de falha local (0081 r3, R3-5).
+        falha = portao.falha_de_resposta(Unavailable("transporte_RespostaInvalida", "resposta_inesperada",
+                                                     {"url": TERMO_URL, "status": resposta.status, "mime": resposta.mime,
+                                                      "causa": "termo_nao_interpretavel"}), TERMO_URL)
+        raise AtivacaoRecusada("termo_resposta_invalida", falha.categoria, falha.evidencia) from exc
     if sha256(resposta.body) != resposta.sha256:
         raise AtivacaoRecusada("termo_hash_divergente")
     if portao.politica_de.get(TERMO_URL) != robots["www2.camara.leg.br"]:
@@ -84,18 +89,23 @@ def capturar(portao: Portao, estado: Estado, relogio: Relogio | None = None) -> 
     recibo = {"url": resposta.url, "capturado_em": resposta.fetched_at, "status": resposta.status, "mime": resposta.mime,
               "bytes": len(resposta.body), "sha256": resposta.sha256, "data_ou_versao_exibida": _data_exibida(texto),
               "politica_robots_sha256": portao.politica_de.get(TERMO_URL), "user_agent": USER_AGENT_IDENTIFICADO}
-    pre = {"termo_sha256": resposta.sha256, "termo_recibo": recibo, "robots_sha256": robots,
+    pre = {"termo_sha256": resposta.sha256, "termo_recibo_sha256": selo_do_recibo(recibo), "termo_recibo": recibo,
+           "robots_sha256": robots,
            "versao_produto": __version__, "instante": iso(relogio.agora())}
     try:
         estado.guardar_termo(resposta.body, recibo)
         estado.gravar_pre_ativacao(pre)
     except EstadoIndisponivel as exc:
+        # Falha ao preservar o termo ou a pré-ativação é falha local: encerra a sessão do portão (os dois hosts) ANTES de
+        # propagar; retomar só em nova unidade (0081 r3, R3-4).
+        portao.falha_local_de_estado(exc)
         raise _local(exc) from exc
     return pre
 
 
 def _pre_valida(pre) -> bool:
-    return (isinstance(pre, dict) and eh_sha256(pre.get("termo_sha256")) and isinstance(pre.get("robots_sha256"), dict)
+    return (isinstance(pre, dict) and eh_sha256(pre.get("termo_sha256")) and eh_sha256(pre.get("termo_recibo_sha256"))
+            and isinstance(pre.get("robots_sha256"), dict)
             and set(pre["robots_sha256"]) == set(HOSTS) and all(eh_sha256(v) for v in pre["robots_sha256"].values()))
 
 
@@ -141,7 +151,7 @@ def registrar(estado: Estado, revisao_arquivo: Path | str, relogio: Relogio | No
     if revisao["resultado"] != "conforme":
         raise AtivacaoRecusada("termo_divergente_exige_revisao_da_decisao")
     try:
-        termo_conferido = estado.termo_preservado(pre["termo_sha256"]) is not None
+        termo_conferido = estado.termo_preservado(pre["termo_sha256"], pre["termo_recibo_sha256"]) is not None
     except EstadoIndisponivel as exc:
         raise _local(exc) from exc
     if revisao["termo_sha256"] != pre["termo_sha256"] or not termo_conferido:
@@ -162,7 +172,8 @@ def registrar(estado: Estado, revisao_arquivo: Path | str, relogio: Relogio | No
         raise _local(exc) from exc
     except (EstadoIndisponivel, rb.RobotsInconclusivo, RespostaInvalida) as exc:
         raise AtivacaoRecusada("robots_preservado_invalido", None, {"causa": type(exc).__name__}) from exc
-    registro = {"termo_sha256": pre["termo_sha256"], "termo_url": TERMO_URL, "robots_sha256": pre["robots_sha256"],
+    registro = {"termo_sha256": pre["termo_sha256"], "termo_recibo_sha256": pre["termo_recibo_sha256"],
+                "termo_url": TERMO_URL, "robots_sha256": pre["robots_sha256"],
                 "versao_produto": __version__, "instante": iso(agora),
                 "revisao": {"sha256": revisao_sha, "auditor": revisao["auditor"],
                             "revisado_em": revisao["revisado_em"], "resultado": "conforme",
@@ -195,7 +206,8 @@ def validar_registro(estado: Estado, registro) -> bool:
             return False
         revisao = registro["revisao"]
         if (registro["termo_url"] != TERMO_URL or registro["registro_sha256"] != _selo(registro)
-                or not eh_sha256(registro["termo_sha256"]) or not isinstance(registro["versao_produto"], str)
+                or not eh_sha256(registro["termo_sha256"]) or not eh_sha256(registro["termo_recibo_sha256"])
+                or not isinstance(registro["versao_produto"], str)
                 or not registro["versao_produto"] or _de_iso(registro["instante"]) is None
                 or not isinstance(registro["robots_sha256"], dict) or set(registro["robots_sha256"]) != set(HOSTS)
                 or not all(eh_sha256(v) for v in registro["robots_sha256"].values())):
@@ -213,7 +225,7 @@ def validar_registro(estado: Estado, registro) -> bool:
         if (not isinstance(original, dict)
                 or any(original.get(k) != revisao[k] for k in ("auditor", "revisado_em", "resultado", "termo_sha256"))):
             return False
-        recibo = estado.termo_preservado(registro["termo_sha256"])
+        recibo = estado.termo_preservado(registro["termo_sha256"], registro["termo_recibo_sha256"])
         if recibo is None or recibo["politica_robots_sha256"] != registro["robots_sha256"]["www2.camara.leg.br"]:
             return False
         return all(_politica_decide_o_conteudo(estado, host, digest) for host, digest in registro["robots_sha256"].items())

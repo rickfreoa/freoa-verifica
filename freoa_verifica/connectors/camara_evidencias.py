@@ -6,11 +6,16 @@ termo) e os registros de ativação como EVIDÊNCIA (instalar não ativa a rota)
 de hashes do manifesto.
 
 Validação (`_validar`): cada arquivo pelo nome (hash), cada recibo de política como evidência dos seus bytes (a mesma
-validação do portão), cada recibo de termo pelo termo, e o FECHAMENTO dos vínculos: toda obtenção aponta termo (corpo e
-recibo), política (corpo e recibo, com o instante registrado) e todo termo aponta a política que o autorizou; evidência
-declarada com referência quebrada é recusada, mesmo com checksums refeitos. Ausência TOTAL de evidência Câmara é legítima.
+validação do portão), cada recibo de termo pelo termo, e o FECHAMENTO dos vínculos (0081 r3, R3-1): para cada obtenção,
+a gramática e a DECISÃO do caminho são recompostas dos bytes da política apontada (mesmo motor RFC 9309 por token), a
+decisão persistida correspondente tem de existir e permitir, a política tem de ter sido obtida antes da emissão e ser
+válida nela, a captura não precede a política, e o termo (recibo da obtenção, não só o conteúdo) tem de existir, ter sido
+capturado antes da emissão e sob política válida que permitia o caminho do termo. `termo_sha256=null` só com o marcador
+explícito `sem_termo`. O nome do recibo arquivado tem de coincidir com o instante declarado. Evidência declarada com
+referência quebrada é recusada, mesmo com checksums refeitos. Ausência TOTAL de evidência Câmara é legítima.
 
-Instalação (`Publicacao`): preflight completo de TODOS os conflitos e da união com o home, preparo em staging e
+Instalação (`Publicacao`): preflight completo de TODOS os conflitos e VALIDAÇÃO da união (home + pacote) pela mesma `_validar` (home incoerente
+com pacote íntegro é recusado: a instalação não conserta nem herda evidência quebrada), preparo em staging e
 publicação com diário de desfazimento, de modo que entra na MESMA publicação/recuperação transacional do banco e dos
 blobs (`snapshot.py`): falha em qualquer ponto restaura `camara/` ao estado anterior. Arquivos nomeados pelo hash
 coexistem (termos de snapshots diferentes), as obtenções são unidas por registro, as decisões por caminho de uma mesma
@@ -26,19 +31,22 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from freoa_verifica.connectors import camara_ativacao as ativ
+from freoa_verifica.connectors import camara_robots as rb
 from freoa_verifica.connectors.camara_estado import (ATIVACAO, Estado, EstadoIndisponivel, _de_iso, _escrever,
                                                      _json_bytes, iso, json_de_bytes, sha256, validar_obtencao,
                                                      validar_politica, validar_recibo_do_termo)
-from freoa_verifica.connectors.camara_policy import HOSTS
+from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL
+from freoa_verifica.texto_resposta import texto_da_resposta
+from freoa_verifica.transport import RespostaInvalida
 
 _H = r"[0-9a-f]{64}"
 _HOST = r"www2?\.camara\.leg\.br"
 _PADROES = {
     "termo_corpo": re.compile(rf"termo/({_H})\.html"),
-    "termo_recibo": re.compile(rf"termo/({_H})\.recibo\.json"),
+    "termo_recibo": re.compile(rf"termo/({_H})\.({_H})\.recibo\.json"),
     "revisao": re.compile(rf"revisao/({_H})\.json"),
     "robots": re.compile(rf"robots-({_HOST})-({_H})\.txt"),
-    "politica": re.compile(rf"politicas/({_HOST})-({_H})-\d+\.json"),
+    "politica": re.compile(rf"politicas/({_HOST})-({_H})-(\d+)\.json"),
     "obtencoes": re.compile(r"obtencoes\.jsonl"),
     "ativacao": re.compile(rf"evidencias/ativacao-({_H})\.json"),
 }
@@ -68,7 +76,7 @@ def _arquivos_do_home(estado: Estado) -> dict[str, bytes]:
         achado = _tipo(relativo)
         if achado is None or achado[0] == "ativacao":
             continue
-        if achado[0] == "termo_corpo" and not (pasta / f"termo/{achado[1].group(1)}.recibo.json").is_file():
+        if achado[0] == "termo_corpo" and not any((pasta / "termo").glob(f"{achado[1].group(1)}.*.recibo.json")):
             continue  # resto de uma captura interrompida (corpo sem recibo): não é evidência e não viaja
         saida[relativo] = caminho.read_bytes()
     ativacao = estado.home / ATIVACAO if estado.home else None
@@ -91,6 +99,26 @@ def _instante(texto) -> str:
     return iso(_de_iso(texto))
 
 
+def _caminho(url: str) -> str:
+    partes = urlsplit(url)
+    return partes.path + ("?" + partes.query if partes.query else "")
+
+
+def _recibos_vigentes_em(recibos: list[dict], instante) -> list[dict]:
+    return [r for r in recibos if _de_iso(r["obtido_em"]) <= instante < _de_iso(r["valido_ate"])]
+
+
+def _permite(recibo: dict, corpo: bytes, caminho: str) -> bool:
+    """A decisão RECOMPOSTA dos bytes da política (mesma gramática e mesmo motor do portão) permite o caminho E a
+    decisão persistida no recibo existe e é a mesma."""
+    try:
+        grupos = rb.interpretar(texto_da_resposta(corpo, recibo["content_type"]))
+        decisao = rb.decidir(grupos, caminho).estado
+    except (RespostaInvalida, rb.RobotsInconclusivo) as exc:
+        raise EvidenciaInvalida("camara_politica_nao_interpretavel") from exc
+    return decisao == rb.PERMITIDO and recibo["decisoes"].get(caminho) == rb.PERMITIDO
+
+
 def _validar(arquivos: dict[str, bytes]) -> None:
     """Confere todas as evidências entre si e o fechamento dos vínculos; levanta `EvidenciaInvalida` no primeiro defeito."""
     memoria = Estado(None)
@@ -102,6 +130,8 @@ def _validar(arquivos: dict[str, bytes]) -> None:
         tipo, m = achado
         if tipo in {"termo_corpo", "revisao"} and sha256(dados) != m.group(1):
             raise EvidenciaInvalida(f"camara_evidencia_hash_diverge:{relativo}")
+        if tipo == "termo_recibo" and sha256(dados) != m.group(2):
+            raise EvidenciaInvalida(f"camara_evidencia_hash_diverge:{relativo}")
         if tipo == "robots":
             if sha256(dados) != m.group(2):
                 raise EvidenciaInvalida(f"camara_evidencia_hash_diverge:{relativo}")
@@ -109,7 +139,7 @@ def _validar(arquivos: dict[str, bytes]) -> None:
         if tipo == "termo_corpo":
             termos[m.group(1)] = dados
         memoria._memoria[relativo] = dados
-    recibos_de_termo: dict[str, dict] = {}
+    recibos_de_termo: dict[tuple[str, str], dict] = {}
     politicas: dict[tuple[str, str], list[dict]] = {}
     obtencoes: list[dict] = []
     try:
@@ -118,8 +148,8 @@ def _validar(arquivos: dict[str, bytes]) -> None:
             if tipo == "termo_recibo":
                 if m.group(1) not in termos:
                     raise EvidenciaInvalida(f"camara_recibo_sem_termo:{relativo}")
-                recibos_de_termo[m.group(1)] = validar_recibo_do_termo(json_de_bytes(dados), m.group(1),
-                                                                       len(termos[m.group(1)]))
+                recibos_de_termo[(m.group(1), m.group(2))] = validar_recibo_do_termo(
+                    json_de_bytes(dados), m.group(1), len(termos[m.group(1)]))
             elif tipo == "politica":
                 corpo = robots.get((m.group(1), m.group(2)))
                 if corpo is None:
@@ -127,31 +157,52 @@ def _validar(arquivos: dict[str, bytes]) -> None:
                 registro = validar_politica(json_de_bytes(dados), m.group(1), corpo)  # a mesma validação do portão
                 if registro["sha256"] != m.group(2):
                     raise EvidenciaInvalida(f"camara_politica_incoerente:{relativo}")
+                if str(int(_de_iso(registro["obtido_em"]).timestamp())) != m.group(3):
+                    raise EvidenciaInvalida(f"camara_politica_instante_do_nome_incoerente:{relativo}")
                 memoria._memoria[relativo] = registro
                 politicas.setdefault((m.group(1), m.group(2)), []).append(registro)
             elif tipo == "obtencoes":
                 obtencoes += [validar_obtencao(json_de_bytes(linha)) for linha in dados.splitlines() if linha]
         # Fechamento dos vínculos: nada do que um registro aponta pode faltar ou contradizer o apontado.
         for digest in termos:
-            if digest not in recibos_de_termo:
+            if not any(d == digest for d, _ in recibos_de_termo):
                 raise EvidenciaInvalida(f"camara_termo_sem_recibo:{digest}")
-        for digest, recibo in recibos_de_termo.items():
-            if ("www2.camara.leg.br", recibo["politica_robots_sha256"]) not in politicas:
+        for (digest, _), recibo in recibos_de_termo.items():
+            candidatas = politicas.get(("www2.camara.leg.br", recibo["politica_robots_sha256"]))
+            if candidatas is None:
                 raise EvidenciaInvalida(f"camara_termo_sem_politica:{digest}")
+            vigentes = _recibos_vigentes_em(candidatas, _de_iso(recibo["capturado_em"]))
+            if not vigentes:
+                raise EvidenciaInvalida(f"camara_termo_fora_da_validade_da_politica:{digest}")
+            corpo = robots[("www2.camara.leg.br", recibo["politica_robots_sha256"])]
+            if not any(_permite(r, corpo, urlsplit(TERMO_URL).path) for r in vigentes):
+                raise EvidenciaInvalida(f"camara_termo_sem_decisao_que_o_permita:{digest}")
         for obtencao in obtencoes:
             host = urlsplit(obtencao["url"]).netloc
             if host not in HOSTS:
                 raise EvidenciaInvalida("camara_obtencao_host_nao_admitido")
-            if obtencao["termo_sha256"] is not None and obtencao["termo_sha256"] not in recibos_de_termo:
-                raise EvidenciaInvalida(f"camara_obtencao_sem_termo:{obtencao['termo_sha256']}")
+            termo = None
+            if obtencao["termo_sha256"] is not None:
+                termo = recibos_de_termo.get((obtencao["termo_sha256"], obtencao["termo_recibo_sha256"]))
+                if termo is None:
+                    raise EvidenciaInvalida(f"camara_obtencao_sem_termo:{obtencao['termo_sha256']}")
             recibos = politicas.get((host, obtencao["politica_sha256"]))
             if recibos is None:
                 raise EvidenciaInvalida(f"camara_obtencao_sem_politica:{obtencao['politica_sha256']}")
             instante = _instante(obtencao["politica_obtida_em"])
-            if all(_instante(r["obtido_em"]) != instante for r in recibos):
+            doc = [r for r in recibos if _instante(r["obtido_em"]) == instante]
+            if not doc:
                 raise EvidenciaInvalida("camara_obtencao_instante_da_politica_sem_recibo")
-            if _de_iso(obtencao["politica_obtida_em"]) > _de_iso(obtencao["em"]):
+            recibo = doc[0]
+            emitida = _de_iso(obtencao["emitida_em"])
+            if not _de_iso(recibo["obtido_em"]) <= emitida < _de_iso(recibo["valido_ate"]):
+                raise EvidenciaInvalida("camara_obtencao_fora_da_validade_da_politica")
+            if _de_iso(obtencao["capturado_em"]) < _de_iso(recibo["obtido_em"]):
                 raise EvidenciaInvalida("camara_obtencao_anterior_a_politica")
+            if not _permite(recibo, robots[(host, obtencao["politica_sha256"])], _caminho(obtencao["url"])):
+                raise EvidenciaInvalida("camara_obtencao_nao_autorizada_pela_politica")
+            if termo is not None and _de_iso(termo["capturado_em"]) > emitida:
+                raise EvidenciaInvalida("camara_obtencao_termo_posterior_a_emissao")
         for relativo, dados in arquivos.items():
             tipo, m = _tipo(relativo)
             if tipo == "ativacao":
@@ -298,6 +349,13 @@ class Publicacao:
                 if atual != uniao:
                     self._anterior["obtencoes.jsonl"] = atual
                     self.plano["obtencoes.jsonl"] = uniao
+            # Preflight da UNIÃO (R3-2): o que o home tem, com o que será publicado por cima, validado pela mesma `_validar`
+            # do snapshot. Home incoerente + pacote íntegro é recusado; não há tolerância a resto quebrado no destino.
+            uniao = _arquivos_do_home(self.estado)
+            uniao.update(self.plano)
+            for relativo, dados in self.arquivos.items():
+                uniao.setdefault(relativo, dados)
+            _validar(uniao)
             for relativo, dados in self.plano.items():
                 _escrever(self.staging / relativo, dados)
         except EvidenciaInvalida:

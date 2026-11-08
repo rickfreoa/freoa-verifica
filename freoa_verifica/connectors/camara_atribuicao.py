@@ -56,7 +56,7 @@ def termo_da_captura(home: Path | None, sha256: str | None, url: str | None, fet
     estado = Estado(Path(home))
     try:
         termos = {r["termo_sha256"] for r in _obtencoes_por_captura(estado).get(_chave(sha256, url, fetched_at), [])
-                  if r.get("termo_sha256") and estado.termo_preservado(r["termo_sha256"]) is not None}
+                  if r.get("termo_sha256") and estado.termo_preservado(r["termo_sha256"], r["termo_recibo_sha256"])}
     except (EstadoIndisponivel, ValueError):
         return None
     return next(iter(termos)) if len(termos) == 1 else None

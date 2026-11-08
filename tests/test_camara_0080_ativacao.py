@@ -4,6 +4,7 @@ import hmac
 import io
 import json
 import re
+from datetime import datetime, timezone
 
 import pytest
 
@@ -43,7 +44,7 @@ def test_capturar_le_robots_antes_do_termo_e_preserva_o_termo_integro(tmp_path):
     assert t.urls == [ROBOTS_WWW2, ROBOTS_WWW, TERMO_URL]  # robots dos dois hosts, só então o termo
     sha = hashlib.sha256(TERMO_HTML).hexdigest()
     assert pre["termo_sha256"] == sha and set(pre["robots_sha256"]) == {"www.camara.leg.br", "www2.camara.leg.br"}
-    recibo = estado.termo_preservado(sha)
+    recibo = estado.termo_preservado(sha, pre["termo_recibo_sha256"])
     assert recibo and {recibo[k] for k in ("url", "status", "mime", "bytes", "sha256")} == {
         TERMO_URL, 200, "text/html", len(TERMO_HTML), sha}
     assert recibo["capturado_em"] and recibo["data_ou_versao_exibida"] == "05/11/2026"
@@ -167,7 +168,8 @@ def test_registro_de_ativacao_adulterado_mantem_a_rota_pendente(tmp_path, campo,
 
 # --- o conector só vai ao vivo com a ativação -------------------------------------------------------------------------
 def servir_fixtures(monkeypatch, termo=True):
-    respostas = {r.url: r for r in (da_fixture(k) for k in ("robots_portal", "robots_legin", "busca_lei6404",
+    agora = datetime.now(timezone.utc).isoformat()  # o transporte vivo carimba o recebimento
+    respostas = {r.url: r for r in (da_fixture(k, fetched_at=agora) for k in ("robots_portal", "robots_legin", "busca_lei6404",
                                                               "norma_lei6404", "textos_atualizado_lei6404",
                                                               "textos_original_lei6404"))}
     respostas[TERMO_URL] = resposta(TERMO_URL, TERMO_HTML)
@@ -448,7 +450,7 @@ def test_causal_aceitar_termo_nao_preservado_quebra_a_ativacao(tmp_path, monkeyp
     with pytest.raises(Unavailable, match="termo_revisado_difere_do_preservado"):
         ativ.registrar(estado, arquivo, relogio)
     www2 = pre["robots_sha256"]["www2.camara.leg.br"]
-    monkeypatch.setattr(Estado, "termo_preservado", lambda self, digest: {"sha256": digest, "politica_robots_sha256": www2})
+    monkeypatch.setattr(Estado, "termo_preservado", lambda self, digest, selo: {"sha256": digest, "politica_robots_sha256": www2})
     assert ativ.registrar(estado, arquivo, relogio)  # com a proteção removida a ativação passaria: o teste acima falharia
 
 

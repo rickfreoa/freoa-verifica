@@ -4,7 +4,7 @@ Layout de `<home>/camara/`: `robots-<host>.json` (política vigente e recibo), `
 originais da resposta, nomeados pelo hash), `politicas/` (recibo de cada política obtida), `bloqueio-<host>.json`
 (barreiras do host e dos seus recursos), `ritmo-<host>.json` (início da última requisição, civil e monotônico),
 `host-<host>.lock` (trava entre processos), `obtencoes.jsonl` (vínculo de cada obtenção à política e ao termo
-vigentes), `termo/` (captura do termo), `revisao/` (bytes da revisão do auditor) e, no próprio home,
+vigentes), `termo/` (corpo pelo conteúdo e um recibo por obtenção), `revisao/` (bytes da revisão do auditor) e, no próprio home,
 `camara_ativacao.json`. Sem `home`, o estado vive só em memória (replay e testes).
 
 Toda escrita é atômica (arquivo temporário + `os.replace`). Falha de escrita, de leitura ou de esquema levanta
@@ -35,6 +35,8 @@ VALIDADE_ROBOTS = timedelta(hours=24)
 BLOQUEIO_TRANSITORIO = timedelta(hours=1)
 REVALIDACAO_INICIAL = timedelta(hours=1)
 REVALIDACAO_MAXIMA = timedelta(hours=24)
+JANELA_DO_REGISTRO = timedelta(minutes=5)  # `em` (escrito após a resposta) fica a até este tempo da emissão (timeout 60 s)
+SEM_TERMO = "portao_sem_ativacao_exigida"  # única ausência legítima de termo numa obtenção (replay e instrumento sem ativação)
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 
 
@@ -108,6 +110,11 @@ def _texto(valor) -> str:
 
 def sha256(dados: bytes) -> str:
     return hashlib.sha256(dados).hexdigest()
+
+
+def selo_do_recibo(recibo: dict) -> str:
+    """Identidade da OBTENÇÃO do termo: hash dos bytes gravados do recibo (a do conteúdo é o hash do corpo)."""
+    return sha256(_json_bytes(recibo))
 
 
 def json_de_bytes(dados: bytes):
@@ -249,12 +256,23 @@ def _validar_bloqueios(dados, host: str) -> dict:
 
 def validar_obtencao(registro) -> dict:
     """Vínculo de uma obtenção: identifica a CAPTURA pela tripla (`sha256`, `url`, `capturado_em`) que o banco usa, a
-    política que a autorizou (hash e instante) e o termo vigente NA EMISSÃO (0081 r2, R2-5)."""
+    política que a autorizou (hash e instante), o instante da EMISSÃO (`emitida_em`, em que a política foi reconfirmada
+    válida) e o termo vigente NA EMISSÃO, pelo conteúdo (`termo_sha256`) e pelo recibo da obtenção (`termo_recibo_sha256`).
+    Termo nulo só com o marcador explícito `sem_termo` (0081 r3, R3-1 e R3-6). `em` é escrito depois da resposta: só se
+    exige que não preceda a emissão e que a siga em até `JANELA_DO_REGISTRO`."""
     if (not isinstance(registro, dict) or not isinstance(registro.get("url"), str)
-            or not eh_sha256(registro.get("sha256")) or not eh_sha256(registro.get("politica_sha256"))
-            or (registro.get("termo_sha256") is not None and not eh_sha256(registro["termo_sha256"]))):
+            or not eh_sha256(registro.get("sha256")) or not eh_sha256(registro.get("politica_sha256"))):
         _invalido("obtencao")
-    _de_iso(registro.get("politica_obtida_em")), _de_iso(registro.get("em")), _de_iso(registro.get("capturado_em"))
+    termo, recibo, motivo = registro.get("termo_sha256"), registro.get("termo_recibo_sha256"), registro.get("sem_termo")
+    if termo is None:
+        if recibo is not None or motivo != SEM_TERMO:
+            _invalido("obtencao_sem_termo_nao_marcada")
+    elif not eh_sha256(termo) or not eh_sha256(recibo) or motivo is not None:
+        _invalido("obtencao_termo")
+    _de_iso(registro.get("politica_obtida_em")), _de_iso(registro.get("capturado_em"))
+    emitida, em = _de_iso(registro.get("emitida_em")), _de_iso(registro.get("em"))
+    if not emitida <= em <= emitida + JANELA_DO_REGISTRO:
+        _invalido("obtencao_instantes")
     return registro
 
 
@@ -559,22 +577,26 @@ class Estado:
         _escrever(self.home / ATIVACAO, _json_bytes(registro))
 
     def guardar_termo(self, corpo: bytes, recibo: dict) -> str:
+        """Conserva os bytes (nomeados pelo conteúdo) e o recibo DESTA obtenção (nomeado pelo hash do próprio recibo):
+        recapturar os mesmos bytes em outro instante ou sob outra política não sobrescreve a proveniência anterior
+        (0081 r3, R3-6). Devolve o hash do conteúdo; o do recibo é `selo_do_recibo(recibo)`."""
         digest = sha256(corpo)
         validar_recibo_do_termo(recibo, digest, len(corpo))
         self._gravar_bytes(f"termo/{digest}.html", corpo)
-        self._gravar_bytes(f"termo/{digest}.recibo.json", _json_bytes(recibo))
+        self._gravar_bytes(f"termo/{digest}.{selo_do_recibo(recibo)}.recibo.json", _json_bytes(recibo))
         return digest
 
-    def termo_preservado(self, digest: str) -> dict | None:
-        """Recibo do termo se os bytes preservados conferem com o hash e o recibo está íntegro; senão None.
+    def termo_preservado(self, digest: str, recibo_sha256: str) -> dict | None:
+        """Recibo do termo se os bytes preservados conferem com o hash e o recibo (identificado pelo hash dos seus
+        próprios bytes) está íntegro; senão None.
 
         Cada arquivo é lido uma vez; recibo incompatível (URL, status, MIME, tamanho, instante, hash, vínculo à
         política) não é termo preservado."""
-        if not eh_sha256(digest):
+        if not eh_sha256(digest) or not eh_sha256(recibo_sha256):
             return None
         corpo = self._bytes(f"termo/{digest}.html")  # falha local de leitura NÃO é ausência: propaga
-        bruto = self._bytes(f"termo/{digest}.recibo.json")
-        if corpo is None or bruto is None or sha256(corpo) != digest:
+        bruto = self._bytes(f"termo/{digest}.{recibo_sha256}.recibo.json")
+        if corpo is None or bruto is None or sha256(corpo) != digest or sha256(bruto) != recibo_sha256:
             return None
         try:
             return validar_recibo_do_termo(json_de_bytes(bruto), digest, len(corpo))
