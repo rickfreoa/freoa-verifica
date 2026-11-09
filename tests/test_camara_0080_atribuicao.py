@@ -104,13 +104,25 @@ def test_origem_preservada_em_respostas_compostas_com_varias_fontes(verifica_pop
 
 
 # --- fachadas e caminhos ---------------------------------------------------------------------------------------------
+def conferir_fronteira_original(texto):
+    assert texto.startswith("Art. 289. As publicações ordenadas pela presente Lei serão feitas no órgão oficial")
+
+
 def test_python_obter_dispositivo_vigente_e_original_sem_alterar_o_texto(acervo):
     atual = acervo.obter_dispositivo(ART)
     original = acervo.obter_dispositivo(ART, versao="publicacao_original")
     assert atual["evidencia"]["atribuicao"] == esperada() == original["evidencia"]["atribuicao"]
-    assert original["texto"].startswith("Art. 289. As publicações ordenadas pela presente Lei serão feitas no órgão oficial")
-    assert '"' not in original["texto"][:5]  # o Verifica não insere aspas nem altera o texto
+    conferir_fronteira_original(original["texto"])
     assert atual["status"] == "unknown" and atual["texto"] is None  # semântica das guardas intacta
+
+
+@pytest.mark.parametrize("aspas", ['"', '“'])
+def test_contraprova_aspas_na_fronteira_rotulo_corpo(acervo, aspas):
+    texto = acervo.obter_dispositivo(ART, versao="publicacao_original")["texto"]
+    conferir_fronteira_original(texto)
+    adulterado = texto.replace("Art. 289. ", "Art. 289. " + aspas, 1)
+    with pytest.raises(AssertionError):
+        conferir_fronteira_original(adulterado)
 
 
 def test_python_verificar_citacao_e_historico(acervo):

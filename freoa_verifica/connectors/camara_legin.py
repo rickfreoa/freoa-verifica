@@ -148,6 +148,19 @@ class CamaraLeginConnector(Connector):
         self.links = {}
         self.inventarios = {}
         self.politicas = []
+        self.falhas_descoberta = []
+        self.relacoes_observadas = []
+        self._ancoras = {}
+
+    def zerar_descoberta(self):
+        """Uma unidade de resolução não herda descobertas ou recusas da anterior."""
+        self.paginas.clear()
+        self.links.clear()
+        self.inventarios.clear()
+        self.politicas.clear()
+        self.falhas_descoberta.clear()
+        self.relacoes_observadas.clear()
+        self._ancoras.clear()
 
     def _portao_da_rota(self) -> Portao:
         if self._portao is not None:
@@ -230,9 +243,89 @@ class CamaraLeginConnector(Connector):
             self._validar_response(source, source.final_url)
             if not label or url_publicada(source.final_url, href) != url:
                 raise ValueError("vinculo_descoberta_invalido")
-            if not any(a.get("href") == href and compacto(a) == label for a in arvore(source).xpath('//a[@href]')):
+            if (href, label) not in self._ancoras_publicadas(source):
                 raise ValueError("link_nao_publicado")
         return route
+
+    def _ancoras_publicadas(self, page):
+        # Chamado só depois da conferência do hash; não armazena árvore normativa.
+        if page.sha256 not in self._ancoras:
+            self._ancoras[page.sha256] = frozenset((a.get("href"), compacto(a))
+                                                  for a in arvore(page).xpath('//a[@href]'))
+        return self._ancoras[page.sha256]
+
+    def validar_descoberta(self, url):
+        """Confere a cadeia inteira sem interpretar texto normativo ou obter bytes.
+
+        Cada antecessor deve ser a captura do acumulador, não apenas um objeto
+        de resposta íntegro fornecido pela aresta. A raiz também é capturada.
+        """
+        if self.falhas_descoberta:
+            raise self.falhas_descoberta[0]
+        cursor, visited, chain = url, set(), []
+        while True:
+            if cursor in visited:
+                raise _erro("ciclo_descoberta", self.paginas.get(url))
+            visited.add(cursor)
+            page = self.paginas.get(cursor)
+            if page is None:
+                raise _erro("descoberta_sem_raiz", self.paginas.get(url))
+            self._validar_response(page, cursor)
+            route = self._admitir(cursor)
+            if route["recurso"] in {"busca", "portal", "robots"} and cursor in self.links:
+                raise _erro("raiz_descoberta_invalida", page)
+            if cursor not in self.links:
+                if route["recurso"] not in {"busca", "portal"} and not (route["recurso"] == "robots" and not chain):
+                    raise _erro("descoberta_sem_raiz", page)
+                return chain
+            source, href, label = self.links[cursor]
+            captured = self.paginas.get(source.final_url)
+            if captured is None:
+                raise _erro("descoberta_sem_raiz", page)
+            self._validar_response(source, source.final_url)
+            if captured.sha256 != source.sha256:
+                raise _erro("hash_ancestral_divergente", page)
+            chain.append({"url": cursor, "origem_url": source.final_url,
+                          "origem_sha256": source.sha256, "href": href, "rotulo": label})
+            cursor = source.final_url
+
+    def _registrar_descoberta(self, page, url, href, label):
+        """Preserva o primeiro caminho; vínculos posteriores são relações observadas."""
+        try:
+            self._validar_response(page, page.final_url)
+            captured = self.paginas.get(page.final_url)
+            if captured is None:
+                raise _erro("descoberta_sem_raiz", page)
+            self._validar_response(captured, page.final_url)
+            if captured.sha256 != page.sha256:
+                raise _erro("hash_ancestral_divergente", page)
+            if (not label or url_publicada(page.final_url, href) != url or
+                    (href, label) not in self._ancoras_publicadas(page)):
+                raise _erro("link_nao_publicado", page)
+            classe = None
+            if url == page.final_url:
+                # Uma autorreferência isolada nunca cria uma raiz.
+                classe = "autorreferencia"
+            elif url in self.links or (url in self.paginas and
+                    validar_url(url)["recurso"] in {"busca", "portal"}):
+                previous = self.links.get(url)
+                if previous is not None and previous[0].final_url == page.final_url:
+                    classe = "duplicacao"
+                else:
+                    cursor, seen = page.final_url, set()
+                    while cursor in self.links and cursor not in seen and cursor != url:
+                        seen.add(cursor)
+                        cursor = self.links[cursor][0].final_url
+                    classe = "retorno" if cursor == url else "concorrente"
+            if classe is not None:
+                self.relacoes_observadas.append({"origem_url": page.final_url,
+                    "origem_sha256": page.sha256, "href": href, "rotulo": label,
+                    "destino": url, "classe": classe})
+                return
+            self.links[url] = (page, href, label)
+        except Unavailable as exc:
+            self.falhas_descoberta.append(exc)
+            raise
 
     @sob_guarda
     def _obter_recurso(self, url):
@@ -275,10 +368,10 @@ class CamaraLeginConnector(Connector):
                 continue
             if info["recurso"] != "norma" or not compacto(a):
                 continue
+            self._registrar_descoberta(resp, target, a.get("href"), compacto(a))
             if target in seen:
                 continue
             seen.add(target)
-            self.links[target] = (resp, a.get("href"), compacto(a))
             candidates.append(Candidate(self.id, f"{info['familia']}:{info['numero']}:{info['ano']}",
                                         compacto(a), target, metadata={"pagina_busca": resp.sha256}))
         if not candidates:
@@ -295,6 +388,7 @@ class CamaraLeginConnector(Connector):
         if kind not in TIPOS or not number or not year:
             raise Unavailable("especie_busca_nao_demonstrada")
         wk = WorkKey("federal", kind, str(number), int(year))
+        self.zerar_descoberta()
         name = "Lei Complementar" if kind == "lei_complementar" else "Lei"
         found = self.search(f"{name} {number}/{year}")
         matches = []
@@ -326,9 +420,7 @@ class CamaraLeginConnector(Connector):
     def _descobrir(self, page, inv):
         for r in inv["recursos"]:
             if r["admitido"]:
-                # Uma relação de retorno (inclusive autorreferência) não substitui
-                # a aresta pela qual a página já foi descoberta desde a busca.
-                self.links.setdefault(r["url"], (page, r["href"], r["rotulo"]))
+                self._registrar_descoberta(page, r["url"], r["href"], r["rotulo"])
 
     @_classifica
     def fetch(self, candidate):
@@ -366,6 +458,9 @@ class CamaraLeginConnector(Connector):
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
         self._admitir(resp.final_url)
         self._validar_response(resp, resp.final_url)
+        descoberta = self.validar_descoberta(resp.final_url)
+        if self.paginas[resp.final_url].sha256 != resp.sha256:
+            raise _erro("hash_captura_divergente", resp)
         route = validar_url(resp.final_url)
         if route["recurso"] == "anexo":
             try:
@@ -402,19 +497,7 @@ class CamaraLeginConnector(Connector):
         if (route["familia"], route["numero"], route["ano"]) != (family, page_key.number, page_key.year):
             raise _erro("identidade_slug_divergente", resp)
         doc.title = inv["titulo"]
-        inv = {**inv, "descoberta": []}
-        cursor = resp.final_url
-        visited = set()
-        while cursor in self.links:
-            if cursor in visited:
-                raise _erro("ciclo_descoberta", resp)
-            visited.add(cursor)
-            page, href, label = self.links[cursor]
-            inv["descoberta"].append({"url": cursor, "origem_url": page.final_url,
-                                       "origem_sha256": page.sha256, "href": href, "rotulo": label})
-            cursor = page.final_url
-        if validar_url(cursor)["recurso"] not in {"busca", "portal"}:
-            raise _erro("descoberta_sem_raiz", resp)
+        inv = {**inv, "descoberta": descoberta}
         doc.editorial_blocks.append(EditorialBlock(json.dumps(inv, ensure_ascii=False, sort_keys=True), (0, 0),
                                                    "camara_inventario"))
         return doc

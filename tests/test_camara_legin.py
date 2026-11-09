@@ -245,8 +245,12 @@ def test_c1_texto_de_outra_obra_recusado(servidor):
     cand = con.resolve({"kind": "lei", "number": "6404", "year": 1976})
     resp = con.fetch(cand)
     raw = resp.body.replace(b"6.404", b"6.405", 1)
+    outra = replace(resp, body=raw, sha256=hashlib.sha256(raw).hexdigest(), headers={}, size=len(raw))
+    with pytest.raises(Unavailable, match="hash_captura_divergente"):  # resposta que não é a captura (IL.3-c, R1)
+        con.parse(outra)
+    con.paginas[outra.final_url] = outra  # o servidor publicou, no endereço da 6.404, o texto de outra obra
     with pytest.raises(Unavailable, match="identidade_texto_divergente"):
-        con.parse(replace(resp, body=raw, sha256=hashlib.sha256(raw).hexdigest(), headers={}, size=len(raw)))
+        con.parse(outra)
 
 
 @pytest.mark.parametrize("url", [LSA + "?x=1", LSA + ".bak", LSA.replace("/lei/", "/leicom/"),
@@ -452,3 +456,30 @@ def test_c6_c7_truncamento_e_lacuna_nao_sao_texto_integro():
     doc = sintetico('<p>Art. 1º Primeiro.</p><p>Art. 3º Terceiro.</p>')
     assert doc.quarantined
     assert any(i.detail == "sequência de artigos com lacuna não explicada" for i in doc.issues)
+
+
+def test_r1b_relacoes_reais_preservam_primeira_proveniencia(servidor):
+    con = CamaraLeginConnector()
+    candidate = con.resolve({"kind": "lei", "number": "6404", "year": 1976})
+    inv = con.inventarios[candidate.url]
+    before = dict(con.links)
+    relations = [r for r in inv["recursos"] if r["acao"] and
+                 ("lei-13874-" in r["url"] or "medidaprovisoria-881-" in r["url"])]
+    con.inventarios[candidate.url] = {**inv, "recursos": relations}
+    result = con.capturar_relacoes(candidate)
+    law = next(m for m in result["materiais"] if "lei-13874-" in m["relacao"]["url"])
+    assert law["resposta"].sha256 == "4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3"
+    assert law["publicacao"]["data"] == "2019-09-20"
+    assert law["documento"].title == "LEI Nº 13.874, DE 20 DE SETEMBRO DE 2019"
+    assert len(result["materiais"]) == 2 and result["cadeia_completa"] is False
+    assert all(con.links[url] is edge for url, edge in before.items())
+    assert con.falhas_descoberta == []
+    observed = [r for r in con.relacoes_observadas if "lei-13874-" in r["origem_url"]]
+    assert any(r["classe"] == "concorrente" and "lei-14195-" in r["destino"] for r in observed)
+    assert any(r["classe"] == "concorrente" and "medidaprovisoria-881-" in r["origem_url"]
+               and r["destino"] == law["relacao"]["url"] for r in con.relacoes_observadas)
+    for r in observed:
+        source = con.paginas[r["origem_url"]]
+        assert r["origem_sha256"] == source.sha256
+        assert (r["href"], r["rotulo"]) in con._ancoras_publicadas(source)
+    assert con.validar_descoberta(law["resposta"].url)[-1]["origem_url"] == con.links[LSA][0].url

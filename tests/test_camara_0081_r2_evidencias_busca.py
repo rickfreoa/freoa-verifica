@@ -14,7 +14,7 @@ from freoa_verifica import camara_instrumento as ci
 from freoa_verifica import snapshot as snapshot_mod
 from freoa_verifica.connectors import camara_evidencias as ev
 from freoa_verifica.connectors.camara_estado import Estado
-from freoa_verifica.connectors.camara_legin import inventario
+from freoa_verifica.connectors.camara_legin import CamaraLeginConnector, inventario
 from freoa_verifica.service import Verifica
 from freoa_verifica.store import repo
 from tests._camara_util import LEI, Transporte, barreira, da_fixture, obter_vinculado, resposta, selo_do_termo
@@ -411,7 +411,9 @@ def test_r28_unidade_seguinte_nunca_herda_paginas_exclusivas_da_anterior(tmp_pat
 
 
 def test_r28_o_mutante_sem_zeragem_e_morto_exatamente_por_este_teste(tmp_path, monkeypatch):
-    monkeypatch.setattr(ci, "_zerar", lambda con: None)  # o mutante: nada é zerado entre as unidades
+    # o mutante: nada é zerado entre as unidades. Desde a IL.3-c (R3), `resolve` também zera a unidade na entrada,
+    # e `ci._zerar` delega ao mesmo método; o mutante desliga a zeragem na raiz comum às duas camadas.
+    monkeypatch.setattr(CamaraLeginConnector, "zerar_descoberta", lambda self: None)
     vistas = _inventario_de_duas_normas(tmp_path, monkeypatch)
     segunda = vistas[1][1]
     assert {ATUAL, ORIGINAL, LEI} & segunda  # sem zerar, a segunda herda as páginas da primeira: a regressão acima falharia

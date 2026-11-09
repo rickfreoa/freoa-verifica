@@ -68,6 +68,7 @@ def test_d0_rotulo_literal_em_cada_classe_sem_mudar_corpo(path, expected):
     assert doc.text[red.span[0]:red.span[1]] == expected
 
 
+@pytest.mark.repositorio  # usa o normalizador congelado em scripts/, ausente da wheel
 def test_d0_fachada_igual_ao_gabarito_congelado_de_desenvolvimento(acervo):  # noqa: F811
     casos = [json.loads(s) for s in (Path(__file__).parent / "porta_l" / "desenvolvimento.jsonl").read_text("utf-8").splitlines()]
     caso = next(c for c in casos if c["id"] == "L-b-001")
@@ -113,7 +114,11 @@ def test_d1_capturas_integrais_sobrevivem_a_falha_local_do_parser(tmp_path, monk
     monkeypatch.setattr(isolated, "parse_isolated", lambda profile, *a, **k: isolated._failure(profile, "import indisponivel"))
     out = ci.inventariar(home, normas_em(tmp_path), tmp_path / "saida", transporte=Transporte(relogio, rotas), relogio=relogio)
     assert out["resultado"] == "parcial"
-    assert out["falhas"] == [{"motivo": "falha_parser_camara", "categoria": None}]
+    assert len(out["falhas"]) == 1
+    assert out["falhas"][0] == {"motivo": "falha_parser_camara", "categoria": None,
+                                "fase": "persistencia_interpretacao", "bloqueio": None, "url": ATUAL,
+                                "evidencia": {"url": ATUAL, "sha256": rotas[ATUAL].sha256,
+                                              "causa": "camara_legin_nao_processado: import indisponivel"}}
     with Verifica(home=home) as svc:
         caps = svc.conn.execute("SELECT * FROM capture").fetchall()
         assert len(caps) == 4
@@ -124,13 +129,19 @@ def test_d1_capturas_integrais_sobrevivem_a_falha_local_do_parser(tmp_path, monk
 
 
 @pytest.mark.parametrize("causa", ["import", "processo", "tempo", "memoria", "saida"])
-def test_d2_falha_do_isolamento_terminal_sem_barreira_persistente(tmp_path, monkeypatch, causa, proibir_rede):
+@pytest.mark.parametrize("formato", ["html", "pdf"])
+def test_d2_falha_do_isolamento_terminal_sem_barreira_persistente(tmp_path, monkeypatch, causa, formato, proibir_rede):
     from tests._camara_util import portao
-    p, t, _, estado = portao(tmp_path / "h", rotas_da_fixture())
+    rotas = rotas_da_fixture()
+    for role in ("busca", "norma", "textos_anexo"):
+        r = da_fixture(role + "_lc123")
+        rotas[r.url] = r
+    p, t, _, estado = portao(tmp_path / "h", rotas)
     con = CamaraLeginConnector(portao=p, home=tmp_path / "h")
     with da_chamada():
-        cand = con.resolve({"kind": "lei", "number": "6404", "year": 1976})
-        resp = con.fetch(cand)
+        cand = con.resolve({"kind": "lei", "number": "6404", "year": 1976} if formato == "html" else
+                           {"kind": "lei_complementar", "number": "123", "year": 2006})
+        resp = con.fetch(cand) if formato == "html" else con.fetch_anexo(cand)
         if causa == "processo":
             def popen(*a, **k):
                 raise OSError("processo indisponível")
@@ -142,17 +153,22 @@ def test_d2_falha_do_isolamento_terminal_sem_barreira_persistente(tmp_path, monk
             monkeypatch.setattr(isolated, "_bounded_io", lambda *a: (
                 b"invalido", b"ModuleNotFoundError" if causa == "import" else b"memoria_excedida",
                 "timeout" if causa == "tempo" else None))
-        with pytest.raises(Unavailable, match="falha_parser_camara"):
+        with pytest.raises(Unavailable, match="falha_parser_camara") as failure:
             con.parse(resp)
+        assert failure.value.categoria is None
+        assert failure.value.classificacao() == {}
+        assert failure.value.evidencia["causa"].startswith("camara_legin_nao_processado" if formato == "html" else
+                                                        "camara_anexo_nao_processado")
         antes = list(t.urls)
         with pytest.raises(Unavailable, match="falha_parser_camara"):
             p.obter(LSA)
         assert t.urls == antes
-    assert estado.bloqueio_do_recurso("www2.camara.leg.br", ATUAL) is None
+    assert estado.bloqueio_do_recurso("www2.camara.leg.br", resp.url) is None
     assert estado.bloqueio_do_host("www2.camara.leg.br", p.relogio.agora()) is None
     monkeypatch.undo()
     with da_chamada():
-        assert con.parse(resp).provisions  # nova chamada retoma, sem reabertura registrada
+        doc = con.parse(resp)  # nova chamada retoma, sem reabertura registrada
+        assert doc.provisions if formato == "html" else doc.text
     assert proibir_rede == []
 
 
@@ -188,11 +204,23 @@ def test_d3_autorreferencia_nao_substitui_raiz_e_releitura_confere(tmp_path, num
         assert chain[0]["origem_url"] == chain[1]["url"]
         assert "/busca?" in chain[1]["origem_url"]
         assert any(r["url"] == chain[1]["url"] for r in inv["recursos"])  # autorreferência real
+        assert any(r["classe"] == "autorreferencia" and r["destino"] == chain[1]["url"]
+                   for r in con.relacoes_observadas)
+        assert con.falhas_descoberta == []
         svc._revalidar_camara(rw)
         monkeypatch.setattr(svc, "_offline", lambda: True)
         antes = list(t.urls)
         got = svc.obter_dispositivo(f"art. 1º da Lei {numero}/{ano}")
-        assert got["status"] in {"encontrada", "unknown"}  # D4/perfil não se confunde com descoberta
+        if numero == "13105":
+            assert (got["status"], got["texto"], got["reason_code"]) == ("unknown", None, "ORDER")
+        else:
+            assert got["status"] == "encontrada" and got.get("reason_code") is None
+            assert got["texto"] == (
+                "Art. 1º Esta Lei dispõe sobre o tratamento de dados pessoais, inclusive nos meios digitais, "
+                "por pessoa natural ou por pessoa jurídica de direito público ou privado, com o objetivo de "
+                "proteger os direitos fundamentais de liberdade e de privacidade e o livre desenvolvimento "
+                "da personalidade da pessoa natural.\nParágrafo único. As normas gerais contidas nesta Lei "
+                "são de interesse nacional e devem ser observadas pela União, Estados, Distrito Federal e Municípios.")
         assert t.urls == antes
     assert proibir_rede == []
 

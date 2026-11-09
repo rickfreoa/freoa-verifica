@@ -25,10 +25,17 @@ interpreta os textos obtidos e persiste as páginas e modelos pelos mesmos camin
 de armazenamento do serviço, no home do próprio portão. Isso conserva a tripla
 URL/hash/instante e a procedência `captura_direta`, com o registro administrativo
 captura → política → termo já preservado pelo portão. Não executa outra obtenção.
-Os bytes são gravados depois do preflight e antes da interpretação: falha local
+O preflight independente do parser confere todas as arestas até a raiz capturada,
+hashes de cada resposta e sua igualdade com o ancestral acumulado, hrefs, rótulos
+e ciclos. A recusa ocorre antes de abrir o home: zero gravações nesse home.
+Os bytes são gravados depois do preflight completo e antes da interpretação: falha local
 do parser não apaga as capturas íntegras nem cria modelo a partir de sua falha.
 Material parcial e falha continuam declarados no inventário de destino. Falha
-local de armazenamento ou interpretação encerra a sessão. Não há nova importação
+local de armazenamento ou interpretação encerra a sessão. Causas por fase são
+acumuladas em ordem, com evidência. O inventário durável mantém a primeira no
+resumo e todas em `causas`; a saída mantém todas em `falhas`. A parada usa a união
+dos impedimentos: causa posterior nunca revoga a terminalidade anterior.
+Não há nova importação
 destino → home nem alteração dos canais públicos do modo reserva.
 
 ## D2 — Isolamento local versus conteúdo
@@ -42,15 +49,35 @@ de perfil; erros reconhecidos de leitura HTML/PDF e limites documentais explíci
 de PDF são devolvidos pelo filho como conteúdo inválido, sem serem confundidos
 com falha do isolamento. Exceções inesperadas continuam locais.
 
-## D3 — Autorreferência em páginas de norma
+## D3 — Proveniência da descoberta e relações observadas
 
 Nos corpos reais do CPC e da LGPD do lote `fv-captura-dev-s2`, a página publica um
 link admitido para ela mesma. `_descobrir` substituía a aresta busca → norma por
 norma → norma; a interpretação detectava corretamente o ciclo que o acumulador
-criara. Preserva-se agora a primeira aresta: relações de retorno e autorreferências
-não sobrescrevem uma descoberta já registrada. A validação de href/rótulo/hash e
-a exigência de raiz de busca continuam, inclusive na releitura do banco. Um ciclo
-efetivo sem raiz continua recusado. Isso não remove impedimentos de parse do CPC.
+criara. A primeira correção (r1) toleraria só a autorreferência e trataria retorno
+e descoberta concorrente como erro. A validação integral mostrou que isso inutiliza
+a rota: as páginas de normas relacionadas publicam rotineiramente vínculos de
+retorno e vínculos concorrentes para os mesmos atos (a página da Lei 13.874/2019
+publica atos já publicados pela da Lei 6.404/1976), e o erro envenenava a unidade
+inteira.
+
+Regra (decisão do supervisor, r1b). A cadeia de descoberta registra a proveniência:
+o primeiro caminho válido pelo qual a unidade alcançou uma URL. Toda aresta é
+conferida antes de qualquer efeito: resposta de origem íntegra e igual à captura
+acumulada, href que resolve para o destino e par href/rótulo presente nas âncoras
+dos bytes. Aresta válida para URL ainda não alcançada entra na cadeia. Aresta
+válida para URL já alcançada (autorreferência, duplicação na mesma página, retorno
+entre páginas ou descoberta concorrente) não altera a cadeia nem é erro: fica
+registrada como relação observada da unidade, com sua classe. Autorreferência sem
+aresta anterior não cria raiz. Aresta inválida é erro de descoberta, retido até
+zerar a unidade, e impede persistência (D1). Por construção, a cadeia é uma
+floresta enraizada; a detecção de ciclo e de raiz continua como defesa em
+profundidade, inclusive na releitura do banco.
+
+Cada `resolve` inicia uma unidade de descoberta limpa, inclusive quando o serviço
+reutiliza o conector entre normas; o estado de barreiras do portão não é zerado.
+Relação observada não é cobertura, vigência nem prova de completude da lista de
+relações. Isso não remove impedimentos de parse do CPC.
 
 ## D4 — Limites conservados com contraprovas
 
