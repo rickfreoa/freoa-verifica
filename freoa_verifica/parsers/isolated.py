@@ -20,9 +20,15 @@ LIMIT_INSTALL_EXIT = 78
 _JOB_HANDLE = None  # Não fechar: KILL_ON_JOB_CLOSE deve durar até a saída do filho.
 
 
-def _failure(profile: str, detail: str) -> ParsedDocument:
+def _failure(profile: str, detail: str, *, exit_code: int | None = None) -> ParsedDocument:
+    from freoa_verifica.connectors.base import CAUSAS_PARSER
+    profile = profile if isinstance(profile, str) and profile in _PROFILES else "desconhecido"
+    cause = detail if isinstance(detail, str) and detail in CAUSAS_PARSER else "protocolo"
+    fields = {"causa": cause}
+    if type(exit_code) is int:
+        fields["exit_code"] = exit_code
     return ParsedDocument(profile, "0", "", None, "", issues=[
-        Issue("TRUNCATED", None, detail, blocking_scope="document"),
+        Issue("TRUNCATED", None, json.dumps(fields), blocking_scope="document"),
     ])
 
 def parse_ou_indisponivel(profile: str, data: bytes | str, timeout: float, *, base_url: str | None = None) -> ParsedDocument:
@@ -30,8 +36,14 @@ def parse_ou_indisponivel(profile: str, data: bytes | str, timeout: float, *, ba
     from freoa_verifica.connectors.base import LocalParserFailure, Unavailable
     doc = parse_isolated(profile, data, timeout, base_url=base_url)
     if doc.parser_version == "0":  # marca de _failure
-        detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "falha")
-        raise LocalParserFailure(f"{profile}_nao_processado: {detalhe}"[:200])
+        from freoa_verifica.connectors.base import sanitizar_falha_parser
+        try:
+            fields = json.loads(next(i.detail for i in doc.issues if i.code == "TRUNCATED"))
+        except (ValueError, TypeError, StopIteration):
+            fields = {}
+        if not isinstance(fields, dict):
+            fields = {}
+        raise sanitizar_falha_parser(LocalParserFailure("parser_nao_processado", None, fields), perfil=profile)
     if doc.parser_version == "conteudo-invalido":
         raise Unavailable(f"{profile}_conteudo_nao_processavel")
     return doc
@@ -48,7 +60,8 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url:
         return _failure(profile, "entrada_excedida")
     timeout = restante(timeout)
     if timeout <= 0:
-        return _failure(profile, "orcamento esgotado")
+        return _failure(profile, "tempo")
+    proc, fase = None, "criacao_processo"
     try:
         # Sem `with`: o __exit__ do Popen fecharia pipes ainda presos por um descendente fora do grupo
         # (setsid) e bloquearia o pai; _bounded_io fecha o que pode e abandona o resto no prazo.
@@ -61,19 +74,29 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url:
             # Grupo próprio: timeout e excesso matam também descendentes que herdem os pipes.
             **({"start_new_session": True} if os.name == "posix" else {}),
         )
-        output, stderr, exceeded = _bounded_io(proc, raw, timeout)
+        fase = "protocolo"
+        output, _stderr, exceeded = _bounded_io(proc, raw, timeout)
         if exceeded:
-            return _failure(profile, exceeded)
+            return _failure(profile, "tempo" if exceeded in {"tempo", "timeout"} else "protocolo")
         if proc.returncode != 0:
-            detail = stderr.decode("utf-8", "replace").strip().splitlines()
-            return _failure(profile, f"parse_isolated falhou no filho (exit={proc.returncode}): "
-                            + (detail[-1][:200] if detail else "sem detalhe"))
-    except OSError as exc:
-        return _failure(profile, f"parse_isolated indisponivel: {type(exc).__name__}")
+            cause = {77: "importacao", 3: "memoria"}.get(proc.returncode, "exit_nao_zero")
+            return _failure(profile, cause, exit_code=proc.returncode)
+    except Exception as exc:  # noqa: BLE001 — falha do mecanismo, nunca texto de exceção no retorno
+        if proc is not None:
+            try:
+                if os.name == "posix":
+                    os.killpg(proc.pid, 9)
+                else:
+                    proc.kill()
+            except Exception:  # noqa: BLE001, S110 — limpeza não substitui a causa local nem divulga mensagens
+                pass
+        cause = ("memoria" if isinstance(exc, MemoryError) else "importacao" if isinstance(exc, ImportError)
+                 else "tempo" if isinstance(exc, (TimeoutError, subprocess.TimeoutExpired)) else fase)
+        return _failure(profile, cause)
     try:
         return document_from_dict(json.loads(output))
-    except (ValueError, TypeError, KeyError, AttributeError):
-        return _failure(profile, "parse_isolated sem resultado valido do filho")
+    except Exception as exc:  # noqa: BLE001 — protocolo de saída inválido ou memória local
+        return _failure(profile, "memoria" if isinstance(exc, MemoryError) else "protocolo")
 
 
 def _bounded_io(proc, raw: bytes, timeout: float):
@@ -88,12 +111,12 @@ def _bounded_io(proc, raw: bytes, timeout: float):
                 os.killpg(proc.pid, 9)
             else:
                 proc.kill()  # Job Object com KILL_ON_JOB_CLOSE e ACTIVE_PROCESS=1 cobre descendentes
-        except OSError:
+        except Exception:  # noqa: BLE001, S110 — falha de limpeza não imprime mensagem de exceção da thread
             pass
 
     def read(stream, index, limit):
-        fd = stream.fileno()  # descritor cru: nenhuma trava de BufferedReader compartilhada com o fechamento
         try:
+            fd = stream.fileno()  # nenhuma trava de BufferedReader compartilhada com o fechamento
             while True:
                 chunk = os.read(fd, min(65536, limit - len(buffers[index]) + 1))
                 if not chunk:
@@ -102,10 +125,13 @@ def _bounded_io(proc, raw: bytes, timeout: float):
                     kill("stdout_excedido" if index == 0 else "stderr_excedido")
                     break
                 buffers[index].extend(chunk)
-        except OSError:
+        except Exception:  # noqa: BLE001 — nenhuma mensagem de falha da thread vai para stderr
             kill("leitura_falhou")
         finally:
-            stream.close()
+            try:
+                stream.close()
+            except Exception:  # noqa: BLE001 — erro local de protocolo, sem mensagem
+                kill("fechamento_falhou")
 
     def write():
         try:
@@ -115,8 +141,13 @@ def _bounded_io(proc, raw: bytes, timeout: float):
                 mv = mv[os.write(fd, mv[: 1 << 20]):]
         except (BrokenPipeError, OSError):
             pass
+        except Exception:  # noqa: BLE001 — falha local inesperada da thread
+            kill("escrita_falhou")
         finally:
-            proc.stdin.close()
+            try:
+                proc.stdin.close()
+            except Exception:  # noqa: BLE001 — erro local de protocolo, sem mensagem
+                kill("fechamento_falhou")
 
     threads = [threading.Thread(target=read, args=(proc.stdout, 0, STDOUT_LIMIT), daemon=True),
                threading.Thread(target=read, args=(proc.stderr, 1, STDERR_LIMIT), daemon=True),
@@ -126,7 +157,7 @@ def _bounded_io(proc, raw: bytes, timeout: float):
     try:
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        kill(f"parse_isolated excedeu timeout={timeout}s")
+        kill("tempo")
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
@@ -233,8 +264,7 @@ def texto_pdf_isolado(body: bytes, timeout: float = 60.0) -> str:
 
     doc = parse_isolated("pdf_texto", body, timeout)
     if doc.quarantined:
-        detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "falha")
-        raise Unavailable(f"pdf_nao_processado: {detalhe}"[:200])
+        raise Unavailable("pdf_nao_processado")
     return doc.text
 
 
@@ -244,12 +274,15 @@ def _main() -> None:
     except Exception:
         sys.stderr.write("limites_nao_instalados\n")
         sys.exit(LIMIT_INSTALL_EXIT)
-    from freoa_verifica.parsers.planalto import parse_planalto
-    from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
-    from freoa_verifica.parsers.bcb_json import parse_bcb_json
-    from freoa_verifica.connectors.cvm_normas import parse_pdf_direto
-    from freoa_verifica.parsers.camara_legin import parse_camara_legin
-    from freoa_verifica.parsers.camara_anexo import parse_camara_anexo
+    try:
+        from freoa_verifica.parsers.planalto import parse_planalto
+        from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
+        from freoa_verifica.parsers.bcb_json import parse_bcb_json
+        from freoa_verifica.connectors.cvm_normas import parse_pdf_direto
+        from freoa_verifica.parsers.camara_legin import parse_camara_legin
+        from freoa_verifica.parsers.camara_anexo import parse_camara_anexo
+    except ImportError:
+        sys.exit(77)
     parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto, parse_camara_legin, parse_camara_anexo)))
     try:
         body = sys.stdin.buffer.read()
@@ -273,8 +306,7 @@ def _main() -> None:
             document = ParsedDocument(sys.argv[1], "conteudo-invalido", "", None, "", issues=[
                 Issue("TRUNCATED", None, type(exc).__name__, "document")])
         else:
-            sys.stderr.write(str(getattr(exc, "reason", None) or type(exc).__name__) + "\n")
-            sys.exit(3)
+            sys.exit(4)
     sys.stdout.buffer.write(json.dumps(asdict(document), ensure_ascii=False).encode("utf-8"))
 
 if __name__ == "__main__":

@@ -20,34 +20,98 @@ guarda existente, sem renovar a captura. Nenhuma normalização nova.
 
 ## D1 — Inventário e home
 
-Depois da obtenção, o instrumento valida as respostas e a cadeia de descoberta,
-interpreta os textos obtidos e persiste as páginas e modelos pelos mesmos caminhos
-de armazenamento do serviço, no home do próprio portão. Isso conserva a tripla
-URL/hash/instante e a procedência `captura_direta`, com o registro administrativo
-captura → política → termo já preservado pelo portão. Não executa outra obtenção.
-O preflight independente do parser confere todas as arestas até a raiz capturada,
-hashes de cada resposta e sua igualdade com o ancestral acumulado, hrefs, rótulos
-e ciclos. A recusa ocorre antes de abrir o home: zero gravações nesse home.
-Os bytes são gravados depois do preflight completo e antes da interpretação: falha local
-do parser não apaga as capturas íntegras nem cria modelo a partir de sua falha.
-Material parcial e falha continuam declarados no inventário de destino. Falha
-local de armazenamento ou interpretação encerra a sessão. Causas por fase são
-acumuladas em ordem, com evidência. O inventário durável mantém a primeira no
-resumo e todas em `causas`; a saída mantém todas em `falhas`. A parada usa a união
-dos impedimentos: causa posterior nunca revoga a terminalidade anterior.
-Não há nova importação
-destino → home nem alteração dos canais públicos do modo reserva.
+O preflight único `CamaraLeginConnector.validar_conjunto` valida a unidade inteira:
+respostas íntegras, cada página acumulada com proveniência até uma busca/portal
+capturada, hashes, href/rótulo publicado, igualdade do ancestral, ausência de
+ciclo e `falhas_descoberta` vazia. Página acumulada sem proveniência é erro do
+conjunto (fail-closed); não se descarta página para salvar o restante. Robots é
+evidência administrativa independente, nunca raiz de cadeia normativa. Busca e
+portal só podem ser raízes, sem antecessor. Relações válidas observadas mantêm D3.
+Na pasta de corpos/recibos do instrumento, `capturas_normativas` exclui apenas
+robots, mantido na área administrativa do portão, após conferir o acumulador
+inteiro. Nenhuma página normativa órfã ou inválida é removida desse conjunto.
+
+O instrumento chama o preflight antes de abrir o home (`_persistir_unidade`) e
+antes de escrever corpos/recibos no destino (`_gravar_unidade`). No serviço,
+`_capture_work`, `_index_candidate_legis`, `indexar_obra` e
+`_material_historico_camara` chamam a mesma função antes da primeira indexação ou
+gravação da unidade. No histórico, a original e as relações são primeiro
+coletadas em memória: não se chama uma captura com persistência durante a coleta,
+nem se zera a descoberta no meio da unidade. Falha de descoberta retida por
+`capturar_relacoes`, mesmo devolvida como resultado parcial, impede as gravações.
+O indexador também confere que o corpo a indexar corresponde à captura validada.
+
+Cada modelo novo registra em `camara_inventario.conjunto_descoberta` as URLs e
+hashes das páginas da unidade e suas primeiras arestas (origem/hash/href/rótulo).
+A releitura reconstrói esse conjunto a partir dos corpos autenticados e executa
+o mesmo preflight, incluindo a igualdade com a cadeia `descoberta` do texto.
+O URL/hash da página declarada deve coincidir com a primeira aresta. O corpo e
+a captura específica do texto também são autenticados e os metadados são lidos
+pelo seu `capture_id`, sem substituição por outra obtenção do mesmo URL/hash.
+O snapshot confere cada linha de captura, inclusive quando URL/hash se repetem:
+uma obtenção 200 não mascara outra 403 dos mesmos bytes. Cada reconstrução relê
+uma vez cada par URL/hash; a validação de resposta pode compartilhar seu exame
+de perfil apenas dentro do mesmo preflight síncrono ou lote de registro dos
+links de uma página, reconferindo hash, identidade e metadados em cada chamada.
+A aprovação não atravessa fronteiras, lotes ou unidades; cada aresta é conferida.
+Modelos anteriores sem esse campo usam a cadeia declarada, sem reconstruir
+arestas novas a partir de busca ou metadados, e exigem cobertura de todas as
+capturas Câmara do home por cadeias recuperáveis. É a recusa conservadora para
+unidades antigas sem delimitação persistida: captura normativa órfã em home
+legado também impede releitura. `indexar_obra` sem conector recebido
+reconstitui e valida o conjunto antes de escrever.
+
+O snapshot valida os modelos e a cobertura de TODAS as capturas Câmara antes de
+exportar. Na instalação repete a reconstrução e o preflight no banco e nos blobs
+unidos em staging, antes da publicação de banco, blobs ou evidência administrativa.
+Uma captura normativa sem cadeia recuperável recusa o snapshot inteiro; não é
+omitida. Capturas íntegras preservadas após falha local de parser continuam no
+home, mas, sem prova persistida de descoberta num modelo, não são exportáveis.
+Busca/portal/robots independentes são conferidos como respostas, sem promover
+uma captura normativa órfã a material validado. Ausência de bytes também recusa.
+Um snapshot Câmara que cairia no modo texto-somente pelo limite global de blobs
+é recusado antes de exportar, pois a instalação exige esses corpos.
+A recusa de snapshot tem código `camara_descoberta_invalida`; a de releitura,
+`camara_releitura_sem_vinculo_validado`, com causa interna, sem conteúdo livre.
+
+Captura e indexação conservam URL/hash/instante e `captura_direta`, sem nova
+obtenção ou renovação. No indexador Câmara, o recibo real é salvo antes do materializador
+genérico, evitando que seu `application/octet-stream` substitua o MIME capturado.
+Recibos antigos genéricos que não provem MIME admitido são recusados; não se
+corrige a captura por inferência nem se renova seu instante.
+No instrumento os bytes íntegros são gravados após o
+preflight e antes da interpretação: falha local do parser não os apaga nem cria
+modelo a partir da falha. Material parcial válido e falhas continuam declarados.
+As causas são acumuladas em ordem; inventário durável mantém a primeira no resumo
+e todas em `causas`, saída mantém todas em `falhas`. A parada usa a união dos
+impedimentos, inclusive se falham depois o inventário ou o compromisso. Não há
+nova importação destino → home nem alteração dos canais públicos da reserva.
 
 ## D2 — Isolamento local versus conteúdo
 
-`LocalParserFailure`, subclasse aditiva de `Unavailable`, distingue a ausência de
-resultado do processo isolado de uma resposta de perfil incompatível. Falha de
-importação, criação/saída do processo, tempo, memória e protocolo de saída é local
-terminal e não grava bloqueio de recurso. A Câmara aplica isso tanto a HTML como
-a PDF. O parser que devolve conteúdo sem dispositivos continua gerando barreira
-de perfil; erros reconhecidos de leitura HTML/PDF e limites documentais explícitos
-de PDF são devolvidos pelo filho como conteúdo inválido, sem serem confundidos
-com falha do isolamento. Exceções inesperadas continuam locais.
+`LocalParserFailure`, subclasse aditiva de `Unavailable`, distingue ausência de
+resultado do processo isolado de conteúdo incompatível. Falha de importação,
+criação/saída do processo, tempo, memória e protocolo é local e terminal para o
+escopo, sem gravar bloqueio de recurso. A Câmara aplica isso a HTML e PDF.
+Conteúdo sem dispositivos ainda gera barreira de perfil; erros reconhecidos de
+leitura HTML/PDF e limites documentais de PDF continuam conteúdo inválido.
+
+Falha local sai do processo apenas por códigos e campos permitidos:
+`fase=interpretacao`, `perfil`, `causa` (`importacao`, `criacao_processo`,
+`exit_nao_zero`, `tempo`, `memoria` ou `protocolo`), `exit_code` inteiro quando
+conhecido, URL oficial e SHA-256. O filho usa 77 para importação, 3 para memória,
+4 para exceção inesperada; outros códigos não zero são preservados numericamente.
+O pai não interpreta nem incorpora stderr. Motivo não contém mensagem nem caminho;
+`Issue.detail` de falha isolada contém apenas JSON tipificado. O portão,
+`_causa`/`_saida` do instrumento e os caminhos de captura/candidato do serviço
+reaplicam a lista permitida, inclusive a falhas locais legadas. Tipo de falha
+local desconhecido vira `protocolo`, sem repassar texto livre. Isso preserva a
+acumulação de causas, a terminalidade e a distinção entre falha local e remota.
+Exceções inesperadas na criação e no I/O também são tipificadas. Falhas das
+threads de drenagem/escrita/fechamento não imprimem traceback em stderr; retornam
+falha de protocolo, preservando a limpeza limitada do processo filho.
+Exceção local inesperada no candidato Câmara também não é convertida com
+`str(exc)`: a saída usa o código `falha_local_camara`.
 
 ## D3 — Proveniência da descoberta e relações observadas
 
@@ -106,6 +170,13 @@ Adota-se a alternativa expressamente autorizada na tarefa: documentar o limite
 com teste, mantendo abstenção. Não se trata D4 como capacidade corrigida nem se
 afirma que captura, título ou texto aproximado habilitam `verified`.
 
+Para conter o custo da seleção da wheel, os testes D3/D4 fazem o parse real
+integral e conferem identidade, problemas e limites antes de projetar o modelo
+a indexar ao artigo consultado. Conservam bytes, texto integral, spans, notas,
+emendas, problemas e descoberta; preservam as saídas exatas e a releitura. Isso
+evita materializar derivados quadráticos de milhares de dispositivos que esses
+testes não consultam, sem alterar seleção, limite ou teste congelado da wheel.
+
 ## Fixtures e limites de entrega
 
 Foram importados 16 pares recibo/corpo (CC, CPC, LGPD e Lei 13.874), exclusivamente
@@ -121,4 +192,4 @@ reconfere separadamente o vínculo de raiz no corpo de busca fornecido, registra
 Sem ampliação do período do CTN (D5), sem leitura da reserva (D6), sem alteração de
 `C:\dev\fv-home-dev`, sem rede de produto e sem commit. O supervisor deve incluir
 também `docs/auditoria/1.4.0/il3c-desenvolvimento.md` no primeiro commit. Resultados
-finais de testes e limites de execução constam de `C:\dev\tmp\relatorio-il3c-impl.md`.
+finais da rodada R2 e limites de execução constam de `C:\dev\tmp\relatorio-il3c-impl-r2.md`.

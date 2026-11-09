@@ -111,14 +111,14 @@ def test_d1_capturas_integrais_sobrevivem_a_falha_local_do_parser(tmp_path, monk
     from freoa_verifica.store import blobs
     rotas = rotas_da_fixture()
     home, relogio, _ = ativar_com(tmp_path, rotas)
-    monkeypatch.setattr(isolated, "parse_isolated", lambda profile, *a, **k: isolated._failure(profile, "import indisponivel"))
+    monkeypatch.setattr(isolated, "parse_isolated", lambda profile, *a, **k: isolated._failure(profile, "importacao"))
     out = ci.inventariar(home, normas_em(tmp_path), tmp_path / "saida", transporte=Transporte(relogio, rotas), relogio=relogio)
     assert out["resultado"] == "parcial"
     assert len(out["falhas"]) == 1
     assert out["falhas"][0] == {"motivo": "falha_parser_camara", "categoria": None,
                                 "fase": "persistencia_interpretacao", "bloqueio": None, "url": ATUAL,
                                 "evidencia": {"url": ATUAL, "sha256": rotas[ATUAL].sha256,
-                                              "causa": "camara_legin_nao_processado: import indisponivel"}}
+                                              "causa": "importacao", "fase": "interpretacao", "perfil": "camara_legin"}}
     with Verifica(home=home) as svc:
         caps = svc.conn.execute("SELECT * FROM capture").fetchall()
         assert len(caps) == 4
@@ -144,21 +144,23 @@ def test_d2_falha_do_isolamento_terminal_sem_barreira_persistente(tmp_path, monk
         resp = con.fetch(cand) if formato == "html" else con.fetch_anexo(cand)
         if causa == "processo":
             def popen(*a, **k):
-                raise OSError("processo indisponível")
+                raise OSError("C:/dev/tmp/SYNTHETIC_PRIVATE criacao")
             monkeypatch.setattr(subprocess, "Popen", popen)
         else:
             class Filho:
-                returncode = 1 if causa in {"import", "memoria"} else 0
+                returncode = {"import": 77, "memoria": 3}.get(causa, 0)
             monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: Filho())
             monkeypatch.setattr(isolated, "_bounded_io", lambda *a: (
-                b"invalido", b"ModuleNotFoundError" if causa == "import" else b"memoria_excedida",
+                b"invalido", b"C:/dev/tmp/SYNTHETIC_PRIVATE stderr",
                 "timeout" if causa == "tempo" else None))
         with pytest.raises(Unavailable, match="falha_parser_camara") as failure:
             con.parse(resp)
+        assert "SYNTHETIC_PRIVATE" not in json.dumps(ci._causa(failure.value, "interpretacao"))
         assert failure.value.categoria is None
         assert failure.value.classificacao() == {}
-        assert failure.value.evidencia["causa"].startswith("camara_legin_nao_processado" if formato == "html" else
-                                                        "camara_anexo_nao_processado")
+        assert failure.value.evidencia["perfil"] == ("camara_legin" if formato == "html" else "camara_anexo")
+        assert failure.value.evidencia["causa"] == {"import": "importacao", "processo": "criacao_processo",
+                                                   "tempo": "tempo", "memoria": "memoria", "saida": "protocolo"}[causa]
         antes = list(t.urls)
         with pytest.raises(Unavailable, match="falha_parser_camara"):
             p.obter(LSA)
@@ -191,9 +193,32 @@ def test_d2_pdf_invalido_e_conteudo_nao_falha_do_isolamento(proibir_rede):
     assert erro.value.reason == "camara_anexo_conteudo_nao_processavel"
 
 
+def indexar_so_recorte(con, monkeypatch, path, conferir):
+    """Parse real completo; índice de teste só do artigo consultado.
+
+    Conserva bytes, texto integral, spans, notas, emendas, todos os problemas e
+    metadados de descoberta. Evita gerar derivados quadráticos de milhares de
+    dispositivos que D3/D4 não consultam, como já faz a fixture _lsa_art254a.
+    A conferência do documento integral ocorre ANTES da projeção.
+    """
+    parse = con.parse
+    def interpretar(resp):
+        full = parse(resp)
+        conferir(full)
+        selected = [p for p in full.provisions if p.path == path or p.path.startswith(path + ".")
+                    or path.startswith(p.path + ".")]
+        return replace(full, provisions=selected or full.provisions[:1])
+    monkeypatch.setattr(con, "parse", interpretar)
+
+
 @pytest.mark.parametrize("numero,ano", [("13105", 2015), ("13709", 2018)])
 def test_d3_autorreferencia_nao_substitui_raiz_e_releitura_confere(tmp_path, numero, ano, monkeypatch, proibir_rede):
     con, t = conector(tmp_path / "h", numero)
+    def conferir(full):
+        assert full.provision("art1") is not None
+        if numero == "13105":
+            assert any(i.code == "ORDER" for i in full.issues)
+    indexar_so_recorte(con, monkeypatch, "art1", conferir)
     with Verifica(home=tmp_path / "h") as svc:
         monkeypatch.setattr(svc, "_get", lambda _: con)
         monkeypatch.setattr(svc, "_offline", lambda: False)
@@ -243,6 +268,13 @@ def test_d3_ciclo_efetivo_sem_raiz_continua_recusado(tmp_path, proibir_rede):
 ])
 def test_d4_limites_documentais_permanecem_unknown(tmp_path, numero, ano, versao, path, detail, monkeypatch, proibir_rede):
     con, _ = conector(tmp_path / "h", numero)
+    def conferir(full):
+        assert full.title.startswith("LEI Nº")
+        assert any(i.code == "TRUNCATED" and i.detail == detail for i in full.issues)
+        if numero == "10406":
+            assert "Art. 1.031" in full.text
+            assert full.provision("art1031") is None
+    indexar_so_recorte(con, monkeypatch, path, conferir)
     with Verifica(home=tmp_path / "h") as svc:
         monkeypatch.setattr(svc, "_get", lambda _: con)
         monkeypatch.setattr(svc, "_offline", lambda: False)

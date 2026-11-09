@@ -710,13 +710,37 @@ class Verifica:
         label: str | None = None,
         fts_alvo: str = "fts_redaction",
         content_type: str | None = None,
+        descoberta_camara=None,
     ) -> ResolvedWork:
         if cancelado():
             raise Unavailable("orcamento")
+        if source_id == "camara_legin":
+            if descoberta_camara is None:
+                from freoa_verifica.connectors.camara_descoberta import reconstruir
+                response = Response(url, url, 200, {}, body, hashlib.sha256(body).hexdigest(),
+                                    fetched_at, [], "text/html", content_type=content_type or "text/html")
+                descoberta_camara = reconstruir(document, response, self._resposta_camara)
+            descoberta_camara.validar_conjunto()
+            captured = descoberta_camara.paginas.get(url)
+            if captured is None or captured.sha256 != hashlib.sha256(body).hexdigest():
+                raise Unavailable("hash_captura_divergente")
+            if fetched_at is not None and fetched_at != captured.fetched_at:
+                raise Unavailable("instante_captura_divergente")
+            fetched_at = captured.fetched_at
+            content_type = content_type or content_type_do_response(captured)
+            descoberta_camara.registrar_conjunto(document)
         declared = validate_identity(work_key, document, work_date)
         if not work_key.year and declared and declared.year:
             work_key = declared
             work_date = work_date or declared_identity(document)[1]
+        if source_id == "camara_legin":
+            # A primeira linha deve ser o recibo capturado, antes do recibo
+            # genérico de populate_from_parsed (que usa octet-stream).
+            self.conn.execute("INSERT OR IGNORE INTO source(id, authority, profile, hosts_json) VALUES (?,?,?,?)",
+                              (source_id, descoberta_camara.authority, source_id,
+                               json.dumps(sorted(descoberta_camara.hosts))))
+            for page in descoberta_camara.paginas.values():
+                repo.save_capture(self.conn, page, source_id, home=self.home)
         demovida = False
         if fts_alvo == "fts_redaction" and source_id in repo.FONTES_COMPILADAS:
             existente = self.conn.execute(
@@ -887,56 +911,39 @@ class Verifica:
             raise SourceUnavailable("camara_modelo_requer_reprocessamento", [
                 {"fonte": "camara_legin", "resultado": "indisponivel",
                  "motivo": "camara_modelo_requer_reprocessamento", "categoria": None}])
-        from freoa_verifica.connectors.camara_policy import validar_url, url_publicada
-        from freoa_verifica.connectors.camara_legin import arvore, compacto
+        from freoa_verifica.connectors.camara_policy import validar_url
+        from freoa_verifica.connectors.camara_descoberta import reconstruir
         try:
-            route = validar_url(rw.url)
             self._authenticate_capture(rw.capture_id)
+            response = self._resposta_camara(rw.url, rw.sha256, capture_id=rw.capture_id)
+            con = reconstruir(rw.document, response, self._resposta_camara)
+            con.validar_conjunto()
             inv = next(json.loads(b.text) for b in rw.document.editorial_blocks if b.kind == "camara_inventario")
-            origin = inv["pagina"]
-            origin_route = validar_url(origin["url"])
-            if origin_route["recurso"] != "norma" or any(origin_route[k] != route[k] for k in ("id", "familia", "numero", "ano")):
+            if "conjunto_descoberta" not in inv:
+                # O formato antigo não delimitava a unidade gravada. Exige
+                # cobertura das capturas Câmara no home, sem omitir órfãs nem
+                # inventar arestas para recuperar uma proveniência ausente.
+                from freoa_verifica.connectors.camara_descoberta import validar_acervo
+                validar_acervo(self.conn, self.home)
+            route, origin = validar_url(rw.url), validar_url(inv["pagina"]["url"])
+            if origin["recurso"] != "norma" or any(origin[k] != route[k] for k in ("id", "familia", "numero", "ano")):
                 raise ValueError("pagina_de_outra_obra")
-            page = self.conn.execute("SELECT * FROM capture WHERE url=? AND sha256=? AND source_id='camara_legin'",
-                                     (origin["url"], origin["sha256"])).fetchone()
-            if page is None:
-                raise ValueError("pagina_norma_ausente")
-            self._authenticate_capture(page["id"])
-            raw = blobs.get_blob(page["sha256"], home=self.home)
-            response = Response(page["url"], page["url"], 200, {}, raw, page["sha256"], page["fetched_at"], [],
-                                "text/html", content_type=page["content_type"] or "text/html")
             matches = [r for r in inv["recursos"] if r["url"] == rw.url and r["admitido"]]
             if len(matches) != 1 or route["recurso"] not in {"atualizado", "original"}:
                 raise ValueError("vinculo_invalido")
-            link = matches[0]
-            if not any(url_publicada(origin["url"], a.get("href")) == rw.url and compacto(a) == link["rotulo"]
-                       for a in arvore(response).xpath('//a[@href]')):
-                raise ValueError("link_nao_publicado")
-            cursor = rw.url
-            visited = set()
-            for edge in inv.get("descoberta", []):
-                if edge["url"] != cursor or cursor in visited:
-                    raise ValueError("cadeia_descoberta_invalida")
-                visited.add(cursor)
-                validar_url(cursor)
-                validar_url(edge["origem_url"])
-                cap = self.conn.execute("SELECT * FROM capture WHERE url=? AND sha256=? AND source_id='camara_legin'",
-                                        (edge["origem_url"], edge["origem_sha256"])).fetchone()
-                if cap is None:
-                    raise ValueError("origem_descoberta_ausente")
-                self._authenticate_capture(cap["id"])
-                body = blobs.get_blob(cap["sha256"], home=self.home)
-                source = Response(cap["url"], cap["url"], 200, {}, body, cap["sha256"], cap["fetched_at"], [],
-                                  "text/html", content_type=cap["content_type"] or "text/html")
-                if not any(a.get("href") == edge["href"] and compacto(a) == edge["rotulo"]
-                           and url_publicada(source.url, a.get("href")) == cursor
-                           for a in arvore(source).xpath('//a[@href]')):
-                    raise ValueError("href_descoberta_invalido")
-                cursor = source.url
-            if validar_url(cursor)["recurso"] not in {"busca", "portal"}:
-                raise ValueError("descoberta_sem_raiz")
-        except (ValueError, TypeError, KeyError, StopIteration, OSError) as exc:
+            if con.links[rw.url] != (con.paginas[inv["pagina"]["url"]], matches[0]["href"], matches[0]["rotulo"]):
+                raise ValueError("vinculo_invalido")
+        except (Unavailable, ValueError, TypeError, KeyError, StopIteration, OSError) as exc:
             raise SourceUnavailable("camara_releitura_sem_vinculo_validado") from exc
+
+    def _resposta_camara(self, url, sha256, *, capture_id=None):
+        from freoa_verifica.connectors.camara_descoberta import resposta_capturada
+        cap = self.conn.execute("SELECT * FROM capture WHERE url=? AND sha256=? AND source_id='camara_legin' "
+                                "AND (? IS NULL OR id=?)", (url, sha256, capture_id, capture_id)).fetchone()
+        if cap is None:
+            raise Unavailable("descoberta_sem_raiz")
+        self._authenticate_capture(cap["id"])
+        return resposta_capturada(cap, self.home)
 
     def _selecionar_camara(self, work, versao="vigente", fonte=None):
         """Seleção por fonte/versão de capturas coexistentes; nunca pelo último cache em memória."""
@@ -1211,6 +1218,8 @@ class Verifica:
                     cand = replace(cand, metadata={**cand.metadata, "versao": versao})
                 resp = conn_obj.fetch(cand)
                 parsed = conn_obj.parse(resp)
+                if cid == "camara_legin":
+                    conn_obj.validar_conjunto()
                 if isinstance(parsed, ParsedDecision):
                     continue
                 if validate_identity(work, parsed, requested_work_date) is None:
@@ -1226,6 +1235,7 @@ class Verifica:
                     fetched_at=resp.fetched_at,
                     label=label,
                     work_date=declared_identity(parsed)[1] if cid == "camara_legin" else None,
+                    descoberta_camara=conn_obj if cid == "camara_legin" else None,
                 )
                 if cid == "camara_legin":
                     for page in conn_obj.paginas.values():
@@ -1240,6 +1250,8 @@ class Verifica:
             except IdentityMismatch:
                 raise
             except Unavailable as exc:
+                from freoa_verifica.connectors.base import sanitizar_falha_parser
+                exc = sanitizar_falha_parser(exc)
                 # Entre fontes oficiais distintas qualquer Unavailable permite a próxima, declarada em
                 # fontes_consultadas; dentro da mesma fonte só ausência explícita autoriza (decisão 0058).
                 errors.append(f"{cid}:{exc.reason}")
@@ -1512,6 +1524,8 @@ class Verifica:
             resp = connector.fetch(cand)
             parse_candidate = getattr(connector, "parse_candidate", None)
             parsed = parse_candidate(resp, cand) if parse_candidate else connector.parse(resp)
+            if connector.id == "camara_legin":
+                connector.validar_conjunto()
             if isinstance(parsed, ParsedDocument):
                 meta = cand.metadata or {}
                 number = str(meta.get("numero") or meta.get("number") or cand.key)
@@ -1548,6 +1562,7 @@ class Verifica:
                     label=cand.title,
                     fts_alvo="fts_staging",
                     work_date=work_date,
+                    descoberta_camara=connector if connector.id == "camara_legin" else None,
                 )
                 capture_id = rw.capture_id
                 work_id = rw.work_id
@@ -1561,11 +1576,14 @@ class Verifica:
                     path = parsed.provisions[0].path
                     trecho = parsed.provisions[0].redactions[0].text if parsed.provisions[0].redactions else trecho
         except Unavailable as exc:
+            from freoa_verifica.connectors.base import sanitizar_falha_parser
+            exc = sanitizar_falha_parser(exc)
             if exc.categoria in _INTERROMPEM_A_FONTE:
                 raise  # desafio, recusa ou fonte fora: o controlador interrompe a fonte e declara (FIX17/F-23)
             failure, classificacao = exc.reason, exc.classificacao()  # falha do item, com categoria e evidência
         except Exception as exc:  # noqa: BLE001
-            failure = getattr(exc, "reason", str(exc)) or type(exc).__name__
+            failure = ("falha_local_camara" if connector.id == "camara_legin"
+                       else getattr(exc, "reason", str(exc)) or type(exc).__name__)
         text, trunc = _truncate(trecho, 280)
         return {
             **classificacao,
@@ -1984,17 +2002,20 @@ class Verifica:
                     prior = self._selecionar_camara(rw.work_key, "publicacao_original", "camara_legin")
                 except SourceUnavailable:
                     prior = None
+                original_material = []
                 if prior is None:
                     try:
-                        self._capture_work(rw.work_key, versao="publicacao_original")
-                    except SourceUnavailable as exc:
-                        failures.extend(exc.fontes_consultadas or [{"motivo": exc.reason, "categoria": None}])
+                        resp = con.fetch(replace(candidate, metadata={**candidate.metadata, "versao": "publicacao_original"}))
+                        original_material.append({"resposta": resp, "documento": con.parse(resp)})
+                    except Unavailable as exc:
+                        failures.append({"motivo": exc.reason, "categoria": exc.categoria, **exc.classificacao()})
                         pending.append({"motivo": "publicacao_original_indisponivel", "url": candidate.url})
                 result = con.capturar_relacoes(candidate)
+                con.validar_conjunto()
                 pending.extend(result["pendencias"])
                 failures.extend(result["indisponibilidades"])
                 indexed = set()
-                for material in result["materiais"]:
+                for material in original_material + result["materiais"]:
                     resp = material.get("resposta")
                     doc = material.get("documento")
                     if resp is None or doc is None or resp.sha256 in indexed:
@@ -2006,7 +2027,7 @@ class Verifica:
                         continue
                     self.indexar_obra(source_id="camara_legin", work_key=own_key, document=doc, body=resp.body,
                                       url=resp.final_url, fetched_at=resp.fetched_at, work_date=own_date,
-                                      content_type=content_type_do_response(resp), label=doc.title)
+                                      content_type=content_type_do_response(resp), label=doc.title, descoberta_camara=con)
                 for page in con.paginas.values():
                     repo.save_capture(self.conn, page, "camara_legin", home=self.home)
             except AmbiguousCandidates:

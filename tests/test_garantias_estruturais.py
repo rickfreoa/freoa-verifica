@@ -44,7 +44,6 @@ DECODE_JUSTIFICADOS = {
     ("semente.py", "data_da_epigrafe"): "dobra ASCII de nome de mês da epígrafe (str), sem bytes de resposta",
     ("transport.py", "_campos_estritos"): "nomes/valores de campos de cabeçalho HTTP (RFC 9110: ASCII/obs-text)",
     ("transport.py", "_host_canonico"): "rótulo IDNA do host, não corpo",
-    ("parsers/isolated.py", "parse_isolated"): "stderr do subprocesso de parse (diagnóstico)",
     ("parsers/isolated.py", "_main"): "texto já decidido pelo pai, transportado ao filho em UTF-8 (`--texto`)",
     ("parsers/bcb_json.py", "parse_bcb_json"): "API do parser para bytes de fixture; resposta nunca chega em bytes (4)",
     ("parsers/html_devices.py", "decode_html_bytes"): "API do parser para bytes de fixture; idem (garantia 4)",

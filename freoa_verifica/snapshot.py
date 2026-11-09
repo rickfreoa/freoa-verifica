@@ -298,6 +298,18 @@ def export_snapshot(
     atribuicoes: dict[str, str] | None = None,
     staging_dir: str | Path | None = None,
 ) -> dict[str, Any]:
+    from freoa_verifica.connectors.camara_descoberta import validar_acervo
+    from freoa_verifica.connectors.base import Unavailable
+    try:
+        validar_acervo(conn, home)
+        if conn.execute("SELECT 1 FROM capture WHERE source_id='camara_legin' LIMIT 1").fetchone():
+            total = conn.execute("SELECT coalesce(sum(size),0) FROM (SELECT max(size) AS size FROM capture GROUP BY sha256)").fetchone()[0]
+            if total > BLOB_SIZE_LIMIT:
+                # O modo texto-somente não contém os corpos exigidos pelo
+                # mesmo preflight na instalação. Não publicar esse snapshot.
+                raise Unavailable("camara_descoberta_invalida")
+    except (Unavailable, ValueError, TypeError, KeyError, StopIteration, OSError):
+        return {"status": "erro", "motivo": "camara_descoberta_invalida"}
     destino = Path(destino)
     if destino.name.endswith(".tar.gz"):
         if destino.exists():
@@ -1114,6 +1126,12 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
                 raise ValueError("snapshot_banco_invalido")
             if check.execute("PRAGMA foreign_key_check").fetchone():
                 raise ValueError("snapshot_relacoes_invalidas")
+            from freoa_verifica.connectors.camara_descoberta import validar_acervo
+            from freoa_verifica.connectors.base import Unavailable
+            try:
+                validar_acervo(check, staging, blob_dir=merged_blobs)
+            except (Unavailable, ValueError, TypeError, KeyError, StopIteration, OSError) as exc:
+                raise ValueError("camara_descoberta_invalida") from exc
             # C6: nunca publicar derivados abaixo da versão do código (sem rebaixamento silencioso).
             if not derivados.compativel(check):
                 raise ValueError("derivados_abaixo_da_versao_atual")

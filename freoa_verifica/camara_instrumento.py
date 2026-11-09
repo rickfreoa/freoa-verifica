@@ -39,6 +39,8 @@ def _portao(home, transporte, relogio, *, exigir_ativacao: bool = False) -> Port
 
 def _saida(dados: dict, *, falha: Unavailable | None = None) -> dict:
     if falha:
+        from freoa_verifica.connectors.base import sanitizar_falha_parser
+        falha = sanitizar_falha_parser(falha)
         return {"resultado": "falha", "motivo": falha.reason, "categoria": falha.categoria,
                 "evidencia": falha.evidencia}
     return {"resultado": "ok", **dados}
@@ -50,7 +52,10 @@ def _falha_local(exc: Exception) -> dict:
 
 def _causa(exc: Exception, fase: str) -> dict:
     if isinstance(exc, Unavailable):
-        return {"fase": fase, "motivo": exc.reason, "categoria": exc.categoria,
+        from freoa_verifica.connectors.base import LocalParserFailure, sanitizar_falha_parser
+        parser_local = isinstance(exc, LocalParserFailure)
+        exc = sanitizar_falha_parser(exc)
+        return {"fase": fase, "motivo": "falha_parser_camara" if parser_local else exc.reason, "categoria": exc.categoria,
                 "bloqueio": exc.evidencia.get("bloqueio"), "url": exc.evidencia.get("url"),
                 "evidencia": exc.evidencia}
     return {"fase": fase, "motivo": (f"inventario_norma_nao_obtida:{type(exc).__name__}"
@@ -164,11 +169,14 @@ def _recursos_da_unidade(con, falha: dict | None) -> list[dict]:
 def _gravar_unidade(pasta: Path, con, portao, norma: dict, falha: dict | None) -> list[str]:
     """Grava o material da unidade, inclusive o parcial de uma unidade que falhou, e o inventário durável dela.
     Devolve os hashes das páginas gravadas. Falha de gravação levanta `EstadoIndisponivel` (controlada)."""
+    con.validar_conjunto()
+    # Robots pertence à evidência administrativa mantida pelo portão, não ao
+    # conjunto de corpos normativos exportados nesta pasta. O preflight acima
+    # também o confere se estiver acumulado; nenhuma página normativa é filtrada.
+    capturas_normativas = {url: resp for url, resp in con.paginas.items() if "/robots.txt" not in url}
     hashes = []
     paginas = []
-    for url, resp in list(con.paginas.items()):
-        if "/robots.txt" in url:
-            continue
+    for url, resp in capturas_normativas.items():
         origem = con.links.get(url)
         nome = hashlib.sha256(url.encode()).hexdigest()[:16]
         _escrever(pasta / f"{nome}.corpo", resp.body)
@@ -204,9 +212,7 @@ def _persistir_unidade(home, con, norma) -> None:
     from freoa_verifica.texto_resposta import content_type_do_response
 
     key = WorkKey("federal", norma["kind"], norma["number"], norma["year"])
-    for url, resp in con.paginas.items():
-        con._validar_response(resp, url)
-        con.validar_descoberta(url)
+    con.validar_conjunto()
     if not con.paginas:
         return
     with Verifica(home=home) as svc:
@@ -225,7 +231,7 @@ def _persistir_unidade(home, con, norma) -> None:
             svc.indexar_obra(source_id=con.id, work_key=key, document=doc,
                              body=resp.body, url=resp.final_url, fetched_at=resp.fetched_at,
                              work_date=declared_identity(doc)[1], label=doc.title,
-                             content_type=content_type_do_response(resp))
+                             content_type=content_type_do_response(resp), descoberta_camara=con)
 
 
 def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
@@ -276,7 +282,7 @@ def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
             try:  # o material parcial e o inventário da unidade são gravados também quando ela falhou
                 hashes += _gravar_unidade(destino / f"{norma['kind']}-{norma['number']}-{norma['year']}",
                                           con, portao, norma, falha)
-            except OSError as exc:
+            except (OSError, Unavailable) as exc:
                 causas.append(_causa(exc, "inventario_duravel"))
             if not causas:
                 obtidas += 1

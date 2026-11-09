@@ -161,6 +161,8 @@ class CamaraLeginConnector(Connector):
         self.falhas_descoberta.clear()
         self.relacoes_observadas.clear()
         self._ancoras.clear()
+        for name in ("_texto_url", "_cadeia_declarada", "_pagina_declarada"):
+            self.__dict__.pop(name, None)
 
     def _portao_da_rota(self) -> Portao:
         if self._portao is not None:
@@ -214,33 +216,41 @@ class CamaraLeginConnector(Connector):
         from freoa_verifica.connectors.camara_atribuicao import atribuicao
         return atribuicao(self.home, autoria, sha256=sha256, url=url, fetched_at=fetched_at)
 
-    def _validar_response(self, resp, url):
+    def _validar_response(self, resp, url, *, validadas=None):
         try:
             route = validar_url(url)
             validar_url(resp.final_url)
         except ValueError as exc:
             raise _erro("url_resposta_nao_admitida", resp) from exc
-        if resp.url != url or resp.final_url != url or resp.redirects or resp.status != 200:
+        if resp.url != url or resp.final_url != url or resp.redirects or resp.status != 200 or len(resp.body) > 30 * 1024**2:
             raise _erro("resposta_camara_invalida", resp)
         if hashlib.sha256(resp.body).hexdigest() != resp.sha256:
             raise _erro("hash_captura_divergente", resp)
+        # Cache só deste preflight síncrono. Hash e identidade são reconferidos
+        # mesmo na repetição; nenhuma aprovação atravessa chamadas/fronteiras.
+        signature = (url, resp.sha256, resp.mime, resp.content_type, resp.size,
+                     repr(resp.interpretacao_legada), tuple(sorted(resp.headers.items())))
+        if validadas is not None and signature in validadas:
+            return
         _revalidar(resp, url, hosts=self.hosts, path_prefixes=self.path_prefixes,
                    mimes=frozenset({route["mime"]}), max_redirects=0, max_bytes=30 * 1024**2)
+        if validadas is not None:
+            validadas.add(signature)
 
-    def _admitir(self, url):
+    def _admitir(self, url, *, validadas=None):
         try:
-            return self._admitir_url(url)
+            return self._admitir_url(url, validadas=validadas)
         except ValueError as exc:
             raise Unavailable(str(exc)) from exc
 
-    def _admitir_url(self, url):
+    def _admitir_url(self, url, *, validadas=None):
         route = validar_url(url)
         if route["recurso"] not in {"robots", "portal", "busca"}:
             origin = self.links.get(url)
             if origin is None:
                 raise ValueError("vinculo_descoberta_ausente")
             source, href, label = origin
-            self._validar_response(source, source.final_url)
+            self._validar_response(source, source.final_url, validadas=validadas)
             if not label or url_publicada(source.final_url, href) != url:
                 raise ValueError("vinculo_descoberta_invalido")
             if (href, label) not in self._ancoras_publicadas(source):
@@ -254,7 +264,7 @@ class CamaraLeginConnector(Connector):
                                                   for a in arvore(page).xpath('//a[@href]'))
         return self._ancoras[page.sha256]
 
-    def validar_descoberta(self, url):
+    def validar_descoberta(self, url, *, validadas=None):
         """Confere a cadeia inteira sem interpretar texto normativo ou obter bytes.
 
         Cada antecessor deve ser a captura do acumulador, não apenas um objeto
@@ -270,8 +280,8 @@ class CamaraLeginConnector(Connector):
             page = self.paginas.get(cursor)
             if page is None:
                 raise _erro("descoberta_sem_raiz", self.paginas.get(url))
-            self._validar_response(page, cursor)
-            route = self._admitir(cursor)
+            self._validar_response(page, cursor, validadas=validadas)
+            route = self._admitir(cursor, validadas=validadas)
             if route["recurso"] in {"busca", "portal", "robots"} and cursor in self.links:
                 raise _erro("raiz_descoberta_invalida", page)
             if cursor not in self.links:
@@ -282,21 +292,54 @@ class CamaraLeginConnector(Connector):
             captured = self.paginas.get(source.final_url)
             if captured is None:
                 raise _erro("descoberta_sem_raiz", page)
-            self._validar_response(source, source.final_url)
+            self._validar_response(source, source.final_url, validadas=validadas)
             if captured.sha256 != source.sha256:
                 raise _erro("hash_ancestral_divergente", page)
             chain.append({"url": cursor, "origem_url": source.final_url,
                           "origem_sha256": source.sha256, "href": href, "rotulo": label})
             cursor = source.final_url
 
-    def _registrar_descoberta(self, page, url, href, label):
+    def validar_conjunto(self):
+        """Preflight único da unidade inteira, antes da primeira escrita material.
+
+        Robots é evidência administrativa isolada, nunca ancestral normativo.
+        Página órfã no acumulador é erro; nenhuma página é descartada aqui.
+        """
+        if self.falhas_descoberta:
+            raise self.falhas_descoberta[0]
+        validadas = set()
+        for url, resp in self.paginas.items():
+            self._validar_response(resp, url, validadas=validadas)
+            self.validar_descoberta(url, validadas=validadas)
+        if hasattr(self, "_cadeia_declarada"):
+            if self.validar_descoberta(self._texto_url, validadas=validadas) != self._cadeia_declarada:
+                raise _erro("cadeia_descoberta_invalida", self.paginas[self._texto_url])
+            source = self.links[self._texto_url][0]
+            if (source.url, source.sha256) != (self._pagina_declarada["url"], self._pagina_declarada["sha256"]):
+                raise _erro("hash_ancestral_divergente", self.paginas[self._texto_url])
+
+    def registrar_conjunto(self, document):
+        """Guarda a unidade validada no modelo para releitura sem nova descoberta."""
+        from freoa_verifica.parsers.model import EditorialBlock
+        for i, block in enumerate(document.editorial_blocks):
+            if block.kind != "camara_inventario":
+                continue
+            inv = json.loads(block.text)
+            inv["conjunto_descoberta"] = {
+                "paginas": [{"url": url, "sha256": p.sha256} for url, p in self.paginas.items()],
+                "arestas": [{"url": url, "origem_url": p.url, "origem_sha256": p.sha256,
+                             "href": href, "rotulo": label} for url, (p, href, label) in self.links.items()]}
+            document.editorial_blocks[i] = EditorialBlock(json.dumps(inv, ensure_ascii=False, sort_keys=True),
+                                                          block.span, block.kind)
+
+    def _registrar_descoberta(self, page, url, href, label, *, validadas=None):
         """Preserva o primeiro caminho; vínculos posteriores são relações observadas."""
         try:
-            self._validar_response(page, page.final_url)
+            self._validar_response(page, page.final_url, validadas=validadas)
             captured = self.paginas.get(page.final_url)
             if captured is None:
                 raise _erro("descoberta_sem_raiz", page)
-            self._validar_response(captured, page.final_url)
+            self._validar_response(captured, page.final_url, validadas=validadas)
             if captured.sha256 != page.sha256:
                 raise _erro("hash_ancestral_divergente", page)
             if (not label or url_publicada(page.final_url, href) != url or
@@ -418,9 +461,12 @@ class CamaraLeginConnector(Connector):
         return matches[0]
 
     def _descobrir(self, page, inv):
+        # Apenas este lote síncrono. Cada aresta reconfere hash e metadados,
+        # sem repetir o exame puro de perfil para os mesmos bytes da origem.
+        validadas = set()
         for r in inv["recursos"]:
             if r["admitido"]:
-                self._registrar_descoberta(page, r["url"], r["href"], r["rotulo"])
+                self._registrar_descoberta(page, r["url"], r["href"], r["rotulo"], validadas=validadas)
 
     @_classifica
     def fetch(self, candidate):
@@ -454,7 +500,7 @@ class CamaraLeginConnector(Connector):
 
     @_classifica
     def parse(self, resp):
-        from freoa_verifica.connectors.base import LocalParserFailure
+        from freoa_verifica.connectors.base import LocalParserFailure, sanitizar_falha_parser
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
         self._admitir(resp.final_url)
         self._validar_response(resp, resp.final_url)
@@ -466,8 +512,9 @@ class CamaraLeginConnector(Connector):
             try:
                 return parse_ou_indisponivel("camara_anexo", corpo_binario(resp), 60)
             except LocalParserFailure as exc:
-                raise Unavailable("falha_parser_camara", None, {"url": resp.url, "sha256": resp.sha256,
-                                                               "causa": exc.reason}) from exc
+                raise Unavailable("falha_parser_camara", None, sanitizar_falha_parser(
+                    exc, perfil="camara_anexo" if route["recurso"] == "anexo" else "camara_legin",
+                    url=resp.url, sha256=resp.sha256).evidencia) from exc
             except Unavailable as exc:
                 raise _erro("pdf_nao_processado", resp) from exc
         if route["recurso"] not in {"atualizado", "original"}:
@@ -476,8 +523,9 @@ class CamaraLeginConnector(Connector):
             doc = parse_ou_indisponivel("camara_legin", texto_do_response(resp), 120, base_url=resp.final_url)
         except Unavailable as exc:
             if isinstance(exc, LocalParserFailure):
-                raise Unavailable("falha_parser_camara", None, {"url": resp.url, "sha256": resp.sha256,
-                                                               "causa": exc.reason}) from exc
+                raise Unavailable("falha_parser_camara", None, sanitizar_falha_parser(
+                    exc, perfil="camara_anexo" if route["recurso"] == "anexo" else "camara_legin",
+                    url=resp.url, sha256=resp.sha256).evidencia) from exc
             if any(error in exc.reason for error in ("AttributeError", "NameError", "TypeError")):
                 raise Unavailable("falha_parser_camara", "regressao", {"url": resp.url, "sha256": resp.sha256}) from exc
             raise _erro("html_nao_processado", resp) from exc

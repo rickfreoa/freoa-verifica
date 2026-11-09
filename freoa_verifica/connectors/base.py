@@ -54,6 +54,38 @@ class LocalParserFailure(Unavailable):
     """Processo isolado sem resultado; não constitui evidência de perfil remoto."""
 
 
+CAUSAS_PARSER = frozenset({"importacao", "criacao_processo", "exit_nao_zero", "tempo", "memoria", "protocolo"})
+
+
+def sanitizar_falha_parser(exc: Unavailable, *, perfil=None, url=None, sha256=None) -> Unavailable:
+    """Lista permitida para falha local, inclusive exceções legadas de terceiros."""
+    if not isinstance(exc, LocalParserFailure) and exc.reason != "falha_parser_camara":
+        return exc
+    evidence = exc.evidencia
+    safe = {"fase": "interpretacao", "causa": evidence.get("causa")
+            if isinstance(evidence.get("causa"), str) and evidence["causa"] in CAUSAS_PARSER else "protocolo"}
+    profile = perfil or evidence.get("perfil")
+    if isinstance(profile, str) and profile in {"planalto", "cvm_docx", "bcb_json", "cvm_pdf", "pdf_texto", "camara_legin", "camara_anexo"}:
+        safe["perfil"] = profile
+    if type(evidence.get("exit_code")) is int:
+        safe["exit_code"] = evidence["exit_code"]
+    address = url or evidence.get("url")
+    if address:
+        from freoa_verifica.connectors.camara_policy import validar_url
+        try:
+            validar_url(address)
+        except (ValueError, TypeError):
+            pass
+        else:
+            safe["url"] = address
+    digest = sha256 or evidence.get("sha256")
+    if isinstance(digest, str) and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest):
+        safe["sha256"] = digest
+    if isinstance(exc, LocalParserFailure):
+        return LocalParserFailure(f"{profile}_nao_processado" if "perfil" in safe else "parser_nao_processado", None, safe)
+    return Unavailable("falha_parser_camara", None, safe)
+
+
 @dataclass(frozen=True)
 class Candidate:
     """Candidato de busca/resolve — metadados apenas; nunca 'verified'."""
