@@ -60,6 +60,16 @@ def validar_url(url: str) -> dict:
                 familia=familia, numero=numero, ano=int(ano), id=ident)
 
 
+TERMO_URL = "https://www2.camara.leg.br/termo-de-uso-e-politica-de-privacidade/termos-gerais"
+
+
+def validar_termo(url: str) -> dict:
+    """Exceção administrativa da 0080 §3: uma única URL exata. Vizinhos (inclusive o índice) são recusados."""
+    if url != TERMO_URL:
+        raise ValueError("termo_url_nao_admitida")
+    return {"recurso": "termo", "mime": "text/html"}
+
+
 def validar_busca(url: str) -> dict:
     p = urlsplit(url)
     if p.scheme != "https" or p.netloc != "www.camara.leg.br" or p.path != "/legislacao/busca" or p.fragment:

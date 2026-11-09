@@ -1,4 +1,5 @@
 """Contraexemplos r1: capturas intactas, replay offline e saída das três fachadas."""
+import hashlib
 import json
 
 import pytest
@@ -359,6 +360,18 @@ def test_f7_fixture_atinge_fronteira_e_nao_tenta_conexao(tmp_path, planalto_offl
     assert proibir_rede == []
 
 
+def _robots_persistido_confere(home):
+    """Recibo e bytes do robots dos DOIS hosts: hash dos bytes, status 200 e, por cima, a validação administrativa
+    completa (recibos, bytes, decisões e vínculos das obtenções) do que está em disco."""
+    from freoa_verifica.connectors import camara_evidencias as ev
+    from freoa_verifica.connectors.camara_estado import Estado
+    for host in ("www.camara.leg.br", "www2.camara.leg.br"):
+        recibo = json.loads((home / "camara" / f"robots-{host}.json").read_bytes())
+        corpo = (home / "camara" / f"robots-{host}-{recibo['sha256']}.txt").read_bytes()
+        assert hashlib.sha256(corpo).hexdigest() == recibo["sha256"] and recibo["status"] == 200
+    ev._validar(ev._arquivos_do_home(Estado(home)))  # recusa qualquer vínculo quebrado ou política que não autorizava
+
+
 def test_f8_busca_ate_persistencia_e_reinicio(tmp_path, servidor, chamar, monkeypatch, proibir_rede):
     monkeypatch.delenv("FV_OFFLINE", raising=False)
     home = tmp_path / "busca"
@@ -366,9 +379,14 @@ def test_f8_busca_ate_persistencia_e_reinicio(tmp_path, servidor, chamar, monkey
         out = chamar(svc, "buscar_legislacao", q="Lei 6404/1976", fonte="camara_legin")
         item = out["itens"][0]
         assert item["capture_id"] and item["work_id"], out
-        assert svc.conn.execute("SELECT count(*) FROM capture WHERE source_id='camara_legin'").fetchone()[0] >= 5
+        # 0080 §4.4: o robots deixou de ser uma linha da tabela `capture` (antes 2 das 5 linhas) e passou a ser política
+        # persistida por host, com bytes nomeados pelo hash e recibo, em `camara/`. As 3 capturas de conteúdo (busca,
+        # página da norma, texto atualizado) permanecem; a evidência do robots é exigida AQUI, nos dois hosts.
+        assert svc.conn.execute("SELECT count(*) FROM capture WHERE source_id='camara_legin'").fetchone()[0] == 3
+        _robots_persistido_confere(home)
     monkeypatch.setenv("FV_OFFLINE", "1")
     with Verifica(home=home) as reopened:
+        _robots_persistido_confere(home)  # depois de reabrir o home: os mesmos recibos e bytes, ainda íntegros
         out = chamar(reopened, "obter_dispositivo", citacao="art. 1, caput da Lei 6404/1976")
         assert out["status"] == "encontrada", out
         assert _conteudo(out["texto"]).startswith("A companhia ou sociedade anônima")

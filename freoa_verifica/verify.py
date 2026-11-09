@@ -60,6 +60,7 @@ class Evidence:
     natureza_texto: str = "nao_identificado"
     procedencia: str = "nao_identificado"
     esfera: str = "nao_identificado"
+    atribuicao: dict | None = None  # só origem Câmara (0080, §7); aditivo, omitido quando ausente
 
     def __post_init__(self) -> None:
         if self.captured_at is None and self.fetched_at is not None:
@@ -107,6 +108,7 @@ class ResolvedWork:
     source_id: str | None = None
     acervo_ate: str | None = None
     procedencia_tipo: str = "nao_identificado"
+    atribuicao: dict | None = None  # só origem Câmara (0080, §7); preenchido pelo serviço, com o home dele
 
 
 class Resolver(Protocol):
@@ -245,7 +247,7 @@ _PROCEDENCIAS = frozenset({"captura_direta", "snapshot", "cadeia_de_alteracoes",
 def campos_evidencia(capture_id: str | None, sha256: str | None, url: str | None, fetched_at: str | None, *,
                      source_kind: str = "nao_identificado", natureza_texto: str = "nao_identificado",
                      procedencia: str | None = None, esfera: str = "nao_identificado",
-                     acervo_ate: str | None = None) -> dict[str, Any]:
+                     acervo_ate: str | None = None, atribuicao: dict | None = None) -> dict[str, Any]:
     """Construtor único da evidência capturada publicada (0075, §3.2; IL.0-R, C6): os quatro campos
     de captura e os seis eixos. Normas, decisões, `verificar_citacao` e `obter_dispositivo` passam por aqui."""
     return {
@@ -259,14 +261,33 @@ def campos_evidencia(capture_id: str | None, sha256: str | None, url: str | None
         "natureza_texto": natureza_texto or "nao_identificado",
         "procedencia": procedencia if procedencia in _PROCEDENCIAS else "nao_identificado",
         "esfera": esfera or "nao_identificado",
+        **({"atribuicao": atribuicao} if atribuicao else {}),
     }
 
 
+def _atribuicao_camara(source_id, home, document, sha256=None, url=None, fetched_at=None) -> dict | None:
+    """Atribuição do §7 da 0080 no caminho de captura viva, com o home de quem capturou e o vínculo da captura."""
+    if source_id != "camara_legin":
+        return None
+    from freoa_verifica.connectors.camara_atribuicao import atribuicao, autoria_declarada
+    return atribuicao(home, autoria_declarada(getattr(document, "text", None)), sha256=sha256, url=url,
+                      fetched_at=fetched_at)
+
+
+def origem_camara(rw: ResolvedWork) -> bool:
+    return rw.source_id == "camara_legin" or str(getattr(rw.document, "profile", "")).startswith("camara")
+
+
 def campos_evidencia_obra(rw: ResolvedWork, acervo_ate: str | None) -> dict[str, Any]:
+    atribuicao = rw.atribuicao
+    if atribuicao is None and origem_camara(rw):  # obra montada fora do serviço: home padrão, autoria declarada
+        from freoa_verifica.connectors.camara_atribuicao import atribuicao as montar, autoria_declarada
+        atribuicao = montar(None, autoria_declarada(getattr(rw.document, "text", None)), sha256=rw.sha256, url=rw.url)
     return campos_evidencia(
         rw.capture_id, rw.sha256, rw.url, rw.fetched_at,
         source_kind=_inferir_source_kind(rw.work_key), natureza_texto=_inferir_natureza_texto(rw),
         procedencia=_inferir_procedencia(rw), esfera=_inferir_esfera(rw.work_key), acervo_ate=acervo_ate,
+        atribuicao=atribuicao,
     )
 
 
@@ -993,7 +1014,7 @@ def _result_to_json(result: VerificationResult) -> dict[str, Any]:
             "status": d.status,
             "reason_code": d.reason_code,
             "evidence": [{**{k: v for k, v in asdict(e).items()
-                             if k not in ("fontes_consultadas", "proveniencia") or v},
+                             if k not in ("fontes_consultadas", "proveniencia", "atribuicao") or v},
                           "span": list(e.span) if e.span is not None else None}
                          for e in d.evidence],
         }
@@ -1273,4 +1294,5 @@ def populate_from_parsed(
         # C6: a marca persistida da captura (a existente prevalece sobre a regravação idêntica).
         procedencia_tipo=(conn.execute("SELECT procedencia FROM capture WHERE id=?", (capture_id,)).fetchone()[0]
                           or "nao_identificado"),
+        atribuicao=_atribuicao_camara(source_id, home, document, digest, url, resp.fetched_at),
     )

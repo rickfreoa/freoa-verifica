@@ -446,6 +446,14 @@ def export_snapshot(
             rel = f.relative_to(destino).as_posix()
             file_hashes[rel] = _sha256_file(f)
 
+    from freoa_verifica.connectors import camara_evidencias
+
+    try:  # termo, revisão, política, obtenções e ativação como evidência (0080 §8.4): viajam sob o inventário de hashes
+        camara_hashes, camara_entrada = camara_evidencias.exportar(home, destino)
+    except camara_evidencias.EvidenciaInvalida as exc:
+        return {"status": "erro", "motivo": str(exc)}
+    file_hashes.update(camara_hashes)
+
     manifest = {
         "formato": "freoa-verifica-snapshot-1",
         "gerado_em": _now(),
@@ -468,6 +476,7 @@ def export_snapshot(
         "parser_version_por_capture": _parser_versions(conn),
         "cobertura_por_fonte": _cobertura(conn),
         "atribuicoes": atrib,
+        **({"camara_evidencias": camara_entrada} if camara_entrada else {}),
         "licenca_metadados": "CC-BY-4.0",
         "autenticidade": AUTHENTICITY_NOTE,
         "arquivos_sha256": file_hashes,
@@ -986,6 +995,12 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
     sum_err = _verify_sums(origem, manifest)
     if sum_err:
         return {"status": "erro", "motivo": sum_err}
+    from freoa_verifica.connectors import camara_evidencias
+
+    try:  # evidência administrativa da Câmara conferida ANTES de qualquer mudança no home (0080 §8.4)
+        camara_arquivos = camara_evidencias.preparar(origem, manifest)
+    except (camara_evidencias.EvidenciaInvalida, OSError) as exc:
+        return {"status": "erro", "motivo": str(exc)[:200] or "camara_evidencia_ilegivel"}
 
     local_schema = sorted(
         r[0] for r in svc.conn.execute("SELECT version FROM schema_version").fetchall()
@@ -1018,6 +1033,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
 
     db_saved = blobs_saved = db_installed = blobs_installed = False
     closed = False
+    camara_pub = None
     try:
         shutil.copy2(db_src, staging_db)
 
@@ -1104,6 +1120,9 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
         finally:
             check.close()
 
+        # Evidência administrativa da Câmara: preflight de TODOS os conflitos e da união com o home e preparo em staging,
+        # sem escrever no home. A publicação vem junto com a do banco e dos blobs e entra na mesma recuperação.
+        camara_pub = camara_evidencias.Publicacao(svc.home, camara_arquivos, staging / "camara-novo").preparar()
         # So agora fechar e guardar os originais completos antes de publicar.
         svc._close_all_conns(strict=True)
         closed = True
@@ -1117,6 +1136,7 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
         db_installed = True
         os.replace(merged_blobs, live_blobs)
         blobs_installed = True
+        camara_pub.publicar()  # aditivo e idempotente; qualquer falha daqui em diante desfaz banco, blobs e `camara/`
 
         svc._db_path = db_dst
         svc._clear_caches()
@@ -1142,11 +1162,17 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
                          f"({derivados.DERIVED_VERSION}) antes de publicar"} if reconstruir else {}),
         }
     except Exception as exc:  # noqa: BLE001
-        mutated = db_saved or blobs_saved or db_installed or blobs_installed
+        mutated = db_saved or blobs_saved or db_installed or blobs_installed or bool(camara_pub and camara_pub.alterou)
         result = {"status": "erro", "motivo": str(exc)[:200], "rollback": False}
         if not closed:
             return result
         svc._close_all_conns()
+        camara_erro = None
+        if camara_pub is not None:  # `camara/` volta ao que era, ainda que a restauração do banco falhe depois
+            try:
+                camara_pub.desfazer()
+            except Exception as exc_camara:  # noqa: BLE001
+                camara_erro = exc_camara
         try:
             # Remover apenas componentes novos efetivamente publicados.
             if db_installed:
@@ -1159,6 +1185,8 @@ def _install_from_dir(svc: Any, origem: Path, *, vinculo: dict | None = None) ->
                 os.replace(backup_db, db_dst)
             if blobs_saved:
                 os.replace(backup_blobs, live_blobs)
+            if camara_erro is not None:
+                raise camara_erro
             result["rollback"] = mutated
         except Exception as rollback_exc:  # noqa: BLE001
             # Nao anunciar restauracao se ela falhou; preservar os backups.

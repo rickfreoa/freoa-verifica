@@ -1,20 +1,24 @@
 """Câmara/Legin: descoberta publicada, política estrita e versões sem reconstrução."""
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
-import time
-from urllib.parse import urlencode, urlsplit
+from pathlib import Path
+from urllib.parse import urlencode
 
 from lxml import html
 
 from freoa_verifica.connectors.base import (AmbiguousCandidates, Candidate, CandidateList, Connector, HealthProbe,
                                            HealthReport, Unavailable, register, sob_guarda)
+from freoa_verifica.connectors.camara_ativacao import ativacao
+from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel, Relogio
 from freoa_verifica.connectors.camara_policy import HOSTS, validar_url, url_publicada
-from freoa_verifica.connectors.httputil import _revalidar
-from freoa_verifica.identidade_http import UA_POR_CONECTOR, USER_AGENT_IDENTIFICADO
-from freoa_verifica.limites import restante
+from freoa_verifica.connectors.camara_portao import Portao
+from freoa_verifica.connectors.camara_robots import politica_robots  # noqa: F401  (assinatura da IL.2-c)
+from freoa_verifica.connectors.httputil import _revalidar, connector_fetch
+from freoa_verifica.identidade_http import UA_POR_CONECTOR
 from freoa_verifica.texto_resposta import corpo_binario, texto_do_response
 from freoa_verifica.transport import Response
 
@@ -25,6 +29,16 @@ TIPOS = {"lei": "Lei Ordinária", "lei_complementar": "Lei Complementar"}
 def _erro(reason, resp=None):
     return Unavailable(reason, "resposta_inesperada", {} if resp is None else {
         "url": resp.final_url, "status": resp.status, "sha256": resp.sha256})
+
+
+def _endereco_da_norma(url, wk) -> bool:
+    """O endereço da página de norma é o da obra pedida (família, número e ano)."""
+    try:
+        info = validar_url(url)
+    except ValueError:
+        return False
+    familia = {"lei": "lei", "leicom": "lei_complementar"}.get(info.get("familia"))
+    return familia == wk.kind and str(info.get("numero")) == str(wk.number) and str(info.get("ano")) == str(wk.year)
 
 
 def arvore(resp):
@@ -38,58 +52,6 @@ def arvore(resp):
 
 def compacto(el):
     return " ".join("".join(el.itertext()).split())
-
-
-def politica_robots(texto: str, caminho: str) -> tuple[bool, float]:
-    """Grupos mais específicos, maior correspondência e Allow no empate; sem permissão implícita."""
-    groups, agents, rules, delay = [], [], [], 0.0
-    seen_rule = False
-    for original in texto.splitlines():
-        line = original.split("#", 1)[0].strip()
-        if not line:
-            continue
-        if ":" not in line:
-            raise ValueError("robots_inconclusivo")
-        key, value = (v.strip() for v in line.split(":", 1))
-        key = key.lower()
-        if key == "user-agent":
-            if not value:
-                raise ValueError("robots_inconclusivo")
-            if seen_rule:
-                groups.append((agents, rules, delay))
-                agents, rules, delay, seen_rule = [], [], 0.0, False
-            agents.append(value.lower())
-        elif key in {"allow", "disallow", "crawl-delay"}:
-            if not agents:
-                raise ValueError("robots_inconclusivo")
-            seen_rule = True
-            if key == "crawl-delay":
-                delay = float(value)
-                if not 0 <= delay <= 3600:
-                    raise ValueError("robots_inconclusivo")
-            elif value:
-                if not value.startswith("/"):
-                    raise ValueError("robots_inconclusivo")
-                rules.append((key, value))
-        elif key != "sitemap":
-            raise ValueError("robots_diretiva_nao_suportada")
-    if agents:
-        groups.append((agents, rules, delay))
-    product = USER_AGENT_IDENTIFICADO.split("/", 1)[0].lower()
-    applicable = [(max((len(a) if a != "*" else 0 for a in aa if a == "*" or a in product), default=-1), rr, dd)
-                  for aa, rr, dd in groups]
-    specificity = max((g[0] for g in applicable), default=-1)
-    if specificity < 0:
-        raise ValueError("robots_sem_grupo_aplicavel")
-    selected = [g for g in applicable if g[0] == specificity]
-    matches = []
-    for _, rr, _ in selected:
-        for action, pattern in rr:
-            terminal = pattern.endswith("$")
-            expr = "^" + re.escape(pattern[:-1] if terminal else pattern).replace(r"\*", ".*") + ("$" if terminal else "")
-            if re.search(expr, caminho):
-                matches.append((len(pattern.replace("*", "").rstrip("$")), action == "allow"))
-    return (max(matches)[1] if matches else True), max(g[2] for g in selected)
 
 
 def inventario(resp: Response) -> dict:
@@ -149,6 +111,17 @@ def inventario(resp: Response) -> dict:
             "pagina": {"url": resp.final_url, "sha256": resp.sha256, "fetched_at": resp.fetched_at}}
 
 
+def _classifica(funcao):
+    """Falhas de perfil/resposta dos métodos públicos alimentam o estado de barreiras do portão (0080 §6)."""
+    @functools.wraps(funcao)
+    def interno(self, *args, **kwargs):
+        try:
+            return funcao(self, *args, **kwargs)
+        except Unavailable as exc:
+            self._relancar(exc)
+    return interno
+
+
 @register
 class CamaraLeginConnector(Connector):
     id = "camara_legin"
@@ -162,14 +135,71 @@ class CamaraLeginConnector(Connector):
                 "inteiro_teor": True, "ementa": True, "periodo": "perfis demonstrados; sem exaustividade",
                 "atualizacao": "sob demanda; licença e política pendentes", "qualificacao": "nao_apurada"}
 
-    def __init__(self, *, transporte_offline=None):
-        # Não há opção de ativação ao vivo. A injeção serve ao replay de capturas locais.
+    def __init__(self, *, transporte_offline=None, home=None, relogio: Relogio | None = None,
+                 portao: Portao | None = None):
+        # Ao vivo só com ativação registrada (0080 §2). A injeção serve ao replay e aos testes com transporte
+        # simulado; `portao` é o do instrumento (sessão própria, teto de 200).
         self._transporte_offline = transporte_offline
+        self._portao_injetado = portao
+        self._portao: Portao | None = portao
+        self._relogio = relogio
+        self.home = None if home is None else Path(home)
         self.paginas = {}
         self.links = {}
         self.inventarios = {}
         self.politicas = []
-        self._last_request = {}
+
+    def _portao_da_rota(self) -> Portao:
+        if self._portao is not None:
+            return self._portao
+        if self._transporte_offline is not None:
+            estado = Estado(self.home)  # replay/testes: a ativação não é exigida, mas o termo vigente é registrado
+            self._portao = Portao(self._transporte_offline, estado=estado, relogio=self._relogio,
+                                  ativacao=lambda: ativacao(estado), exigir_ativacao=False)
+            return self._portao
+        from freoa_verifica.store.db import data_home
+        estado = Estado(self.home or data_home())
+        # A ativação é revalidada pelo portão antes de CADA obtenção viva, não só ao criá-lo.
+        portao = Portao(connector_fetch, estado=estado, relogio=self._relogio, ativacao=lambda: ativacao(estado))
+        portao.checar_terminal()  # falha local anterior nesta chamada: nada mais é lido nem emitido
+        try:
+            registro = ativacao(estado)
+        except EstadoIndisponivel as exc:  # falha local ao LER a documentação: terminal, nunca pendência (0080 §6)
+            raise portao.falha_local_de_estado(exc) from exc
+        if registro is None:
+            raise Unavailable("ativacao_ao_vivo_pendente")
+        self._portao = portao
+        return self._portao
+
+    def _perfil(self, exc: Unavailable) -> Unavailable:
+        """Falha de perfil ou de resposta detectada DEPOIS do portão: alimenta o mesmo classificador e o mesmo estado
+        de barreiras (recurso persistente; host pelo escopo). Entrada inválida do chamador e formatos não habilitados
+        não têm categoria de resposta e passam intactos; falha local do parser encerra o escopo sem culpar a fonte."""
+        portao = self._portao
+        if portao is None or "bloqueio" in exc.evidencia:
+            return exc
+        if exc.categoria == "resposta_inesperada" and isinstance(exc.evidencia.get("url"), str):
+            return portao.falha_de_resposta(exc, exc.evidencia["url"])
+        if exc.reason == "falha_parser_camara":
+            return portao.falha_local_de_interpretacao(exc)
+        return exc
+
+    def _relancar(self, exc: Unavailable):
+        novo = self._perfil(exc)
+        if novo is exc:
+            raise exc
+        raise novo from exc
+
+    def _inventario(self, page):
+        try:
+            return inventario(page)
+        except Unavailable as exc:
+            self._relancar(exc)
+
+    def atribuicao(self, autoria: str | None = None, *, sha256: str | None = None, url: str | None = None,
+                   fetched_at: str | None = None) -> dict:
+        from freoa_verifica.connectors.camara_atribuicao import atribuicao
+        return atribuicao(self.home, autoria, sha256=sha256, url=url, fetched_at=fetched_at)
 
     def _validar_response(self, resp, url):
         try:
@@ -206,38 +236,23 @@ class CamaraLeginConnector(Connector):
 
     @sob_guarda
     def _obter_recurso(self, url):
-        if self._transporte_offline is None:
-            raise Unavailable("ativacao_ao_vivo_pendente")
         try:
-            route = self._admitir(url)  # antes inclusive do robots e do cache
+            self._admitir(url)  # gramática e vínculo de descoberta, antes inclusive do robots e do cache
         except ValueError as exc:
             raise Unavailable(str(exc)) from exc
-        if route["recurso"] != "robots":
-            host = urlsplit(url).netloc
-            robot = self._obter_recurso(f"https://{host}/robots.txt")
-            try:
-                parts = urlsplit(url)
-                target = parts.path + ("?" + parts.query if parts.query else "")
-                allowed, delay = politica_robots(texto_do_response(robot), target)
-            except (ValueError, OverflowError) as exc:
-                raise Unavailable("robots_inconclusivo", evidencia={"url": robot.url, "sha256": robot.sha256}) from exc
-            self.politicas.append({"url": url, "permitido": allowed, "robots_url": robot.url,
-                                   "sha256": robot.sha256, "fetched_at": robot.fetched_at})
-            if not allowed:
-                raise Unavailable("robots_proibido", evidencia=self.politicas[-1])
-            wait = delay - (time.monotonic() - self._last_request.get(host, float("-inf")))
-            if wait > 0:
-                if wait > min(restante(60), 60):
-                    raise Unavailable("orcamento")
-                time.sleep(wait)
-        resp = self._transporte_offline(url, hosts=self.hosts, path_prefixes=self.path_prefixes,
-                               mimes=frozenset({route["mime"]}), user_agent=self.user_agent,
-                               max_redirects=0, repeticao=0, max_bytes=30 * 1024**2, timeout=60)
-        self._last_request[urlsplit(url).netloc] = time.monotonic()
-        self._validar_response(resp, url)
+        portao = self._portao_da_rota()
+        resp = portao.obter(url)
+        politica = portao.politica_de.get(url)
+        if politica is not None:
+            self.politicas.append({"url": url, "politica_sha256": politica})
+        try:
+            self._validar_response(resp, url)
+        except Unavailable as exc:
+            self._relancar(exc)
         self.paginas[url] = resp
         return resp
 
+    @_classifica
     def search(self, q: str, **filtros):
         from freoa_verifica.citation import parse_one
         cite = parse_one(q)
@@ -270,6 +285,7 @@ class CamaraLeginConnector(Connector):
             raise _erro("busca_sem_marcador_zero_validado", resp)
         return CandidateList(candidates, total=None)
 
+    @_classifica
     def resolve(self, key):
         from freoa_verifica.aliases import WorkKey
         from freoa_verifica.identity import validate_identity
@@ -282,14 +298,18 @@ class CamaraLeginConnector(Connector):
         name = "Lei Complementar" if kind == "lei_complementar" else "Lei"
         found = self.search(f"{name} {number}/{year}")
         matches = []
+        divergente = None  # página que o endereço diz ser a norma pedida e cujo conteúdo diz outra coisa
         for cand in found:
             page = self._obter_recurso(cand.url)
-            inv = inventario(page)
+            inv = self._inventario(page)
             doc = ParsedDocument("camara_norma", "1", inv["titulo"], None, "")
             try:
-                if validate_identity(wk, doc) is None:
-                    continue
+                confirmada = validate_identity(wk, doc) is not None
             except ValueError:
+                confirmada = False
+            if not confirmada:
+                if _endereco_da_norma(cand.url, wk):
+                    divergente = page
                 continue
             self.inventarios[cand.url] = inv
             self._descobrir(page, inv)
@@ -298,7 +318,9 @@ class CamaraLeginConnector(Connector):
         if len(matches) > 1:
             raise AmbiguousCandidates(matches)
         if not matches:
-            raise Unavailable("identidade_nao_confirmada")
+            if divergente is not None:  # perfil incompatível: evidência da resposta, mesmo classificador das barreiras
+                raise _erro("identidade_nao_confirmada", divergente)
+            raise Unavailable("identidade_nao_confirmada")  # nenhuma página da norma pedida: ausência demonstrada
         return matches[0]
 
     def _descobrir(self, page, inv):
@@ -306,6 +328,7 @@ class CamaraLeginConnector(Connector):
             if r["admitido"]:
                 self.links[r["url"]] = (page, r["href"], r["rotulo"])
 
+    @_classifica
     def fetch(self, candidate):
         version = candidate.metadata.get("versao", "vigente")
         if version not in {"vigente", "publicacao_original"}:
@@ -314,15 +337,19 @@ class CamaraLeginConnector(Connector):
         inv = self.inventarios.get(candidate.url)
         if inv is None:
             page = self._obter_recurso(candidate.url)
-            inv = inventario(page)
+            inv = self._inventario(page)
             from freoa_verifica.aliases import WorkKey
             from freoa_verifica.identity import validate_identity
             from freoa_verifica.parsers.model import ParsedDocument
             info = validar_url(candidate.url)
             kind = {"lei": "lei", "leicom": "lei_complementar"}[info["familia"]]
             key = WorkKey("federal", kind, info["numero"], int(info["ano"]))
-            if validate_identity(key, ParsedDocument("camara_norma", "1", inv["titulo"], None, "")) is None:
-                raise Unavailable("identidade_nao_confirmada")
+            try:
+                confirmada = validate_identity(key, ParsedDocument("camara_norma", "1", inv["titulo"], None, "")) is not None
+            except ValueError:
+                confirmada = False
+            if not confirmada:  # o endereço é o da norma e a página declara outra: perfil incompatível, com evidência
+                raise _erro("identidade_nao_confirmada", page)
             self.inventarios[candidate.url] = inv
             self._descobrir(page, inv)
         role = "atualizado" if version == "vigente" else "original"
@@ -331,6 +358,7 @@ class CamaraLeginConnector(Connector):
             raise Unavailable("versao_ausente_ou_ambigua")
         return self._obter_recurso(choices[0]["url"])
 
+    @_classifica
     def parse(self, resp):
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
         self._admitir(resp.final_url)
@@ -354,7 +382,7 @@ class CamaraLeginConnector(Connector):
         # A epígrafe pode faltar no atualizado. Identidade só pelo vínculo exato à página capturada.
         from freoa_verifica.parsers.model import EditorialBlock
         source = self.links[resp.final_url][0]
-        inv = self.inventarios.get(source.final_url) or inventario(source)
+        inv = self.inventarios.get(source.final_url) or self._inventario(source)
         from freoa_verifica.identity import declared_identity
         page_doc = type(doc)("camara_norma", "1", inv["titulo"], None, "")
         text_key, _ = declared_identity(doc)
@@ -383,6 +411,7 @@ class CamaraLeginConnector(Connector):
         return doc
 
     @sob_guarda
+    @_classifica
     def fetch_anexo(self, candidate):
         self._admitir(candidate.url)
         inv = self.inventarios.get(candidate.url)
@@ -423,7 +452,7 @@ class CamaraLeginConnector(Connector):
                     remaining -= 1
                     try:
                         page = self._obter_recurso(url)
-                        own = inventario(page)
+                        own = self._inventario(page)
                         self.inventarios[url] = own
                         self._descobrir(page, own)
                         original = [r for r in own["recursos"] if r["recurso"] == "original" and r["admitido"]]
@@ -447,5 +476,11 @@ class CamaraLeginConnector(Connector):
         return {"materiais": materials, "pendencias": pending, "indisponibilidades": failures, "cadeia_completa": False}
 
     def health(self):
-        # Termos/licença ainda pendentes; não transformar robots em capacidade aprovada.
-        return HealthReport(self.id, (HealthProbe("documento", "unavailable", "ativacao_ao_vivo_pendente"),))
+        # Robots e termo não são capacidade aprovada: a qualificação segue `nao_apurada` (0080).
+        from freoa_verifica.store.db import data_home
+        try:
+            ativa = self._portao_injetado is not None or ativacao(Estado(self.home or data_home())) is not None
+        except EstadoIndisponivel:
+            ativa = False  # sem leitura da documentação não se afirma ativação
+        return HealthReport(self.id, (HealthProbe("documento", "unavailable",
+                                                  "ativada_sem_sonda_de_saude" if ativa else "ativacao_ao_vivo_pendente"),))

@@ -94,6 +94,11 @@ class GuardaExecucao:
         hosts.discard("")
         return hosts
 
+    def em_cache(self, method: str, url: str, body: bytes | None, cabecalhos: dict[str, str] | None = None) -> bool:
+        """A requisição seria atendida pelo desfecho já guardado, sem rede? (controle de ritmo e tetos)."""
+        chave = identidade_requisicao(method, url, body, cabecalhos)
+        return chave in self._sucessos or chave in self._falhas
+
     def antes_do_salto(self, host: str) -> None:
         """Chamado pelo transporte antes de seguir um redirecionamento: host bloqueado não é visitado."""
         bloqueio = self.bloqueios.get(host)

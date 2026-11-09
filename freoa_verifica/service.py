@@ -689,6 +689,8 @@ class Verifica:
             if connector_id == "stj":
                 self._connectors[connector_id].db_path = self.home / "stj_fts.sqlite"
                 self._connectors[connector_id].resource_dir = self.home / "stj-resources"
+            if connector_id == "camara_legin":
+                self._connectors[connector_id].home = self.home
         return self._connectors[connector_id]
 
     def registrar(self, rw: ResolvedWork) -> None:
@@ -844,10 +846,39 @@ class Verifica:
             fontes_consultadas=([{"fonte": "camara_legin", "resultado": "acervo", "motivo": None, "categoria": None}]
                                if source_id == "camara_legin" else []),
             procedencia_tipo=(cap.get("procedencia") if cap else None) or "nao_identificado",
+            atribuicao=(self._atribuicao_camara(doc.text, cap["sha256"], cap["url"], cap["fetched_at"])
+                        if source_id == "camara_legin" and cap else None),
         )
         if source_id == "camara_legin":
             self._revalidar_camara(rw)
         return rw
+
+    def _camara_ativada(self) -> bool:
+        from freoa_verifica.connectors.camara_ativacao import ativacao
+        from freoa_verifica.connectors.camara_estado import Estado, EstadoIndisponivel
+        try:
+            return ativacao(Estado(self.home)) is not None
+        except EstadoIndisponivel:
+            return False  # sem leitura da documentação não se afirma ativação
+
+    def _atribuicao_camara(self, texto: str | None = None, sha256: str | None = None, url: str | None = None,
+                           fetched_at: str | None = None) -> dict:
+        """Atribuição do §7 da 0080 POR CAPTURA (`sha256`, `url` e `fetched_at` da captura entregue, a tripla do banco),
+        com o home deste serviço; autoria só se o próprio documento a declara."""
+        from freoa_verifica.connectors.camara_atribuicao import atribuicao, autoria_declarada
+        return atribuicao(self.home, autoria_declarada(texto), sha256=sha256, url=url, fetched_at=fetched_at)
+
+    def _atribuicoes_das_capturas(self, capture_ids, texto: str | None = None) -> list[dict]:
+        """Atribuição de CADA captura de origem Câmara que sustenta o item entregue, sem repetir atribuições idênticas;
+        as de outras fontes não geram atribuição. Várias origens distintas ficam separadas, nunca fundidas."""
+        saida: list[dict] = []
+        for capture_id in capture_ids:
+            cap = repo.get_capture(self.conn, capture_id)
+            if cap and cap.get("source_id") == "camara_legin":
+                atribuicao = self._atribuicao_camara(texto, cap["sha256"], cap["url"], cap["fetched_at"])
+                if atribuicao not in saida:
+                    saida.append(atribuicao)
+        return saida
 
     def _revalidar_camara(self, rw):
         """Releitura não amplia a política: corpo, página de origem e href recuperáveis."""
@@ -1279,6 +1310,25 @@ class Verifica:
     # Busca legislação
     # ------------------------------------------------------------------
 
+    def _obras_do_item(self, row: dict, fonte: str | None) -> list:
+        """Obras que sustentam o item do índice (rótulo, caminho e texto): identidade exclusiva por obra, nunca
+        `LIMIT 1` por rótulo ou número. Com `fonte`, só as obras com ocorrência capturada nela. Mais de uma = ambígua."""
+        sql = ("SELECT DISTINCT w.id, w.label, w.authority, w.kind, w.number, w.year FROM work w "
+               "JOIN provision p ON p.work_id=w.id JOIN redaction r ON r.provision_id=p.id "
+               "WHERE (w.label=? OR w.number=?) AND p.path=? AND r.text=?")
+        params: list = [row["work_label"], row["work_label"], row["path"], row["text"]]
+        if fonte:
+            sql += (" AND EXISTS (SELECT 1 FROM occurrence o JOIN extract e ON e.id=o.extract_id "
+                    "JOIN capture c ON c.id=e.capture_id WHERE o.redaction_id=r.id AND c.source_id=?)")
+            params.append(fonte)
+        return self.conn.execute(sql + " ORDER BY w.id", params).fetchall()
+
+    def _recibos_da_obra(self, work_id: str, row: dict) -> list:
+        return self.conn.execute(
+            "SELECT DISTINCT e.capture_id FROM redaction r JOIN provision p ON p.id=r.provision_id "
+            "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
+            "WHERE r.text=? AND p.path=? AND p.work_id=?", (row["text"], row["path"], work_id)).fetchall()
+
     @_authenticated_output
     def buscar_legislacao(
         self,
@@ -1307,11 +1357,17 @@ class Verifica:
                 r["_staging"] = True
                 local.append(r)
         items: list[dict[str, Any]] = []
+        omitidos_ambiguos = 0
         for row in local:
-            receipts = self.conn.execute(
-                "SELECT DISTINCT e.capture_id FROM redaction r JOIN provision p ON p.id=r.provision_id "
-                "JOIN occurrence o ON o.redaction_id=r.id JOIN extract e ON e.id=o.extract_id "
-                "WHERE r.text=? AND p.path=?", (row["text"], row["path"])).fetchall()
+            candidatas = self._obras_do_item(row, filtro_fonte)
+            if len(candidatas) > 1:  # obra não identificável: o item não sai (nem com `trecho: null`); a parcialidade é declarada
+                omitidos_ambiguos += 1
+                continue
+            work_row = candidatas[0] if len(candidatas) == 1 else None
+            # As evidências do item são as da OBRA e da ocorrência que o sustentam, por identidade exclusiva da obra: texto e
+            # caminho iguais em outra norma (ou em outra fonte) não são evidência deste item e não lhe emprestam atribuição.
+            # Obra que não se identifica sem ambiguidade (rótulo repetido) não recebe recibo nem atribuição algum.
+            receipts = self._recibos_da_obra(work_row["id"], row) if work_row else []
             rebaixo = None
             try:
                 if not receipts:
@@ -1320,15 +1376,6 @@ class Verifica:
                     self._authenticate_capture(receipt[0])
             except SourceUnavailable as exc:
                 rebaixo = exc.reason
-            work_row = self.conn.execute(
-                "SELECT id, label, authority, kind, number, year FROM work WHERE label=? LIMIT 1",
-                (row["work_label"],),
-            ).fetchone()
-            if work_row is None:
-                work_row = self.conn.execute(
-                    "SELECT id, label, authority, kind, number, year FROM work WHERE number=? LIMIT 1",
-                    (row["work_label"],),
-                ).fetchone()
             vigencia = None
             if work_row and data and not rebaixo:
                 wk = WorkKey(
@@ -1354,6 +1401,7 @@ class Verifica:
                     vigencia = {"status": "unknown", "motivo": exc.reason, **exc.classificacao()}
                 except Exception:  # noqa: BLE001
                     vigencia = {"status": "unknown"}
+            atribuicoes = self._atribuicoes_das_capturas([r[0] for r in receipts], row["text"]) if work_row else []
             items.append(
                 {
                     "obra": row["work_label"],
@@ -1367,12 +1415,17 @@ class Verifica:
                     "pertinencia": row["pertinencia"],
                     "correspondencia": row["correspondencia"],
                     "candidato_ao_vivo": bool(row.get("_staging")),
+                    **({"atribuicao": atribuicoes[0]} if len(atribuicoes) == 1 else {}),
+                    **({"atribuicoes": atribuicoes} if len(atribuicoes) > 1 else {}),
                     **({"nao_indexado": True, "motivo": rebaixo} if rebaixo else {}),
                 }
             )
 
         fontes = [fonte] if fonte and fonte != "__somente_local__" else list(_LEGIS_CONNECTORS)
         fontes_status: dict[str, dict[str, Any]] = {}
+        if omitidos_ambiguos:
+            fontes_status["acervo_local"] = {"status": "unavailable", "motivo": "OBRA_AMBIGUA", "parcial": True,
+                                             "omitidos": omitidos_ambiguos}
 
         def nao_consultada(cid, motivo):
             fontes_status[cid] = {"status": "nao_consultada", "motivo": motivo, "parcial": False}
@@ -1454,6 +1507,7 @@ class Verifica:
         classificacao: dict[str, Any] = {}
         path = None
         trecho = cand.snippet or ""
+        atribuicao = None
         try:
             resp = connector.fetch(cand)
             parse_candidate = getattr(connector, "parse_candidate", None)
@@ -1500,6 +1554,7 @@ class Verifica:
                 if connector.id == "camara_legin":
                     for page in connector.paginas.values():
                         repo.save_capture(self.conn, page, connector.id, home=self.home)
+                    atribuicao = self._atribuicao_camara(parsed.text, rw.sha256, rw.url, rw.fetched_at)
                 if connector.id == "cvm_normas":  # C2
                     situacao.registrar_cvm(self.conn, self.home, connector, cand, rw)
                 if parsed.provisions:
@@ -1525,6 +1580,7 @@ class Verifica:
             "vigencia": None,
             "fonte": connector.id,
             "truncado": trunc,
+            **({"atribuicao": atribuicao} if atribuicao else {}),
         }
 
     # ------------------------------------------------------------------
@@ -3759,6 +3815,8 @@ class Verifica:
             "offset": offset,
             "max_chars": max_chars,
             "cursor": str(offset + max_chars) if truncado else None,
+            **({"atribuicao": self._atribuicao_camara(text, cap["sha256"], cap["url"], cap["fetched_at"])}
+               if cap.get("source_id") == "camara_legin" else {}),
             **({} if ctype else {"proveniencia": {
                 "interpretacao": ORIGEM_LEGADO_CONFERIDO if conferida is not None else ORIGEM_LEGADO}}),
         }
@@ -3779,7 +3837,7 @@ class Verifica:
             n, capturado = self.conn.execute(
                 "SELECT COUNT(*), MAX(fetched_at) FROM capture WHERE source_id=?", (cid,)).fetchone()
             recorte = {"capturas": n, "capturado_em": capturado}
-            vivo = cid not in {"planalto", "camara_legin"}  # legado / ativação pendente
+            vivo = cid != "planalto" and (cid != "camara_legin" or self._camara_ativada())  # legado / ativação pendente
         return ("ambos" if n and vivo else "acervo" if n else "ao_vivo" if vivo else "nenhuma"), recorte
 
     def obter_registro(
