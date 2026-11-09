@@ -557,6 +557,7 @@ def importar_fixture_offline(recibo: Path, corpo: Path, chave: str, fixtures: Pa
     from datetime import datetime
     from lxml import html
     from freoa_verifica.connectors.camara_policy import validar_url, url_publicada
+    from freoa_verifica.texto_resposta import texto_da_resposta
 
     if not isinstance(chave, str) or not CHAVE.fullmatch(chave):
         raise ValueError("chave_invalida")
@@ -571,6 +572,31 @@ def importar_fixture_offline(recibo: Path, corpo: Path, chave: str, fixtures: Pa
         raw, meta = ler_json_local(path)
         if not isinstance(meta, dict):
             raise ValueError("recibo_invalido")
+        if "fetched_at" in meta:  # recibo de `fv camara inventariar` (0080/0081)
+            campos = {"url", "sha256", "fetched_at", "status", "mime", "politica_robots_sha256", "origem"}
+            if (set(meta) != campos or meta["status"] != 200
+                    or not re.fullmatch(r"[0-9a-f]{64}", str(meta["politica_robots_sha256"]))
+                    or Path(path).name != hashlib.sha256(meta["url"].encode()).hexdigest()[:16] + ".recibo.json"):
+                raise ValueError("recibo_inventario_invalido")
+            body_path = Path(path).with_name(Path(path).name.replace(".recibo.json", ".corpo"))
+            body = body_path.read_bytes()
+            if meta["sha256"] != hashlib.sha256(body).hexdigest() or len(body) > 30 * 1024**2:
+                raise ValueError("recibo_corpo_divergente")
+            stamp = datetime.fromisoformat(meta["fetched_at"])
+            if stamp.tzinfo is None:
+                raise ValueError("instante_sem_fuso")
+            route = validar_url(meta["url"])
+            if meta["mime"] != route["mime"]:
+                raise ValueError("mime_divergente")
+            # O recibo antigo não gravava UA, versão ou charset HTTP. Não os
+            # fabricamos: o original e seu hash viajam integralmente abaixo.
+            normalizado = RegistroCaptura(
+                conector="camara_legin", versao="nao_registrada", url=meta["url"], metodo="GET",
+                parametros=None, user_agent="", capturado_em=meta["fetched_at"], url_final=meta["url"],
+                status=200, content_type=meta["mime"], sha256=meta["sha256"], bytes=len(body),
+                arquivo=body_path.name, evidencia={"formato_recibo": "inventario_0081",
+                                                  "campos_nao_registrados": ["user_agent", "versao", "content_type_http"]})
+            return raw, normalizado.meta(), body_path, body, route
         body_path = _confinado(Path(path).parent, meta.get("arquivo", ""))
         body = body_path.read_bytes()
         if (meta.get("fonte_sonda") != "camara_legislacao" or meta.get("conector") is not None
@@ -604,7 +630,7 @@ def importar_fixture_offline(recibo: Path, corpo: Path, chave: str, fixtures: Pa
         origin_raw, origin, _, origin_body, origin_route = ler(origem_recibo)
         if origin_route["recurso"] not in {"busca", "norma", "atualizado", "original"}:
             raise ValueError("origem_invalida")
-        tree = html.fromstring(origin_body)
+        tree = html.fromstring(texto_da_resposta(origin_body, origin.get("cabecalhos", {}).get("content-type") or origin["content_type"]))
         links = [a for a in tree.xpath('//a[@href]')
                  if url_publicada(origin["url"], a.get("href")) == meta["url"] and "".join(a.itertext()).strip()]
         if not links:
@@ -617,11 +643,33 @@ def importar_fixture_offline(recibo: Path, corpo: Path, chave: str, fixtures: Pa
                 raise ValueError("rotulo_incompativel")
         origem = {"url": origin["url"], "sha256": origin["sha256"], "href": links[0].get("href"),
                   "recibo_sha256": hashlib.sha256(origin_raw).hexdigest()}
+        original = json.loads(raw)
+        if "fetched_at" in original:
+            declarado = original["origem"]
+            if not isinstance(declarado, dict) or set(declarado) != {"url", "sha256", "href", "rotulo"}:
+                raise ValueError("vinculo_recibo_invalido")
+            if route["recurso"] == "norma" and declarado["url"] == meta["url"]:
+                # D3: recibos antigos conservaram a autorreferência em vez da
+                # descoberta. Preservar a anomalia; provar de novo a raiz pela
+                # busca fornecida E a autorreferência pelos bytes da norma.
+                propios = html.fromstring(texto_da_resposta(body, meta.get("cabecalhos", {}).get("content-type") or meta["content_type"])).xpath('//a[@href]')
+                if (origin_route["recurso"] != "busca" or declarado["sha256"] != meta["sha256"]
+                        or not any(a.get("href") == declarado["href"]
+                                   and url_publicada(meta["url"], a.get("href")) == meta["url"]
+                                   and " ".join("".join(a.itertext()).split()) == declarado["rotulo"] for a in propios)):
+                    raise ValueError("vinculo_recibo_invalido")
+                origem["raiz_reconferida_por_autorreferencia_d3"] = True
+            elif (declarado["url"] != origin["url"] or declarado["sha256"] != origin["sha256"]
+                  or not any(a.get("href") == declarado["href"]
+                             and " ".join("".join(a.itertext()).split()) == declarado["rotulo"] for a in links)):
+                raise ValueError("vinculo_recibo_invalido")
+    elif "fetched_at" in json.loads(raw) and json.loads(raw)["origem"] is not None:
+        raise ValueError("vinculo_recibo_invalido")
     allowed = {f.name for f in fields(RegistroCaptura)} - {"corpo", "importacao_offline"}
     if set(meta) - allowed:
         raise ValueError("campos_recibo_desconhecidos")
     reg = RegistroCaptura(**meta, corpo=body, importacao_offline={
-        "recibo_original": meta, "recibo_sha256": hashlib.sha256(raw).hexdigest(), "origem": origem,
+        "recibo_original": json.loads(raw), "recibo_sha256": hashlib.sha256(raw).hexdigest(), "origem": origem,
     })
     reg.conector = "camara_legin"
     dados, _ = _ler_manifesto(Path(fixtures) / "FIXTURES.json")

@@ -1,0 +1,44 @@
+{
+ "conector": "camara_legin",
+ "versao": "nao_registrada",
+ "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=10406&ano=2002&geral=",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "",
+ "capturado_em": "2026-11-09T06:15:43.810177+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {
+  "formato_recibo": "inventario_0081",
+  "campos_nao_registrados": [
+   "user_agent",
+   "versao",
+   "content_type_http"
+  ]
+ },
+ "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=10406&ano=2002&geral=",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {},
+ "sha256": "6890285d30714c58a3e6939e3de3ad39cb162cb0b1cb267b5d33debb21bf3c7d",
+ "bytes": 62208,
+ "arquivo": "1e066ee570d84442.corpo",
+ "importacao_offline": {
+  "recibo_original": {
+   "fetched_at": "2026-11-09T06:15:43.810177+00:00",
+   "mime": "text/html",
+   "origem": null,
+   "politica_robots_sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+   "sha256": "6890285d30714c58a3e6939e3de3ad39cb162cb0b1cb267b5d33debb21bf3c7d",
+   "status": 200,
+   "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=10406&ano=2002&geral="
+  },
+  "recibo_sha256": "e41061c900e964127c72f996e6ee8a6367dc6ef37d62e36a26d18246fe146dea",
+  "origem": null
+ }
+}

@@ -50,6 +50,10 @@ class Unavailable(Exception):
         return out
 
 
+class LocalParserFailure(Unavailable):
+    """Processo isolado sem resultado; não constitui evidência de perfil remoto."""
+
+
 @dataclass(frozen=True)
 class Candidate:
     """Candidato de busca/resolve — metadados apenas; nunca 'verified'."""

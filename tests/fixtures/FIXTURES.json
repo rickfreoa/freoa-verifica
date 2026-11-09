@@ -1162,6 +1162,672 @@
   "url": "https://api-publica.datajud.cnj.jus.br/api_publica_tjsp/_search",
   "url_final": "https://api-publica.datajud.cnj.jus.br/api_publica_tjsp/_search"
  },
+ "il3c_10406_atualizado": {
+  "bytes": 1571920,
+  "capturado_em": "2026-11-09T06:16:03.440408+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_10406_atualizado.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-10406-10-janeiro-2002-432893-normaatualizada-pl.html",
+    "recibo_sha256": "89dba27dd7b4a541dd9c82315670c38ec2e4e3f3c41b864aca411792c4e7141f",
+    "sha256": "3eb958700a7265c58b4e8b56c4a722876cca521577ae5f4225d7aa6f4133fbd5",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html"
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:16:03.440408+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "lei-10406-10-janeiro-2002-432893-normaatualizada-pl.html",
+     "rotulo": "Texto Atualizado (HTML)",
+     "sha256": "3eb958700a7265c58b4e8b56c4a722876cca521577ae5f4225d7aa6f4133fbd5",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "6ed7c19586b21355e998746a0620cea5c2f3e6a24036d7f3743b7d30330e5d90",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-normaatualizada-pl.html"
+   },
+   "recibo_sha256": "9c80957a95a24a879cc44c4342b07f8b624de4d08016d5194bfde4ebafad1015"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "6ed7c19586b21355e998746a0620cea5c2f3e6a24036d7f3743b7d30330e5d90",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-normaatualizada-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-normaatualizada-pl.html",
+  "user_agent": ""
+ },
+ "il3c_10406_atualizado__captura": {
+  "bytes": 2129,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_10406_atualizado",
+  "file": "camara_legin/il3c_10406_atualizado.captura.json",
+  "sha256": "6fdea578a7d6f10649fff1e61a7f1e92ade0b3f5b43093845dfa13487b047722"
+ },
+ "il3c_10406_busca": {
+  "bytes": 62208,
+  "capturado_em": "2026-11-09T06:15:43.810177+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_10406_busca.corpo",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:15:43.810177+00:00",
+    "mime": "text/html",
+    "origem": null,
+    "politica_robots_sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+    "sha256": "6890285d30714c58a3e6939e3de3ad39cb162cb0b1cb267b5d33debb21bf3c7d",
+    "status": 200,
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=10406&ano=2002&geral="
+   },
+   "recibo_sha256": "e41061c900e964127c72f996e6ee8a6367dc6ef37d62e36a26d18246fe146dea"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "6890285d30714c58a3e6939e3de3ad39cb162cb0b1cb267b5d33debb21bf3c7d",
+  "status": 200,
+  "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=10406&ano=2002&geral=",
+  "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=10406&ano=2002&geral=",
+  "user_agent": ""
+ },
+ "il3c_10406_busca__captura": {
+  "bytes": 1580,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_10406_busca",
+  "file": "camara_legin/il3c_10406_busca.captura.json",
+  "sha256": "d58088c6f2a6dcc6a0519701365cd0d38a62f80e8ac3e0bb060e1cddf520b0e0"
+ },
+ "il3c_10406_norma": {
+  "bytes": 76759,
+  "capturado_em": "2026-11-09T06:15:52.754938+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_10406_norma.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html",
+    "recibo_sha256": "e41061c900e964127c72f996e6ee8a6367dc6ef37d62e36a26d18246fe146dea",
+    "sha256": "6890285d30714c58a3e6939e3de3ad39cb162cb0b1cb267b5d33debb21bf3c7d",
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=10406&ano=2002&geral="
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:15:52.754938+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html",
+     "rotulo": "Lei nº 10.406, de 10 de Janeiro de 2002",
+     "sha256": "6890285d30714c58a3e6939e3de3ad39cb162cb0b1cb267b5d33debb21bf3c7d",
+     "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=10406&ano=2002&geral="
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "3eb958700a7265c58b4e8b56c4a722876cca521577ae5f4225d7aa6f4133fbd5",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html"
+   },
+   "recibo_sha256": "89dba27dd7b4a541dd9c82315670c38ec2e4e3f3c41b864aca411792c4e7141f"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "3eb958700a7265c58b4e8b56c4a722876cca521577ae5f4225d7aa6f4133fbd5",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html",
+  "user_agent": ""
+ },
+ "il3c_10406_norma__captura": {
+  "bytes": 2274,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_10406_norma",
+  "file": "camara_legin/il3c_10406_norma.captura.json",
+  "sha256": "8c0809e758758de861bad9e9f7e9bbd766c517081b48938c6d15a16a9a0e0ac3"
+ },
+ "il3c_10406_original": {
+  "bytes": 793397,
+  "capturado_em": "2026-11-09T06:16:13.051573+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_10406_original.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html",
+    "recibo_sha256": "89dba27dd7b4a541dd9c82315670c38ec2e4e3f3c41b864aca411792c4e7141f",
+    "sha256": "3eb958700a7265c58b4e8b56c4a722876cca521577ae5f4225d7aa6f4133fbd5",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html"
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:16:13.051573+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html",
+     "rotulo": "Texto - Publicação Original",
+     "sha256": "3eb958700a7265c58b4e8b56c4a722876cca521577ae5f4225d7aa6f4133fbd5",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "58eb633237ae483da55f8bedb8c541cc1270ddde121084aee6706c4975be9003",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html"
+   },
+   "recibo_sha256": "e80aa2ab71135e45edde0d0a9c3700a9a495447c58ff42e50b80e852bc7bb451"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "58eb633237ae483da55f8bedb8c541cc1270ddde121084aee6706c4975be9003",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html",
+  "user_agent": ""
+ },
+ "il3c_10406_original__captura": {
+  "bytes": 2159,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_10406_original",
+  "file": "camara_legin/il3c_10406_original.captura.json",
+  "sha256": "2407d7a52bc607808ec787944e7bd71bb54ec95818b756ee2f32809b6e6cb92a"
+ },
+ "il3c_13105_atualizado": {
+  "bytes": 938199,
+  "capturado_em": "2026-11-09T06:33:41.162515+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13105_atualizado.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-13105-16-marco-2015-780273-normaatualizada-pl.html",
+    "recibo_sha256": "fa7a2f89f57904f3d689347d1eae050761d2ebdb1a114925b8c4c0bb6f883b2c",
+    "sha256": "1e52ee7f2c25b62061f1baeb4b5e806a04d24a5872263b417414f2536b02d4ee",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html"
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:33:41.162515+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "lei-13105-16-marco-2015-780273-normaatualizada-pl.html",
+     "rotulo": "Texto Atualizado (HTML)",
+     "sha256": "1e52ee7f2c25b62061f1baeb4b5e806a04d24a5872263b417414f2536b02d4ee",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "0d7f8c9a0f67734cc047c3bea8bfabd57a7823f361d774041e11815822722821",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-normaatualizada-pl.html"
+   },
+   "recibo_sha256": "32e41f4850ad1b107cb9fd18063c524e28e4d872cc9597f8281ff7a696b27f3d"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "0d7f8c9a0f67734cc047c3bea8bfabd57a7823f361d774041e11815822722821",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-normaatualizada-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-normaatualizada-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13105_atualizado__captura": {
+  "bytes": 2114,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13105_atualizado",
+  "file": "camara_legin/il3c_13105_atualizado.captura.json",
+  "sha256": "c7e0a022e8a18b7e9607a0140e340a4b1665862f07bd1cd3deb7828d8ef78cf0"
+ },
+ "il3c_13105_busca": {
+  "bytes": 62206,
+  "capturado_em": "2026-11-09T06:33:30.081105+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13105_busca.corpo",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:33:30.081105+00:00",
+    "mime": "text/html",
+    "origem": null,
+    "politica_robots_sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+    "sha256": "5ea3a390c328c2084b23a2fccaa55a3f95a6fe4c35cd0f80fa8fc03e8b04530e",
+    "status": 200,
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13105&ano=2015&geral="
+   },
+   "recibo_sha256": "f89c1702d034eb63f2547e798386783a84b5fe23984265e343110d6cf04fdf49"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "5ea3a390c328c2084b23a2fccaa55a3f95a6fe4c35cd0f80fa8fc03e8b04530e",
+  "status": 200,
+  "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13105&ano=2015&geral=",
+  "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13105&ano=2015&geral=",
+  "user_agent": ""
+ },
+ "il3c_13105_busca__captura": {
+  "bytes": 1580,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13105_busca",
+  "file": "camara_legin/il3c_13105_busca.captura.json",
+  "sha256": "f168dfe4d5259f77a15ae384d1dc1197583788b9d23a3ce8b4294beebac23713"
+ },
+ "il3c_13105_norma": {
+  "bytes": 61138,
+  "capturado_em": "2026-11-09T06:33:31.926683+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13105_norma.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html",
+    "raiz_reconferida_por_autorreferencia_d3": true,
+    "recibo_sha256": "f89c1702d034eb63f2547e798386783a84b5fe23984265e343110d6cf04fdf49",
+    "sha256": "5ea3a390c328c2084b23a2fccaa55a3f95a6fe4c35cd0f80fa8fc03e8b04530e",
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13105&ano=2015&geral="
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:33:31.926683+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "../../../fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html",
+     "rotulo": "Lei Ordinária nº 13105 de 16 de Março de 2015 (Poder Legislativo) - (Vigência Condicionada). Art. 1045 .",
+     "sha256": "1e52ee7f2c25b62061f1baeb4b5e806a04d24a5872263b417414f2536b02d4ee",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "1e52ee7f2c25b62061f1baeb4b5e806a04d24a5872263b417414f2536b02d4ee",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html"
+   },
+   "recibo_sha256": "fa7a2f89f57904f3d689347d1eae050761d2ebdb1a114925b8c4c0bb6f883b2c"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "1e52ee7f2c25b62061f1baeb4b5e806a04d24a5872263b417414f2536b02d4ee",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13105_norma__captura": {
+  "bytes": 2314,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13105_norma",
+  "file": "camara_legin/il3c_13105_norma.captura.json",
+  "sha256": "94c108a8f4959fddea092c1e541d370347a90ff24de23b23829ee122d8fe6852"
+ },
+ "il3c_13105_original": {
+  "bytes": 799280,
+  "capturado_em": "2026-11-09T06:33:52.038612+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13105_original.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-13105-16-marco-2015-780273-publicacaooriginal-146341-pl.html",
+    "recibo_sha256": "fa7a2f89f57904f3d689347d1eae050761d2ebdb1a114925b8c4c0bb6f883b2c",
+    "sha256": "1e52ee7f2c25b62061f1baeb4b5e806a04d24a5872263b417414f2536b02d4ee",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html"
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:33:52.038612+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "lei-13105-16-marco-2015-780273-publicacaooriginal-146341-pl.html",
+     "rotulo": "Texto - Publicação Original",
+     "sha256": "1e52ee7f2c25b62061f1baeb4b5e806a04d24a5872263b417414f2536b02d4ee",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "a87022d98739567ae51fcebc92efe968ab0c0f1031ce12761a25494d33d9e52e",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-publicacaooriginal-146341-pl.html"
+   },
+   "recibo_sha256": "b409528863f7cca4e98a266f600d84b6a2c5e91de773b429aac61d2af3f86e7d"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "a87022d98739567ae51fcebc92efe968ab0c0f1031ce12761a25494d33d9e52e",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-publicacaooriginal-146341-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2015/lei-13105-16-marco-2015-780273-publicacaooriginal-146341-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13105_original__captura": {
+  "bytes": 2170,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13105_original",
+  "file": "camara_legin/il3c_13105_original.captura.json",
+  "sha256": "c1e2fe156eed7069ea77985e653b97146af73020473a0d7c652f6b3a5c8ee29f"
+ },
+ "il3c_13709_atualizado": {
+  "bytes": 223813,
+  "capturado_em": "2026-11-09T06:34:11.208887+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13709_atualizado.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-13709-14-agosto-2018-787077-normaatualizada-pl.html",
+    "recibo_sha256": "93e0e44b745fbe57451a165acde51ab803bd733aa97f761742400b94ea4295f1",
+    "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:34:11.208887+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "lei-13709-14-agosto-2018-787077-normaatualizada-pl.html",
+     "rotulo": "Texto Atualizado (HTML)",
+     "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "5ade20f12d206504f3beb13a0595d144efc891229ad0e6badcebfa97a8a83596",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-normaatualizada-pl.html"
+   },
+   "recibo_sha256": "6502a706c85d9fc5e2d570aaae5570c7259cdee2ddaadf35593ce51316fc72ca"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "5ade20f12d206504f3beb13a0595d144efc891229ad0e6badcebfa97a8a83596",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-normaatualizada-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-normaatualizada-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13709_atualizado__captura": {
+  "bytes": 2121,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13709_atualizado",
+  "file": "camara_legin/il3c_13709_atualizado.captura.json",
+  "sha256": "b441ce56a696f928bfb549a7b38163c615986392d9fcb649eb148c489244b1ef"
+ },
+ "il3c_13709_busca": {
+  "bytes": 62302,
+  "capturado_em": "2026-11-09T06:33:53.633492+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13709_busca.corpo",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:33:53.633492+00:00",
+    "mime": "text/html",
+    "origem": null,
+    "politica_robots_sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+    "sha256": "de634f5a7faf1aa710ffac268340d97ea61e4e8749ddb0a98ee201319e6538e3",
+    "status": 200,
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13709&ano=2018&geral="
+   },
+   "recibo_sha256": "a99cf2fd9ac5eee3b55b231d26845af394023d0358610a25d478461623d70673"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "de634f5a7faf1aa710ffac268340d97ea61e4e8749ddb0a98ee201319e6538e3",
+  "status": 200,
+  "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13709&ano=2018&geral=",
+  "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13709&ano=2018&geral=",
+  "user_agent": ""
+ },
+ "il3c_13709_busca__captura": {
+  "bytes": 1580,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13709_busca",
+  "file": "camara_legin/il3c_13709_busca.captura.json",
+  "sha256": "d73bc8999121da377f2f542014da36bb4ed35d5026ec2b888bde22a8ddc8bc76"
+ },
+ "il3c_13709_norma": {
+  "bytes": 53383,
+  "capturado_em": "2026-11-09T06:34:01.707108+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13709_norma.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+    "raiz_reconferida_por_autorreferencia_d3": true,
+    "recibo_sha256": "a99cf2fd9ac5eee3b55b231d26845af394023d0358610a25d478461623d70673",
+    "sha256": "de634f5a7faf1aa710ffac268340d97ea61e4e8749ddb0a98ee201319e6538e3",
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13709&ano=2018&geral="
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:34:01.707108+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "../../../fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+     "rotulo": "Lei Ordinária nº 13709 de 14 de Agosto de 2018 (Poder Legislativo) - (Vigência Condicionada).",
+     "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+   },
+   "recibo_sha256": "93e0e44b745fbe57451a165acde51ab803bd733aa97f761742400b94ea4295f1"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13709_norma__captura": {
+  "bytes": 2308,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13709_norma",
+  "file": "camara_legin/il3c_13709_norma.captura.json",
+  "sha256": "e2d1fb89ee93e697bde1f9fc4952f2b3488c3fbc6bc9418b4316f9054aa699c6"
+ },
+ "il3c_13709_original": {
+  "bytes": 117283,
+  "capturado_em": "2026-11-09T06:34:21.894850+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13709_original.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-13709-14-agosto-2018-787077-publicacaooriginal-156212-pl.html",
+    "recibo_sha256": "93e0e44b745fbe57451a165acde51ab803bd733aa97f761742400b94ea4295f1",
+    "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:34:21.894850+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "lei-13709-14-agosto-2018-787077-publicacaooriginal-156212-pl.html",
+     "rotulo": "Texto - Publicação Original",
+     "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "43119e7d6dda5a6277928473be68306afe29d2e73117b8fb935690190c4ad88a",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-publicacaooriginal-156212-pl.html"
+   },
+   "recibo_sha256": "83e4b0f4c14f9529110b4c361b5ee15e68980d1919d286bbe65d8a3396dc2e44"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "43119e7d6dda5a6277928473be68306afe29d2e73117b8fb935690190c4ad88a",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-publicacaooriginal-156212-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-publicacaooriginal-156212-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13709_original__captura": {
+  "bytes": 2177,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13709_original",
+  "file": "camara_legin/il3c_13709_original.captura.json",
+  "sha256": "cac876bdd5693eba3e376981d9e9d01ad1f09e358d56dac0e1d511e23ce997c7"
+ },
+ "il3c_13874_atualizado": {
+  "bytes": 117838,
+  "capturado_em": "2026-11-09T06:34:41.289365+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13874_atualizado.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+    "recibo_sha256": "f38f5ca08dd4356c19c905d5802b0c9b9c577316a05145c6c17cdd6fbf076576",
+    "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:34:41.289365+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+     "rotulo": "Texto Atualizado (HTML)",
+     "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "a231acb388e65b023db0536b60d134e146890f1f642413d1d4e8616317a3c6b0",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html"
+   },
+   "recibo_sha256": "a7adf9503983df07faa2138958ba0e416a1899e5a147124b440a87ab0fec5027"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "a231acb388e65b023db0536b60d134e146890f1f642413d1d4e8616317a3c6b0",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-normaatualizada-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13874_atualizado__captura": {
+  "bytes": 2135,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13874_atualizado",
+  "file": "camara_legin/il3c_13874_atualizado.captura.json",
+  "sha256": "4f1bde022200f9831838cfbcc87997f48b4f130fd22f94022e66b5728b4848a2"
+ },
+ "il3c_13874_busca": {
+  "bytes": 62896,
+  "capturado_em": "2026-11-09T06:34:22.598192+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13874_busca.corpo",
+  "importacao_offline": {
+   "origem": null,
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:34:22.598192+00:00",
+    "mime": "text/html",
+    "origem": null,
+    "politica_robots_sha256": "80d159e66519e14dba592a93c29301b63409896856d10f8ff54a55805ec9ce4a",
+    "sha256": "c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d",
+    "status": 200,
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral="
+   },
+   "recibo_sha256": "8ae9f93e660332f5762b9688cf3f98146365bfbd94ba97eb5c4bba3efad6d67b"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d",
+  "status": 200,
+  "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral=",
+  "url_final": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral=",
+  "user_agent": ""
+ },
+ "il3c_13874_busca__captura": {
+  "bytes": 1580,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13874_busca",
+  "file": "camara_legin/il3c_13874_busca.captura.json",
+  "sha256": "f058ccf66da4b0d4895c5551fd8b945c7f6adf9f7b4a42d32d33117a5784859a"
+ },
+ "il3c_13874_norma": {
+  "bytes": 53481,
+  "capturado_em": "2026-11-09T06:34:31.994924+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13874_norma.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+    "recibo_sha256": "8ae9f93e660332f5762b9688cf3f98146365bfbd94ba97eb5c4bba3efad6d67b",
+    "sha256": "c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d",
+    "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral="
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:34:31.994924+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+     "rotulo": "Lei nº 13.874, de 20 de Setembro de 2019",
+     "sha256": "c0377cd867d3a3b1b29c6713a6629b41055daa3726053512473893070174744d",
+     "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13874&ano=2019&geral="
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
+   },
+   "recibo_sha256": "f38f5ca08dd4356c19c905d5802b0c9b9c577316a05145c6c17cdd6fbf076576"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13874_norma__captura": {
+  "bytes": 2280,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13874_norma",
+  "file": "camara_legin/il3c_13874_norma.captura.json",
+  "sha256": "cca65888f277cab1a11be26ff991584b8c7769c0bdffc077f06ee711eb02a35b"
+ },
+ "il3c_13874_original": {
+  "bytes": 103071,
+  "capturado_em": "2026-11-09T06:34:56.613783+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "camara_legin/il3c_13874_original.corpo",
+  "importacao_offline": {
+   "origem": {
+    "href": "lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+    "recibo_sha256": "f38f5ca08dd4356c19c905d5802b0c9b9c577316a05145c6c17cdd6fbf076576",
+    "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
+   },
+   "recibo_original": {
+    "fetched_at": "2026-11-09T06:34:56.613783+00:00",
+    "mime": "text/html",
+    "origem": {
+     "href": "lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+     "rotulo": "Texto - Publicação Original",
+     "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
+    },
+    "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+    "sha256": "4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3",
+    "status": 200,
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html"
+   },
+   "recibo_sha256": "88837c593268450515abb7ed23b665e6a37fa0f229facbcbc6f66a4a4d58920c"
+  },
+  "metodo": "GET",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3",
+  "status": 200,
+  "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+  "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+  "user_agent": ""
+ },
+ "il3c_13874_original__captura": {
+  "bytes": 2191,
+  "categoria": "metadados_captura",
+  "descreve": "il3c_13874_original",
+  "file": "camara_legin/il3c_13874_original.captura.json",
+  "sha256": "5e5b7d983641448c21dfab594edbe28daa605617e0d11642dc7c0908f5ba1288"
+ },
  "planalto_lei_10303_2001": {
   "bytes": 104183,
   "capturado_em": "2026-10-17T20:46:08.268794+00:00",

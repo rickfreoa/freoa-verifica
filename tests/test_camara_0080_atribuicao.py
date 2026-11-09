@@ -108,7 +108,7 @@ def test_python_obter_dispositivo_vigente_e_original_sem_alterar_o_texto(acervo)
     atual = acervo.obter_dispositivo(ART)
     original = acervo.obter_dispositivo(ART, versao="publicacao_original")
     assert atual["evidencia"]["atribuicao"] == esperada() == original["evidencia"]["atribuicao"]
-    assert original["texto"].startswith("As publicações ordenadas pela presente Lei serão feitas no órgão oficial")
+    assert original["texto"].startswith("Art. 289. As publicações ordenadas pela presente Lei serão feitas no órgão oficial")
     assert '"' not in original["texto"][:5]  # o Verifica não insere aspas nem altera o texto
     assert atual["status"] == "unknown" and atual["texto"] is None  # semântica das guardas intacta
 

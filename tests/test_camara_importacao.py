@@ -64,7 +64,7 @@ def test_c16_mutante_corpo_editado(tmp_path):
 def test_c16_manifesto_e_hashes_lote():
     manifest = json.loads((FIX / "FIXTURES.json").read_bytes())
     entries = [v for v in manifest.values() if v["file"].startswith("camara_legin/")]
-    assert len(entries) == 34
+    assert len(entries) == 66  # lote inicial (34) + 16 pares de desenvolvimento IL.3-c
     assert {e["file"] for e in entries} == {p.relative_to(FIX).as_posix() for p in (FIX / "camara_legin").iterdir()}
     for e in entries:
         raw = (FIX / e["file"]).read_bytes()

@@ -1,0 +1,54 @@
+{
+ "conector": "camara_legin",
+ "versao": "nao_registrada",
+ "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "",
+ "capturado_em": "2026-11-09T06:16:13.051573+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {
+  "formato_recibo": "inventario_0081",
+  "campos_nao_registrados": [
+   "user_agent",
+   "versao",
+   "content_type_http"
+  ]
+ },
+ "url_final": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {},
+ "sha256": "58eb633237ae483da55f8bedb8c541cc1270ddde121084aee6706c4975be9003",
+ "bytes": 793397,
+ "arquivo": "670905172e55901c.corpo",
+ "importacao_offline": {
+  "recibo_original": {
+   "fetched_at": "2026-11-09T06:16:13.051573+00:00",
+   "mime": "text/html",
+   "origem": {
+    "href": "lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html",
+    "rotulo": "Texto - Publicação Original",
+    "sha256": "3eb958700a7265c58b4e8b56c4a722876cca521577ae5f4225d7aa6f4133fbd5",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html"
+   },
+   "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+   "sha256": "58eb633237ae483da55f8bedb8c541cc1270ddde121084aee6706c4975be9003",
+   "status": 200,
+   "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html"
+  },
+  "recibo_sha256": "e80aa2ab71135e45edde0d0a9c3700a9a495447c58ff42e50b80e852bc7bb451",
+  "origem": {
+   "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-norma-pl.html",
+   "sha256": "3eb958700a7265c58b4e8b56c4a722876cca521577ae5f4225d7aa6f4133fbd5",
+   "href": "lei-10406-10-janeiro-2002-432893-publicacaooriginal-1-pl.html",
+   "recibo_sha256": "89dba27dd7b4a541dd9c82315670c38ec2e4e3f3c41b864aca411792c4e7141f"
+  }
+ }
+}

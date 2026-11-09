@@ -1,0 +1,969 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-br" xml:lang="pt-br">
+<head>
+
+    <meta http-equiv="Content-Type" content="text/html charset=utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="apple-itunes-app" content="app-id=1049343067" />
+    <meta name="google-play-app" content="app-id=br.leg.camara.infolegmovel" />
+    <script>
+      (function () {
+        let initialized = false;
+        let loading = false;
+
+        function ensureBody(callback) {
+          if (document.body) {
+            callback();
+          } else {
+            setTimeout(() => ensureBody(callback), 50);
+          }
+        }
+
+        function loadScript() {
+          if (loading || window.VLibras) return;
+          loading = true;
+
+          ensureBody(() => {
+            const s = document.createElement("script");
+            s.src = "https://vlibras.gov.br/app/vlibras-plugin.js";
+            s.onload = initVLibras;
+            document.body.appendChild(s);
+          });
+        }
+
+        function initVLibras() {
+          if (initialized || !window.VLibras) return;
+
+          ensureBody(() => {
+            if (!document.querySelector("[vw]")) {
+              const container = document.createElement("div");
+              container.innerHTML = `
+              <div vw class="enabled">
+                <div vw-access-button class="active"></div>
+                <div vw-plugin-wrapper>
+                  <div class="vw-plugin-top-wrapper"></div>
+                </div>
+              </div>
+            `;
+              document.body.appendChild(container);
+            }
+
+            (new window.VLibras.Widget(
+              "https://vlibras.gov.br/app",
+              "https://vlibras.gov.br/config/camara.json",
+            ),
+              $("body").append(
+                '<aside><div vw class="enabled"><div vw-access-button class="active"></div><div vw-plugin-wrapper><div class="vw-plugin-top-wrapper"></div></div></div></aside>',
+              ));
+            initialized = true;
+
+            injectCSS();
+            if (!window.location.pathname.includes("/comissoes")) {
+              bindButton();
+            }
+          });
+        }
+
+        function injectCSS() {
+          if (document.getElementById("vlibras-style")) return;
+          const style = document.createElement("style");
+          style.id = "vlibras-style";
+          style.innerHTML = `
+          [vw-access-button] { display: none !important; }
+          div[vw] { z-index: 999999 !important; }
+        `;
+          document.head.appendChild(style);
+        }
+
+        function bindButton() {
+          const btn = document.getElementById("meu-botao-vlibras");
+          if (!btn) {
+            setTimeout(bindButton, 300);
+            return;
+          }
+
+          btn.onclick = function (e) {
+            e.preventDefault();
+            const original = document.querySelector("[vw-access-button]");
+            if (original) original.click();
+          };
+        }
+
+        // OBSERVA MUTA&#199;&#213;ES DO DOM (ESSENCIAL NO PLONE)
+        const observer = new MutationObserver(() => {
+          if (!document.querySelector("[vw]") && !initialized) {
+            loadScript();
+          }
+        });
+
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+        });
+
+        window.addEventListener("load", loadScript);
+      })();
+    </script>
+
+    <title>Portal da Câmara dos Deputados</title>
+  <style type="text/css">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/member-cachekey-46bb2e0fc9968a457e63f356c0ff3900.css);</style><style type="text/css">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/portlets-cachekey-8a45f49b338591ae0c9c8a91f261dc78.css);</style><style type="text/css" media="screen">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/deprecated-cachekey-32595b622b36f2eee9478f07796d4f67.css);</style><style type="text/css" media="screen">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/resourceplone.app.discussion.stylesheetsdiscussion-cachekey-5b23f388acd88bdb65020b51a5a278fb.css);</style><style type="text/css">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/elements-cachekey-57e40a70bd8192a6f63782abff5c2748.css);</style><style type="text/css" media="all">@import url(https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/ploneCustom-cachekey-7fb44e17264e070fccf4e31d9f2ada1c.css);</style><link rel="stylesheet" type="text/css" href="https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/themecamara.leg.viradadigitalcsslibsbootstrap-datetimepicker.min-cachekey-ab2d257c1b49d2d194633e2ecb4564a2.css" /><link rel="stylesheet" type="text/css" href="https://www.camara.leg.br/tema/global/camara-custom.css" /><link rel="stylesheet" type="text/css" href="https://www2.camara.leg.br/portal_css/camara_leg_viradadigital/++theme++camara.leg.viradadigital/css/all.min.css" /><link rel="apple-touch-icon" sizes="180x180" href="https://www.camara.leg.br/tema/apple-touch-icon.png" /><link rel="icon" type="image/png" sizes="32x32" href="https://www.camara.leg.br/tema/favicon-32x32.png" /><link rel="icon" type="image/png" sizes="16x16" href="https://www.camara.leg.br/tema/favicon-16x16.png" /><link rel="manifest" href="https://www.camara.leg.br/tema/site.webmanifest" /><link rel="mask-icon" href="https://www.camara.leg.br/tema/safari-pinned-tab.svg" color="#009e49" /><link rel="search" href="http://www2.camara.leg.br/busca-geral" title="Buscar neste site" /><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/resourceplone.app.jquery-cachekey-3fa72abea58e1799bd3b0bc237335d45.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/styleswitcher-cachekey-9178d2d1bc80488214ac8d40a46c7bdf.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/impressaoIframes-cachekey-7de901cf3c737563606c12fa53b7a321.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/GoogleAnalyticsTracker.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/kss-bbb-cachekey-df10a37e7aa4176c3b122c2e3b0ee128.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/inline_validation-cachekey-35d4d75a94cdb17b403a636871dd92cb.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljsbootstrap.min-cachekey-c15df71e2ec454087fe4c4eab0ce9d3e.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljslibsmoment.min-cachekey-860514b918ea422f7e82fa48125015c4.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljslibsmoment-pt-br-cachekey-0aafba4fb000126f1ed0f6701186de00.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljslibsbootstrap-datetimepicker.min-cachekey-fac2884b384d9c99236b26d0746facc4.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljslibsjquery.maskedinput.min-cachekey-e2f8b2523378532cc132594675b6dc6f.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljsacoes-tema-cachekey-a0084cf69f1785571a18f6a58a4986ac.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitaljscorrecoes-bootstrap-tema-cachekey-bd4c19550531506aa59d8b0aa7e8d6c5.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitalviradadigitalvendorjquery.mmenu.all-cachekey-f0e297313e30d6b2b2c2588ef23b5ef2.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitalviradadigitaljsvd_correcoes-cachekey-52a3614631388ad9e07bf35264bc73d5.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitalviradadigitaljsmmenu-correcoes-cachekey-8e45cc1e451978774afbfe2f5f1e95cf.js"></script><script type="text/javascript" src="https://www2.camara.leg.br/portal_javascripts/camara_leg_viradadigital/themecamara.leg.viradadigitalviradadigitaljsselecao-idioma-cachekey-998dbb210e1353a5d7f94011740ee16c.js"></script><meta name="msapplication-TileColor" content="#00a300" /><meta name="msapplication-TileImage" content="https://www.camara.leg.br/tema/mstile-144x144.png" /><meta name="theme-color" content="#009e49" /><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" /><link rel="canonical" href="" /><script type="text/javascript">
+          $("link[rel='canonical']").attr("href", window.location.href);
+        </script>
+
+
+
+
+
+
+
+<title> LEI Nº 13.105, DE 16 DE MARÇO DE 2015 - Dados da Norma - Portal Câmara dos Deputados</title>
+
+<meta name="description" content="Código de Processo Civil." />
+
+<!-- Coloque aqui sua referência ao CSS local -->
+<link rel="stylesheet" type="text/css" href="../../../_css/legislacao-v1.css" />
+
+<!-- CSS do portal-tema: necessário para o botão de compartilhamento -->
+<link rel="stylesheet" type="text/css" href="https://www.camara.leg.br/tema/global/camara-custom.css" />
+
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-T3NRZN7V');</script>
+<!-- End Google Tag Manager -->
+
+<!-- Coloque aqui seu javascript -->
+<!-- script type="text/javascript" src="caminho-e-nome-do-arquivo.js"></script -->
+<script type="text/javascript" src="../../../js/jquery-1.6.2.min.js"></script>
+<script type="text/javascript" src="../../../js/jquery.cd.gruporetratil.js"></script>
+
+<script type="text/javascript">
+
+    jQuery(document).ready(function($) {
+
+        $('.grupoRetratil').grupoRetratil();
+    });
+
+</script>
+
+</head>
+<body>
+    <header class="l-cabecalho-portal" role="banner" id="portal-header">
+        <ul aria-label="Acesso direto" class="acesso-direto">
+          <!-- Links para saltar diretamente para &#225;reas importantes da p&#225;gina accesskey 2 = conte&#250;do e 3 = navega&#231;&#227;o -->
+          <li>
+            <a class="acesso-direto__link" href="#main-content" accesskey="2">Ir ao conteúdo</a>
+          </li>
+          <li>
+            <a class="acesso-direto__link" href="#main-nav" accesskey="3">Ir à navegação principal</a>
+          </li>
+        </ul>
+
+        <!--[if lte IE 9]>
+          <p class="browserupgrade">
+            Voc&#234; est&#225; usando um navegador <strong>defasado</strong>. Por favor,
+            <a href="https://browsehappy.com/">atualize seu navegador</a> para
+            melhorar sua experi&#234;ncia e sua seguran&#231;a.
+          </p>
+        <![endif]-->
+
+        <div class="nav-top">
+          <div class="container nav-top--container">
+            <a href="https://www2.camara.leg.br" class="logo-camara" accesskey="1"><span class="sr-only">Página inicial</span></a>
+
+            <div class="nav-top__palacio"></div>
+
+            <div class="nav-top__menu-superior">
+              <ul aria-label="Ferramentas de apoio" class="links-apoio">
+                <li class="links-apoio__item links-apoio__item--vlibras">
+                  <a id="meu-botao-vlibras" href="javascript:void(0);">
+                    <span>
+                      <img src="https://www.camara.leg.br/tema/assets/images/ico-vlibras-branco.png" alt="Ativar VLibras" width="28px" height="30px" />
+                    </span>
+                  </a>
+                </li>
+                <li class="links-apoio__item links-apoio__item--acessibilidade">
+                  <a href="https://www2.camara.leg.br/acessibilidade/recursos-de-acessibilidade" accesskey="0">Acessibilidade</a>
+                </li>
+                <li class="links-apoio__item links-apoio__item--faleconosco">
+                  <a href="https://www.camara.leg.br/fale-conosco" accesskey="9">Fale Conosco</a>
+                </li>
+              </ul>
+
+              <ul class="orgaos-parceiros" aria-label="Órgãos parceiros">
+                <li class="orgaos-parceiros__item orgaos-parceiros__item--congresso">
+                  <a href="http://www.congressonacional.leg.br"><span>Congresso</span></a>
+                </li>
+                <li class="orgaos-parceiros__item orgaos-parceiros__item--senado">
+                  <a href="http://www.senado.leg.br"><span>Senado</span></a>
+                </li>
+              </ul>
+
+              <div class="lista-idiomas">
+                <button class="botao-idioma-topo" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-offset="4,0">
+                  <span class="botao-idioma-topo__sigla">PT</span>
+                </button>
+
+                <ul class="dropdown-menu dropdown-menu-right l-lista-idiomas" aria-label="Idioma">
+                  <li class="l-lista-idiomas__item">
+                    <a href="https://www2.camara.leg.br/english" class="idioma-topo">
+                      <span class="idioma-topo__bandeira idioma-topo__bandeira--ingles" aria-hidden="true"></span>
+                      <span class="idioma-topo__nome">English</span>
+                      <span class="idioma-topo__sigla">EN</span>
+                    </a>
+                  </li>
+                  <li class="l-lista-idiomas__item">
+                    <a href="https://www2.camara.leg.br/espanol" class="idioma-topo">
+                      <span class="idioma-topo__bandeira idioma-topo__bandeira--espanhol" aria-hidden="true"></span>
+                      <span class="idioma-topo__nome">Español</span>
+                      <span class="idioma-topo__sigla">ES</span>
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="home-camara-menu">
+    <nav class="menu-global navbar navbar-expand-lg" role="navigation" aria-label="Navegação principal" id="menuglobal">
+      <div class="container menu-global--container">
+      
+
+        <a href="https://www.camara.leg.br" class="logo-camara" accesskey="1">
+          <span class="sr-only">Página inicial</span>
+        </a>
+
+      
+        
+        <!-- icone menu -->
+        <button class="menu-global--btnmenu navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarportal" aria-controls="navbarportal" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="menu-global--icon"></span>
+        </button>
+
+        <!-- icone busca -->
+        <button class="menu-global--btnsearch" type="button" data-toggle="collapse" data-target="#buscaportal" aria-controls="buscaportal" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="fa fa-search"></span>
+        </button>
+
+        <div class="navbar-collapse hidden-sm hidden-md hidden-xs" id="navbarportal">
+          <ul title="Navegação Principal" id="main-nav" class="navbar-nav">
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-temas nav-link dropdown-toggle" id="temas">Assuntos</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="temas">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/agropecuaria">Agropecuária</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/cidades-e-transportes">Cidades e transportes</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/ciencia-tecnologia-e-comunicacoes">Ciência, tecnologia e comunicações</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/consumidor">Consumidor</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/direitos-humanos">Direitos humanos</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/economia">Economia</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/educacao-cultura-e-esportes">Educação, cultura e esportes</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/meio-ambiente-e-energia">Meio ambiente e energia</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/politica-e-administracao-publica">Política e administração pública</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/relacoes-exteriores">Relações exteriores</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/saude">Saúde</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/seguranca">Segurança</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assuntos/trabalho-previdencia-e-assistencia">Trabalho, previdência e assistência</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-institucional nav-link dropdown-toggle" id="institucional">Institucional</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="institucional">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/agenda">Agenda</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/transparencia/servicos-ao-cidadao">Serviços</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/a-camara/estruturaadm/mesa/presidencia">Presidência</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/biblioteca-e-publicacoes/">Biblioteca e publicações</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/escola-da-camara/">Escola da Câmara</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/papel-e-estrutura/">Papel e estrutura</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/historia-e-arquivo/">História e arquivo</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/a-camara/visiteacamara">Visite</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-deputados nav-link dropdown-toggle" id="deputados">Deputados</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="deputados">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/deputados/quem-sao">Quem são</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/deputados/liderancas-e-bancadas-partidarias">Lideranças e bancadas</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/deputados/frentes-e-grupos-parlamentares">Frentes e grupos parlamentares</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-atvlegislativa nav-link dropdown-toggle" id="atvlegislativa">Atividade Legislativa</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="atvlegislativa">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada">Propostas legislativas</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/plenario">Plenário</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/comissoes">Comissões</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/sessoesereunioes">Sessões e reuniões</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/atividade-legislativa/estudos-e-notas-tecnicas">Estudos legislativos</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/atividade-legislativa/orcamento-da-uniao">Orçamento da União</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/legislacao">Legislação</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/entenda-o-processo-legislativo/">Entenda o processo legislativo</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/atividade-legislativa/participe">Participe</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-comunicacao nav-link dropdown-toggle" id="comunicacao">Comunicação</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="comunicacao">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/noticias">Agência Câmara de Notícias</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/radio">Rádio Câmara</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/tv">TV Câmara</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/banco-imagens">Banco de Imagens</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/assessoria-de-imprensa">Assessoria de Imprensa</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/comprove">Comprove uma notícia</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+            
+              
+                <li class="nav-item dropdown">
+                  <a href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="menu-global__item-transprestcontas nav-link dropdown-toggle" id="transprestcontas">Transparência e prestação de contas</a>
+
+                  
+                    <ul class="dropdown-menu" aria-labelledby="transprestcontas">
+                      <li class="dropdown-item">
+                        <a href="https://www.camara.leg.br/transparencia/">Transparência</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://www2.camara.leg.br/transparencia/prestacao-de-contas">Prestação de contas</a>
+                      </li>
+                      <li class="dropdown-item">
+                        <a href="https://dadosabertos.camara.leg.br/">Dados abertos</a>
+                      </li>
+                    </ul>
+                  
+                </li>
+              
+            
+          </ul>
+          <div class="outras-opcoes-menu-usuario hidden-md hidden-lg">
+            <ul aria-label="Ferramentas de apoio" class="links-apoio links-apoio--menu-mobile">
+              <li class="links-apoio__item links-apoio__item--acessibilidade">
+                <a href="https://www2.camara.leg.br/acessibilidade/recursos-de-acessibilidade" accesskey="0">Acessibilidade</a>
+              </li>
+              <li class="links-apoio__item links-apoio__item--faleconosco">
+                <a href="https://www.camara.leg.br/fale-conosco" accesskey="9">Fale Conosco</a>
+              </li>
+            </ul>
+          </div>
+          <div class="lista-idiomas hidden-md hidden-lg">
+            <button id="botao-idioma-topo" class="botao-idioma-topo" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-offset="4,0">
+                <span class="botao-idioma-topo__sigla">PT</span>
+            </button>
+        
+            <ul class="dropdown-menu-right l-lista-idiomas " aria-label="Idioma">
+                <li class="l-lista-idiomas__item">
+                    <a href="https://www2.camara.leg.br/english" class="idioma-topo">
+                        <span class="idioma-topo__bandeira idioma-topo__bandeira--ingles" aria-hidden="true"></span>
+                        <span class="idioma-topo__nome">English</span>
+                        <span class="idioma-topo__sigla">EN</span>
+                    </a>
+                </li>
+                <li class="l-lista-idiomas__item">
+                    <a href="https://www2.camara.leg.br/espanol" class="idioma-topo">
+                        <span class="idioma-topo__bandeira idioma-topo__bandeira--espanhol" aria-hidden="true"></span>
+                        <span class="idioma-topo__nome">Español</span>
+                        <span class="idioma-topo__sigla">ES</span>            
+                    </a>
+                </li>
+            </ul>
+        </div>
+        </div>
+
+
+        <div class="collapse box-search" id="buscaportal">
+          <form role="search" accesskey="4" class="box-search__busca form-inline" action="https://www.camara.leg.br/busca-geral">
+            <label for="termo" class="sr-only box-search__label">Pesquise no Portal da Câmara</label>
+            <input class="form-control box-search__campo" type="search" name="termo" id="termo" placeholder="Buscar" aria-label="Search" />
+          </form>
+        </div>
+      </div>
+    </nav>
+  </div>
+      </header>
+
+    <div class="breadcrumbs-marcacao">
+        <div class="container">
+            <nav aria-label="Onde estou">
+                <ol class="breadcrumb portal-breadcrumbs">
+                    <li class="breadcrumb-item"><a href="//www.camara.leg.br">Início</a></li>
+                    
+	<li class='breadcrumb-item'><a href='http://www2.camara.gov.br/atividade-legislativa'>Atividade Legislativa</a></li>
+    <li class='breadcrumb-item'><a href='http://www2.camara.gov.br/atividade-legislativa/legislacao'>Legislação</a></li>
+
+                    <li class="breadcrumb-item active" aria-current="page">Esta página</li>
+                </ol>
+            </nav>
+        </div>
+        
+        <div class="container-fluid p-0">
+            <div id="menu-secoes-internas" class="menu-secoes-internass">
+                <div id="portal-mainsection">
+                    <div class="l-identificacao-landing">
+                        <div class="container">
+                            <h1 class="titulo-landing">Legislação</h1>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="marcacao-conteudo-portal" class="conteudo-portal container nopadding-right nopadding-left">
+        <div class="coluna-centro col-md-12">
+
+
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T3NRZN7V"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<div id="portal-column-content">
+	<div id="portal-content-wrapper">
+		<div class="documentContent">
+			<div id="content">
+	
+				<h2 class="documentFirstHeading">Legislação Informatizada - Dados da Norma</h2>
+
+			<div class="g-contexto-compartilhamento g-contexto-compartilhamento--extendido g-impressao">
+				<!-- Elemento propositalmente vazio, preenchido pelo JS de compartilhamento do portal -->
+			</div>
+				<div class="dadosNorma">
+					<h1>LEI Nº 13.105, DE 16 DE MARÇO DE 2015</h1>
+						<h1>Código de Processo Civil (2015)</h1>
+						<p class="sessao ementa">
+				    		<span class="rotulo">EMENTA:</span> Código de Processo Civil.
+				    	</p>
+			    
+				    	<div class="textoAtualizadoDownload">
+                                            <p>
+
+                                                    
+                                                    <a href="lei-13105-16-marco-2015-780273-normaatualizada-pl.html" target="_blank">Texto Atualizado (HTML)</a>
+                                                    &nbsp;&nbsp;&nbsp;                                                
+                                                
+                                                    <a href="lei-13105-16-marco-2015-780273-normaatualizada-pl.docx">Formato docx <img src="../../../_imagens/icone-docx.png" /></a>
+                                                    &nbsp;&nbsp;&nbsp;
+                                                
+                                                        <a href="lei-13105-16-marco-2015-780273-normaatualizada-pl.pdf">
+                                                            Formato pdf <img src="../../../_imagens/icone-pdf.png" />
+                                                        </a>
+                                                
+
+                                            </p>
+                                        </div>
+				    
+                                        <div class="sessao">
+                                                    <a style="text-transform:uppercase;" href="lei-13105-16-marco-2015-780273-publicacaooriginal-146341-pl.html">
+                                                        <strong>
+                                                                Texto - Publicação Original
+                                                         </strong>
+                                                    </a>
+                                                    <ul class="listaMarcada">
+                                                        <li>
+                                                            
+
+                                                            <!-- -->
+
+                                                            Diário Oficial da União - Seção 1
+                                                            	- 17/3/2015, Página 1 
+                                                            
+                                                            (Publicação Original)
+
+                                                            <!---->
+
+                                                            
+                                                        </li>
+                                                </ul>
+                                                    <a style="text-transform:uppercase;" href="lei-13105-16-marco-2015-780273-veto-146344-pl.html">
+                                                        <strong>
+                                                                Texto - Veto
+                                                         </strong>
+                                                    </a>
+                                                    <ul class="listaMarcada">
+                                                        <li>
+                                                            
+
+                                                            <!-- -->
+
+                                                            Diário Oficial da União - Seção 1
+                                                            	- 17/3/2015, Página 51 
+                                                            
+                                                            (Veto)
+
+                                                            <!---->
+
+                                                            
+                                                        </li>
+                                                </ul>
+                                        </div>
+				    
+				    
+					    <div>
+					    	<div class="sessao">
+					    		<span class="rotulo"><strong>Proposição Originária:</strong></span>
+					    		<ul class="listaMarcada">
+					    			<a href="http://www.camara.gov.br/sileg/Prop_Detalhe.asp?id=490267">PL 8046/2010</a>
+					    		</ul>
+					    	</div>
+					    </div>
+				    
+				    	<div class="sessao">
+				    		<span class=""rotulo""><strong>Observação: </strong></span>
+				    		<span>Vide ADIs nºs 2.418/2001, 5.165/2014, 5.492/2016, 5.534/2016, 5.737/2017, 5.941/2018, 5.953/2018, 6.053/2018, 6.556/2020, 6.792/2020 e 7.055/2021; ADC nº 51/2017; e ADPF nº 157/2008.
+</span>
+				    	</div>
+				    	<br/>
+				    
+				    	<div class="sessao">
+				    		<span class=""rotulo""><strong>Origem: </strong></span>
+				    		<span>Poder Legislativo</span>
+				    	</div>
+				    	<br/>
+
+				    	<div class="sessao">
+				    		<span class=""rotulo""><strong>Situação: </strong></span>
+				    		<span>Não consta revogação expressa</span>
+				    	</div>
+				    	<br/>
+				    
+						    <div class="sessao">
+						    	<span class="rotulo">
+						    		<strong>Veto:</strong>
+						    	</span>
+						    	<br/>Veta parcialmente. Mensagem Presidencial n° 56 de 2,015.
+						    	<ul class="listaMarcada">
+							    			<li>
+							    				Art. 35 - (Mantém Veto)
+							    			</li>
+							    			<li>
+							    				Art. 333 - (Mantém Veto)
+							    			</li>
+							    			<li>
+							    				Art. 1015, inciso XII - (Mantém Veto)
+							    			</li>
+							    			<li>
+							    				Art. 515, inciso X - (Mantém Veto)
+							    			</li>
+							    			<li>
+							    				Art. 895, § 3º - (Mantém Veto)
+							    			</li>
+							    			<li>
+							    				Art. 937, inciso VII - (Mantém Veto)
+							    			</li>
+							    			<li>
+							    				Art. 1055 - (Mantém Veto)
+							    			</li>
+				 				</ul>
+						    </div>
+				        
+					    <div class="sessao">
+					    	<span class="rotulo">
+					    		<strong>Vide Norma(s):</strong>
+					    	</span>
+					    	<ul class="listaMarcada">
+					    			<li>
+					    				<a href="../../../fed/lei/2026/lei-15484-4-agosto-2026-799698-norma-pl.html">Lei Ordinária nº 15484 de 4 de Agosto de 2026 (Poder Legislativo) - (Acréscimo de Artigo).
+					    				 Art. 1035-A, "caput", §§ 1º a 8º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2026/lei-15484-4-agosto-2026-799698-norma-pl.html">Lei Ordinária nº 15484 de 4 de Agosto de 2026 (Poder Legislativo) - (Alteração).
+					    				 Art. 927, "caput", inciso III-A ; Art. 932, "caput", inciso IV, alínea "b", inciso V, alínea "b" ; Art. 979, "caput", § 3º ; Art. 988, "caput", inciso V, §§ 4º, 5º, inciso II ; Art. 998, "caput", parágrafo único ; Art. 1030, "caput", inciso I, alínea "c", inciso II, inciso V, alínea "a" ; Art. 1039, "caput", parágrafo único ; Art. 1042, "caput", § 2º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2026/lei-15479-29-julho-2026-799680-norma-pl.html">Lei Ordinária nº 15479 de 29 de Julho de 2026 (Poder Legislativo) - (Acréscimo de Parágrafo Único).
+					    				 Art. 196,  "caput" ; Art. 913, "caput".</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2026/lei-15479-29-julho-2026-799680-norma-pl.html">Lei Ordinária nº 15479 de 29 de Julho de 2026 (Poder Legislativo) - (Acréscimo de Artigo).
+					    				 Art. 529-A, "caput", incisos I, II, alíneas "a" a "h", incisos III a X, Parágrafo único.</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2025/lei-15109-13-marco-2025-797168-norma-pl.html">Lei Ordinária nº 15109 de 13 de Março de 2025 (Poder Legislativo) - (Acréscimo de Parágrafo).
+					    				 Art. 82, § 3º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2024/lei-14976-18-setembro-2024-796249-norma-pl.html">Lei Ordinária nº 14976 de 18 de Setembro de 2024 (Poder Legislativo) - (Alteração).
+					    				 Art. 1063 .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2024/lei-14939-30-julho-2024-796005-norma-pl.html">Lei Ordinária nº 14939 de 30 de Julho de 2024 (Poder Legislativo) - (Alteração).
+					    				 Art. 1003, "caput", § 6º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2024/lei-14879-4-junho-2024-795714-norma-pl.html">Lei Ordinária nº 14879 de 4 de Junho de 2024 (Poder Legislativo) - (Alteração).
+					    				 Art. 63, "caput", §§ 1º, 5º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2024/lei-14833-27-marco-2024-795431-norma-pl.html">Lei Ordinária nº 14833 de 27 de Março de 2024 (Poder Legislativo) - (Acréscimo de Parágrafo Único).
+					    				 Art. 499, "caput", parágrafo único .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2023/lei-14711-30-outubro-2023-794873-norma-pl.html">Lei Ordinária nº 14711 de 30 de Outubro de 2023 (Poder Legislativo) - (Acréscimo de Inciso).
+					    				 Art. 784, "caput", inciso XI-A .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2023/lei-14713-30-outubro-2023-794875-norma-pl.html">Lei Ordinária nº 14713 de 30 de Outubro de 2023 (Poder Legislativo) - (Acréscimo de Artigo).
+					    				 Art. 699-A .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2023/lei-14620-13-julho-2023-794436-norma-pl.html">Lei Ordinária nº 14620 de 13 de Julho de 2023 (Poder Legislativo) - (Acréscimo de Parágrafo).
+					    				 Art. 784, § 4º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2022/lei-14365-2-junho-2022-792762-norma-pl.html">Lei Ordinária nº 14365 de 2 de Junho de 2022 (Poder Legislativo) - (Alteração).
+					    				 Art. 85, "caput", §§ 6º-A, 8º-A, 20  .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2022/lei-14341-18-maio-2022-792653-norma-pl.html">Lei Ordinária nº 14341 de 18 de Maio de 2022 (Poder Legislativo) - (Alteração).
+					    				 Art. 75, "caput", inciso III, § 5º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2021/lei-14195-26-agosto-2021-791684-norma-pl.html">Lei Ordinária nº 14195 de 26 de Agosto de 2021 (Poder Legislativo) - (Alteração).
+					    				 Art. 77, "caput", inciso VII ; Art. 231, "caput", inciso IX ; Art. 238, "caput", parágrafo único ; Art. 246, "caput", §§ 1º, 1º-A, incisos I a IV, 1º-B, 1º-C, 4º, 5º, 6º ; Art. 247, "caput" ; Art. 397, "caput", incisos I, II, III ; Art. 921, "caput", inciso III, §§ 4º, 4º-A, 5º, 6º, 7º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2021/lei-14195-26-agosto-2021-791684-norma-pl.html">Lei Ordinária nº 14195 de 26 de Agosto de 2021 (Poder Legislativo) - (Revogação Parcial).
+					    				 Art. 246, "caput", incisos I, II, III, IV, V .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2021/lei-14133-1-abril-2021-791222-norma-pl.html">Lei Ordinária nº 14133 de 1º de Abril de 2021 (Poder Legislativo) - (Acréscimo de Inciso).
+					    				 Art. 1048, "caput", inciso IV .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2020/lei-13988-14-abril-2020-790048-norma-pl.html">Lei Ordinária nº 13988 de 14 de Abril de 2020 (Poder Legislativo) - (Norma Complementar).
+					    				</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2019/lei-13894-29-outubro-2019-789320-norma-pl.html">Lei Ordinária nº 13894 de 29 de Outubro de 2019 (Poder Legislativo) - (Alteração).
+					    				 Art. 53, "caput", inciso I, alínea "d" ; Art. 698, "caput", parágrafo único ; Art. 1048, "caput", inciso III .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2019/lei-13793-3-janeiro-2019-787595-norma-pl.html">Lei Ordinária nº 13793 de 3 de Janeiro de 2019 (Poder Legislativo) - (Acréscimo de Parágrafo).
+					    				 Art. 107, "caput",  § 5º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2018/lei-13606-9-janeiro-2018-786083-norma-pl.html">Lei Ordinária nº 13606 de 9 de Janeiro de 2018 (Poder Legislativo) - (Não Aplicação).
+					    				 Art. 90 .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2018/lei-13606-9-janeiro-2018-786083-norma-pl.html">Lei Ordinária nº 13606 de 9 de Janeiro de 2018 (Poder Legislativo) - (Norma Complementar).
+					    				 Art. 389 ; Art. 385 .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2017/lei-13465-11-julho-2017-785192-norma-pl.html">Lei Ordinária nº 13465 de 11 de Julho de 2017 (Poder Legislativo) - (Acréscimo de Inciso).
+					    				 Art. 799, "caput", incisos X, XI .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2016/lei-13363-25-novembro-2016-783946-norma-pl.html">Lei Ordinária nº 13363 de 25 de Novembro de 2016 (Poder Legislativo) - (Alteração).
+					    				 Art. 313, incisos IX e X, §§ 6º e 7º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2016/lei-13300-23-junho-2016-783275-norma-pl.html">Lei Ordinária nº 13300 de 23 de Junho de 2016 (Poder Legislativo) - (Aplicação).
+					    				</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2016/lei-13256-4-fevereiro-2016-782330-norma-pl.html">Lei Ordinária nº 13256 de 4 de Fevereiro de 2016 (Poder Legislativo) - (Alteração).
+					    				 Art. 12, "caput" ; Art. 153, "caput" ; Art. 521, inciso III ; Art. 537, § 3º ; Art. 966, §§ 5º e 6º ; Art. 988, incisos III e IV, § 5º, incisos I e II ; Art. 1029, § 5º, incisos I e III ; Art. 1030, "caput", inciso I, alíneas "a" e "b", incisos II a V, alíneas "a" a "c", §§ 1º e 2º ; Art. 1035, § 7º ; Art. 1036, § 3º ; Art. 1038, § 3º ; Art. 1041, § 2º ; Art. 1042, "caput" e § 2º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2016/lei-13256-4-fevereiro-2016-782330-norma-pl.html">Lei Ordinária nº 13256 de 4 de Fevereiro de 2016 (Poder Legislativo) - (Revogação Parcial).
+					    				 Art. 945 ; Art. 1029, § 2º ; Art. 1035, § 3º, inciso II, e § 10 ; Art. 1037, §§ 2º e 5º ; Art. 1042, "caput", incisos I a III, e § 1º, incisos I e II, alíneas "a" e "b" ; Art. 1043, "caput", incisos II e IV, e § 5º .</a>
+					    			</li>
+					    			<li>
+					    				<a href="../../../fed/lei/2015/lei-13105-16-marco-2015-780273-norma-pl.html">Lei Ordinária nº 13105 de 16 de Março de 2015 (Poder Legislativo) - (Vigência Condicionada).
+					    				 Art. 1045 .</a>
+					    			</li>
+					    	</ul>
+					    </div>
+
+                                        <div class="sessao grupoRetratil defaultFechado">
+                                            <span class="rotulo cabecalho">Indexação</span>
+                                            <div class="corpo">CÓDIGO DE PROCESSO CIVIL (2015) -  reforma - alteração<br />CÓDIGO CIVIL (2002) - alteração<br />LEI DE REGISTROS PÚBLICOS - alteração<br />DIREITO PROCESSUAL CIVIL - Norma jurídica - Ordenamento - Aplicação - Consensualidade - Promoção - Estado - Conciliação - Mediação - Conflito - Parte (processo civil) - Prazo - Solução - Decisão - Mérito<br />PODER JUDICIÁRIO - Julgamento - Publicidade - Segredo de justiça - Processo - Disponibilidade - Divulgação - Consulta pública - Cartório - INTERNET<br />JURISDIÇÃO - Ação judicial - Cooperação internacional - Limite - Cooperação jurídica internacional - Auxílio - Carta rogatória<br />AÇÃO CÍVEL - Competência - Foro<br />CONTESTAÇÃO - Incompetência absoluta - Incompetência relativa - Conflito de competência<br />PARTE (PROCESSO CIVIL)  - Procurador - Capacidade processual - Deveres - Responsabilidade - Danos processuais - Despesa - Honorários advocatícios - Multa - Gratuidade - Justiça - Taxa - Custas - Selo postal - Publicação - Imprensa oficial - Indenização - Testemunha - Exame de DNA - Perito - Remuneração - Intérprete - Tradutor - Cálculo - Depósito - Interposição de recurso - Emolumento - Oficial de registro - Notário - Sucessão - Advogado - Direitos - Litisconsórcio - Litisconsorte - Intervenção - Terceiros - Assistência - Denunciação da lide - Conclamação - Personalidade jurídica - Desconsideração - Incidente<br />JUIZ - Competência - Responsabilidade - Deveres - Impedimento - Suspeição - Pronunciamento - Sentença judicial - Decisão judicial - Decisão interlocutória - Despacho judicial<br />JUSTIÇA - Auxiliar - Escrivão - Chefe - Secretaria - Oficial de justiça - Perito - Depositário - Administrador - Intérprete - Tradutor - Mediador - Conciliador - Partidor judicial - Distribuidor - Partidor judicial - Regulador de sinistros - Ministério Público - Advocacia Pública - Defensoria Pública<br />ATO PROCESSUAL - Forma - Tempo - Local - Meio eletrônico - Prazo - Verificação - Penalidade - Comunicação - Ordem judicial - Citação - Citação por edital - Correio - Carta de ordem - Carta precatória - Carta rogatória - Intimação - Nulidade - Distribuição - Registro - Valor - Ação judicial<br />TUTELA PROVISÓRIA - Urgência - Tutela da evidência - Tutela antecipada - Concessão - Requerimento<br />PROCESSO CIVIL - Formação - Composição - Suspensão - Extinção<br />PROCESSO DE CONHECIMENTO - Cumprimento - Sentença - Procedimento - Petição inicial - Pedido - Indeferimento - Improcedência - Liminar - Audiência de conciliação - Mediação - Réu - Contestação - Reconvenção -  Revelia - Providências preliminares - Saneamento do processo - Julgamento antecipado do mérito - Audiência de instrução e julgamento - Gravação eletrônica - Imagem - Som - Autorização judicial<br />PROVA - Produção - Antecipação - Ata - Tabelião de notas - Depoimento pessoal - Confissão (direito processual) - Documento - Documento eletrônico - Exibição - Coisa - Arguição - Falsidade - Prova testemunhal - Admissibilidade - Prova pericial - Inspeção<br />SENTENÇA JUDICIAL - Duplo grau de jurisdição - Coisa julgada - Liquidação da sentença - Cumprimento - Provisório - Exigibilidade - Obrigação - Pagamento - Valor - Prestação alimentícia - Fazenda Pública - Entrega - Coisa - Contas<br />AÇÃO POSSESSÓRIA - Manutenção - Reintegração de posse - Interdito proibitório<br />PATRIMÔNIO PRIVADO - Ação de divisão - Demarcação<br />AÇÃO DE DISSOLUÇÃO PARCIAL DE SOCIEDADE - Sociedade empresária<br />INVENTÁRIO - Legitimidade - Requerimento - Inventariante - Citação - Impugnação - Imposto - Avaliação - Cálculo - Colação - Dívida - Pagamento<br />PARTILHA - Arrolamento de bens<br />EMBARGO DE TERCEIRO<br />OPOSIÇÃO<br />HABILITAÇÃO<br />AÇÕES DE FAMÍLIA - Processo contencioso - Divórcio - Separação - Reconhecimento - Extinção - União estável - Guarda judicial - Visitação - Filiação<br />AÇÃO MONITÓRIA<br />PENHOR LEGAL - Homologação<br />AVARIA - Regulação<br />AUTOS JUDICIAIS - Restauração<br />JURISDIÇÃO VOLUNTÁRIA - Procedimento - Notificação - Interpelação - Alienação de bens - Casamento - Testamento - Codicilo - Herança jacente - Pessoa ausente - Bens - Coisa vaga - Interdição - Tutela - Curatela - Fundação - Organização - Fiscalização<br />EMBARCAÇÃO - Protesto marítimo - Testemunha<br />PROCESSO DE EXECUÇÃO - Título executivo extrajudicial - Parte (processo civil) - Competência - Cobrança - Crédito - Obrigação - Exigibilidade - Responsabilidade patrimonial - Citação - Devedor - Arresto - Penhora - Depósito - Avaliação - Registro - Documentação - Dinheiro - Aplicação financeira - Ações - Cota - Sociedade empresária - Empresa - Semovente - Patrimônio - Navio - Aeronave - Faturamento - Percentual - Móvel - Imóvel - Rendimento - Bens - Desapropriação - Adjudicação - Alienação - Pensão alimentícia - Embargo - Suspensão - Extinção<br />TRIBUNAL - Processo judicial - Impugnação - Decisão judicial - Ordem - Competência originária<br />COMPETÊNCIA - Assunção - Incidente - Julgamento - Recurso judicial<br />ARGUIÇÃO DE INCONSTITUCIONALIDADE - Incidente<br />CONFLITO DE COMPETÊNCIA - Ministério Público - Juiz<br />SENTENÇA ESTRANGEIRA - Homologação - Concessão - Execução - Carta rogatória<br />AÇÃO RESCISÓRIA<br />DEMANDA - Repetição - Resolução - Incidente<br />RECLAMAÇÃO<br />RECURSO JUDICIAL - Apelação - Agravo de instrumento - Agravo interno - Embargo de declaração - Recurso ordinário - Recurso especial - Recurso extraordinário - Agravo em recurso especial ou extraordinário - Embargo de divergência - Supremo Tribunal Federal (STF) - Superior Tribunal de Justiça (STJ) - Prazo - Interposição - Decisão - Relator<br />PROCESSO JUDICIAL - Tramitação - Prioridade - Parte (processo civil) - Interessado - Idoso - Portador - Doença grave - Criança - Adolescente - Trânsito em julgado<br />SENTENÇA ARBITRAL - Nulidade - Decretação - Requisição - Impugnação - Cumprimento<br />PERSONALIDADE JURÍDICA - Incidente - Desconsideração - Aplicação - Processo - Competência - Juizado Especial<br />CREDOR SOLIDÁRIO - Julgamento - Contrário - Favorável - Aproveitamento - Prejuízo - Exceção - Pessoal - Devedor<br />PARTILHA - Nulidade - Vício - Defeito - Invalidade - Negócio jurídico<br />CONSELHO NACIONAL DE JUSTIÇA (CNJ) - Pesquisa - Estatística - Avaliação - Efetivade - Norma<br />USUCAPIÃO - Reconhecimento extrajudicial - Pedido - Requisição - Processamento - Cartório de Registro de Imóveis - Imóvel - Jurisdição<br /></div>
+				    	</div>
+				    	<br/>
+			    </div>
+    
+			</div> <!-- content // -->
+		</div> <!-- documentContent // -->
+	</div> <!-- portal-content-wrapper // -->
+</div> <!-- portal-column-content // --> 
+
+<!-- JS do portal-tema: necessário para o botão de compartilhamento -->
+<script type="text/javascript" src="https://www.camara.leg.br/tema/global/vendor-bundle.js"></script>
+<script type="text/javascript" src="https://www.camara.leg.br/tema/global/camara-bundle.js"></script>
+
+</div></div>
+<div class="js-mmenu-container">
+      
+
+      
+      
+
+      
+
+      <footer role="contentinfo" class="rodape-portal">
+        <!-- Coloque aqui o endere&#231;o e demais informa&#231;&#245;es de assinatura -->
+        <address class="rodape-portal-info">
+          <div class="container">
+            <div class="rodape-portal-info__nome">
+              <p>
+                <strong id="legislaturaRodape">57ª Legislatura - 4ª Sessão Legislativa Ordinária</strong>
+              </p>
+            </div>
+
+            <div class="l-rodape-info">
+              <div class="l-rodape-info__local rodape-portal-info__texto">
+                <span class="rodape-info">Câmara dos Deputados - Palácio do Congresso Nacional - Praça
+                  dos Três Poderes</span>
+                <span class="rodape-info">Brasília - DF - Brasil - CEP 70160-900</span>
+                <span class="rodape-info"><span class="rodape-info__destaque">CNPJ:</span>
+                  00.530.352/0001-59</span>
+              </div>
+
+              <div class="l-rodape-info__telefones rodape-portal-info__texto">
+                <ul class="list-unstyled" aria-label="Número para contato e horário de atendimento">
+                  <li>
+                    <span class="rodape-info__destaque">Disque-Câmara:</span>
+                    <a href="tel:0800-0-619-619">0800-0-619-619</a>, das 8h às
+                    20h
+                  </li>
+                  <li>
+                    <span class="rodape-info__destaque">Atendimento por WhatsApp:</span>
+                    <a href="https://wa.me//556132160000?text">(61) 3216-0000</a>, das 8h às 19h
+                  </li>
+                  <li>
+                    <span class="rodape-info__destaque">Atendimento presencial:</span>
+                    das 9h às 19h
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div class="acesso-provedor text-right">
+              <a title="Autenticar-se no site" href="/login_form">
+                <i class="fas fa-lock" aria-hidden="true"></i>
+              </a>
+            </div>
+          </div>
+        </address>
+        <!-- Coloque aqui a lista de redes sociais da C&#226;mara -->
+        <div class="rodape-portal-links rodape-portal-links--redes-sociais">
+          <div class="container">
+            <ul class="rodape-portal-links__lista" aria-label="Câmara nas redes sociais">
+              <li class="rodape-portal-links__item">
+                <a href="https://whatsapp.com/channel/0029Va2fexI3gvWgfMs6Fv31" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--whatsapp" aria-hidden="true"></span>
+                  <span class="sr-only">Whatsapp</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://t.me/CamaradosDeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--telegram" aria-hidden="true"></span>
+                  <span class="sr-only">Telegram</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www.facebook.com/camaradeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--facebook" aria-hidden="true"></span>
+                  <span class="sr-only">Facebook</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://twitter.com/camaradeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--twitter" aria-hidden="true"></span>
+                  <span class="sr-only">X</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www.youtube.com/channel/UC-ZkSRh-7UEuwXJQ9UMCFJA" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--youtube" aria-hidden="true"></span>
+                  <span class="sr-only">Youtube</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://tiktok.com/@camaradosdeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--tiktok" aria-hidden="true"></span>
+                  <span class="sr-only">Tiktok</span>
+                </a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www.instagram.com/camaradeputados" class="rodape-portal-links__link">
+                  <span class="g-social-icon-outline g-social-icon-outline--instagram" aria-hidden="true"></span>
+                  <span class="sr-only">Instagram</span>
+                </a>
+              </li>
+              <li class="rodape-portal-links__item">
+                  <a href="https://www.threads.com/@camaradosdeputados" class="rodape-portal-links__link">
+                      <span class="g-social-icon-outline g-social-icon-outline--threads" aria-hidden="true"></span>
+                      <span class="sr-only">Threads</span>
+                  </a>
+              </li>
+              <li class="rodape-portal-links__item">
+                  <a href="https://bsky.app/profile/camara.leg.br" class="rodape-portal-links__link">
+                      <span class="g-social-icon-outline g-social-icon-outline--bluesky" aria-hidden="true"></span>
+                      <span class="sr-only">Bluesky</span>
+                  </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <!-- Coloque aqui a lista de links de apoio do rodap&#233; -->
+        <div class="rodape-portal-links rodape-portal-links--apoio">
+          <div class="container">
+            <ul class="rodape-portal-links__lista" aria-label="Links de apoio">
+              <li class="rodape-portal-links__item">
+                <a href="https://www2.camara.leg.br/sobre-o-portal" class="rodape-portal-links__link">Sobre o portal</a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www2.camara.leg.br/termo-de-uso-e-politica-de-privacidade" class="rodape-portal-links__link">Termos de uso</a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www2.camara.leg.br/aplicativos/" class="rodape-portal-links__link">Aplicativos</a>
+              </li>
+
+              <li class="rodape-portal-links__item">
+                <a href="https://www.camara.leg.br/extranet" class="rodape-portal-links__link">Extranet</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </footer>
+
+      <div class="barra-carregando" style="display: none">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Carregando</h5>
+            </div>
+            <div class="modal-body">
+              <p>Por favor, aguarde.</p>
+              <div class="progress">
+                <div class="progress-bar progress-bar-striped active" role="progressbar" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100" style="width: 100%">
+                  <span class="sr-only"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

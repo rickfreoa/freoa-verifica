@@ -1,0 +1,54 @@
+{
+ "conector": "camara_legin",
+ "versao": "nao_registrada",
+ "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-normaatualizada-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "",
+ "capturado_em": "2026-11-09T06:34:11.208887+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {
+  "formato_recibo": "inventario_0081",
+  "campos_nao_registrados": [
+   "user_agent",
+   "versao",
+   "content_type_http"
+  ]
+ },
+ "url_final": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-normaatualizada-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {},
+ "sha256": "5ade20f12d206504f3beb13a0595d144efc891229ad0e6badcebfa97a8a83596",
+ "bytes": 223813,
+ "arquivo": "7fdaaeb5f8626cb7.corpo",
+ "importacao_offline": {
+  "recibo_original": {
+   "fetched_at": "2026-11-09T06:34:11.208887+00:00",
+   "mime": "text/html",
+   "origem": {
+    "href": "lei-13709-14-agosto-2018-787077-normaatualizada-pl.html",
+    "rotulo": "Texto Atualizado (HTML)",
+    "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+   },
+   "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+   "sha256": "5ade20f12d206504f3beb13a0595d144efc891229ad0e6badcebfa97a8a83596",
+   "status": 200,
+   "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-normaatualizada-pl.html"
+  },
+  "recibo_sha256": "6502a706c85d9fc5e2d570aaae5570c7259cdee2ddaadf35593ce51316fc72ca",
+  "origem": {
+   "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+   "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+   "href": "lei-13709-14-agosto-2018-787077-normaatualizada-pl.html",
+   "recibo_sha256": "93e0e44b745fbe57451a165acde51ab803bd733aa97f761742400b94ea4295f1"
+  }
+ }
+}

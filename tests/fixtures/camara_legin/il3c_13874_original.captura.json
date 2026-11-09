@@ -1,0 +1,54 @@
+{
+ "conector": "camara_legin",
+ "versao": "nao_registrada",
+ "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "",
+ "capturado_em": "2026-11-09T06:34:56.613783+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {
+  "formato_recibo": "inventario_0081",
+  "campos_nao_registrados": [
+   "user_agent",
+   "versao",
+   "content_type_http"
+  ]
+ },
+ "url_final": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {},
+ "sha256": "4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3",
+ "bytes": 103071,
+ "arquivo": "b3d7daeca09fad45.corpo",
+ "importacao_offline": {
+  "recibo_original": {
+   "fetched_at": "2026-11-09T06:34:56.613783+00:00",
+   "mime": "text/html",
+   "origem": {
+    "href": "lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+    "rotulo": "Texto - Publicação Original",
+    "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html"
+   },
+   "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+   "sha256": "4fd5ddbc75e7dc56ab3c2d53c7abdcbb3eee46c894e18b5a3d07041e7cd244c3",
+   "status": 200,
+   "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html"
+  },
+  "recibo_sha256": "88837c593268450515abb7ed23b665e6a37fa0f229facbcbc6f66a4a4d58920c",
+  "origem": {
+   "url": "https://www2.camara.leg.br/legin/fed/lei/2019/lei-13874-20-setembro-2019-789149-norma-pl.html",
+   "sha256": "01399e663bc3c108d0eb1a58ebdda1a56a89ef549db537215bd9c4642133b3c3",
+   "href": "lei-13874-20-setembro-2019-789149-publicacaooriginal-159080-pl.html",
+   "recibo_sha256": "f38f5ca08dd4356c19c905d5802b0c9b9c577316a05145c6c17cdd6fbf076576"
+  }
+ }
+}

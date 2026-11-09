@@ -27,12 +27,13 @@ def _failure(profile: str, detail: str) -> ParsedDocument:
 
 def parse_ou_indisponivel(profile: str, data: bytes | str, timeout: float, *, base_url: str | None = None) -> ParsedDocument:
     """Falha do filho (não a quarentena legítima do parser) vira Unavailable declarada."""
-    from freoa_verifica.connectors.base import Unavailable
-
+    from freoa_verifica.connectors.base import LocalParserFailure, Unavailable
     doc = parse_isolated(profile, data, timeout, base_url=base_url)
     if doc.parser_version == "0":  # marca de _failure
         detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "falha")
-        raise Unavailable(f"{profile}_nao_processado: {detalhe}"[:200])
+        raise LocalParserFailure(f"{profile}_nao_processado: {detalhe}"[:200])
+    if doc.parser_version == "conteudo-invalido":
+        raise Unavailable(f"{profile}_conteudo_nao_processavel")
     return doc
 
 
@@ -263,8 +264,17 @@ def _main() -> None:
         sys.stderr.write("memoria_excedida\n")
         sys.exit(3)
     except Exception as exc:  # noqa: BLE001 — o pai transforma em quarentena
-        sys.stderr.write(str(getattr(exc, "reason", None) or type(exc).__name__) + "\n")
-        sys.exit(3)
+        from lxml.etree import ParserError
+        from pypdf.errors import PdfReadError
+        if (sys.argv[1] in {"camara_legin", "camara_anexo"}
+                and (isinstance(exc, (ParserError, PdfReadError))
+                     or isinstance(exc, ValueError) and str(exc) in {
+                         "pdf_paginas_excedidas", "pdf_folha_sem_extracao", "pdf_texto_excedido"})):
+            document = ParsedDocument(sys.argv[1], "conteudo-invalido", "", None, "", issues=[
+                Issue("TRUNCATED", None, type(exc).__name__, "document")])
+        else:
+            sys.stderr.write(str(getattr(exc, "reason", None) or type(exc).__name__) + "\n")
+            sys.exit(3)
     sys.stdout.buffer.write(json.dumps(asdict(document), ensure_ascii=False).encode("utf-8"))
 
 if __name__ == "__main__":

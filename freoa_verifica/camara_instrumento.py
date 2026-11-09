@@ -26,7 +26,7 @@ from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.connectors.guarda import da_chamada
 
 CHAVE_HMAC_MINIMA = 32  # bytes (256 bits)
-_PARAR_A_SESSAO = {"teto_de_sessao", "persistencia_local_falhou", "interpretacao_local_falhou"}
+_PARAR_A_SESSAO = {"teto_de_sessao", "persistencia_local_falhou", "interpretacao_local_falhou", "falha_parser_camara"}
 
 
 def _portao(home, transporte, relogio, *, exigir_ativacao: bool = False) -> Portao:
@@ -179,6 +179,44 @@ def _zerar(con) -> None:
     con.politicas.clear()
 
 
+def _persistir_unidade(home, con, norma) -> None:
+    """Persiste os bytes já capturados e os modelos no mesmo home do portão.
+
+    Valida hash, resposta, identidade e descoberta antes de indexar. Não busca
+    novamente nem renova o instante; a evidência administrativa já é a do portão.
+    """
+    from freoa_verifica.aliases import WorkKey
+    from freoa_verifica.connectors.camara_policy import validar_url
+    from freoa_verifica.identity import validate_identity, declared_identity
+    from freoa_verifica.service import Verifica
+    from freoa_verifica.store import repo
+    from freoa_verifica.texto_resposta import content_type_do_response
+
+    key = WorkKey("federal", norma["kind"], norma["number"], norma["year"])
+    for url, resp in con.paginas.items():
+        con._validar_response(resp, url)
+        con._admitir(url)
+    if not con.paginas:
+        return
+    with Verifica(home=home) as svc:
+        svc.conn.execute("INSERT OR IGNORE INTO source(id, authority, profile, hosts_json) VALUES (?,?,?,?)",
+                         (con.id, con.authority, con.id, json.dumps(sorted(con.hosts))))
+        for resp in con.paginas.values():
+            repo.save_capture(svc.conn, resp, con.id, home=svc.home)
+        # Os bytes íntegros são evidência mesmo quando o parser falha depois.
+        # A captura parcial não vira modelo aprovado nem renova o instante.
+        for url, resp in con.paginas.items():
+            if validar_url(url)["recurso"] not in {"atualizado", "original"}:
+                continue
+            doc = con.parse(resp)
+            if validate_identity(key, doc) is None:
+                raise Unavailable("identidade_nao_confirmada")
+            svc.indexar_obra(source_id=con.id, work_key=key, document=doc,
+                             body=resp.body, url=resp.final_url, fetched_at=resp.fetched_at,
+                             work_date=declared_identity(doc)[1], label=doc.title,
+                             content_type=content_type_do_response(resp))
+
+
 def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
                 chave_hmac: Path | str | None = None) -> dict:
     """Obtém as normas do inventário pela cadeia de descoberta (busca → página → links publicados)."""
@@ -219,6 +257,13 @@ def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
             except Exception as exc:  # noqa: BLE001  AmbiguousCandidates e afins: não obtido, nunca silencioso
                 falha = {"motivo": f"inventario_norma_nao_obtida:{type(exc).__name__}", "categoria": None,
                          "bloqueio": None, "url": None}
+            try:
+                _persistir_unidade(home, con, norma)
+            except Unavailable as exc:
+                falha = {"motivo": exc.reason, "categoria": exc.categoria, "bloqueio": exc.evidencia.get("bloqueio"),
+                         "url": exc.evidencia.get("url")}
+            except Exception:  # noqa: BLE001  banco/blob/modelo: falha local, terminal, sem caminhos na saída
+                falha = {"motivo": "persistencia_local_falhou", "categoria": None, "bloqueio": None, "url": None}
             try:  # o material parcial e o inventário da unidade são gravados também quando ela falhou
                 hashes += _gravar_unidade(destino / f"{norma['kind']}-{norma['number']}-{norma['year']}",
                                           con, portao, norma, falha)

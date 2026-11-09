@@ -326,7 +326,9 @@ class CamaraLeginConnector(Connector):
     def _descobrir(self, page, inv):
         for r in inv["recursos"]:
             if r["admitido"]:
-                self.links[r["url"]] = (page, r["href"], r["rotulo"])
+                # Uma relação de retorno (inclusive autorreferência) não substitui
+                # a aresta pela qual a página já foi descoberta desde a busca.
+                self.links.setdefault(r["url"], (page, r["href"], r["rotulo"]))
 
     @_classifica
     def fetch(self, candidate):
@@ -360,6 +362,7 @@ class CamaraLeginConnector(Connector):
 
     @_classifica
     def parse(self, resp):
+        from freoa_verifica.connectors.base import LocalParserFailure
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
         self._admitir(resp.final_url)
         self._validar_response(resp, resp.final_url)
@@ -367,6 +370,9 @@ class CamaraLeginConnector(Connector):
         if route["recurso"] == "anexo":
             try:
                 return parse_ou_indisponivel("camara_anexo", corpo_binario(resp), 60)
+            except LocalParserFailure as exc:
+                raise Unavailable("falha_parser_camara", None, {"url": resp.url, "sha256": resp.sha256,
+                                                               "causa": exc.reason}) from exc
             except Unavailable as exc:
                 raise _erro("pdf_nao_processado", resp) from exc
         if route["recurso"] not in {"atualizado", "original"}:
@@ -374,6 +380,9 @@ class CamaraLeginConnector(Connector):
         try:
             doc = parse_ou_indisponivel("camara_legin", texto_do_response(resp), 120, base_url=resp.final_url)
         except Unavailable as exc:
+            if isinstance(exc, LocalParserFailure):
+                raise Unavailable("falha_parser_camara", None, {"url": resp.url, "sha256": resp.sha256,
+                                                               "causa": exc.reason}) from exc
             if any(error in exc.reason for error in ("AttributeError", "NameError", "TypeError")):
                 raise Unavailable("falha_parser_camara", "regressao", {"url": resp.url, "sha256": resp.sha256}) from exc
             raise _erro("html_nao_processado", resp) from exc

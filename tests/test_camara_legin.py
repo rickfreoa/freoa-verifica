@@ -22,8 +22,7 @@ ORIGINAL = "https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6404-15-dezem
 
 def response(key):
     meta = json.loads((FIX / f"camara_{key}.captura.json").read_bytes())
-    original = meta["importacao_offline"]["recibo_original"]
-    body = (FIX / f"camara_{key}{Path(original['arquivo']).suffix}").read_bytes()
+    body = (FIX / f"camara_{key}{Path(meta['arquivo']).suffix}").read_bytes()
     return Response(meta["url"], meta["url_final"], meta["status"], meta["cabecalhos"], body,
                     meta["sha256"], meta["capturado_em"], [], meta["content_type"],
                     size=len(body), content_type=meta["cabecalhos"]["content-type"])
@@ -33,7 +32,7 @@ def response(key):
 def servidor(monkeypatch, proibir_rede):
     responses = {response(p.stem.removeprefix("camara_").removesuffix(".captura")).url:
                  response(p.stem.removeprefix("camara_").removesuffix(".captura"))
-                 for p in FIX.glob("*.captura.json")}
+                 for p in FIX.glob("camara_*.captura.json")}
     calls = type("Chamadas", (list,), {})()
     def fetch(url, **kw):
         calls.append((url, kw))
@@ -137,7 +136,7 @@ def test_c6_c8_recorte_156_e_notas(servidor, key):
     cand = con.resolve({"kind": "lei", "number": "6404", "year": 1976})
     version = "publicacao_original" if "original" in key else "vigente"
     doc = con.parse(con.fetch(replace(cand, metadata={**cand.metadata, "versao": version})))
-    expected = ("É vedado ao administrador intervir em qualquer operação social em que tiver interesse conflitante "
+    expected = ("Art. 156. É vedado ao administrador intervir em qualquer operação social em que tiver interesse conflitante "
                 "com o da companhia, bem como na deliberação que a respeito tomarem os demais administradores, "
                 "cumprindo-lhe cientificá-los do seu impedimento e fazer consignar, em ata de reunião do conselho "
                 "de administração ou da diretoria, a natureza e extensão do seu interesse.")
@@ -156,7 +155,7 @@ def test_c6_c8_recorte_156_e_notas(servidor, key):
     assert doc.provision("art289") is not None
     if version == "vigente":
         assert doc.provision("art254-A") is not None
-        assert doc.provision("art289").redactions[0].text.startswith("As publicações ordenadas por esta Lei obedecerão às seguintes condições:")
+        assert doc.provision("art289").redactions[0].text.startswith("Art. 289. As publicações ordenadas por esta Lei obedecerão às seguintes condições:")
         assert "Caput" not in doc.provision("art289").redactions[0].text
         assert doc.provision("art289.caput").redactions[0].annotations
         assert not doc.provision("art289").redactions[0].annotations
@@ -304,7 +303,7 @@ def test_c6_gabaritos_integrais_289_e_254a(servidor):
     current = con.parse(con.fetch(candidate))
     original = con.parse(con.fetch(replace(candidate, metadata={**candidate.metadata, "versao": "publicacao_original"})))
     expected_original = (
-        'As publicações ordenadas pela presente Lei serão feitas no órgão oficial da União ou do Estado, conforme o lugar '
+        'Art. 289. As publicações ordenadas pela presente Lei serão feitas no órgão oficial da União ou do Estado, conforme o lugar '
         'em que esteja situada a sede da companhia, e em outro jornal de grande circulação editado na localidade em que '
         'está situado a sede da companhia. '
         '§ 1º. A Comissão de Valores Mobiliários poderá determinar que as publicações, ordenadas pela presente Lei, sejam '
@@ -320,7 +319,7 @@ def test_c6_gabaritos_integrais_289_e_254a(servidor):
         'expressão monetária o "milhar de cruzeiros".'
     )
     expected_current = (
-        'As publicações ordenadas por esta Lei obedecerão às seguintes condições: '
+        'Art. 289. As publicações ordenadas por esta Lei obedecerão às seguintes condições: '
         'I - deverão ser efetuadas em jornal de grande circulação editado na localidade em que esteja situada a sede da '
         'companhia, de forma resumida e com divulgação simultânea da íntegra dos documentos na página do mesmo jornal '
         'na internet, que deverá providenciar certificação digital da autenticidade dos documentos mantidos na página '
@@ -346,7 +345,7 @@ def test_c6_gabaritos_integrais_289_e_254a(servidor):
         'referidas publicações pela rede mundial de computadores.'
     )
     expected_254a = (
-        'A alienação, direta ou indireta, do controle de companhia aberta somente poderá ser contratada sob a condição, '
+        'Art. 254-A. A alienação, direta ou indireta, do controle de companhia aberta somente poderá ser contratada sob a condição, '
         'suspensiva ou resolutiva, de que o adquirente se obrigue a fazer oferta pública de aquisição das ações com direito '
         'a voto de propriedade dos demais acionistas da companhia, de modo a lhes assegurar o preço no mínimo igual a '
         '80% (oitenta por cento) do valor pago por ação com direito a voto, integrante do bloco de controle. '
@@ -374,9 +373,9 @@ def test_c6_tabelas_reais_e_c8_referencias_editoriais(servidor):
     con = CamaraLeginConnector()
     candidate = con.resolve({"kind": "lei", "number": "6404", "year": 1976})
     original = con.parse(con.fetch(replace(candidate, metadata={**candidate.metadata, "versao": "publicacao_original"})))
-    assert original.provision("art30.par1.ali-a").redactions[0].text == "as operações de resgate, reembolso ou amortização previstas em lei;"
+    assert original.provision("art30.par1.ali-a").redactions[0].text == "a) as operações de resgate, reembolso ou amortização previstas em lei;"
     assert original.provision("art30.par1.ali-b").redactions[0].text == (
-        "a aquisição, para permanência em tesouraria ou cancelamento, desde que até o valor do saldo de lucros ou reservas, "
+        "b) a aquisição, para permanência em tesouraria ou cancelamento, desde que até o valor do saldo de lucros ou reservas, "
         "exceto a legal, e sem diminuição do capital social, ou por doação;")
     current = con.parse(con.fetch(candidate))
     renumbered = current.provision("art137.inc4")

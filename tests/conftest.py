@@ -225,7 +225,7 @@ def planalto_offline(monkeypatch, proibir_rede):
             from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
             from tests.test_camara_legin import response, FIX
             captures = {r.url: r for r in (response(p.stem.removeprefix("camara_").removesuffix(".captura"))
-                                          for p in FIX.glob("*.captura.json"))}
+                                          for p in FIX.glob("camara_*.captura.json"))}
             def offline_get(url, **kwargs):
                 if url not in captures:
                     raise Unavailable("http_404")
