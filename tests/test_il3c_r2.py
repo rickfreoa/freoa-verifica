@@ -625,3 +625,22 @@ def test_n2_candidato_nao_repassa_excecao_local_inesperada(tmp_path, monkeypatch
         out = svc._index_candidate_legis(con, cand)
         assert out['motivo'] == 'falha_local_camara'
         assert private not in json.dumps(out) and writes == []
+
+
+@pytest.mark.parametrize('instante', ['', 'nao-data', None])
+def test_n3_instante_invalido_recusado_antes_de_gravar(tmp_path, instante):
+    # Passe final: com o conector presente, captura sem instante real não chega ao
+    # materializador genérico, que fabricaria outro recibo com o relógio.
+    con = grafo()
+    con.paginas[ATUAL] = replace(con.paginas[ATUAL], fetched_at=instante)
+    doc = documento(con)
+    with Verifica(home=tmp_path / 'h') as svc:
+        with pytest.raises(Unavailable) as error:
+            svc.indexar_obra(source_id=con.id, work_key=KEY, document=doc,
+                             body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
+        assert error.value.reason == 'instante_captura_invalido'
+        assert svc.conn.execute('SELECT count(*) FROM capture').fetchone()[0] == 0
+        assert not list((svc.home / 'blobs').rglob('*'))
+    with pytest.raises(Unavailable) as error:
+        con.validar_conjunto()
+    assert error.value.reason == 'instante_captura_invalido'

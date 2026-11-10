@@ -84,7 +84,11 @@ Captura e indexação conservam URL/hash/instante e `captura_direta`, sem nova
 obtenção ou renovação. No indexador Câmara, o recibo real é salvo antes do materializador
 genérico, evitando que seu `application/octet-stream` substitua o MIME capturado.
 Recibos antigos genéricos que não provem MIME admitido são recusados; não se
-corrige a captura por inferência nem se renova seu instante.
+corrige a captura por inferência nem se renova seu instante. Passe final (N3
+residual): o preflight `validar_conjunto` exige de cada página um instante de
+obtenção presente e em ISO 8601 e recusa com `instante_captura_invalido` antes da
+primeira escrita; sem isso, o materializador genérico preencheria o vazio com o
+relógio e gravaria um segundo recibo com MIME genérico.
 No instrumento os bytes íntegros são gravados após o
 preflight e antes da interpretação: falha local do parser não os apaga nem cria
 modelo a partir da falha. Material parcial válido e falhas continuam declarados.

@@ -1,6 +1,7 @@
 """Câmara/Legin: descoberta publicada, política estrita e versões sem reconstrução."""
 from __future__ import annotations
 
+from datetime import datetime
 import functools
 import hashlib
 import json
@@ -120,6 +121,21 @@ def _classifica(funcao):
         except Unavailable as exc:
             self._relancar(exc)
     return interno
+
+
+def _exigir_instante(resp):
+    """Passe final (N3 residual): captura sem instante real não é persistida.
+
+    O materializador genérico preencheria o vazio com o relógio e gravaria outro
+    recibo; recusa-se antes da primeira escrita, sem renovar nem inferir o instante.
+    """
+    instante = resp.fetched_at
+    try:
+        valido = isinstance(instante, str) and bool(instante) and datetime.fromisoformat(instante) is not None
+    except ValueError:
+        valido = False
+    if not valido:
+        raise _erro("instante_captura_invalido", resp)
 
 
 @register
@@ -310,6 +326,7 @@ class CamaraLeginConnector(Connector):
         validadas = set()
         for url, resp in self.paginas.items():
             self._validar_response(resp, url, validadas=validadas)
+            _exigir_instante(resp)
             self.validar_descoberta(url, validadas=validadas)
         if hasattr(self, "_cadeia_declarada"):
             if self.validar_descoberta(self._texto_url, validadas=validadas) != self._cadeia_declarada:
