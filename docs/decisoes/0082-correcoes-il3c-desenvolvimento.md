@@ -97,6 +97,23 @@ e todas em `causas`, saída mantém todas em `falhas`. A parada usa a união dos
 impedimentos, inclusive se falham depois o inventário ou o compromisso. Não há
 nova importação destino → home nem alteração dos canais públicos da reserva.
 
+Conferências do passe final (supervisor). Uma obtenção distinta dos mesmos bytes
+não encobre outra: (i) a conferência comum de resposta Câmara (`_validar_response`)
+exige instante de obtenção presente e em ISO 8601, de modo que o acumulador, o
+registro de arestas, o preflight, a releitura e a validação do acervo recusam
+`instante_captura_invalido` antes de substituir, reduzir ou gravar; (ii)
+`validar_acervo` confere cada linha de captura antes de reduzir por URL/hash; (iii)
+a releitura autentica e confere todas as linhas da URL/hash de cada ancestral;
+(iv) a mesclagem da instalação de snapshot recusa `conflito_recibo_captura` quando
+o recibo recebido da mesma tripla (sha256, URL, instante) diverge do local, antes
+do preflight e da publicação.
+
+Questões abertas registradas, não bloqueadoras segundo o passe final: a releitura
+de modelos legados recusa toda a releitura Câmara se houver captura normativa
+órfã no home (escolha conservadora, possivelmente mais ampla que o necessário); e
+o custo de reconstruções repetidas do conjunto entre fronteiras, que alongou as
+partições locais e pede medição causal.
+
 ## D2 — Isolamento local versus conteúdo
 
 `LocalParserFailure`, subclasse aditiva de `Unavailable`, distingue ausência de
