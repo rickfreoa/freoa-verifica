@@ -688,3 +688,47 @@ def test_conf2_releitura_nao_encobre_recibo_ancestral_invalido(tmp_path, defeito
         with pytest.raises(SourceUnavailable) as error:
             svc._revalidar_camara(rw)
         assert 'camara_releitura_sem_vinculo_validado' in str(error.value)
+
+
+def test_conf3_conferencia_comum_exige_instante():
+    # Conferência 3: o acumulador e o registro de arestas não substituem nem reduzem
+    # resposta com instante inválido (a conferência comum o exige).
+    con = grafo()
+    for url, page in list(con.paginas.items()):
+        with pytest.raises(Unavailable) as error:
+            con._validar_response(replace(page, fetched_at='nao-data'), url)
+        assert error.value.reason == 'instante_captura_invalido'
+    origem, href, rotulo = con.links[ATUAL]
+    antes = dict(con.links)
+    with pytest.raises(Unavailable) as error:
+        con._registrar_descoberta(replace(origem, fetched_at='nao-data'), ATUAL, href, rotulo)
+    assert error.value.reason == 'instante_captura_invalido'
+    assert con.links == antes
+
+
+@pytest.mark.parametrize('coluna,valor', [('status', 403), ('mime', 'application/pdf')])
+def test_conf3_mesclagem_do_snapshot_nao_encobre_recibo_divergente(tmp_path, coluna, valor):
+    # Conferência 3: a instalação não descarta recibo recebido divergente da mesma
+    # tripla (sha256, url, fetched_at) antes do preflight.
+    import sqlite3
+    from freoa_verifica import snapshot
+    con = grafo()
+    with Verifica(home=tmp_path / 'h') as svc:
+        svc.indexar_obra(source_id=con.id, work_key=KEY, document=documento(con),
+                         body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
+        svc.conn.commit()
+        bases = {}
+        for nome in ('vivo', 'igual', 'divergente'):
+            bases[nome] = tmp_path / f'{nome}.sqlite3'
+            destino = sqlite3.connect(str(bases[nome]))
+            svc.conn.backup(destino)
+            destino.close()
+    alterar = sqlite3.connect(str(bases['divergente']))
+    for (gatilho,) in alterar.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='capture'"):
+        alterar.execute(f'DROP TRIGGER "{gatilho}"')
+    alterar.execute(f'UPDATE capture SET {coluna}=? WHERE url=?', (valor, ATUAL))
+    alterar.commit()
+    alterar.close()
+    snapshot._merge_attach(bases['vivo'], bases['igual'])  # controle: mesma obtenção, mesmo recibo
+    with pytest.raises(ValueError, match='conflito_recibo_captura'):
+        snapshot._merge_attach(bases['vivo'], bases['divergente'])

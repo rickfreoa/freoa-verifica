@@ -617,6 +617,10 @@ def _reconstruir_derivados_substituidos(conn: sqlite3.Connection, capturas: list
                               extract_id=ext["id"] if ext else None)
 
 
+_RECIBO_INTEGRAL = ("final_url", "status", "headers_json", "redirects_json", "mime", "size",
+                    "content_type")
+
+
 def _merge_attach(live_db: Path, snap_db: Path) -> list:
     """Anexa dados publicos, remapeando identidades naturais ja existentes."""
     conn = sqlite3.connect(str(live_db))
@@ -656,6 +660,12 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
                 if existing is not None:
                     if table == "capture" and existing["source_id"] != values["source_id"]:
                         raise ValueError("conflito_identidade_captura")
+                    if table == "capture" and any(
+                            c in existing.keys() and existing[c] != values[c] for c in _RECIBO_INTEGRAL
+                            if c in values):
+                        # Conferência 3: a mesclagem não encobre recibo divergente da mesma
+                        # obtenção; recusa antes do preflight e da publicação.
+                        raise ValueError("conflito_recibo_captura")
                     if old_id:
                         table_map[old_id] = existing["id"]
                     continue

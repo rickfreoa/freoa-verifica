@@ -242,6 +242,9 @@ class CamaraLeginConnector(Connector):
             raise _erro("resposta_camara_invalida", resp)
         if hashlib.sha256(resp.body).hexdigest() != resp.sha256:
             raise _erro("hash_captura_divergente", resp)
+        # Conferência 3: o instante integra a conferência comum de toda resposta
+        # (acumulador, registro de arestas, preflight, releitura e acervo).
+        _exigir_instante(resp)
         # Cache só deste preflight síncrono. Hash e identidade são reconferidos
         # mesmo na repetição; nenhuma aprovação atravessa chamadas/fronteiras.
         signature = (url, resp.sha256, resp.mime, resp.content_type, resp.size,
