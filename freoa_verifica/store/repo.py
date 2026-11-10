@@ -131,8 +131,7 @@ def save_capture(
                     "headers_json": json.dumps(resp.headers, ensure_ascii=False, sort_keys=True),
                     "redirects_json": json.dumps(resp.redirects, ensure_ascii=False),
                     "mime": resp.mime, "size": size, "content_type": content_type}
-        if any(row[c] != v for c, v in recebido.items()
-               if not (c == "content_type" and (row[c] is None or v is None))):
+        if any(row[c] != v for c, v in recebido.items()):
             conn.rollback()
             raise IdentityConflict(f"captura {digest} já registrada com recibo divergente")
     conn.commit()

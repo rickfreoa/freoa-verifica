@@ -662,7 +662,8 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
                         raise ValueError("conflito_identidade_captura")
                     if table == "capture" and any(
                             c in existing.keys() and existing[c] != values[c] for c in _RECIBO_INTEGRAL
-                            if c in values and not (c == "content_type" and None in (existing[c], values[c]))):
+                            if c in values and not (c == "content_type" and None in (existing[c], values[c])
+                                                    and values["source_id"] != "camara_legin")):
                         # Conferência 3: a mesclagem não encobre recibo divergente da mesma
                         # obtenção; recusa antes do preflight e da publicação.
                         raise ValueError("conflito_recibo_captura")

@@ -107,12 +107,17 @@ a releitura autentica e confere todas as linhas da URL/hash de cada ancestral;
 (iv) a mesclagem da instalação de snapshot recusa `conflito_recibo_captura` quando
 o recibo recebido da mesma tripla (sha256, URL, instante) diverge do local, antes
 do preflight e da publicação, e recusa `conflito_identidade_captura` quando um
-recibo recebido colide pela identidade com outra tripla, em vez de ignorá-lo; a
-comparação de `content_type` é dispensada só quando um dos lados é nulo (snapshot
-anterior à migração 014); (v) `repo.save_capture` da Câmara não reaproveita
+recibo recebido colide pela identidade com outra tripla, em vez de ignorá-lo. A
+comparação de `content_type` é dispensada quando um dos lados é nulo apenas para
+fontes que não a Câmara (snapshot anterior à migração 014); para a Câmara, cuja rota
+nasceu depois da 014, nulo de um lado só é divergência e recusa; (v) `repo.save_capture` da Câmara não reaproveita
 obtenção da mesma tripla com recibo divergente (recibo legado inválido não absorve
 o novo) e o materializador comum não grava recibo genérico para a Câmara: o modelo
-vincula-se à captura real gravada pelo indexador após o preflight.
+vincula-se à captura real gravada pelo indexador após o preflight; a comparação
+de recibos da Câmara em `save_capture` é estrita, inclusive no `content_type`
+nulo; (vi) a reconstrução de resposta a partir do recibo não preenche
+`content_type` nulo com o MIME, de modo que o Content-Type original dos headers
+continua sujeito à conferência.
 
 Questões abertas registradas, não bloqueadoras segundo o passe final: a releitura
 de modelos legados recusa toda a releitura Câmara se houver captura normativa

@@ -768,11 +768,57 @@ def test_conf4_mesclagem_recusa_colisao_de_identidade(tmp_path):
         snapshot._merge_attach(bases['vivo'], bases['colisao'])
 
 
-def test_conf4_mesclagem_tolera_content_type_ausente_do_snapshot_anterior(tmp_path):
+@pytest.mark.parametrize('lado', ['recebido_nulo', 'local_nulo'])
+def test_conf5_mesclagem_camara_nao_tolera_content_type_nulo_de_um_lado(tmp_path, lado):
+    # Conferência 5 (B1): snapshots anteriores à migração 014 não têm capturas Câmara;
+    # para a Câmara, nulo de um lado só é divergência e recusa a mesclagem.
     from freoa_verifica import snapshot
-    bases = _bases_do_grafo(tmp_path, ('vivo', 'anterior'))
-    _alterar_captura(bases['anterior'], 'UPDATE capture SET content_type=NULL', ())
-    snapshot._merge_attach(bases['vivo'], bases['anterior'])
+    bases = _bases_do_grafo(tmp_path, ('vivo', 'outro'))
+    if lado == 'recebido_nulo':
+        _alterar_captura(bases['outro'], 'UPDATE capture SET content_type=NULL', ())
+    else:
+        _alterar_captura(bases['vivo'], 'UPDATE capture SET content_type=NULL', ())
+        _alterar_captura(bases['outro'], 'UPDATE capture SET content_type=?', ('text/html; charset=INVALID-CODEC',))
+    with pytest.raises(ValueError, match='conflito_recibo_captura'):
+        snapshot._merge_attach(bases['vivo'], bases['outro'])
+
+
+def test_conf5_recibo_local_com_content_type_invalido_nao_absorve_resposta_sem_cabecalho(tmp_path):
+    # Conferência 5 (B2): resposta nova sem Content-Type não reaproveita recibo local
+    # da mesma tripla com Content-Type divergente.
+    con = grafo()
+    with Verifica(home=tmp_path / 'h') as svc:
+        svc.conn.execute("INSERT OR IGNORE INTO source(id, authority, profile, hosts_json) VALUES (?,?,?,?)",
+                         (con.id, con.authority, con.id, json.dumps(sorted(con.hosts))))
+        repo.save_capture(svc.conn, replace(con.paginas[ATUAL], content_type='text/html; charset=INVALID-CODEC'),
+                          'camara_legin', home=svc.home)
+        con.paginas[ATUAL] = replace(con.paginas[ATUAL], content_type='',
+                                     headers={k: v for k, v in con.paginas[ATUAL].headers.items()
+                                              if k.lower() != 'content-type'})
+        with pytest.raises((repo.IdentityConflict, Unavailable)):
+            svc.indexar_obra(source_id=con.id, work_key=KEY, document=documento(con),
+                             body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
+        assert svc.conn.execute('SELECT count(*) FROM parsed_document').fetchone()[0] == 0
+
+
+def test_conf5_reconstrucao_le_content_type_dos_headers_quando_coluna_nula():
+    # Conferência 5 (B3): coluna nula não é preenchida com o MIME; o header original vale.
+    from freoa_verifica.connectors.camara_descoberta import resposta_capturada
+    page = grafo().paginas[ATUAL]
+    cap = {'url': page.url, 'final_url': page.final_url, 'status': page.status, 'sha256': page.sha256,
+           'fetched_at': page.fetched_at, 'mime': 'text/html', 'content_type': None, 'size': len(page.body),
+           'headers_json': json.dumps({'content-type': 'text/html; charset=INVALID-CODEC'}),
+           'redirects_json': '[]'}
+    import freoa_verifica.store.blobs as blobs_mod
+    original = blobs_mod.get_blob
+    blobs_mod.get_blob = lambda sha, home=None: page.body
+    try:
+        resp = resposta_capturada(cap, None)
+    finally:
+        blobs_mod.get_blob = original
+    con = CamaraLeginConnector()
+    with pytest.raises(Unavailable):
+        con._validar_response(resp, resp.url)
 
 
 @pytest.mark.parametrize('campo,valor', [('mime', 'application/octet-stream'), ('status', 403)])

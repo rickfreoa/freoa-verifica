@@ -23,7 +23,7 @@ def resposta_capturada(cap, home, *, blob_dir=None):
         raise Unavailable("resposta_camara_invalida")
     return Response(cap["url"], cap["final_url"], cap["status"], headers, body,
                     cap["sha256"], cap["fetched_at"], redirects, cap["mime"], size=len(body),
-                    content_type=cap["content_type"] or cap["mime"])
+                    content_type=cap["content_type"] or "")
 
 
 def reconstruir(document, response, carregar):
