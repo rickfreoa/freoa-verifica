@@ -398,23 +398,21 @@ def test_n1_inventario_duravel_zero_gravacoes(tmp_path, monkeypatch, case, reaso
     assert writes == [] and not (tmp_path / 'nao-gravado').exists()
 
 
-@pytest.mark.parametrize('case,reason', CASES)
-def test_n1_indexar_reconstroi_antes_de_gravar(tmp_path, monkeypatch, case, reason):
-    con = defeituoso(case)
+@pytest.mark.parametrize('case', [None] + [c for c, _ in CASES])
+def test_n1_indexar_sem_descoberta_recusa_sem_fabricar_recibo(tmp_path, monkeypatch, case):
+    # r3/N3: sem o conector da unidade, nem grafo válido nem defeituoso é reconstruído
+    # a partir de recibo sintético; recusa antes de qualquer leitura ou gravação.
+    con = grafo() if case is None else defeituoso(case)
     doc = documento(con)
     with Verifica(home=tmp_path / 'h') as svc:
-        def carregar(url, digest, **kw):
-            page = con.paginas.get(url)
-            if page is None:
-                raise Unavailable('descoberta_sem_raiz')
-            if page.sha256 != digest:
-                raise Unavailable('hash_ancestral_divergente')
-            return page
-        monkeypatch.setattr(svc, '_resposta_camara', carregar)
+        lidos = []
+        monkeypatch.setattr(svc, '_resposta_camara', lambda *a, **kw: lidos.append(a))
         with pytest.raises(Unavailable) as error:
             svc.indexar_obra(source_id=con.id, work_key=KEY, document=doc,
-                             body=con.paginas[ATUAL].body, url=ATUAL)
-        assert error.value.reason == reason
+                             body=con.paginas[ATUAL].body, url=ATUAL,
+                             fetched_at='2099-01-01T00:00:00+00:00')
+        assert error.value.reason == 'camara_indexacao_sem_descoberta'
+        assert lidos == []
         assert svc.conn.execute('SELECT count(*) FROM capture').fetchone()[0] == 0
         assert not list((svc.home / 'blobs').rglob('*'))
 

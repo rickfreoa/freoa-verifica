@@ -58,8 +58,14 @@ Modelos anteriores sem esse campo usam a cadeia declarada, sem reconstruir
 arestas novas a partir de busca ou metadados, e exigem cobertura de todas as
 capturas Câmara do home por cadeias recuperáveis. É a recusa conservadora para
 unidades antigas sem delimitação persistida: captura normativa órfã em home
-legado também impede releitura. `indexar_obra` sem conector recebido
-reconstitui e valida o conjunto antes de escrever.
+legado também impede releitura. Redução de escopo após a auditoria r3 (N3,
+teto do D5): `indexar_obra` da Câmara exige o conector da unidade
+(`descoberta_camara`) e, sem ele, recusa com `camara_indexacao_sem_descoberta`
+antes de qualquer leitura ou gravação. A versão anterior reconstruía o conjunto a
+partir de uma resposta sintética (status 200, headers vazios, MIME HTML, instante
+do chamador) e a persistia como captura: recibo fabricado. Todos os chamadores de
+produção já passam o conector; a reconstrução offline fica restrita à releitura,
+que lê o recibo real pela captura específica.
 
 O snapshot valida os modelos e a cobertura de TODAS as capturas Câmara antes de
 exportar. Na instalação repete a reconstrução e o preflight no banco e nos blobs

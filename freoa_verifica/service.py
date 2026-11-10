@@ -716,10 +716,9 @@ class Verifica:
             raise Unavailable("orcamento")
         if source_id == "camara_legin":
             if descoberta_camara is None:
-                from freoa_verifica.connectors.camara_descoberta import reconstruir
-                response = Response(url, url, 200, {}, body, hashlib.sha256(body).hexdigest(),
-                                    fetched_at, [], "text/html", content_type=content_type or "text/html")
-                descoberta_camara = reconstruir(document, response, self._resposta_camara)
+                # Redução de escopo (0082, D1, r3): sem o conector da unidade não há recibo
+                # real da obtenção; nada é reconstruído nem fabricado a partir dos argumentos.
+                raise Unavailable("camara_indexacao_sem_descoberta")
             descoberta_camara.validar_conjunto()
             captured = descoberta_camara.paginas.get(url)
             if captured is None or captured.sha256 != hashlib.sha256(body).hexdigest():
