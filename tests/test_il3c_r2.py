@@ -666,3 +666,25 @@ def test_conf_snapshot_recusa_recibo_sem_instante_encoberto(tmp_path, instante, 
         with pytest.raises(Unavailable) as error:
             validar_acervo(svc.conn, svc.home)
         assert error.value.reason == 'instante_captura_invalido'
+
+
+@pytest.mark.parametrize('defeito', ['instante', 'status', 'mime'])
+@pytest.mark.parametrize('alvo', ['busca', 'norma'])
+def test_conf2_releitura_nao_encobre_recibo_ancestral_invalido(tmp_path, defeito, alvo):
+    # Conferência 2: na releitura, recibo ancestral inválido da mesma URL/hash não
+    # fica encoberto pela seleção de uma única linha válida.
+    con = grafo()
+    url = BUSCA if alvo == 'busca' else con.links[ATUAL][0].final_url
+    outro = '2026-11-09T00:00:00+00:00'
+    ruim = {'instante': {'fetched_at': 'nao-data'},
+            'status': {'status': 403, 'fetched_at': outro},
+            'mime': {'mime': 'application/pdf', 'content_type': 'application/pdf', 'fetched_at': outro}}[defeito]
+    with Verifica(home=tmp_path / 'h') as svc:
+        rw = svc.indexar_obra(source_id=con.id, work_key=KEY, document=documento(con),
+                              body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
+        svc._revalidar_camara(rw)  # controle positivo
+        repo.save_capture(svc.conn, replace(con.paginas[url], **ruim), 'camara_legin', home=svc.home)
+        svc.conn.commit()
+        with pytest.raises(SourceUnavailable) as error:
+            svc._revalidar_camara(rw)
+        assert 'camara_releitura_sem_vinculo_validado' in str(error.value)

@@ -937,12 +937,21 @@ class Verifica:
 
     def _resposta_camara(self, url, sha256, *, capture_id=None):
         from freoa_verifica.connectors.camara_descoberta import resposta_capturada
-        cap = self.conn.execute("SELECT * FROM capture WHERE url=? AND sha256=? AND source_id='camara_legin' "
-                                "AND (? IS NULL OR id=?)", (url, sha256, capture_id, capture_id)).fetchone()
-        if cap is None:
+        from freoa_verifica.connectors.camara_legin import CamaraLeginConnector, _exigir_instante
+        caps = self.conn.execute("SELECT * FROM capture WHERE url=? AND sha256=? AND source_id='camara_legin' "
+                                 "AND (? IS NULL OR id=?) ORDER BY rowid", (url, sha256, capture_id, capture_id)).fetchall()
+        if not caps:
             raise Unavailable("descoberta_sem_raiz")
-        self._authenticate_capture(cap["id"])
-        return resposta_capturada(cap, self.home)
+        # Conferência 2: obtenções distintas dos mesmos bytes não se encobrem. Toda
+        # linha da URL/hash é autenticada e conferida (status, MIME, instante).
+        conferidor, respostas = CamaraLeginConnector(), []
+        for cap in caps:
+            self._authenticate_capture(cap["id"])
+            page = resposta_capturada(cap, self.home)
+            conferidor._validar_response(page, page.url)
+            _exigir_instante(page)
+            respostas.append(page)
+        return respostas[0]
 
     def _selecionar_camara(self, work, versao="vigente", fonte=None):
         """Seleção por fonte/versão de capturas coexistentes; nunca pelo último cache em memória."""
