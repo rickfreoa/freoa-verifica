@@ -160,7 +160,8 @@ def test_d2_falha_do_isolamento_terminal_sem_barreira_persistente(tmp_path, monk
         assert failure.value.classificacao() == {}
         assert failure.value.evidencia["perfil"] == ("camara_legin" if formato == "html" else "camara_anexo")
         assert failure.value.evidencia["causa"] == {"import": "importacao", "processo": "criacao_processo",
-                                                   "tempo": "tempo", "memoria": "memoria", "saida": "protocolo"}[causa]
+                                                   "tempo": "timeout", "memoria": "memoria_excedida",
+                                                   "saida": "protocolo"}[causa]
         antes = list(t.urls)
         with pytest.raises(Unavailable, match="falha_parser_camara"):
             p.obter(LSA)

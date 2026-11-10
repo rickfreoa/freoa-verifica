@@ -93,6 +93,8 @@ def test_capture_mismatch_not_indexed(tmp_path,monkeypatch):
         def resolve(self,key): return Candidate('planalto','candidate','metadata','https://www.planalto.gov.br/ccivil_03/test.htm')
         def fetch(self,c): return Response(c.url,c.url,200,{},body,hashlib.sha256(body).hexdigest(),'2026-01-01T00:00:00+00:00',[],'text/html')
         def parse(self,r): return doc
+        # Rota federal = camara_legin (IL.3-b); dublê com conjunto de descoberta válido (validado antes da identidade).
+        def validar_conjunto(self): return None
     with Verifica(tmp_path) as s:
         monkeypatch.setattr(s,'_get',lambda name:Connector())
         result=s.verificar_citacao('Lei 8765/2000, art. 1',trecho='A regra permanece.')
@@ -266,10 +268,33 @@ def test_date_mismatch_before_index(tmp_path,monkeypatch):
         def resolve(self,key):return Candidate('planalto','x','x','https://www.planalto.gov.br/test')
         def fetch(self,c):return Response(c.url,c.url,200,{},body,hashlib.sha256(body).hexdigest(),'2026-01-01T00:00:00+00:00',[],'text/html')
         def parse(self,r):return ParsedDocument('test','1','Lei 8765, de 7 de maio de 1999',None,'')
+        # Rota federal = camara_legin (IL.3-b); dublê com conjunto de descoberta válido (validado antes da identidade).
+        def validar_conjunto(self):return None
     with Verifica(tmp_path) as s:
         monkeypatch.setattr(s,'_get',lambda name:Connector())
         v=s.verificar_citacao('Lei 8765, de 8 de maio de 1999, art. 87')
         assert v['identity']['status']=='not_found' and v['identity']['reason_code']=='IDENTIDADE_DIVERGENTE'
+        assert s.conn.execute('select count(*) from work').fetchone()[0]==0
+
+
+def test_conjunto_camara_invalido_prevalece_sobre_identidade_divergente(tmp_path,monkeypatch):
+    """Regra 2: material de descoberta não conferido não sustenta `not_found`; vira indisponibilidade."""
+    monkeypatch.delenv('FV_OFFLINE', raising=False)  # conector falso: nenhuma rede real
+    from freoa_verifica.service import Verifica
+    from freoa_verifica.connectors.base import Candidate, Unavailable
+    from freoa_verifica.transport import Response
+    import hashlib
+    body=b'captured epigraph'
+    class Connector:
+        def resolve(self,key):return Candidate('camara_legin','x','x','https://www2.camara.leg.br/test')
+        def fetch(self,c):return Response(c.url,c.url,200,{},body,hashlib.sha256(body).hexdigest(),'2026-01-01T00:00:00+00:00',[],'text/html')
+        def parse(self,r):return ParsedDocument('test','1','Lei 8765, de 7 de maio de 1999',None,'')
+        def validar_conjunto(self):raise Unavailable('conjunto_camara_invalido')
+    with Verifica(tmp_path) as s:
+        monkeypatch.setattr(s,'_get',lambda name:Connector())
+        v=s.verificar_citacao('Lei 8765, de 8 de maio de 1999, art. 87')
+        assert v['identity']['status']=='unavailable'
+        assert 'conjunto_camara_invalido' in v['identity']['reason_code']
         assert s.conn.execute('select count(*) from work').fetchone()[0]==0
 
 @pytest.mark.parametrize('value',['1ª Câmara','1a Câmara','Primeira Câmara','1 Câmara'])

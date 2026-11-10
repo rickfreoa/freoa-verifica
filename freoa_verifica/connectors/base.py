@@ -54,7 +54,17 @@ class LocalParserFailure(Unavailable):
     """Processo isolado sem resultado; não constitui evidência de perfil remoto."""
 
 
-CAUSAS_PARSER = frozenset({"importacao", "criacao_processo", "exit_nao_zero", "tempo", "memoria", "protocolo"})
+# Causas tipadas e distintas da falha local do parser isolado (códigos, nunca texto livre). Cada
+# código identifica um mecanismo; a sanitização N2 não pode fundi-los (regressão da r2, CI de ad89d58).
+CAUSAS_PARSER = frozenset({
+    "importacao", "criacao_processo", "exit_nao_zero", "protocolo", "perfil_desconhecido",
+    "timeout", "orcamento_esgotado", "entrada_excedida", "memoria_excedida", "limites_nao_instalados",
+    "stdout_excedido", "stderr_excedido", "leitura_falhou", "escrita_falhou", "fechamento_falhou",
+    "descendente_reteve_pipes", "erro_so", "pdf_paginas_excedidas", "pdf_texto_excedido",
+    "pdf_folha_sem_extracao", "pdf_sem_biblioteca",
+})
+# Tipo da exceção de sistema no filho (ex.: criação de descendente negada pelo limite de processos).
+TIPOS_ERRO_SO = frozenset({"OSError", "BlockingIOError", "PermissionError"})
 
 
 def sanitizar_falha_parser(exc: Unavailable, *, perfil=None, url=None, sha256=None) -> Unavailable:

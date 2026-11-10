@@ -551,9 +551,13 @@ class Verifica:
                 self._cv.wait_for(lambda: self._excl_owner is None)
                 self._ops += 1
             self._local.prof = 1
+            # Memo de conferência de política/desafio das respostas Câmara, só desta operação síncrona externa
+            # (aninhadas compartilham); descartado ao fim, nenhuma aprovação atravessa operações.
+            self._local.validadas_camara = set()
             try:
                 yield
             finally:
+                self._local.validadas_camara = None
                 self._local.prof = 0
                 with self._cv:
                     self._ops -= 1
@@ -912,11 +916,15 @@ class Verifica:
                  "motivo": "camara_modelo_requer_reprocessamento", "categoria": None}])
         from freoa_verifica.connectors.camara_policy import validar_url
         from freoa_verifica.connectors.camara_descoberta import reconstruir
+        # Fora de operação pública (chamada interna direta), o memo vale só para esta releitura.
+        validadas = getattr(self._local, "validadas_camara", None)
+        validadas = set() if validadas is None else validadas
         try:
             self._authenticate_capture(rw.capture_id)
-            response = self._resposta_camara(rw.url, rw.sha256, capture_id=rw.capture_id)
-            con = reconstruir(rw.document, response, self._resposta_camara)
-            con.validar_conjunto()
+            response = self._resposta_camara(rw.url, rw.sha256, capture_id=rw.capture_id, validadas=validadas)
+            con = reconstruir(rw.document, response,
+                              lambda url, sha256: self._resposta_camara(url, sha256, validadas=validadas))
+            con.validar_conjunto(validadas=validadas)
             inv = next(json.loads(b.text) for b in rw.document.editorial_blocks if b.kind == "camara_inventario")
             if "conjunto_descoberta" not in inv:
                 # O formato antigo não delimitava a unidade gravada. Exige
@@ -935,7 +943,7 @@ class Verifica:
         except (Unavailable, ValueError, TypeError, KeyError, StopIteration, OSError) as exc:
             raise SourceUnavailable("camara_releitura_sem_vinculo_validado") from exc
 
-    def _resposta_camara(self, url, sha256, *, capture_id=None):
+    def _resposta_camara(self, url, sha256, *, capture_id=None, validadas=None):
         from freoa_verifica.connectors.camara_descoberta import resposta_capturada
         from freoa_verifica.connectors.camara_legin import CamaraLeginConnector, _exigir_instante
         caps = self.conn.execute("SELECT * FROM capture WHERE url=? AND sha256=? AND source_id='camara_legin' "
@@ -948,7 +956,7 @@ class Verifica:
         for cap in caps:
             self._authenticate_capture(cap["id"])
             page = resposta_capturada(cap, self.home)
-            conferidor._validar_response(page, page.url)
+            conferidor._validar_response(page, page.url, validadas=validadas)
             _exigir_instante(page)
             respostas.append(page)
         return respostas[0]

@@ -555,7 +555,8 @@ def test_n2_threads_de_io_nao_emitem_excecao_livre(monkeypatch, capsys, recwarn,
     monkeypatch.setattr(isolated.os, 'killpg', lambda *a: killed.append(True), raising=False)
     with pytest.raises(LocalParserFailure) as error:
         isolated.parse_ou_indisponivel(profile, b'x', 1)
-    assert killed and error.value.evidencia['causa'] == 'protocolo'
+    # Código tipado da falha de I/O (lista fechada), nunca a mensagem; não se funde em `protocolo`.
+    assert killed and error.value.evidencia['causa'] == 'leitura_falhou'
     assert private not in json.dumps(error.value.evidencia)
     assert private not in capsys.readouterr().err
     assert not any('SYNTHETIC_PRIVATE' in str(w.message) for w in recwarn)

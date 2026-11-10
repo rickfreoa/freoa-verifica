@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import json
 import os
+import re
 import threading
 import subprocess
 import sys
@@ -20,16 +21,57 @@ LIMIT_INSTALL_EXIT = 78
 _JOB_HANDLE = None  # Não fechar: KILL_ON_JOB_CLOSE deve durar até a saída do filho.
 
 
-def _failure(profile: str, detail: str, *, exit_code: int | None = None) -> ParsedDocument:
-    from freoa_verifica.connectors.base import CAUSAS_PARSER
+# Exit codes do filho e o código que cada um pode declarar na última linha do stderr. O pai só aceita
+# o par (exit, código) desta tabela; qualquer outro stderr é descartado sem ser lido como texto.
+EXIT_MEMORIA, EXIT_GENERICO, EXIT_TIPADO, EXIT_IMPORTACAO = 3, 4, 5, 77
+_CODIGOS_FILHO = {
+    EXIT_MEMORIA: {"memoria_excedida"},
+    LIMIT_INSTALL_EXIT: {"limites_nao_instalados"},
+    EXIT_TIPADO: {"pdf_paginas_excedidas", "pdf_texto_excedido", "pdf_folha_sem_extracao", "pdf_sem_biblioteca",
+                  "erro_so:OSError", "erro_so:BlockingIOError", "erro_so:PermissionError"},
+}
+_CAUSA_POR_EXIT = {EXIT_MEMORIA: "memoria_excedida", LIMIT_INSTALL_EXIT: "limites_nao_instalados",
+                   EXIT_IMPORTACAO: "importacao"}
+
+
+def _causa_do_filho(returncode: int, stderr: bytes) -> tuple[str, str | None]:
+    """(causa, tipo) a partir de código declarado e coerente com o exit; nunca texto livre."""
+    linhas = bytes(stderr).strip().splitlines()
+    ultima = linhas[-1].strip().decode("ascii", "replace") if linhas else ""
+    if ultima in _CODIGOS_FILHO.get(returncode, ()):
+        causa, _, tipo = ultima.partition(":")
+        return causa, tipo or None
+    return _CAUSA_POR_EXIT.get(returncode, "exit_nao_zero"), None
+
+
+def _failure(profile: str, detail: str, *, exit_code: int | None = None, tipo: str | None = None) -> ParsedDocument:
+    """Quarentena por falha local: detalhe `causa=<código>[;tipo=<exceção>][;exit=<int>]`."""
+    from freoa_verifica.connectors.base import CAUSAS_PARSER, TIPOS_ERRO_SO
     profile = profile if isinstance(profile, str) and profile in _PROFILES else "desconhecido"
-    cause = detail if isinstance(detail, str) and detail in CAUSAS_PARSER else "protocolo"
-    fields = {"causa": cause}
+    partes = ["causa=" + (detail if isinstance(detail, str) and detail in CAUSAS_PARSER else "protocolo")]
+    if isinstance(tipo, str) and tipo in TIPOS_ERRO_SO:
+        partes.append("tipo=" + tipo)
     if type(exit_code) is int:
-        fields["exit_code"] = exit_code
+        partes.append(f"exit={exit_code}")
     return ParsedDocument(profile, "0", "", None, "", issues=[
-        Issue("TRUNCATED", None, json.dumps(fields), blocking_scope="document"),
+        Issue("TRUNCATED", None, ";".join(partes), blocking_scope="document"),
     ])
+
+
+def _campos_da_falha(detail) -> dict:
+    """Inverso estrito de _failure; campo fora do formato é descartado."""
+    from freoa_verifica.connectors.base import CAUSAS_PARSER
+    fields: dict = {}
+    if not isinstance(detail, str):
+        return fields
+    for parte in detail.split(";"):
+        chave, _, valor = parte.partition("=")
+        if chave == "causa" and valor in CAUSAS_PARSER:
+            fields["causa"] = valor
+        elif chave == "exit" and re.fullmatch(r"-?[0-9]{1,10}", valor):
+            fields["exit_code"] = int(valor)
+    return fields
+
 
 def parse_ou_indisponivel(profile: str, data: bytes | str, timeout: float, *, base_url: str | None = None) -> ParsedDocument:
     """Falha do filho (não a quarentena legítima do parser) vira Unavailable declarada."""
@@ -37,12 +79,7 @@ def parse_ou_indisponivel(profile: str, data: bytes | str, timeout: float, *, ba
     doc = parse_isolated(profile, data, timeout, base_url=base_url)
     if doc.parser_version == "0":  # marca de _failure
         from freoa_verifica.connectors.base import sanitizar_falha_parser
-        try:
-            fields = json.loads(next(i.detail for i in doc.issues if i.code == "TRUNCATED"))
-        except (ValueError, TypeError, StopIteration):
-            fields = {}
-        if not isinstance(fields, dict):
-            fields = {}
+        fields = _campos_da_falha(next((i.detail for i in doc.issues if i.code == "TRUNCATED"), None))
         raise sanitizar_falha_parser(LocalParserFailure("parser_nao_processado", None, fields), perfil=profile)
     if doc.parser_version == "conteudo-invalido":
         raise Unavailable(f"{profile}_conteudo_nao_processavel")
@@ -52,7 +89,7 @@ def parse_ou_indisponivel(profile: str, data: bytes | str, timeout: float, *, ba
 def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url: str | None = None) -> ParsedDocument:
     """Executa em filho; timeout, falha ou saida invalida geram quarentena."""
     if profile not in _PROFILES:
-        return _failure(profile, "perfil desconhecido")
+        return _failure(profile, "perfil_desconhecido")
     if len(data) > INPUT_LIMIT:
         return _failure(profile, "entrada_excedida")
     raw = data.encode("utf-8") if isinstance(data, str) else data
@@ -60,7 +97,7 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url:
         return _failure(profile, "entrada_excedida")
     timeout = restante(timeout)
     if timeout <= 0:
-        return _failure(profile, "tempo")
+        return _failure(profile, "orcamento_esgotado")
     proc, fase = None, "criacao_processo"
     try:
         # Sem `with`: o __exit__ do Popen fecharia pipes ainda presos por um descendente fora do grupo
@@ -75,12 +112,12 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url:
             **({"start_new_session": True} if os.name == "posix" else {}),
         )
         fase = "protocolo"
-        output, _stderr, exceeded = _bounded_io(proc, raw, timeout)
+        output, stderr, exceeded = _bounded_io(proc, raw, timeout)
         if exceeded:
-            return _failure(profile, "tempo" if exceeded in {"tempo", "timeout"} else "protocolo")
+            return _failure(profile, exceeded)  # código de _bounded_io; fora da lista vira protocolo
         if proc.returncode != 0:
-            cause = {77: "importacao", 3: "memoria"}.get(proc.returncode, "exit_nao_zero")
-            return _failure(profile, cause, exit_code=proc.returncode)
+            cause, tipo = _causa_do_filho(proc.returncode, stderr)
+            return _failure(profile, cause, exit_code=proc.returncode, tipo=tipo)
     except Exception as exc:  # noqa: BLE001 — falha do mecanismo, nunca texto de exceção no retorno
         if proc is not None:
             try:
@@ -90,13 +127,13 @@ def parse_isolated(profile: str, data: bytes | str, timeout: float, *, base_url:
                     proc.kill()
             except Exception:  # noqa: BLE001, S110 — limpeza não substitui a causa local nem divulga mensagens
                 pass
-        cause = ("memoria" if isinstance(exc, MemoryError) else "importacao" if isinstance(exc, ImportError)
-                 else "tempo" if isinstance(exc, (TimeoutError, subprocess.TimeoutExpired)) else fase)
+        cause = ("memoria_excedida" if isinstance(exc, MemoryError) else "importacao" if isinstance(exc, ImportError)
+                 else "timeout" if isinstance(exc, (TimeoutError, subprocess.TimeoutExpired)) else fase)
         return _failure(profile, cause)
     try:
         return document_from_dict(json.loads(output))
     except Exception as exc:  # noqa: BLE001 — protocolo de saída inválido ou memória local
-        return _failure(profile, "memoria" if isinstance(exc, MemoryError) else "protocolo")
+        return _failure(profile, "memoria_excedida" if isinstance(exc, MemoryError) else "protocolo")
 
 
 def _bounded_io(proc, raw: bytes, timeout: float):
@@ -157,7 +194,7 @@ def _bounded_io(proc, raw: bytes, timeout: float):
     try:
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        kill("tempo")
+        kill("timeout")
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
@@ -264,7 +301,9 @@ def texto_pdf_isolado(body: bytes, timeout: float = 60.0) -> str:
 
     doc = parse_isolated("pdf_texto", body, timeout)
     if doc.quarantined:
-        raise Unavailable("pdf_nao_processado")
+        # Só o detalhe de _failure (códigos tipados) entra no motivo; quarentena do parser não traz texto.
+        detalhe = next((i.detail for i in doc.issues if i.code == "TRUNCATED"), "") if doc.parser_version == "0" else ""
+        raise Unavailable(f"pdf_nao_processado: {detalhe}" if detalhe else "pdf_nao_processado")
     return doc.text
 
 
@@ -282,7 +321,7 @@ def _main() -> None:
         from freoa_verifica.parsers.camara_legin import parse_camara_legin
         from freoa_verifica.parsers.camara_anexo import parse_camara_anexo
     except ImportError:
-        sys.exit(77)
+        sys.exit(EXIT_IMPORTACAO)
     parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto, parse_camara_legin, parse_camara_anexo)))
     try:
         body = sys.stdin.buffer.read()
@@ -295,18 +334,31 @@ def _main() -> None:
             document = parsers[sys.argv[1]](body)
     except MemoryError:
         sys.stderr.write("memoria_excedida\n")
-        sys.exit(3)
+        sys.exit(EXIT_MEMORIA)
     except Exception as exc:  # noqa: BLE001 — o pai transforma em quarentena
         from lxml.etree import ParserError
         from pypdf.errors import PdfReadError
+        codigos = {"pdf_paginas_excedidas", "pdf_folha_sem_extracao", "pdf_texto_excedido", "pdf_sem_biblioteca"}
+        # ValueError(código) dos parsers comuns; Unavailable("código: contagem") do cvm_pdf. Só o prefixo
+        # de lista fechada sai do filho.
+        motivo = str(exc) if isinstance(exc, ValueError) else getattr(exc, "reason", None)
+        prefixo = motivo.partition(":")[0].strip() if isinstance(motivo, str) else None
+        codigo_pdf = prefixo if prefixo in codigos else None
         if (sys.argv[1] in {"camara_legin", "camara_anexo"}
                 and (isinstance(exc, (ParserError, PdfReadError))
-                     or isinstance(exc, ValueError) and str(exc) in {
-                         "pdf_paginas_excedidas", "pdf_folha_sem_extracao", "pdf_texto_excedido"})):
+                     or isinstance(exc, ValueError) and str(exc) in codigos)):
             document = ParsedDocument(sys.argv[1], "conteudo-invalido", "", None, "", issues=[
                 Issue("TRUNCATED", None, type(exc).__name__, "document")])
+        elif codigo_pdf:
+            sys.stderr.write(codigo_pdf + "\n")  # código da lista fechada, nunca a mensagem da exceção
+            sys.exit(EXIT_TIPADO)
+        elif isinstance(exc, OSError):
+            # Ex.: criação de descendente negada (NPROC/Job Object). Só o nome do tipo, de lista fechada.
+            nome = type(exc).__name__ if type(exc).__name__ in {"BlockingIOError", "PermissionError"} else "OSError"
+            sys.stderr.write(f"erro_so:{nome}\n")
+            sys.exit(EXIT_TIPADO)
         else:
-            sys.exit(4)
+            sys.exit(EXIT_GENERICO)
     sys.stdout.buffer.write(json.dumps(asdict(document), ensure_ascii=False).encode("utf-8"))
 
 if __name__ == "__main__":

@@ -318,15 +318,17 @@ class CamaraLeginConnector(Connector):
                           "origem_sha256": source.sha256, "href": href, "rotulo": label})
             cursor = source.final_url
 
-    def validar_conjunto(self):
+    def validar_conjunto(self, *, validadas=None):
         """Preflight único da unidade inteira, antes da primeira escrita material.
 
         Robots é evidência administrativa isolada, nunca ancestral normativo.
         Página órfã no acumulador é erro; nenhuma página é descartada aqui.
+        `validadas` só pode vir da mesma operação síncrona (releitura); hash, status e instante são
+        reconferidos em toda resposta mesmo quando a assinatura já consta.
         """
         if self.falhas_descoberta:
             raise self.falhas_descoberta[0]
-        validadas = set()
+        validadas = set() if validadas is None else validadas
         for url, resp in self.paginas.items():
             self._validar_response(resp, url, validadas=validadas)
             _exigir_instante(resp)
