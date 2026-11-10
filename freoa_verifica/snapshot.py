@@ -662,7 +662,7 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
                         raise ValueError("conflito_identidade_captura")
                     if table == "capture" and any(
                             c in existing.keys() and existing[c] != values[c] for c in _RECIBO_INTEGRAL
-                            if c in values):
+                            if c in values and not (c == "content_type" and None in (existing[c], values[c]))):
                         # Conferência 3: a mesclagem não encobre recibo divergente da mesma
                         # obtenção; recusa antes do preflight e da publicação.
                         raise ValueError("conflito_recibo_captura")
@@ -670,6 +670,10 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
                         table_map[old_id] = existing["id"]
                     continue
                 colunas = columns
+                if table == "capture" and conn.execute("SELECT 1 FROM main.capture WHERE id=?",
+                                                       (values["id"],)).fetchone():
+                    # Conferência 4: mesma identidade com outra tripla não é ignorada em silêncio.
+                    raise ValueError("conflito_identidade_captura")
                 if table == "capture":
                     # C6: captura incorporada pelo snapshot (inclusive em acervo misto) é `snapshot`; a tabela é
                     # imutável (trigger), então a marca vai no INSERT. As capturas locais mantêm a sua.

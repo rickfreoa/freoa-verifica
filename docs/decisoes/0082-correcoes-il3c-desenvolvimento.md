@@ -106,7 +106,13 @@ registro de arestas, o preflight, a releitura e a validação do acervo recusam
 a releitura autentica e confere todas as linhas da URL/hash de cada ancestral;
 (iv) a mesclagem da instalação de snapshot recusa `conflito_recibo_captura` quando
 o recibo recebido da mesma tripla (sha256, URL, instante) diverge do local, antes
-do preflight e da publicação.
+do preflight e da publicação, e recusa `conflito_identidade_captura` quando um
+recibo recebido colide pela identidade com outra tripla, em vez de ignorá-lo; a
+comparação de `content_type` é dispensada só quando um dos lados é nulo (snapshot
+anterior à migração 014); (v) `repo.save_capture` da Câmara não reaproveita
+obtenção da mesma tripla com recibo divergente (recibo legado inválido não absorve
+o novo) e o materializador comum não grava recibo genérico para a Câmara: o modelo
+vincula-se à captura real gravada pelo indexador após o preflight.
 
 Questões abertas registradas, não bloqueadoras segundo o passe final: a releitura
 de modelos legados recusa toda a releitura Câmara se houver captura normativa

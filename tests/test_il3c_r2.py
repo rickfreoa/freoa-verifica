@@ -732,3 +732,57 @@ def test_conf3_mesclagem_do_snapshot_nao_encobre_recibo_divergente(tmp_path, col
     snapshot._merge_attach(bases['vivo'], bases['igual'])  # controle: mesma obtenção, mesmo recibo
     with pytest.raises(ValueError, match='conflito_recibo_captura'):
         snapshot._merge_attach(bases['vivo'], bases['divergente'])
+
+
+def _bases_do_grafo(tmp_path, nomes):
+    import sqlite3
+    con = grafo()
+    with Verifica(home=tmp_path / 'h') as svc:
+        svc.indexar_obra(source_id=con.id, work_key=KEY, document=documento(con),
+                         body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
+        svc.conn.commit()
+        bases = {}
+        for nome in nomes:
+            bases[nome] = tmp_path / f'{nome}.sqlite3'
+            destino = sqlite3.connect(str(bases[nome]))
+            svc.conn.backup(destino)
+            destino.close()
+    return bases
+
+
+def _alterar_captura(base, sql, args):
+    import sqlite3
+    alterar = sqlite3.connect(str(base))
+    for (gatilho,) in alterar.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='capture'"):
+        alterar.execute(f'DROP TRIGGER "{gatilho}"')
+    alterar.execute(sql, args)
+    alterar.commit()
+    alterar.close()
+
+
+def test_conf4_mesclagem_recusa_colisao_de_identidade(tmp_path):
+    from freoa_verifica import snapshot
+    bases = _bases_do_grafo(tmp_path, ('vivo', 'colisao'))
+    _alterar_captura(bases['colisao'], 'UPDATE capture SET fetched_at=? WHERE url=?', ('nao-data', ATUAL))
+    with pytest.raises(ValueError, match='conflito_identidade_captura'):
+        snapshot._merge_attach(bases['vivo'], bases['colisao'])
+
+
+def test_conf4_mesclagem_tolera_content_type_ausente_do_snapshot_anterior(tmp_path):
+    from freoa_verifica import snapshot
+    bases = _bases_do_grafo(tmp_path, ('vivo', 'anterior'))
+    _alterar_captura(bases['anterior'], 'UPDATE capture SET content_type=NULL', ())
+    snapshot._merge_attach(bases['vivo'], bases['anterior'])
+
+
+@pytest.mark.parametrize('campo,valor', [('mime', 'application/octet-stream'), ('status', 403)])
+def test_conf4_recibo_local_divergente_da_mesma_tripla_nao_absorve_o_novo(tmp_path, campo, valor):
+    con = grafo()
+    with Verifica(home=tmp_path / 'h') as svc:
+        svc.conn.execute("INSERT OR IGNORE INTO source(id, authority, profile, hosts_json) VALUES (?,?,?,?)",
+                         (con.id, con.authority, con.id, json.dumps(sorted(con.hosts))))
+        repo.save_capture(svc.conn, replace(con.paginas[ATUAL], **{campo: valor}), 'camara_legin', home=svc.home)
+        with pytest.raises(repo.IdentityConflict):
+            svc.indexar_obra(source_id=con.id, work_key=KEY, document=documento(con),
+                             body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
+        assert svc.conn.execute('SELECT count(*) FROM parsed_document').fetchone()[0] == 0
