@@ -117,7 +117,11 @@ vincula-se à captura real gravada pelo indexador após o preflight; a comparaç
 de recibos da Câmara em `save_capture` é estrita, inclusive no `content_type`
 nulo; (vi) a reconstrução de resposta a partir do recibo não preenche
 `content_type` nulo com o MIME, de modo que o Content-Type original dos headers
-continua sujeito à conferência.
+continua sujeito à conferência; (vii) o recibo comparado é o inteiro: na
+mesclagem, para a Câmara, todas as colunas da captura exceto identidade e
+procedência da cópia; em `save_capture`, também `outcome`, `codificacao` e
+`origem_da_codificacao`; e a reconstrução confronta a decisão de interpretação
+gravada com a reproduzida a partir do recibo (`interpretacao_divergente`).
 
 Questões abertas registradas, não bloqueadoras segundo o passe final: a releitura
 de modelos legados recusa toda a releitura Câmara se houver captura normativa

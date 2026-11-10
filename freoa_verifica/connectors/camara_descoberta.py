@@ -21,9 +21,18 @@ def resposta_capturada(cap, home, *, blob_dir=None):
             or not isinstance(redirects, list) or not all(isinstance(v, str) for v in redirects)
             or cap["size"] != len(body)):
         raise Unavailable("resposta_camara_invalida")
-    return Response(cap["url"], cap["final_url"], cap["status"], headers, body,
+    resp = Response(cap["url"], cap["final_url"], cap["status"], headers, body,
                     cap["sha256"], cap["fetched_at"], redirects, cap["mime"], size=len(body),
                     content_type=cap["content_type"] or "")
+    # Conferência 6: a decisão de interpretação gravada é a reproduzida a partir do recibo.
+    colunas = set(cap.keys())  # dict ou sqlite3.Row (cujo `in` percorre valores, não chaves)
+    if colunas & {"codificacao", "origem_da_codificacao"}:
+        from freoa_verifica.store.repo import interpretacao_do_recibo
+        _, codificacao, origem = interpretacao_do_recibo(resp)
+        registrada = tuple(cap[c] if c in colunas else None for c in ("codificacao", "origem_da_codificacao"))
+        if registrada != (codificacao, origem):
+            raise Unavailable("interpretacao_divergente")
+    return resp
 
 
 def reconstruir(document, response, carregar):

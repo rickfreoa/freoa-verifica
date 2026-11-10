@@ -832,3 +832,37 @@ def test_conf4_recibo_local_divergente_da_mesma_tripla_nao_absorve_o_novo(tmp_pa
             svc.indexar_obra(source_id=con.id, work_key=KEY, document=documento(con),
                              body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
         assert svc.conn.execute('SELECT count(*) FROM parsed_document').fetchone()[0] == 0
+
+
+@pytest.mark.parametrize('campo,valor', [('codificacao', 'INVALID-CODEC'), ('origem_da_codificacao', 'INVALID-ORIGIN')])
+@pytest.mark.parametrize('lado', ['recebido', 'local'])
+def test_conf6_mesclagem_compara_decisao_de_interpretacao(tmp_path, campo, valor, lado):
+    from freoa_verifica import snapshot
+    bases = _bases_do_grafo(tmp_path, ('vivo', 'outro'))
+    _alterar_captura(bases['outro' if lado == 'recebido' else 'vivo'],
+                     f'UPDATE capture SET {campo}=? WHERE url=?', (valor, ATUAL))
+    with pytest.raises(ValueError, match='conflito_recibo_captura'):
+        snapshot._merge_attach(bases['vivo'], bases['outro'])
+
+
+@pytest.mark.parametrize('campo,valor', [('codificacao', 'INVALID-CODEC'), ('origem_da_codificacao', 'INVALID-ORIGIN')])
+def test_conf6_decisao_de_interpretacao_divergente_recusada(tmp_path, campo, valor):
+    # Indexação não absorve recibo local adulterado; acervo e releitura o recusam.
+    from freoa_verifica.connectors.camara_descoberta import validar_acervo
+    con = grafo()
+    with Verifica(home=tmp_path / 'h') as svc:
+        rw = svc.indexar_obra(source_id=con.id, work_key=KEY, document=documento(con),
+                              body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
+        svc.conn.commit()
+        for (gatilho,) in svc.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='capture'").fetchall():
+            svc.conn.execute(f'DROP TRIGGER "{gatilho}"')
+        svc.conn.execute(f'UPDATE capture SET {campo}=? WHERE url=?', (valor, ATUAL))
+        svc.conn.commit()
+        with pytest.raises(Unavailable) as error:
+            validar_acervo(svc.conn, svc.home)
+        assert error.value.reason == 'interpretacao_divergente'
+        with pytest.raises(SourceUnavailable):
+            svc._revalidar_camara(rw)
+        with pytest.raises((repo.IdentityConflict, Unavailable)):
+            repo.save_capture(svc.conn, con.paginas[ATUAL], 'camara_legin', home=svc.home)
