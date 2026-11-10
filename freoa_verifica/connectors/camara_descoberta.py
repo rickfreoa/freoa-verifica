@@ -6,7 +6,7 @@ import json
 import re
 
 from freoa_verifica.connectors.base import Unavailable
-from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
+from freoa_verifica.connectors.camara_legin import CamaraLeginConnector, _exigir_instante
 from freoa_verifica.connectors.camara_policy import validar_url
 from freoa_verifica.transport import Response
 
@@ -93,6 +93,7 @@ def validar_acervo(conn, home, *, blob_dir=None):
     for cap in rows:
         page = resposta_capturada(cap, home, blob_dir=blob_dir)
         responses._validar_response(page, page.url, validadas=checked)
+        _exigir_instante(page)  # cada recibo, antes da redução por URL/hash (conferência)
     by_key = {(r["url"], r["sha256"]): r for r in rows}
     covered = set()
 

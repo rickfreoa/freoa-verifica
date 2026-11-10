@@ -644,3 +644,25 @@ def test_n3_instante_invalido_recusado_antes_de_gravar(tmp_path, instante):
     with pytest.raises(Unavailable) as error:
         con.validar_conjunto()
     assert error.value.reason == 'instante_captura_invalido'
+
+
+@pytest.mark.parametrize('instante', ['', 'nao-data'])
+@pytest.mark.parametrize('ordem', ['por_ultimo', 'entre_validos'])
+def test_conf_snapshot_recusa_recibo_sem_instante_encoberto(tmp_path, instante, ordem):
+    # Conferência do passe final: recibo inválido da mesma URL/hash não fica
+    # encoberto por outro válido na validação do acervo (exportação e instalação).
+    from freoa_verifica.connectors.camara_descoberta import validar_acervo
+    con = grafo()
+    with Verifica(home=tmp_path / 'h') as svc:
+        svc.indexar_obra(source_id=con.id, work_key=KEY, document=documento(con),
+                         body=con.paginas[ATUAL].body, url=ATUAL, descoberta_camara=con)
+        validar_acervo(svc.conn, svc.home)  # controle positivo
+        repo.save_capture(svc.conn, replace(con.paginas[ATUAL], fetched_at=instante),
+                          'camara_legin', home=svc.home)
+        if ordem == 'entre_validos':
+            repo.save_capture(svc.conn, replace(con.paginas[ATUAL], fetched_at='2026-11-09T00:00:00+00:00'),
+                              'camara_legin', home=svc.home)
+        svc.conn.commit()
+        with pytest.raises(Unavailable) as error:
+            validar_acervo(svc.conn, svc.home)
+        assert error.value.reason == 'instante_captura_invalido'
