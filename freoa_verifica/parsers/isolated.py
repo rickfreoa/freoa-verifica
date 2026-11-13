@@ -37,9 +37,11 @@ _CAUSA_POR_EXIT = {EXIT_MEMORIA: "memoria_excedida", LIMIT_INSTALL_EXIT: "limite
 def _causa_do_filho(returncode: int, stderr: bytes) -> tuple[str, str | None]:
     """(causa, tipo) a partir de código declarado e coerente com o exit; nunca texto livre."""
     linhas = bytes(stderr).strip().splitlines()
-    ultima = linhas[-1].strip().decode("ascii", "replace") if linhas else ""
-    if ultima in _CODIGOS_FILHO.get(returncode, ()):
-        causa, _, tipo = ultima.partition(":")
+    ultima = linhas[-1].strip() if linhas else b""
+    # Comparação em bytes contra a lista fechada: o stderr do filho nunca é decodificado.
+    declarados = {c.encode("ascii"): c for c in _CODIGOS_FILHO.get(returncode, ())}
+    if ultima in declarados:
+        causa, _, tipo = declarados[ultima].partition(":")
         return causa, tipo or None
     return _CAUSA_POR_EXIT.get(returncode, "exit_nao_zero"), None
 
