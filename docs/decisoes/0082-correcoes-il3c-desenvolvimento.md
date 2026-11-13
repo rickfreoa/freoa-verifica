@@ -260,8 +260,9 @@ os códigos admitidos para aquele exit, sem decode (garantia estrutural 3).
 
 **Passe final sob a 0083.** O auditor demonstrou que a premissa do §3 da 0083 não
 vale em todas as rotas: `--aceitar-nao-vinculado` (URL, arquivo e diretório
-locais) e o instalador com `-SemAttestation` levam pacote sem vínculo até
-`_merge_attach`, e a release automática não exige attestation. Com isso B2
+locais) leva pacote sem vínculo até `_merge_attach`; o instalador com
+`-SemAttestation` dispensa a attestation do wheel, mas continua exigindo snapshot
+vinculado; e a release automática não exige attestation. Com isso B2
 voltava a bloquear. Correção por classe, em vez de restringir as rotas: logo
 depois do `ATTACH`, `_merge_attach` executa `PRAGMA snap.foreign_key_check` sobre
 o pacote recebido, isoladamente, e recusa com `snapshot_relacoes_invalidas`
@@ -272,3 +273,9 @@ correção). O snapshot oficial da 1.4.0a2 e o candidato da release não têm
 violação relacional. B1 segue pendência de endurecimento (0083); a exigência de
 attestation em todas as rotas e o staging antes da conferência de digest ficam
 como pendências de endurecimento, sem efeito sobre B2 depois desta correção.
+A conferência do auditor (13/11/2026, sem bloqueador, 27 mutantes de FK
+recusados) registrou um resíduo semântico, também pendência: `capture.edition_id`
+apontando para edição existente de outra obra passa na conferência relacional e é
+encoberto pela captura local da mesma identidade natural (`edition_id` segue fora
+da comparação). Sem `verified` indevido demonstrado nem resposta do transporte que
+o produza; recorte da 0083.
