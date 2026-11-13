@@ -23,7 +23,7 @@ Relatório `apura-dev.json`, SHA-256 `8b82fec3a609cfabb3bf78e532bc4d1031d7c48e9f
 | (d) | 9 | 0 | 0 | 18/18 | 0,006 |
 | (e) | 10 | 0 | 0 | 22/22 | 1,33 |
 
-Item eliminatório: **zero confirmações indevidas** (eram 24 na apuração de 09/11, todas pelo rótulo ausente, D0). Nenhuma capacidade atinge o piso. Causas dominantes: `unknown` (abstenção) nas normas obtidas cujo dispositivo não se identifica sem ambiguidade (D4: CC e Lei 13.874) ou cuja redação em D não tem fundamento; `indisponivel` onde a rota não tem material; (d) sem anexos (C13); (b) acusa ainda truncamento em norma grande.
+Item eliminatório: **zero confirmações indevidas** (eram 24 na apuração de 09/11, todas pelo rótulo ausente, D0). Nenhuma capacidade atinge o piso. Causas dominantes: `unknown` (abstenção) nas normas obtidas cujo dispositivo não se identifica sem ambiguidade (D4: CC e Lei 13.874) ou cuja redação em D não tem fundamento; `indisponivel` onde a rota não tem material; (d) sem anexos (C13). O motivo "truncamento em caso de norma grande" de (b) (7/10 sem truncamento) não indica texto truncado: o executor exige `truncado: false` em todo caso de norma grande, e os três casos que faltam são abstenções (`unknown`/`indisponivel`), cuja resposta não traz o campo.
 
 ## 4. Consequência
 

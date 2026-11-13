@@ -78,7 +78,7 @@ Versões oficiais por data, cadeia de atos alteradores e `sem_versao_oficial_na_
 
 ## 6. Numeração das pré-releases
 
-IL.0 e esta correção saem em pré-release própria, 1.4.0a2 (emenda, seção 5, IL.0). O IL qualificado pela Porta L sai em 1.4.0a3; o STJ, em 1.4.0a4. A 1.4.0 estável continua IL + STJ. Número de versão não é rótulo de substituição.
+IL.0 e esta correção saem em pré-release própria, 1.4.0a2 (emenda, seção 5, IL.0). O IL qualificado pela Porta L sai em 1.4.0a3; o STJ, em 1.4.0a4. A 1.4.0 estável continua IL + STJ. Número de versão não é rótulo de substituição. (Superveniente: a decisão 0084 publicou as correções IL.1 a IL.3-c como 1.4.0a3 sem a Porta L; o IL qualificado passa à primeira pré-release posterior que a aprovar, e o STJ à seguinte.)
 
 ## 7. Histórico
 
