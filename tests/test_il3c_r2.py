@@ -867,3 +867,24 @@ def test_conf6_decisao_de_interpretacao_divergente_recusada(tmp_path, campo, val
             svc._revalidar_camara(rw)
         with pytest.raises((repo.IdentityConflict, Unavailable)):
             repo.save_capture(svc.conn, con.paginas[ATUAL], 'camara_legin', home=svc.home)
+
+
+@pytest.mark.parametrize('tabela,sql', [
+    ('capture', 'UPDATE capture SET edition_id=? WHERE url=?'),
+])
+def test_pf83_mesclagem_recusa_referencia_invalida_no_recebido(tmp_path, tabela, sql):
+    # Passe final 0083 (B2): edition_id inexistente no pacote recebido é recusado antes
+    # da redução que reaproveitaria a captura local da mesma identidade natural.
+    import sqlite3
+    from freoa_verifica import snapshot
+    bases = _bases_do_grafo(tmp_path, ('vivo', 'orfa', 'igual'))
+    _alterar_captura(bases['orfa'], sql, ('SYNTHETIC_MISSING_EDITION', ATUAL))
+    antes = sqlite3.connect(str(bases['vivo']))
+    estado = list(antes.iterdump())
+    antes.close()
+    with pytest.raises(ValueError, match='snapshot_relacoes_invalidas'):
+        snapshot._merge_attach(bases['vivo'], bases['orfa'])
+    depois = sqlite3.connect(str(bases['vivo']))
+    assert list(depois.iterdump()) == estado
+    depois.close()
+    snapshot._merge_attach(bases['vivo'], bases['igual'])  # controle: pacote íntegro mescla

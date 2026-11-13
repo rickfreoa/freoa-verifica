@@ -235,3 +235,40 @@ Sem ampliação do período do CTN (D5), sem leitura da reserva (D6), sem altera
 `C:\dev\fv-home-dev`, sem rede de produto e sem commit. O supervisor deve incluir
 também `docs/auditoria/1.4.0/il3c-desenvolvimento.md` no primeiro commit. Resultados
 finais da rodada R2 e limites de execução constam de `C:\dev\tmp\relatorio-il3c-impl-r2.md`.
+
+## Adendo (13/11/2026): r4, r4b e passe final sob a 0083
+
+**r4 (`feb65d4`).** A sanitização da r2 achatara as causas do parser isolado e dos
+conectores. As causas locais voltam a ser códigos de lista fechada
+(`CAUSAS_PARSER`, `freoa_verifica/connectors/base.py`); código desconhecido vira
+`protocolo`. `Issue.detail` tem o formato `causa=…[;tipo=…][;exit=…]`, sem texto
+livre do filho; a menção anterior a "JSON tipificado" e a enumeração de seis
+causas ficam substituídas por esta. Falha local continua indisponibilidade ou
+quarentena, separada de conteúdo inválido. `descendants_denied` conserva o tipo
+(`erro_so:OSError`, `BlockingIOError` ou `PermissionError`) em `Issue.detail`; a
+fronteira `Unavailable` preserva causa e exit, sem o campo `tipo`. O preflight
+precede a identidade: conjunto inválido produz indisponibilidade e não sustenta
+`not_found`. Desempenho: a releitura Câmara reaproveita a conferência de cada par
+URL/hash só dentro da operação síncrona externa (`threading.local()` por
+instância, criado na operação e descartado em `finally`); hash, URL, status,
+redirecionamentos e instante são conferidos antes do reaproveitamento, e MIME,
+Content-Type, tamanho, interpretação legada e headers compõem a assinatura.
+Nenhuma aprovação persistente.
+
+**r4b (`e771b05`).** A última linha do stderr do filho é comparada em bytes contra
+os códigos admitidos para aquele exit, sem decode (garantia estrutural 3).
+
+**Passe final sob a 0083.** O auditor demonstrou que a premissa do §3 da 0083 não
+vale em todas as rotas: `--aceitar-nao-vinculado` (URL, arquivo e diretório
+locais) e o instalador com `-SemAttestation` levam pacote sem vínculo até
+`_merge_attach`, e a release automática não exige attestation. Com isso B2
+voltava a bloquear. Correção por classe, em vez de restringir as rotas: logo
+depois do `ATTACH`, `_merge_attach` executa `PRAGMA snap.foreign_key_check` sobre
+o pacote recebido, isoladamente, e recusa com `snapshot_relacoes_invalidas`
+qualquer referência inválida antes de remapear, reaproveitar ou ignorar linhas.
+O banco local fica intacto. Regressão causal
+`test_pf83_mesclagem_recusa_referencia_invalida_no_recebido` (falha sem a
+correção). O snapshot oficial da 1.4.0a2 e o candidato da release não têm
+violação relacional. B1 segue pendência de endurecimento (0083); a exigência de
+attestation em todas as rotas e o staging antes da conferência de digest ficam
+como pendências de endurecimento, sem efeito sobre B2 depois desta correção.

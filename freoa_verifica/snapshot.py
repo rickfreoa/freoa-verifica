@@ -637,6 +637,10 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
     divergentes: list = []
     try:
         conn.execute("ATTACH DATABASE ? AS snap", (str(snap_db),))
+        # Passe final 0083 (B2): o recebido é conferido isoladamente antes de qualquer redução;
+        # referência inválida no pacote (ex.: edition_id inexistente) não é encoberta pela mesclagem.
+        if conn.execute("PRAGMA snap.foreign_key_check").fetchone():
+            raise ValueError("snapshot_relacoes_invalidas")
         local_dv = derivados.versao(conn)
         snap_dv = _versao_derivados(conn, "snap")
         # C6: snapshot de derivados mais novos substitui os modelos locais.
