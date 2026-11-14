@@ -282,13 +282,31 @@ def origem_camara(rw: ResolvedWork) -> bool:
     return rw.source_id == "camara_legin" or str(getattr(rw.document, "profile", "")).startswith("camara")
 
 
+def origem_normas_leg(rw: ResolvedWork) -> bool:
+    """Procedência normas.leg.br por QUALQUER sinal (0085 §3.3): rótulo, perfil, metadados do conector ou host.
+
+    Basta um: trocar `source_id` e `profile` não promove a `verified` texto obtido por esta rota.
+    """
+    from urllib.parse import urlsplit
+    doc = rw.document
+    if rw.source_id == "normas_leg" or getattr(doc, "profile", None) == "normas_leg":
+        return True
+    if any(getattr(b, "kind", None) == "normas_leg_metadados" for b in (getattr(doc, "editorial_blocks", None) or [])):
+        return True
+    try:
+        host = (urlsplit(rw.url or "").hostname or "").lower()
+    except ValueError:
+        return True  # URL ilegível: não se presume procedência confirmável
+    return host == "normas.leg.br" or host.endswith(".normas.leg.br")
+
+
 def campos_evidencia_obra(rw: ResolvedWork, acervo_ate: str | None) -> dict[str, Any]:
     atribuicao = rw.atribuicao
     if atribuicao is None and origem_camara(rw):  # obra montada fora do serviço: home padrão, autoria declarada
         from freoa_verifica.connectors.camara_atribuicao import atribuicao as montar, autoria_declarada
         atribuicao = montar(None, autoria_declarada(getattr(rw.document, "text", None)), sha256=rw.sha256, url=rw.url)
     extra = {}
-    if rw.source_id == "normas_leg" or rw.document.profile == "normas_leg":
+    if origem_normas_leg(rw):
         from freoa_verifica.connectors.normas_leg import ATRIBUICAO
         meta = next((json.loads(b.text) for b in rw.document.editorial_blocks
                      if b.kind == "normas_leg_metadados"), {})
@@ -717,8 +735,7 @@ def verificar(
             support=support, citation=cite,
         ))
     from freoa_verifica.qualificacao import rota_aprovada
-    if ((rw.source_id == "normas_leg" or rw.document.profile == "normas_leg")
-            and not rota_aprovada("normas_leg", "normas_leg")):
+    if origem_normas_leg(rw) and not rota_aprovada("normas_leg", "normas_leg"):
         # 0085 §3.3: material parcial, sem confirmação, inclusive na API Python sem serviço.
         evidence = _ev_from_resolved(rw, cite.path, None)
         provision = _find_provision(rw.document, cite.path) if cite.path else None

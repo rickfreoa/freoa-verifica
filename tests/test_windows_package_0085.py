@@ -1,4 +1,5 @@
 ﻿"""0085 §4: virtualização do home; fixtures sintéticas por construção, sem instalação."""
+import sys
 from pathlib import Path
 
 import pytest
@@ -37,9 +38,21 @@ def test_doctor_home_alerta(tmp_path, monkeypatch):
 def test_instalador_detecta_e_relanca_antes_de_gravar_home():
     text = (Path(__file__).resolve().parents[1] / "scripts/instalar-freoa-verifica.ps1").read_text(encoding="utf-8-sig")
     assert '[DllImport("kernel32.dll"' in text and "GetCurrentPackageFullName" in text and "15700" in text
-    assert "[switch]$PermitirVirtualizado" in text
+    assert "PermitirVirtualizado" not in text  # auditoria 0085, I4: sem desvio da detecção
     assert "Invoke-CimMethod -ClassName Win32_Process -MethodName Create" in text
     assert text.index("Test-CurrentPackage") < text.index('$etapa = "preparar"')
     assert "-Versao '$versionLiteral'$attArg" in text and "-SemAttestation" in text
     assert "exit $code" in text and "exit 1" in text and "Use o terminal comum" in text
     assert "Get-Content -LiteralPath $log" in text and "ProcessId" in text
+
+
+@pytest.mark.repositorio
+@pytest.mark.skipif(sys.platform != "win32", reason="parser do Windows PowerShell")
+def test_instalador_sem_erro_de_sintaxe_no_powershell():
+    import subprocess
+    script = Path(__file__).resolve().parents[1] / "scripts/instalar-freoa-verifica.ps1"
+    comando = ("$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile("
+               f"'{script}', [ref]$null, [ref]$e); $e.Count")
+    p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", comando],
+                       capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0 and p.stdout.strip() == "0", p.stdout + p.stderr

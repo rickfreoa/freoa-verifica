@@ -91,7 +91,26 @@ sob `%LOCALAPPDATA%\Packages\`.
    reinicia a numeração). A rota captura o documento, mas não devolve trecho de documento em
    quarentena. A quarentena não é afrouxada para servir extração; a correção é do parser.
 
-## 6. Verificação ao vivo (14/11/2026, home temporário)
+## 6. Ordem das fontes e correções da auditoria (14/11/2026)
+
+1. Obra federal: Câmara primeiro; `normas_leg` só depois, e só quando a Câmara responde
+   ausência explícita ou motivo de alcance (`ativacao_ao_vivo_pendente`,
+   `especie_busca_nao_demonstrada`). Falha de integridade ou barreira da Câmara não é encoberta
+   (0058, com esta restrição). A primeira implementação punha `normas_leg` no lugar da Câmara:
+   5.127 erros na suíte local e o CI reprovado em todas as combinações; corrigido.
+2. B1: a trava `rota_nao_qualificada` reconhece a procedência por qualquer sinal (`source_id`,
+   perfil, bloco `normas_leg_metadados` ou host `normas.leg.br`); trocar rótulos não promove a
+   `verified`. Regressão com os bytes reais da LC 118.
+3. B2 (BCB): página toda filtrada com resultados não examinados é
+   `unavailable(resposta_parcial_sem_correspondencia)`, não ausência; o candidato sintético
+   continua restrito a ausência explícita.
+4. I3: seleção por `normas_leg` com `versao="vigente"` aceita só `Current` (ou `Original` quando a
+   norma não tem compilação).
+5. I4: removido `-PermitirVirtualizado` do instalador; teste de sintaxe do script no PowerShell.
+6. I5: recibos formais das sondas dos dois scripts e dos metadados em
+   `docs/auditoria/1.4.0/normas-leg-sondas/`, com os trechos e offsets.
+
+## 7. Verificação ao vivo (14/11/2026, home temporário)
 
 `doctor` da fonte: positivo `ok`, negativo `zero`, documento `ok` (LC 118, `Original`).
 `verifica`: art. 1º da MP 2.158-35/2001 e art. 3º da LC 118/2005 devolvem

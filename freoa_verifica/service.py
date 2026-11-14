@@ -102,6 +102,9 @@ from freoa_verifica.politica_captura import (  # noqa: E402
     LEGIS_NOVA_CAPTURA as _LEGIS_NOVA_CAPTURA,
     exigir_nova_captura,
 )
+# Motivos da Câmara que indicam norma fora do alcance da rota, não falha dela (0085): só estes
+# autorizam a consulta seguinte a normas_leg.
+_CAMARA_FORA_DE_ALCANCE = frozenset({"ativacao_ao_vivo_pendente", "especie_busca_nao_demonstrada"})
 # Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
 _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
 
@@ -1220,7 +1223,9 @@ class Verifica:
         elif work.authority in {"bcb", "cmn"}:
             order = ["bcb"]
         elif work.authority == "federal":
-            order = [fonte] if fonte else (["camara_legin"] if versao != "vigente" else ["normas_leg"])
+            # 0085: normas_leg é rota adicional, depois da Câmara (0058: fonte oficial distinta,
+            # declarada em fontes_consultadas); nunca a substitui.
+            order = [fonte] if fonte else ["camara_legin", "normas_leg"]
         else:
             order = list(_LEGIS_CONNECTORS)
 
@@ -1284,6 +1289,10 @@ class Verifica:
                 consultadas.append({"fonte": cid, "resultado": "indisponivel", "motivo": exc.reason,
                                     "categoria": exc.categoria,
                                     **({"evidencia_indisponibilidade": exc.evidencia} if exc.evidencia else {})})
+                if cid == "camara_legin" and exc.reason not in _CAMARA_FORA_DE_ALCANCE:
+                    # 0085: normas_leg só supre o que a rota da Câmara não alcança; falha de
+                    # integridade ou barreira da Câmara não é encoberta por outra rota.
+                    break
             except Exception as exc:  # noqa: BLE001 — captura sob demanda
                 errors.append(f"{cid}:{type(exc).__name__}")
                 consultadas.append({"fonte": cid, "resultado": "erro", "motivo": type(exc).__name__,
@@ -1301,7 +1310,14 @@ class Verifica:
             if isinstance(local, ResolvedWork) and local.source_id == "normas_leg":
                 meta = next((json.loads(b.text) for b in local.document.editorial_blocks
                              if b.kind == "normas_leg_metadados"), {})
-                if versao == "vigente" or meta.get("version") == "Original":
+                versoes = {e.get("version") for e in meta.get("encoding") or [] if isinstance(e, dict)}
+                if versao == "vigente":
+                    # Auditoria 0085, I3: vigente é a compilação; Original só quando não há Current.
+                    aceita = meta.get("version") == "Current" or (meta.get("version") == "Original"
+                                                                  and "Current" not in versoes)
+                else:
+                    aceita = meta.get("version") == "Original"
+                if aceita:
                     return local
             captured = self._capture_work(work, requested_work_date, versao=versao, fonte=fonte)
             if captured is None:

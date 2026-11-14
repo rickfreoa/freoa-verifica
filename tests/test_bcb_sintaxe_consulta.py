@@ -62,6 +62,25 @@ def test_tipo_e_numero_exatos_conferidos_no_cliente(monkeypatch):
     assert out.total == 1
 
 
+def test_pagina_filtrada_com_resto_nao_examinado_nao_e_ausencia(monkeypatch):
+    # Auditoria 0085, B2: TotalRows=40 e três linhas de outro tipo não autorizam o candidato sintético.
+    linhas = [_linha("Resolução BCB", "4966"), _linha("Comunicado", "4966"), _linha("Circular", "4966")]
+    corpo = json.dumps({"TotalRows": 40, "Rows": linhas}).encode()
+    monkeypatch.setattr(bcb, "connector_fetch", lambda url, **kw: _resp(url, corpo))
+    con = bcb.BcbConnector()
+    with pytest.raises(Unavailable) as exc:
+        con.search("", tipo="Resolução CMN", numero=4966, limite=3)
+    assert exc.value.reason == "resposta_parcial_sem_correspondencia"
+    with pytest.raises(Unavailable):
+        con.resolve({"tipo": "Resolução CMN", "numero": 4966})
+
+
+def test_pagina_filtrada_examinada_por_inteiro_e_ausencia(monkeypatch):
+    _captura(monkeypatch, [_linha("Resolução BCB", "4966"), _linha("Comunicado", "4966")])
+    out = bcb.BcbConnector().search("", tipo="Resolução CMN", numero=4966)
+    assert list(out) == []
+
+
 def test_resolucao_cmn_aceita_tipo_resolucao_anterior_a_2020(monkeypatch):
     _captura(monkeypatch, [_linha("Resolução", "2827"), _linha("Resolução BCB", "2827")])
     out = bcb.BcbConnector().search("", tipo="Resolução CMN", numero=2827)

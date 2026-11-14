@@ -98,3 +98,39 @@ def test_identidade_real_divergente_e_recusada(tmp_path):
                                                       mime="application/json")})
     with pytest.raises(Unavailable, match="resposta_inesperada"):
         con.search("", tipo="lei complementar", numero=119, ano=2005)
+
+
+@pytest.mark.parametrize("rotulos", [
+    {"source_id": "planalto", "profile": "planalto"},
+    {"source_id": "planalto", "profile": "planalto", "sem_bloco": True},
+    {"source_id": "senado", "profile": "camara_atualizado"},
+])
+def test_troca_de_rotulos_nao_promove_a_verified(tmp_path, rotulos):
+    # Auditoria 0085, B1: bytes reais da LC 118, rótulos trocados; a procedência (metadados ou host)
+    # mantém o gate fechado.
+    from dataclasses import replace
+
+    from freoa_verifica.aliases import WorkKey
+    from freoa_verifica.service import Verifica
+    from freoa_verifica.verify import MemoryResolver, verificar
+    urn = "urn:lex:br:federal:lei.complementar:2005;118"
+    con, _ = _conector(tmp_path, {
+        _api(urn): _real("normas_leg_meta_lc118", _api(urn), "application/json"),
+        BIN_LC118: _real("normas_leg_bin_lc118_original", BIN_LC118, "text/html"),
+    })
+    resp = con.fetch(con.search("Lei Complementar 118/2005")[0])
+    doc = con.parse(resp)
+    doc.profile = rotulos["profile"]
+    if rotulos.get("sem_bloco"):
+        doc.editorial_blocks = [b for b in doc.editorial_blocks if b.kind != "normas_leg_metadados"]
+    key = WorkKey("federal", "lei_complementar", "118", 2005)
+    with Verifica(home=tmp_path / "db") as svc:
+        rw = svc.indexar_obra(source_id=rotulos["source_id"], work_key=key, document=doc, body=resp.body,
+                              url=resp.url, fetched_at=resp.fetched_at, content_type="text/html; charset=utf-8")
+        rw = replace(rw, source_id=rotulos["source_id"]) if getattr(rw, "source_id", None) else rw
+        resolver = MemoryResolver()
+        resolver.add(rw)
+        trecho = doc.provision("art3").current_redaction().text
+        out = verificar("art. 3º da Lei Complementar 118/2005", trecho=trecho, resolver=resolver)
+    assert "verified" not in {out.identity.status, out.text.status, out.temporal.status}
+    assert out.text.reason_code == "rota_nao_qualificada"

@@ -2,8 +2,7 @@
 # A attestation é obrigatória; -SemAttestation pula a verificação e grava attestation_verificada: false.
 param(
     [string]$Versao = "1.4.0a3",
-    [switch]$SemAttestation,
-    [switch]$PermitirVirtualizado
+    [switch]$SemAttestation
 )
 $ErrorActionPreference = "Stop"
 
@@ -23,7 +22,8 @@ public static class FreoaPackageIdentity {
     return [FreoaPackageIdentity]::GetCurrentPackageFullName([ref]$length, $null) -ne 15700
 }
 
-if (-not $PermitirVirtualizado) {
+# Sem desvio: a 0085 §4 não prevê instalação deliberada no armazenamento virtualizado.
+& {
     try {
         if (Test-CurrentPackage) {
             if ($env:FV_INSTALL_RELAUNCHED) { throw "O processo relancado ainda esta em pacote MSIX" }

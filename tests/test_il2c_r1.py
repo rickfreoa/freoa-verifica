@@ -207,7 +207,9 @@ def test_f5_pendencia_bloqueia_antes_do_transporte(tmp_path, chamar, proibir_red
     with Verifica(home=tmp_path / "bloqueio") as svc:
         out = chamar(svc, "buscar_legislacao", q="Lei 6404/1976", fonte="camara_legin")
         assert out["fontes"]["camara_legin"]["motivo"] == "ativacao_ao_vivo_pendente"
-        out = chamar(svc, "obter_dispositivo", citacao="art. 1 da Lei 6404/1976")
+        # 0085: sem fonte, a pendência da Câmara autoriza normas_leg (0058); o objeto deste teste é o
+        # portão da Câmara, por isso a fonte é fixada.
+        out = chamar(svc, "obter_dispositivo", citacao="art. 1 da Lei 6404/1976", fonte="camara_legin")
         assert out["status"] == "indisponivel"
         assert "ativacao_ao_vivo_pendente" in out["motivo"]
     assert calls == [] and proibir_rede == []

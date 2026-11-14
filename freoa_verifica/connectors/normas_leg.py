@@ -35,7 +35,7 @@ BINARIO = re.compile(r"https://normas\.leg\.br/api/(?:public/)?binario/"
 
 
 def tipo_normalizado(value):
-    texto = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode().lower()
+    texto = "".join(c for c in unicodedata.normalize("NFKD", str(value)) if not unicodedata.combining(c)).lower()
     texto = re.sub(r"[ .-]+", "_", texto)
     return SIGLAS.get(texto, texto)
 
@@ -246,20 +246,26 @@ class NormasLegConnector(Connector):
         return doc
 
     def health(self):
+        # Três sondas explícitas, fora de laço (garantias estruturais: o controlador não engole falhas).
         probes = []
-        for name, key in (("positivo", {"tipo": "LEI", "numero": 6404, "ano": 1976}),
-                          ("negativo", {"tipo": "LEI", "numero": 999999, "ano": 2099}),
-                          ("documento", {"tipo": "LCP", "numero": 118, "ano": 2005})):
-            try:
-                cand = self.resolve(key)
-                if name == "documento" and cand:
-                    from dataclasses import replace
-                    resp = self.fetch(replace(cand, metadata={**cand.metadata, "versao": "Original"}))
-                    doc = self.parse(resp)
-                    probes.append(HealthProbe(name, "ok" if doc.provisions else "failed", "Original"))
-                else:
-                    status = ("zero" if cand is None else "failed") if name == "negativo" else ("ok" if cand else "failed")
-                    probes.append(HealthProbe(name, status))
-            except Unavailable as exc:
-                probes.append(HealthProbe(name, "unavailable", exc.reason))
+        try:
+            cand = self.resolve({"tipo": "LEI", "numero": 6404, "ano": 1976})
+            probes.append(HealthProbe("positivo", "ok" if cand else "failed"))
+        except Unavailable as exc:
+            probes.append(HealthProbe("positivo", "unavailable", exc.reason))
+        try:
+            cand = self.resolve({"tipo": "LEI", "numero": 999999, "ano": 2099})
+            probes.append(HealthProbe("negativo", "zero" if cand is None else "failed"))
+        except Unavailable as exc:
+            probes.append(HealthProbe("negativo", "unavailable", exc.reason))
+        try:
+            cand = self.resolve({"tipo": "LCP", "numero": 118, "ano": 2005})
+            if cand is None:
+                probes.append(HealthProbe("documento", "failed"))
+            else:
+                from dataclasses import replace
+                doc = self.parse(self.fetch(replace(cand, metadata={**cand.metadata, "versao": "Original"})))
+                probes.append(HealthProbe("documento", "ok" if doc.provisions else "failed", "Original"))
+        except Unavailable as exc:
+            probes.append(HealthProbe("documento", "unavailable", exc.reason))
         return HealthReport(self.id, tuple(probes), datetime.now(timezone.utc).isoformat())

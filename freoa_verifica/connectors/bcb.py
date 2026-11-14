@@ -229,7 +229,14 @@ class BcbConnector(Connector):
                     },
                 )
             )
-        out.total = max(total - descartadas, len(out))
+        examinadas_todas = startrow + len(rows) >= total
+        if descartadas and not out and not examinadas_todas:
+            # Página inteira de outro tipo/número com resultados ainda não examinados: não é ausência
+            # explícita e não autoriza o candidato sintético (zero falso; auditoria 0085, B2).
+            raise Unavailable("resposta_parcial_sem_correspondencia")
+        # Com filtragem local, só a contagem examinada por inteiro é exata; senão vale o total da fonte
+        # (cota superior), que mantém `truncado` e não inventa um número de correspondências.
+        out.total = len(out) if descartadas and examinadas_todas else max(total, len(out))
         return out
 
     def resolve(self, key: Any) -> Candidate | None:
