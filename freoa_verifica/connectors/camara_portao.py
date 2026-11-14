@@ -211,6 +211,9 @@ class Portao:
 
     def falha_local_de_interpretacao(self, exc: Unavailable) -> Unavailable:
         """Falha local do parser: terminal para o escopo, sem culpar o servidor."""
+        from freoa_verifica.connectors.base import LocalParserFailure, sanitizar_falha_parser
+        safe = sanitizar_falha_parser(LocalParserFailure("parser_nao_processado", None, exc.evidencia))
+        exc = Unavailable("falha_parser_camara", exc.categoria, safe.evidencia)
         self._escopo().terminal = _clonar(exc)
         return exc
 

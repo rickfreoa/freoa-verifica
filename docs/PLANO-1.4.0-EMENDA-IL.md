@@ -2,7 +2,7 @@
 
 Autor: Ricardo Peres Freoa | Stocche Forbes Advogados. Data: 2026-11-03. Debate: debate-20261103-verifica-freoa, ACEITO_UNANIMIDADE na rodada 3 (Codex, Antigravity, Cursor em modo ask com garantia reduzida).
 
-Nota de execução (supervisor, 03/11/2026): a numeração das pré-releases foi ajustada pela decisão 0075, item 6 (IL.0 em pré-release própria, 1.4.0a2; IL qualificado em 1.4.0a3; STJ em 1.4.0a4). O conteúdo e os gates não mudam.
+Nota de execução (supervisor, 03/11/2026): a numeração das pré-releases foi ajustada pela decisão 0075, item 6 (IL.0 em pré-release própria, 1.4.0a2; IL qualificado em 1.4.0a3; STJ em 1.4.0a4). O conteúdo e os gates não mudam. Nota superveniente (13/11/2026): pela decisão 0084, a 1.4.0a3 saiu com as correções IL.1 a IL.3-c sem a Porta L; o IL qualificado e o STJ deslocam-se para as pré-releases seguintes.
 
 ## 1. Tese
 

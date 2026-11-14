@@ -26,7 +26,7 @@ from freoa_verifica.connectors.camara_portao import Portao
 from freoa_verifica.connectors.guarda import da_chamada
 
 CHAVE_HMAC_MINIMA = 32  # bytes (256 bits)
-_PARAR_A_SESSAO = {"teto_de_sessao", "persistencia_local_falhou", "interpretacao_local_falhou"}
+_PARAR_A_SESSAO = {"teto_de_sessao", "persistencia_local_falhou", "interpretacao_local_falhou", "falha_parser_camara"}
 
 
 def _portao(home, transporte, relogio, *, exigir_ativacao: bool = False) -> Portao:
@@ -39,6 +39,8 @@ def _portao(home, transporte, relogio, *, exigir_ativacao: bool = False) -> Port
 
 def _saida(dados: dict, *, falha: Unavailable | None = None) -> dict:
     if falha:
+        from freoa_verifica.connectors.base import sanitizar_falha_parser
+        falha = sanitizar_falha_parser(falha)
         return {"resultado": "falha", "motivo": falha.reason, "categoria": falha.categoria,
                 "evidencia": falha.evidencia}
     return {"resultado": "ok", **dados}
@@ -46,6 +48,23 @@ def _saida(dados: dict, *, falha: Unavailable | None = None) -> dict:
 
 def _falha_local(exc: Exception) -> dict:
     return _saida({}, falha=Unavailable("persistencia_local_falhou", None, {"causa": type(exc).__name__}))
+
+
+def _causa(exc: Exception, fase: str) -> dict:
+    if isinstance(exc, Unavailable):
+        from freoa_verifica.connectors.base import LocalParserFailure, sanitizar_falha_parser
+        parser_local = isinstance(exc, LocalParserFailure)
+        exc = sanitizar_falha_parser(exc)
+        return {"fase": fase, "motivo": "falha_parser_camara" if parser_local else exc.reason, "categoria": exc.categoria,
+                "bloqueio": exc.evidencia.get("bloqueio"), "url": exc.evidencia.get("url"),
+                "evidencia": exc.evidencia}
+    return {"fase": fase, "motivo": (f"inventario_norma_nao_obtida:{type(exc).__name__}"
+                                     if fase == "obtencao" else "persistencia_local_falhou"),
+            "categoria": None, "bloqueio": None, "url": None, "evidencia": {"causa": type(exc).__name__}}
+
+
+def _interromper(causas: list[dict]) -> bool:
+    return any(c["motivo"] in _PARAR_A_SESSAO or c["bloqueio"] == "host_persistente" for c in causas)
 
 
 def ativar(home, *, etapa: str, revisao: Path | str | None = None, transporte=None, relogio=None) -> dict:
@@ -137,8 +156,8 @@ def _recursos_da_unidade(con, falha: dict | None) -> list[dict]:
                 motivo = "obtido"
             elif not r["admitido"]:
                 motivo = r["motivo"]
-            elif falha and falha.get("url") == r["url"]:
-                motivo = falha["motivo"]
+            elif falha and any(c.get("url") == r["url"] for c in falha["causas"]):
+                motivo = next(c["motivo"] for c in falha["causas"] if c.get("url") == r["url"])
             else:
                 motivo = "nao_obtido"
             recursos.append({"pagina_de_origem": pagina, "url": r["url"], "href": r["href"], "rotulo": r["rotulo"],
@@ -150,11 +169,14 @@ def _recursos_da_unidade(con, falha: dict | None) -> list[dict]:
 def _gravar_unidade(pasta: Path, con, portao, norma: dict, falha: dict | None) -> list[str]:
     """Grava o material da unidade, inclusive o parcial de uma unidade que falhou, e o inventário durável dela.
     Devolve os hashes das páginas gravadas. Falha de gravação levanta `EstadoIndisponivel` (controlada)."""
+    con.validar_conjunto()
+    # Robots pertence à evidência administrativa mantida pelo portão, não ao
+    # conjunto de corpos normativos exportados nesta pasta. O preflight acima
+    # também o confere se estiver acumulado; nenhuma página normativa é filtrada.
+    capturas_normativas = {url: resp for url, resp in con.paginas.items() if "/robots.txt" not in url}
     hashes = []
     paginas = []
-    for url, resp in list(con.paginas.items()):
-        if "/robots.txt" in url:
-            continue
+    for url, resp in capturas_normativas.items():
         origem = con.links.get(url)
         nome = hashlib.sha256(url.encode()).hexdigest()[:16]
         _escrever(pasta / f"{nome}.corpo", resp.body)
@@ -173,10 +195,43 @@ def _gravar_unidade(pasta: Path, con, portao, norma: dict, falha: dict | None) -
 
 def _zerar(con) -> None:
     """Acumuladores do conector zerados por norma: nada de uma unidade vaza para a seguinte."""
-    con.paginas.clear()
-    con.links.clear()
-    con.inventarios.clear()
-    con.politicas.clear()
+    con.zerar_descoberta()
+
+
+def _persistir_unidade(home, con, norma) -> None:
+    """Persiste os bytes já capturados e os modelos no mesmo home do portão.
+
+    Valida hash, resposta, identidade e descoberta antes de indexar. Não busca
+    novamente nem renova o instante; a evidência administrativa já é a do portão.
+    """
+    from freoa_verifica.aliases import WorkKey
+    from freoa_verifica.connectors.camara_policy import validar_url
+    from freoa_verifica.identity import validate_identity, declared_identity
+    from freoa_verifica.service import Verifica
+    from freoa_verifica.store import repo
+    from freoa_verifica.texto_resposta import content_type_do_response
+
+    key = WorkKey("federal", norma["kind"], norma["number"], norma["year"])
+    con.validar_conjunto()
+    if not con.paginas:
+        return
+    with Verifica(home=home) as svc:
+        svc.conn.execute("INSERT OR IGNORE INTO source(id, authority, profile, hosts_json) VALUES (?,?,?,?)",
+                         (con.id, con.authority, con.id, json.dumps(sorted(con.hosts))))
+        for resp in con.paginas.values():
+            repo.save_capture(svc.conn, resp, con.id, home=svc.home)
+        # Os bytes íntegros são evidência mesmo quando o parser falha depois.
+        # A captura parcial não vira modelo aprovado nem renova o instante.
+        for url, resp in con.paginas.items():
+            if validar_url(url)["recurso"] not in {"atualizado", "original"}:
+                continue
+            doc = con.parse(resp)
+            if validate_identity(key, doc) is None:
+                raise Unavailable("identidade_nao_confirmada")
+            svc.indexar_obra(source_id=con.id, work_key=key, document=doc,
+                             body=resp.body, url=resp.final_url, fetched_at=resp.fetched_at,
+                             work_date=declared_identity(doc)[1], label=doc.title,
+                             content_type=content_type_do_response(resp), descoberta_camara=con)
 
 
 def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
@@ -206,7 +261,7 @@ def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
     with da_chamada():  # a sessão do instrumento é uma guarda só: host que recusou não é consultado de novo
         for norma in normas:
             _zerar(con)
-            falha = None
+            causas = []
             try:
                 cand = con.resolve(norma)
                 con.fetch(cand)
@@ -214,32 +269,36 @@ def inventariar(home, normas_arquivo, destino, *, transporte=None, relogio=None,
                     con.fetch(type(cand)(cand.source_id, cand.key, cand.title, cand.url,
                                          metadata={"versao": "publicacao_original"}))
             except Unavailable as exc:
-                falha = {"motivo": exc.reason, "categoria": exc.categoria, "bloqueio": exc.evidencia.get("bloqueio"),
-                         "url": exc.evidencia.get("url")}
+                causas.append(_causa(exc, "obtencao"))
             except Exception as exc:  # noqa: BLE001  AmbiguousCandidates e afins: não obtido, nunca silencioso
-                falha = {"motivo": f"inventario_norma_nao_obtida:{type(exc).__name__}", "categoria": None,
-                         "bloqueio": None, "url": None}
+                causas.append(_causa(exc, "obtencao"))
+            try:
+                _persistir_unidade(home, con, norma)
+            except Unavailable as exc:
+                causas.append(_causa(exc, "persistencia_interpretacao"))
+            except Exception as exc:  # noqa: BLE001  banco/blob/modelo: falha local, terminal, sem caminhos na saída
+                causas.append(_causa(exc, "persistencia_interpretacao"))
+            falha = {**causas[0], "causas": list(causas)} if causas else None
             try:  # o material parcial e o inventário da unidade são gravados também quando ela falhou
                 hashes += _gravar_unidade(destino / f"{norma['kind']}-{norma['number']}-{norma['year']}",
                                           con, portao, norma, falha)
-            except OSError:
-                falhas.append({"motivo": "persistencia_local_falhou", "categoria": None, "bloqueio": None})
-                break
-            if falha is None:
+            except (OSError, Unavailable) as exc:
+                causas.append(_causa(exc, "inventario_duravel"))
+            if not causas:
                 obtidas += 1
                 continue
-            falhas.append(falha)
-            if falha["motivo"] in _PARAR_A_SESSAO or falha["bloqueio"] == "host_persistente":
+            falhas.extend(causas)
+            if _interromper(causas):
                 break
     if chave is not None:
         try:
             _escrever(destino / "compromisso.json", json.dumps(
                 {"hmac_sha256": compromisso_hmac(chave, sorted(set(hashes))), "n": len(set(hashes))}).encode("utf-8"))
-        except OSError:
-            falhas.append({"motivo": "persistencia_local_falhou", "categoria": None, "bloqueio": None})
+        except OSError as exc:
+            falhas.append(_causa(exc, "compromisso"))
     nao_obtidas = len(normas) - obtidas
     return {"resultado": "ok" if not nao_obtidas and not falhas else "parcial", "obtidas": obtidas,
-            "nao_obtidas": nao_obtidas, "falhas": [{"motivo": f["motivo"], "categoria": f["categoria"]} for f in falhas]}
+            "nao_obtidas": nao_obtidas, "falhas": falhas}
 
 
 def _despachar(args, transporte, relogio) -> dict:

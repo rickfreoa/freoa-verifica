@@ -28,7 +28,7 @@ def test_c9_selecao_coexiste_reinicio(acervo):
     assert original["status"] == "encontrada"
     assert current["versao"] == "vigente"
     assert current["texto"] is None
-    assert original["texto"].startswith("As publicações ordenadas pela presente Lei serão feitas no órgão oficial")
+    assert original["texto"].startswith("Art. 289. As publicações ordenadas pela presente Lei serão feitas no órgão oficial")
     assert original["vigencia"]["status"] == "unknown"
     assert original["vigencia"]["reason_code"] == "publicacao_nao_prova_aplicabilidade"
     assert original["evidencia"]["natureza_texto"] == "publicacao_original"

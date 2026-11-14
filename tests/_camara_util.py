@@ -62,8 +62,7 @@ def da_fixture(chave, *, fetched_at=None):
     """Captura real intacta (bytes e hash) servida por dublê. `fetched_at` simula o carimbo do transporte vivo, que é o
     instante do recebimento: sem ele vale o da captura histórica (que precede qualquer política obtida hoje)."""
     meta = json.loads((FIX / f"camara_{chave}.captura.json").read_bytes())
-    original = meta["importacao_offline"]["recibo_original"]
-    corpo = (FIX / f"camara_{chave}{Path(original['arquivo']).suffix}").read_bytes()
+    corpo = (FIX / f"camara_{chave}{Path(meta['arquivo']).suffix}").read_bytes()
     return Response(meta["url"], meta["url_final"], meta["status"], meta["cabecalhos"], corpo, meta["sha256"],
                     fetched_at or meta["capturado_em"], [], meta["content_type"], size=len(corpo),
                     content_type=meta["cabecalhos"]["content-type"])

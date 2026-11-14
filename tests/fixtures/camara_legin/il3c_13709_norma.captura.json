@@ -1,0 +1,55 @@
+{
+ "conector": "camara_legin",
+ "versao": "nao_registrada",
+ "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "",
+ "capturado_em": "2026-11-09T06:34:01.707108+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {
+  "formato_recibo": "inventario_0081",
+  "campos_nao_registrados": [
+   "user_agent",
+   "versao",
+   "content_type_http"
+  ]
+ },
+ "url_final": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {},
+ "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+ "bytes": 53383,
+ "arquivo": "a1419a0d5f2a11e3.corpo",
+ "importacao_offline": {
+  "recibo_original": {
+   "fetched_at": "2026-11-09T06:34:01.707108+00:00",
+   "mime": "text/html",
+   "origem": {
+    "href": "../../../fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+    "rotulo": "Lei Ordinária nº 13709 de 14 de Agosto de 2018 (Poder Legislativo) - (Vigência Condicionada).",
+    "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+   },
+   "politica_robots_sha256": "b725bf41f0e293419518714b83edb1c2de6728c5156cba037b848ab0788bee8f",
+   "sha256": "325318dae61e6af6b9463c6ac754410a56130dc2bdfe99e3bc15f61d91d7029f",
+   "status": 200,
+   "url": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html"
+  },
+  "recibo_sha256": "93e0e44b745fbe57451a165acde51ab803bd733aa97f761742400b94ea4295f1",
+  "origem": {
+   "url": "https://www.camara.leg.br/legislacao/busca?abrangencia=Legisla%C3%A7%C3%A3o+Federal&tipo=Lei+Ordin%C3%A1ria&numero=13709&ano=2018&geral=",
+   "sha256": "de634f5a7faf1aa710ffac268340d97ea61e4e8749ddb0a98ee201319e6538e3",
+   "href": "https://www2.camara.leg.br/legin/fed/lei/2018/lei-13709-14-agosto-2018-787077-norma-pl.html",
+   "recibo_sha256": "a99cf2fd9ac5eee3b55b231d26845af394023d0358610a25d478461623d70673",
+   "raiz_reconferida_por_autorreferencia_d3": true
+  }
+ }
+}

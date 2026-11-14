@@ -8,6 +8,7 @@ import json
 import pytest
 
 from freoa_verifica import camara_instrumento as ci
+from freoa_verifica.connectors.base import Unavailable
 from freoa_verifica.cli import build_parser
 from freoa_verifica.connectors import camara_ativacao as ativ
 from freoa_verifica.connectors import camara_evidencias as ev
@@ -95,12 +96,19 @@ def test_unidade_que_falha_no_meio_preserva_o_material_parcial_e_o_motivo(tmp_pa
 
 
 def test_acumuladores_do_conector_sao_zerados_por_norma():
-    from types import SimpleNamespace
+    from freoa_verifica.connectors.camara_legin import CamaraLeginConnector
     pagina = resposta(LEI, b"x")
-    con = SimpleNamespace(paginas={LEI: pagina}, links={LEI: (pagina, "h", "r")}, inventarios={LEI: {"recursos": []}},
-                          politicas=[{"url": LEI}])
+    con = CamaraLeginConnector()
+    con.paginas[LEI] = pagina
+    con.links[LEI] = (pagina, "h", "r")
+    con.inventarios[LEI] = {"recursos": []}
+    con.politicas.append({"url": LEI})
+    con.falhas_descoberta.append(Unavailable("conflito_descoberta"))
+    con._ancoras[pagina.sha256] = frozenset()
     ci._zerar(con)
     assert con.paginas == {} and con.links == {} and con.inventarios == {} and con.politicas == []
+    assert con.falhas_descoberta == []
+    assert con._ancoras == {}
 
 
 def test_c17_falha_de_gravacao_vira_falha_controlada_sem_oserror_nem_caminho(tmp_path, monkeypatch):

@@ -574,5 +574,9 @@ def arvore_html(corpo: bytes | str, content_type: str | None = None):
 
 def normalizar_para_busca(texto: str) -> str:
     """NFKC, casefold e sem acentos: forma em que marcadores e texto são comparados."""
-    base = unicodedata.normalize("NFKC", texto).casefold()
-    return "".join(c for c in unicodedata.normalize("NFKD", base) if not unicodedata.combining(c))
+    base = unicodedata.normalize("NFKD", unicodedata.normalize("NFKC", texto).casefold())
+    # Equivale a "".join(c for c in base if not combining(c)): remove exatamente os code points com classe de
+    # combinação não nula, mas por str.translate (C) sobre o conjunto presente, não por gerador caractere a
+    # caractere (perfil de 9ec8028: 90% do custo da releitura Câmara estava neste laço sobre corpos de MB).
+    remover = {ord(c): None for c in set(base) if unicodedata.combining(c)}
+    return base.translate(remover) if remover else base

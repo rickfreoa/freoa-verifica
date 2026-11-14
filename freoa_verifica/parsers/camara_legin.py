@@ -11,7 +11,7 @@ from freoa_verifica.parsers.model import (ParsedDocument, Provision, Redaction, 
                                          EditorialBlock, QuotedAmendment, veto_stub)
 from freoa_verifica.parsers.paths import roman_to_int
 
-PARSER_VERSION = "camara-legin-4"
+PARSER_VERSION = "camara-legin-5"
 _LABEL = re.compile(r"^(?:(Art\.\s*(\d+[º°o]?(?:-[A-Z])?)[.]?)|"
                     r"(§\s*(\d+[º°o]?(?:-[A-Z])?)[.]?)|(Parágrafo\s+único[.]?)|"
                     r"([IVXLCDM]+)\s*[-–—]|([a-z])\)|([1-9]\d*)\.)\s*", re.I)
@@ -284,8 +284,10 @@ def parse_camara_legin(data: str, *, base_url=None):
             if child["level"] <= r["level"] or not child["path"].startswith(r["path"] + "."):
                 break
             descendants.append(child)
-        text = r["text"] + "".join("\n" + c["label"] + " " + c["text"] for c in descendants)
         anns = r["annotations"]
+        # Um rótulo não transforma o stub de veto (sem redação) em texto normativo.
+        prefix = "" if veto_stub(r["text"], anns) else r["label"] + " "
+        text = prefix + r["text"] + "".join("\n" + c["label"] + " " + c["text"] for c in descendants)
         if any(a.kind == "revogado" for c in descendants for a in c["annotations"]):
             doc.issues.append(Issue("REVOGACAO_PARCIAL", r["path"],
                                     "revogação restrita a descendente; agregado não revogado", "provision"))
@@ -307,8 +309,9 @@ def parse_camara_legin(data: str, *, base_url=None):
         doc.provisions.append(prov)
         if r["level"] == 1:
             cap_path = r["path"] + ".caput"
+            cap_prefix = "" if veto_stub(r["text"], anns + caput_annotations.get(cap_path, [])) else r["label"] + " "
             cap = Provision(cap_path, r["label"] + " caput", "", redactions=[Redaction(
-                r["text"], False, 0, caput_annotations.get(cap_path, []), (r["start"], r["end"]))])
+                cap_prefix + r["text"], False, 0, caput_annotations.get(cap_path, []), (r["start"], r["end"]))])
             if cap_path in seen:
                 seen[cap_path].ambiguous = cap.ambiguous = True
                 doc.issues.append(Issue("DUPLICATE_CURRENT", cap_path, "caput concorrente", "provision"))

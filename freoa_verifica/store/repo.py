@@ -114,7 +114,7 @@ def save_capture(
         ),
     )
     row = conn.execute(
-        "SELECT id, source_id FROM capture WHERE sha256=? AND url=? AND fetched_at=?",
+        "SELECT * FROM capture WHERE sha256=? AND url=? AND fetched_at=?",
         (digest, resp.url, resp.fetched_at),
     ).fetchone()
     if row is None:
@@ -124,6 +124,18 @@ def save_capture(
         raise IdentityConflict(
             f"captura {digest} já registrada sob fonte {row['source_id']}"
         )
+    if source_id == "camara_legin" and row["id"] != capture_id:
+        # IL.3-c (conferência 4): a obtenção já registrada com a mesma tripla não é
+        # reaproveitada se o recibo diverge; recibo legado inválido não absorve o novo.
+        # Conferência 6: o recibo inteiro da obtenção, inclusive a decisão de interpretação.
+        recebido = {"final_url": resp.final_url, "status": resp.status,
+                    "headers_json": json.dumps(resp.headers, ensure_ascii=False, sort_keys=True),
+                    "redirects_json": json.dumps(resp.redirects, ensure_ascii=False),
+                    "mime": resp.mime, "size": size, "outcome": outcome, "content_type": content_type,
+                    "codificacao": codificacao, "origem_da_codificacao": origem}
+        if any(row[c] != v for c, v in recebido.items()):
+            conn.rollback()
+            raise IdentityConflict(f"captura {digest} já registrada com recibo divergente")
     conn.commit()
     return row["id"]
 

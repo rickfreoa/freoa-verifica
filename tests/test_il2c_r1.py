@@ -389,6 +389,6 @@ def test_f8_busca_ate_persistencia_e_reinicio(tmp_path, servidor, chamar, monkey
         _robots_persistido_confere(home)  # depois de reabrir o home: os mesmos recibos e bytes, ainda íntegros
         out = chamar(reopened, "obter_dispositivo", citacao="art. 1, caput da Lei 6404/1976")
         assert out["status"] == "encontrada", out
-        assert _conteudo(out["texto"]).startswith("A companhia ou sociedade anônima")
+        assert _conteudo(out["texto"]).startswith("Art. 1º A companhia ou sociedade anônima")
         assert out["evidencia"]["sha256"] == response("textos_atualizado_lei6404").sha256
     assert proibir_rede == []

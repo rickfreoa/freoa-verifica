@@ -1,5 +1,17 @@
 # Histórico de versões
 
+## 1.4.0a3 - 13/11/2026
+
+Pré-release das correções do incremento IL (IL.1 a IL.3-c) sobre a rota Câmara (Legislação Informatizada). **Não é o IL qualificado:** a Porta L não foi aprovada; a matriz de capacidades por rota continua `nao_apurada` e nenhuma capacidade de legislação recebe rótulo de substituição (decisão 0084).
+
+- Rota Câmara (`camara_legin`) com ativação ao vivo registrada (decisões 0080 e 0081), inventário que alimenta o home pelo preflight único da cadeia de descoberta e releitura que reconstrói e reconfere o conjunto de descoberta (decisão 0082).
+- Rótulo do dispositivo no texto da rota Câmara pela convenção das demais fontes (parser `camara-legin-5`; modelos anteriores exigem nova captura).
+- Falha local do parser isolado (importação, processo, tempo, memória, saída) separada de conteúdo inválido, com causas de lista fechada e sem texto livre do processo filho.
+- Recibo gravado da Câmara conferido na mesclagem, na gravação e na reconstrução (modelo de ameaça da decisão 0083).
+- Instalação de snapshot: o pacote recebido é conferido relacionalmente antes de qualquer mesclagem (`snapshot_relacoes_invalidas`).
+- Executor da Porta L (`scripts/porta_l.py`) e campo aditivo `remissoes[]`.
+- Apuração no conjunto de desenvolvimento, rede bloqueada: zero confirmações indevidas (eram 24 antes da IL.3-c); nenhuma capacidade atinge o piso.
+
 ## 1.4.0a2 - 04/11/2026
 
 Pré-release do incremento IL.0 (emenda IL do plano 1.4.0 e decisão 0075). Correção da fronteira e estado temporal com data referida a D, tipagem de evidência em eixos, nova ferramenta `obter_registro` com conferência por HMAC, novos metadados em `listar_fontes` e contrato formal do consumidor FREOA.

@@ -1239,7 +1239,16 @@ def populate_from_parsed(
         year=work_key.year,
         label=label,
     )
-    capture_id = store_repo.save_capture(conn, resp, source_id, home=home)
+    if source_id == "camara_legin":
+        # IL.3-c (conferência 4): a Câmara nunca recebe recibo genérico do materializador;
+        # o modelo vincula-se à captura real já gravada pelo indexador após o preflight.
+        row = conn.execute("SELECT id FROM capture WHERE sha256=? AND url=? AND fetched_at=? "
+                           "AND source_id='camara_legin'", (digest, url, fetched_at)).fetchone()
+        if fetched_at is None or row is None:
+            raise store_repo.IdentityConflict(f"captura {digest} da Câmara ausente para o modelo")
+        capture_id = row["id"] if hasattr(row, "keys") else row[0]
+    else:
+        capture_id = store_repo.save_capture(conn, resp, source_id, home=home)
     with conn:
         for prov in document.provisions:
             pid = new_ulid()
