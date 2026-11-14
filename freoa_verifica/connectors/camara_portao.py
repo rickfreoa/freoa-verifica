@@ -84,10 +84,14 @@ _ESCOPOS_TRAVA = threading.Lock()
 class Portao:
     def __init__(self, transporte, *, estado: Estado | None = None, relogio: Relogio | None = None,
                  instrumento: bool = False, teto_sessao: int | None = None, teto_chamada: int | None = None,
-                 ativacao=None, exigir_ativacao: bool = True):
+                 ativacao=None, exigir_ativacao: bool = True, hosts=HOSTS, prefixos=None,
+                 intervalo_minimo=INTERVALO_MINIMO):
         """`ativacao`: função sem argumentos que devolve o registro de ativação válido (ou None). Com
         `exigir_ativacao` (padrão) é revalidada antes de TODA obtenção viva; sem ela (replay e testes com transporte
         simulado) só informa o termo vigente. O hash do termo vigente vai em cada obtenção registrada."""
+        self.hosts = hosts
+        self.prefixos = PREFIXOS if prefixos is None else prefixos
+        self.intervalo_minimo = intervalo_minimo
         self.transporte = transporte
         self.estado = estado if estado is not None else Estado(None)
         self.relogio = relogio or Relogio()
@@ -175,7 +179,7 @@ class Portao:
     def verificar_caminhos(self, host: str, caminhos) -> dict:
         """Política vigente do host (lida de novo se expirou) e decisão de cada caminho pelo MESMO fluxo do
         `obter` (decisão persistida, bloqueio do host se proibido). Usada pelo fluxo de ativação."""
-        if host not in HOSTS:
+        if host not in self.hosts:
             raise Unavailable("host_nao_admitido")
 
         def passo():
@@ -195,7 +199,7 @@ class Portao:
         """Falha de perfil ou de resposta detectada DEPOIS do portão: alimenta o mesmo classificador e o mesmo
         estado de barreiras (recurso persistente; host pelo restante do escopo), sem bloquear por entrada inválida."""
         host = urlsplit(url).netloc
-        if host not in HOSTS:
+        if host not in self.hosts:
             return exc
         try:
             recurso = self.admitir(url)["recurso"]
@@ -357,7 +361,7 @@ class Portao:
         """`max(10 s, Crawl-delay)` com o atraso RECOMPUTADO dos bytes conferidos da política que autoriza a emissão (ou o
         `atraso` da política anterior, na leitura de robots); nunca o campo declarado no recibo."""
         base = self.estado.atraso_da_politica(politica) if politica is not None else (atraso or 0.0)
-        return max(INTERVALO_MINIMO, base)
+        return max(self.intervalo_minimo, base)
 
     def _esperar(self, host, intervalo) -> None:
         """Espera o resto do intervalo medido pela marca persistida: vale o MENOR entre o decorrido monotônico e o
@@ -458,8 +462,8 @@ class Portao:
             raise
         try:
             resp = self.transporte(
-                url, hosts=HOSTS, path_prefixes=PREFIXOS_TERMO if recurso == "termo" else PREFIXOS,
-                mimes=frozenset({rota["mime"]}), user_agent="identified", max_redirects=0, repeticao=0,
+                url, hosts=self.hosts, path_prefixes=PREFIXOS_TERMO if recurso == "termo" else self.prefixos,
+                mimes=rota.get("mimes", frozenset({rota["mime"]})), user_agent="identified", max_redirects=0, repeticao=0,
                 max_bytes=_LIMITE_BYTES.get(recurso, 30 * 1024**2), timeout=60)
         except Unavailable as exc:
             raise self._registrar_falha(exc, url, host, recurso) from exc
@@ -481,7 +485,7 @@ class Portao:
             return Unavailable(f"http_{resp.status}", None, ev)
         if not resp.body:
             return Unavailable("corpo_vazio", "resposta_inesperada", ev)
-        if resp.mime != rota["mime"]:
+        if resp.mime not in rota.get("mimes", {rota["mime"]}):
             return Unavailable("transporte_RespostaInvalida", "resposta_inesperada", {**ev, "mime": resp.mime})
         return None
 

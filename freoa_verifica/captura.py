@@ -204,6 +204,10 @@ def _planejar(conector: str, consulta: dict[str, Any] | None, url: str | None) -
     plano.setdefault("path_prefixes", classe.path_prefixes)
     plano.setdefault("mimes", classe.mimes)
     plano.update(hosts=classe.hosts, user_agent=classe.user_agent)
+    if conector == "normas_leg":
+        from freoa_verifica.connectors.normas_leg import admitir
+        admitir(url)
+        plano["normas_leg"] = True
     return plano
 
 
@@ -223,10 +227,20 @@ def _planejar_sonda(
     if consulta is not None or url is None:
         raise ValueError("fonte-sonda só captura por url")
     prefixos = prefixos_por_host(fonte)
-    plano = _plano_get(
-        fonte.id, fonte.hosts, prefixos, fonte.mimes, url, rotulo="da fonte-sonda",
-        exatas=dict(fonte.rotas), consultas=dict(fonte.consultas),
-    )
+    if fonte_sonda == "normas_leg":
+        from freoa_verifica.connectors.normas_leg import admitir
+        try:
+            admitir(url, scripts=True)
+        except Unavailable as exc:
+            motivo = "url fora da allowlist da fonte-sonda normas_leg"
+            raise ValueError(motivo) from exc
+        plano = _plano_get(fonte.id, fonte.hosts, prefixos, fonte.mimes, url)
+        plano["normas_leg"] = True
+    else:
+        plano = _plano_get(
+            fonte.id, fonte.hosts, prefixos, fonte.mimes, url, rotulo="da fonte-sonda",
+            exatas=dict(fonte.rotas), consultas=dict(fonte.consultas),
+        )
     host, _ = validate_reference(url, fonte.hosts)  # host canônico, já validado acima
     nivel = "B" if host in fonte.hosts_b else "A"
     if nivel == "B" and not confirmado_por_titular:
@@ -262,6 +276,10 @@ def _buscar(plano: dict[str, Any], ua_modo: str):
         kw["max_redirects"] = plano["max_redirects"]
     if sessao is not None:
         kw["session"] = sessao
+    if plano.get("normas_leg") or plano.get("fonte_sonda") == "normas_leg":
+        from freoa_verifica.connectors.normas_leg import NormasPortao
+        from freoa_verifica.store.db import data_home
+        return NormasPortao(connector_fetch, home=data_home(), instrumento=True).obter(plano["etapas"][0]["url"])
     resp = None
     for etapa in plano["etapas"]:
         headers = dict(etapa["headers"])

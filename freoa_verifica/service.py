@@ -693,7 +693,7 @@ class Verifica:
             if connector_id == "stj":
                 self._connectors[connector_id].db_path = self.home / "stj_fts.sqlite"
                 self._connectors[connector_id].resource_dir = self.home / "stj-resources"
-            if connector_id == "camara_legin":
+            if connector_id in {"camara_legin", "normas_leg"}:
                 self._connectors[connector_id].home = self.home
         return self._connectors[connector_id]
 
@@ -903,6 +903,11 @@ class Verifica:
             cap = repo.get_capture(self.conn, capture_id)
             if cap and cap.get("source_id") == "camara_legin":
                 atribuicao = self._atribuicao_camara(texto, cap["sha256"], cap["url"], cap["fetched_at"])
+                if atribuicao not in saida:
+                    saida.append(atribuicao)
+            if cap and cap.get("source_id") == "normas_leg":
+                from freoa_verifica.connectors.normas_leg import ATRIBUICAO
+                atribuicao = {"texto": ATRIBUICAO}
                 if atribuicao not in saida:
                     saida.append(atribuicao)
         return saida
@@ -1197,7 +1202,7 @@ class Verifica:
     def _offline(self) -> bool:
         return self._read_only or os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
 
-    def _capture_work(self, work: WorkKey, requested_work_date=None, *, versao="vigente") -> ResolvedWork | list[ResolvedWork] | None:
+    def _capture_work(self, work: WorkKey, requested_work_date=None, *, versao="vigente", fonte=None) -> ResolvedWork | list[ResolvedWork] | None:
         if self._offline():
             return None
         key = {
@@ -1215,7 +1220,7 @@ class Verifica:
         elif work.authority in {"bcb", "cmn"}:
             order = ["bcb"]
         elif work.authority == "federal":
-            order = ["camara_legin"]
+            order = [fonte] if fonte else (["camara_legin"] if versao != "vigente" else ["normas_leg"])
         else:
             order = list(_LEGIS_CONNECTORS)
 
@@ -1232,6 +1237,8 @@ class Verifica:
                     continue
                 if cid == "camara_legin":
                     cand = replace(cand, metadata={**cand.metadata, "versao": versao})
+                if cid == "normas_leg" and versao == "publicacao_original":
+                    cand = replace(cand, metadata={**cand.metadata, "versao": "Original"})
                 resp = conn_obj.fetch(cand)
                 parsed = conn_obj.parse(resp)
                 if cid == "camara_legin":
@@ -1257,6 +1264,9 @@ class Verifica:
                     for page in conn_obj.paginas.values():
                         repo.save_capture(self.conn, page, cid, home=self.home)
                     consultadas.append({"fonte": cid, "resultado": "capturada", "motivo": None, "categoria": None})
+                if cid == "normas_leg":
+                    for page in conn_obj.paginas.values():
+                        repo.save_capture(self.conn, page, cid, home=self.home)
                 if cid == "cvm_normas":  # C2: página do ato sempre capturada como evidência de situação
                     situacao.registrar_cvm(self.conn, self.home, conn_obj, cand, rw_novo)
                 rw_novo.fontes_consultadas = consultadas
@@ -1286,13 +1296,24 @@ class Verifica:
     def _resolve(self, work: WorkKey, requested_work_date=None, *, strict: bool = False,
                  versao="vigente", fonte=None) -> ResolvedWork | list[ResolvedWork] | None:
         """strict: obra ausente do acervo sem poder consultar a fonte é lacuna de cobertura, não negativa (A2)."""
+        if work.authority == "federal" and fonte == "normas_leg":
+            local = self._rebuild_from_db(work)
+            if isinstance(local, ResolvedWork) and local.source_id == "normas_leg":
+                meta = next((json.loads(b.text) for b in local.document.editorial_blocks
+                             if b.kind == "normas_leg_metadados"), {})
+                if versao == "vigente" or meta.get("version") == "Original":
+                    return local
+            captured = self._capture_work(work, requested_work_date, versao=versao, fonte=fonte)
+            if captured is None:
+                raise SourceUnavailable("fonte_selecionada_nao_capturada")
+            return captured
         if work.authority == "federal":
             try:
                 selected = self._selecionar_camara(work, versao, fonte)
             except SourceUnavailable as exc:
                 if exc.reason != "versao_nao_capturada" or self._offline():
                     raise
-                selected = self._capture_work(work, requested_work_date, versao=versao)
+                selected = self._capture_work(work, requested_work_date, versao=versao, fonte=fonte)
             if selected is not None:
                 if isinstance(selected, ResolvedWork):
                     validate_identity(work, selected.document, requested_work_date)
@@ -1300,7 +1321,7 @@ class Verifica:
             if fonte is not None and fonte != "camara_legin":
                 raise SourceUnavailable("fonte_selecionada_nao_capturada")
             if versao != "vigente" or fonte == "camara_legin":
-                got = self._capture_work(work, requested_work_date, versao=versao)
+                got = self._capture_work(work, requested_work_date, versao=versao, fonte=fonte)
                 if got is None:
                     raise SourceUnavailable("versao_nao_capturada")
                 return got
@@ -1559,7 +1580,7 @@ class Verifica:
                     if candidate_cite and candidate_cite.work:
                         authority = candidate_cite.work.authority
                         kind = candidate_cite.work.kind
-                wk = WorkKey(authority, kind, re.sub(r"\D", "", number) or number, year)
+                wk = WorkKey(authority, kind, number if connector.id == "normas_leg" else (re.sub(r"\D", "", number) or number), year)
                 if connector.id == "camara_legin":
                     wk, work_date = declared_identity(parsed)
                     if wk is None:
@@ -1586,6 +1607,10 @@ class Verifica:
                     for page in connector.paginas.values():
                         repo.save_capture(self.conn, page, connector.id, home=self.home)
                     atribuicao = self._atribuicao_camara(parsed.text, rw.sha256, rw.url, rw.fetched_at)
+                if connector.id == "normas_leg":
+                    for page in connector.paginas.values():
+                        repo.save_capture(self.conn, page, connector.id, home=self.home)
+                    atribuicao = cand.metadata["atribuicao"]
                 if connector.id == "cvm_normas":  # C2
                     situacao.registrar_cvm(self.conn, self.home, connector, cand, rw)
                 if parsed.provisions:
@@ -3834,6 +3859,7 @@ class Verifica:
         slice_ = text[offset : offset + max_chars]
         truncado = offset + max_chars < len(text)
         envolto = envolver(slice_)
+        from freoa_verifica.connectors.normas_leg import ATRIBUICAO
         return {
             "status": "encontrada",
             "capture_id": capture_id,
@@ -3854,6 +3880,8 @@ class Verifica:
             "cursor": str(offset + max_chars) if truncado else None,
             **({"atribuicao": self._atribuicao_camara(text, cap["sha256"], cap["url"], cap["fetched_at"])}
                if cap.get("source_id") == "camara_legin" else {}),
+            **({"atribuicao": {"texto": ATRIBUICAO}}
+               if cap.get("source_id") == "normas_leg" else {}),
             **({} if ctype else {"proveniencia": {
                 "interpretacao": ORIGEM_LEGADO_CONFERIDO if conferida is not None else ORIGEM_LEGADO}}),
         }
@@ -4190,13 +4218,15 @@ class Verifica:
 
     def doctor(self, *, offline: bool = False) -> dict[str, Any]:
         from freoa_verifica import __version__
+        from freoa_verifica.windows_package import home_virtualizado
 
+        virtualizado = home_virtualizado(self.home)
         checks: list[dict[str, Any]] = [
             {"nome": "versao", "status": "ok", "detalhe": __version__},
             {
                 "nome": "home",
-                "status": "ok" if self.home.is_dir() else "falha",
-                "detalhe": str(self.home),
+                "status": "alerta" if virtualizado else ("ok" if self.home.is_dir() else "falha"),
+                "detalhe": "home_virtualizado" if virtualizado else str(self.home),
             },
             {
                 "nome": "banco",

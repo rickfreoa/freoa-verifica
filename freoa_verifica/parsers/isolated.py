@@ -10,7 +10,7 @@ import sys
 from freoa_verifica.limites import restante
 from freoa_verifica.parsers.model import Issue, ParsedDocument, document_from_dict
 
-_PROFILES = ("planalto", "cvm_docx", "bcb_json", "cvm_pdf", "pdf_texto", "camara_legin", "camara_anexo")
+_PROFILES = ("planalto", "cvm_docx", "bcb_json", "cvm_pdf", "pdf_texto", "camara_legin", "camara_anexo", "normas_leg")
 # Limites instalados pelo filho antes de importar parsers/ler bytes não confiáveis.
 _LIMITES = {p: ((1024, 60) if p in {"cvm_pdf", "pdf_texto", "camara_anexo"} else (2048, 120))
             for p in _PROFILES}
@@ -322,15 +322,16 @@ def _main() -> None:
         from freoa_verifica.connectors.cvm_normas import parse_pdf_direto
         from freoa_verifica.parsers.camara_legin import parse_camara_legin
         from freoa_verifica.parsers.camara_anexo import parse_camara_anexo
+        from freoa_verifica.parsers.normas_leg import parse_normas_leg
     except ImportError:
         sys.exit(EXIT_IMPORTACAO)
-    parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto, parse_camara_legin, parse_camara_anexo)))
+    parsers = dict(zip(_PROFILES, (parse_planalto, parse_cvm_docx, parse_bcb_json, parse_pdf_direto, pdf_texto, parse_camara_legin, parse_camara_anexo, parse_normas_leg)))
     try:
         body = sys.stdin.buffer.read()
         argumentos = sys.argv[2:]
         if argumentos[:1] == ["--texto"]:
             body, argumentos = body.decode("utf-8"), argumentos[1:]  # estrito: erro aqui é falha do filho
-        if sys.argv[1] in {"planalto", "camara_legin"} and argumentos:
+        if sys.argv[1] in {"planalto", "camara_legin", "normas_leg"} and argumentos:
             document = parsers[sys.argv[1]](body, base_url=argumentos[0])
         else:
             document = parsers[sys.argv[1]](body)
@@ -346,7 +347,7 @@ def _main() -> None:
         motivo = str(exc) if isinstance(exc, ValueError) else getattr(exc, "reason", None)
         prefixo = motivo.partition(":")[0].strip() if isinstance(motivo, str) else None
         codigo_pdf = prefixo if prefixo in codigos else None
-        if (sys.argv[1] in {"camara_legin", "camara_anexo"}
+        if (sys.argv[1] in {"camara_legin", "camara_anexo", "normas_leg"}
                 and (isinstance(exc, (ParserError, PdfReadError))
                      or isinstance(exc, ValueError) and str(exc) in codigos)):
             document = ParsedDocument(sys.argv[1], "conteudo-invalido", "", None, "", issues=[

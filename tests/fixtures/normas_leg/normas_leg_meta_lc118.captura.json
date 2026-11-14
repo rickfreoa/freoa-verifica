@@ -1,0 +1,27 @@
+{
+ "conector": "normas_leg",
+ "versao": "1.4.0a3",
+ "url": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei.complementar:2005;118&tipo_documento=maior-detalhe",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a3 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-14T11:32:35.733600+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei.complementar:2005;118&tipo_documento=maior-detalhe",
+ "status": 200,
+ "content_type": "application/json",
+ "cabecalhos": {
+  "content-type": "application/json",
+  "date": "Sat, 14 Nov 2026 11:32:36 GMT"
+ },
+ "sha256": "de7480d00a4d4db0a718c8ac945336a95adf62afa58f3793ec163bad2247358c",
+ "bytes": 4600,
+ "arquivo": "normas_leg_meta_lc118.json"
+}

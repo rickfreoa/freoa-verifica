@@ -29,13 +29,14 @@ def _resp(url, body=CORPO, status=200, mime="application/json"):
 
 
 @pytest.fixture
-def envios(monkeypatch):
+def envios(monkeypatch, tmp_path):
     vistos = []
 
     def fake(url, **kw):
         vistos.append({"url": url, **kw})
         return _resp(url)
 
+    monkeypatch.setenv("FV_HOME", str(tmp_path / "home"))
     monkeypatch.setattr(httputil, "transport_fetch", fake)
     monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
     return vistos
@@ -321,6 +322,17 @@ def test_get_simples_usa_allowlist_limites_e_ua_do_conector(envios, tmp_path, ci
         with pytest.raises(ValueError, match="host barrado legis.senado.leg.br"):
             captura.capturar(cid, url=url, destino=tmp_path, sonda=True, chave="g")
         assert envios == [] and not any(tmp_path.iterdir())
+        return
+    if cid == "normas_leg":
+        from freoa_verifica.connectors import normas_leg as nl
+        assert url == "https://normas.leg.br/robots.txt"
+        # O portão valida os bytes do robots; JSON arbitrário não é permissão.
+        reg = captura.capturar(cid, url=url, destino=tmp_path, sonda=True, chave="g")
+        assert reg.unavailable and reg.motivo == "robots_inconclusivo"
+        assert envios[0]["allowed_hosts"] == nl.HOSTS
+        assert envios[0]["allowed_mimes"] == frozenset({"text/plain"})
+        assert envios[0]["max_redirects"] == 0 and envios[0]["repeticao"] == 0
+        assert envios[0]["headers"] == httputil.ua_header(classe.user_agent)
         return
     reg = captura.capturar(cid, url=url, destino=tmp_path, sonda=True, chave="g")
     assert not reg.unavailable and reg.metodo == "GET" and reg.parametros is None

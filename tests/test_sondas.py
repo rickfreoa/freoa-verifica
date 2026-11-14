@@ -42,13 +42,21 @@ def _resp(url, body=CORPO, status=200, mime="application/json"):
 
 
 @pytest.fixture
-def envios(monkeypatch):
+def envios(monkeypatch, tmp_path):
     vistos = []
 
     def fake(url, **kw):
         vistos.append({"url": url, **kw})
+        if url == "https://normas.leg.br/robots.txt":
+            return _resp(url, b"User-agent: *\nAllow: /\n", mime="text/plain")
         return _resp(url)
 
+    from freoa_verifica.connectors.camara_estado import Relogio
+    from tests._camara_util import RelogioFalso
+    fake_clock = RelogioFalso()
+    monkeypatch.setenv("FV_HOME", str(tmp_path / "home"))
+    for method in ("agora", "monotonic", "sleep"):
+        monkeypatch.setattr(Relogio, method, lambda self, *a, _method=method: getattr(fake_clock, _method)(*a))
     monkeypatch.setattr(httputil, "transport_fetch", fake)
     monkeypatch.setattr(captura, "_raiz_repo", lambda: None)
     return vistos
@@ -57,7 +65,10 @@ def envios(monkeypatch):
 def _urls_validas(fonte: FonteSonda):
     """Uma URL dentro do escopo por host: a primeira rota documentada, ou o robots.txt se o host só admite ele."""
     for host in sorted(fonte.hosts):
-        yield f"https://{host}{(fonte.rotas[host] or ('/robots.txt',))[0]}"
+        if fonte.id == "normas_leg":
+            yield "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei:1976;6404&tipo_documento=maior-detalhe"
+        else:
+            yield f"https://{host}{(fonte.rotas[host] or ('/robots.txt',))[0]}"
 
 
 def _liberado(fonte: FonteSonda, url: str) -> bool:
@@ -151,7 +162,7 @@ def test_escopo_de_caminho_consistente_sem_host_livre():
         ("tst", "consultadocumento.tst.jus.br"),
         ("cjf_unificada", "jurisprudencia.cjf.jus.br"), ("trf1", "jurisprudencia.cjf.jus.br"),
         ("trf1", "arquivo.trf1.jus.br"), ("trf2", "jurisprudencia.trf2.jus.br"),
-        ("normas_leg", "normas.leg.br"), ("lexml", "www.lexml.gov.br"),
+        ("lexml", "www.lexml.gov.br"),
     }
 
 
@@ -191,9 +202,9 @@ def test_fonte_incoerente_e_recusada_na_construcao():
 
 
 def test_registry_do_produto_nao_muda():
-    assert not set(IDS) & set(registry())
+    assert set(IDS) & set(registry()) == {"normas_leg"}
     assert set(registry()) == {
-        "bcb", "camara_legin", "cvm_colegiado", "cvm_normas", "datajud", "planalto", "senado", "stf", "stj", "tcu", "tjdft", "tjsp",
+        "bcb", "camara_legin", "cvm_colegiado", "cvm_normas", "datajud", "normas_leg", "planalto", "senado", "stf", "stj", "tcu", "tjdft", "tjsp",
     }
 
 
@@ -206,11 +217,17 @@ def test_get_na_allowlist_da_fonte_usa_transporte_comum_e_ua_identificado(envios
     reg = captura.capturar(None, url=url, destino=tmp_path, sonda=True, chave="s", fonte_sonda=fid,
                            user_agent="identificado", confirmado_por_titular=_liberado(fonte, url))
     assert not reg.unavailable and reg.metodo == "GET" and reg.parametros is None
-    visto = envios[0]
+    visto = envios[-1]
+    if fid == "normas_leg":
+        assert [e["url"] for e in envios] == ["https://normas.leg.br/robots.txt", url]
     assert visto["url"] == url and visto["method"] == "GET" and visto["body"] is None
     assert visto["allowed_hosts"] == fonte.hosts
     if url.endswith("/robots.txt"):  # host só-robots: política do robots.txt (ver teste próprio)
         assert visto["allowed_mimes"] == frozenset({"text/plain"})
+    elif fid == "normas_leg":
+        from freoa_verifica.connectors.normas_leg import JSON_MIMES, PREFIXOS, SCRIPTS, HOST
+        assert visto["allowed_mimes"] == JSON_MIMES
+        assert visto["allowed_path_prefixes"] == {HOST: PREFIXOS[HOST] + SCRIPTS}
     else:
         assert visto["allowed_mimes"] == fonte.mimes
         assert visto["allowed_path_prefixes"] == prefixos_por_host(fonte)
@@ -260,7 +277,11 @@ def test_robots_txt_de_cada_host_da_fonte(envios, tmp_path, fid):
                          fonte_sonda=fid, confirmado_por_titular=host in fonte.hosts_b)
         visto = envios[-1]
         # exceção de caminho só para o robots.txt exato: prefixo exato em todos os hosts, só text/plain, sem salto
-        assert visto["allowed_path_prefixes"] == {h: ("/robots.txt",) for h in fonte.hosts}
+        if fid == "normas_leg":
+            from freoa_verifica.connectors.normas_leg import PREFIXOS, SCRIPTS, HOST
+            assert visto["allowed_path_prefixes"] == {HOST: PREFIXOS[HOST] + SCRIPTS}
+        else:
+            assert visto["allowed_path_prefixes"] == {h: ("/robots.txt",) for h in fonte.hosts}
         assert visto["allowed_mimes"] == frozenset({"text/plain"}) and visto["max_redirects"] == 0
         assert visto["allowed_hosts"] == fonte.hosts
 
@@ -1093,7 +1114,7 @@ def test_rota_exata_e_consulta_so_na_rota_declarada_com_parametros(envios, tmp_p
     assert [e["url"] for e in envios][-1].startswith("https://esaj.tjac.jus.br/cjsg/resultadoCompleta.do?")
     assert len(envios) == 4
     assert FONTES_SONDA["tjac"].consultas == {"esaj.tjac.jus.br": ("/cjsg/resultadoCompleta.do",)}
-    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac", "camara_legislacao"]
+    assert [f.id for f in FONTES_SONDA.values() if f.consultas] == ["tjac", "normas_leg", "camara_legislacao"]
 
 
 def test_catalogo_so_tem_caminho_exato_sem_prefixo_nem_segmento_proibido():
@@ -1239,10 +1260,11 @@ CAPTURAS_TEXTOS_CAMARA = (
 
 ROTAS_IL2 = {
     "lexml": {"www.lexml.gov.br": ()},
-    "normas_leg": {"normas.leg.br": ()},
+    "normas_leg": {"normas.leg.br": ("/api/public/normas", "/api/public/binario/",
+                                       "/main.9e54abd8eff4fac4.js", "/987.9451176cf8cb4e12.js")},
     "camara_legislacao": {"www.camara.leg.br": ("/legislacao", "/legislacao/busca"), "www2.camara.leg.br": tuple(p for _, p, _, _ in NORMAS_CAMARA + TEXTOS_CAMARA)},
 }
-CONSULTAS_IL2 = {"camara_legislacao": {"www.camara.leg.br": ("/legislacao/busca",)}}
+CONSULTAS_IL2 = {"normas_leg": {"normas.leg.br": ("/api/public/normas",)}, "camara_legislacao": {"www.camara.leg.br": ("/legislacao/busca",)}}
 
 
 def test_il2_allowlist_exata_de_hosts_rotas_e_consultas():
@@ -1264,9 +1286,9 @@ def test_il2_nivel_a_so_com_pagina_oficial_lida_e_nada_de_terceiros_como_origem(
         for host in f.hosts:
             assert f"{host}=https://" in f.origem_hosts, (fid, host)
     # caminho só de busca ou de projeto de terceiros (nível B) não entra no catálogo
-    todas = {r for fid in IDS_IL2 for rs in FONTES_SONDA[fid].rotas.values() for r in rs}
+    todas = {r for fid in IDS_IL2 if fid != "normas_leg" for rs in FONTES_SONDA[fid].rotas.values() for r in rs}
     assert not any(p in r for r in todas for p in ("/api/public", "/web/dou", "/norma/"))
-    assert "pendência IL.2-b" in FONTES_SONDA["normas_leg"].nota and "br-eli-mcp" in FONTES_SONDA["normas_leg"].nota
+    assert "0085" in FONTES_SONDA["normas_leg"].nota and "cliente oficial" in FONTES_SONDA["normas_leg"].nota
 
 
 def test_il2_inlabs_e_hosts_sem_endpoint_oficial_recusados_e_fora_do_catalogo():
@@ -1323,7 +1345,7 @@ def test_il2_lexml_rotas_proibidas_ou_sem_documentacao_recusadas(envios, tmp_pat
 _BASE_MIMES = frozenset({"text/html", "application/json", "text/plain"})
 MIMES_IL2 = {  # conjunto esperado por fonte, fixado aqui, independente do catálogo
     "lexml": _BASE_MIMES | {"application/xml", "text/xml"},
-    "normas_leg": _BASE_MIMES,
+    "normas_leg": _BASE_MIMES | {"application/ld+json", "text/javascript", "application/javascript"},
     "camara_legislacao": _BASE_MIMES | {"application/pdf"},
 }
 HOSTS_IL2 = {fid: frozenset(r) for fid, r in ROTAS_IL2.items()}
@@ -1394,6 +1416,8 @@ def test_il2_mutante_de_mime_chega_ao_transporte_e_o_teste_de_repasse_o_acusa(mo
 
 
 def _rota_de_cada_host(fid):
+    if fid == "normas_leg":
+        return list(_urls_validas(FONTES_SONDA[fid]))
     return [f"https://{h}{(rs or ('/robots.txt',))[0]}" for h, rs in sorted(ROTAS_IL2[fid].items())]
 
 
@@ -1405,6 +1429,11 @@ def test_il2_mimes_hosts_e_caminhos_passados_ao_transporte_conferem_com_as_const
         if url.endswith("/robots.txt"):
             assert visto["allowed_mimes"] == frozenset({"text/plain"})
             assert visto["allowed_path_prefixes"] == {h: ("/robots.txt",) for h in HOSTS_IL2[fid]}
+        elif fid == "normas_leg":
+            assert visto["allowed_mimes"] == frozenset({"application/json", "application/ld+json", "text/json"})
+            assert visto["allowed_path_prefixes"] == {"normas.leg.br": (
+                "/robots.txt", "/api/public/normas", "/api/public/binario/",
+                "/main.9e54abd8eff4fac4.js", "/987.9451176cf8cb4e12.js")}
         else:
             assert visto["allowed_mimes"] == MIMES_IL2[fid]  # constante do teste, não o catálogo
             assert visto["allowed_path_prefixes"] == {h: (rs or ("/robots.txt",)) for h, rs in ROTAS_IL2[fid].items()}

@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.4.0a4 - não publicada
+
+- Conector `normas_leg`: API pública do Congresso Nacional por URN, seleção `Current`/`Original`, textos com hash, versão, valor legal, licença e atribuição (0085). Rota `nao_apurada`: verificação `unknown(rota_nao_qualificada)`.
+- Robots RFC 9309 com tokens do produto e de IA, validade de 24 h, ritmo mínimo de 5 s por host, trava persistente e teto de 12 requisições por chamada; barreiras sem repetição nem fallback.
+- Instalador detecta pacote MSIX e relança fora do contêiner por `Win32_Process.Create`, com log e código de saída; `-PermitirVirtualizado` é opção expressa. `doctor` alerta `home_virtualizado` por caminho ou identidade MSIX.
+- BCB: consulta com `Propriedade:"valor"`, conferência local de tipo e número (commit anterior `9bc6da6`, preservado).
+
 ## 1.4.0a3 - 13/11/2026
 
 Pré-release das correções do incremento IL (IL.1 a IL.3-c) sobre a rota Câmara (Legislação Informatizada). **Não é o IL qualificado:** a Porta L não foi aprovada; a matriz de capacidades por rota continua `nao_apurada` e nenhuma capacidade de legislação recebe rótulo de substituição (decisão 0084).
