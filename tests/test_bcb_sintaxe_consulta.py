@@ -94,3 +94,20 @@ def test_pagina_de_recusa_da_borda_continua_resposta_invalida(monkeypatch):
     with pytest.raises(Unavailable) as exc:
         bcb.BcbConnector().search("Resolução CMN 4.966")
     assert exc.value.reason == "resposta_invalida"
+
+
+def test_ultima_pagina_filtrada_nao_fabrica_total_global(monkeypatch):
+    # Conferência da auditoria 0085: startrow=39 de 40 com linha descartada não declara total 0.
+    corpo = json.dumps({"TotalRows": 40, "Rows": [_linha("Comunicado", "4966")]}).encode()
+    monkeypatch.setattr(bcb, "connector_fetch", lambda url, **kw: _resp(url, corpo))
+    with pytest.raises(Unavailable) as exc:
+        bcb.BcbConnector().search("", tipo="Resolução CMN", numero=4966, startrow=39, limite=1)
+    assert exc.value.reason == "resposta_parcial_sem_correspondencia"
+
+
+def test_pagina_parcial_com_correspondencia_mantem_cota_superior(monkeypatch):
+    corpo = json.dumps({"TotalRows": 40, "Rows": [_linha("Resolução CMN", "4966"),
+                                                  _linha("Comunicado", "4966")]}).encode()
+    monkeypatch.setattr(bcb, "connector_fetch", lambda url, **kw: _resp(url, corpo))
+    out = bcb.BcbConnector().search("", tipo="Resolução CMN", numero=4966, limite=2)
+    assert len(out) == 1 and out.total == 40 and out.truncado

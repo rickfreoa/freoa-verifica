@@ -229,7 +229,9 @@ class BcbConnector(Connector):
                     },
                 )
             )
-        examinadas_todas = startrow + len(rows) >= total
+        # Só a primeira página que cobre o total examina o conjunto inteiro; a última página não
+        # demonstra leitura das anteriores (auditoria 0085, conferência).
+        examinadas_todas = startrow == 0 and len(rows) >= total
         if descartadas and not out and not examinadas_todas:
             # Página inteira de outro tipo/número com resultados ainda não examinados: não é ausência
             # explícita e não autoriza o candidato sintético (zero falso; auditoria 0085, B2).

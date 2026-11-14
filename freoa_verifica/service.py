@@ -1815,7 +1815,12 @@ class Verifica:
         if rw.source_id == "camara_legin":
             return self._obter_camara(rw, path, data, versao)
         if versao == "publicacao_original":
-            return {"status": "unknown", "reason_code": "primeira_publicacao_nao_identificada", "texto": None}
+            meta = next((json.loads(b.text) for b in rw.document.editorial_blocks
+                         if b.kind == "normas_leg_metadados"), {}) if rw.source_id == "normas_leg" else {}
+            if meta.get("version") != "Original":
+                return {"status": "unknown", "reason_code": "primeira_publicacao_nao_identificada", "texto": None}
+            # Auditoria 0085, I3: o texto `Original` de normas.leg.br reproduz a publicação no DOU,
+            # declarada nos metadados da captura (sem valor oficial; atribuição na resposta).
         return self._resposta_dispositivo(rw, path, data)
 
     def _resposta_dispositivo(self, rw, path, data):

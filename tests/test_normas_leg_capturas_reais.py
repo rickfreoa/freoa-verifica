@@ -104,6 +104,9 @@ def test_identidade_real_divergente_e_recusada(tmp_path):
     {"source_id": "planalto", "profile": "planalto"},
     {"source_id": "planalto", "profile": "planalto", "sem_bloco": True},
     {"source_id": "senado", "profile": "camara_atualizado"},
+    {"source_id": "planalto", "profile": "planalto", "url": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp118.htm"},
+    {"source_id": "normas_leg", "profile": "planalto", "sem_bloco": True,
+     "url": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp118.htm"},
 ])
 def test_troca_de_rotulos_nao_promove_a_verified(tmp_path, rotulos):
     # Auditoria 0085, B1: bytes reais da LC 118, rótulos trocados; a procedência (metadados ou host)
@@ -126,7 +129,8 @@ def test_troca_de_rotulos_nao_promove_a_verified(tmp_path, rotulos):
     key = WorkKey("federal", "lei_complementar", "118", 2005)
     with Verifica(home=tmp_path / "db") as svc:
         rw = svc.indexar_obra(source_id=rotulos["source_id"], work_key=key, document=doc, body=resp.body,
-                              url=resp.url, fetched_at=resp.fetched_at, content_type="text/html; charset=utf-8")
+                              url=rotulos.get("url", resp.url), fetched_at=resp.fetched_at,
+                              content_type="text/html; charset=utf-8")
         rw = replace(rw, source_id=rotulos["source_id"]) if getattr(rw, "source_id", None) else rw
         resolver = MemoryResolver()
         resolver.add(rw)
@@ -134,3 +138,21 @@ def test_troca_de_rotulos_nao_promove_a_verified(tmp_path, rotulos):
         out = verificar("art. 3º da Lei Complementar 118/2005", trecho=trecho, resolver=resolver)
     assert "verified" not in {out.identity.status, out.text.status, out.temporal.status}
     assert out.text.reason_code == "rota_nao_qualificada"
+
+
+def test_publicacao_original_de_normas_leg_e_entregue(tmp_path, monkeypatch):
+    # Auditoria 0085, I3: o texto `Original` (publicação no DOU, declarada nos metadados) é entregue
+    # como publicação original, com atribuição; antes caía em `primeira_publicacao_nao_identificada`.
+    from freoa_verifica.service import Verifica
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+    urn = "urn:lex:br:federal:lei.complementar:2005;118"
+    con, _ = _conector(tmp_path / "home", {
+        _api(urn): _real("normas_leg_meta_lc118", _api(urn), "application/json"),
+        BIN_LC118: _real("normas_leg_bin_lc118_original", BIN_LC118, "text/html"),
+    })
+    with Verifica(home=tmp_path / "home") as svc:
+        svc._connectors["normas_leg"] = con
+        out = svc.obter_dispositivo(citacao="art. 3º da Lei Complementar 118/2005",
+                                    versao="publicacao_original", fonte="normas_leg")
+    assert out["status"] == "encontrada", out
+    assert "inciso I do art. 168" in (out.get("texto") or "")

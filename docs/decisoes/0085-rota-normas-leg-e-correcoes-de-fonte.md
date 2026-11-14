@@ -110,6 +110,17 @@ sob `%LOCALAPPDATA%\Packages\`.
 6. I5: recibos formais das sondas dos dois scripts e dos metadados em
    `docs/auditoria/1.4.0/normas-leg-sondas/`, com os trechos e offsets.
 
+7. Conferência da auditoria (14/11): resíduo de B1 só com os quatro sinais adulterados ao mesmo
+   tempo (`source_id`, perfil, remoção do bloco de metadados e URL de outro host). Decisão do
+   supervisor, divergente do auditor: fora do modelo de ameaça da 0083 (adulteração deliberada
+   do home ou do objeto montado pelo chamador); no serviço, `source_id` e URL vêm da captura
+   persistida, que só muda por adulteração do banco. Regressões fixam o bloqueio para qualquer
+   combinação parcial. Vincular a procedência à captura autenticada fica como endurecimento,
+   junto dos da 0083.
+8. BCB: só a primeira página que cobre o total examina o conjunto; a última página filtrada não
+   declara total zero. `publicacao_original` de `normas_leg` entrega o texto `Original` (I3).
+   URL ilegível não é atribuída a `normas_leg`.
+
 ## 7. Verificação ao vivo (14/11/2026, home temporário)
 
 `doctor` da fonte: positivo `ok`, negativo `zero`, documento `ok` (LC 118, `Original`).

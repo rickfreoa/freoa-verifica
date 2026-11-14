@@ -296,7 +296,7 @@ def origem_normas_leg(rw: ResolvedWork) -> bool:
     try:
         host = (urlsplit(rw.url or "").hostname or "").lower()
     except ValueError:
-        return True  # URL ilegível: não se presume procedência confirmável
+        return False  # URL ilegível não é procedência normas.leg.br; os demais sinais já decidiram
     return host == "normas.leg.br" or host.endswith(".normas.leg.br")
 
 
