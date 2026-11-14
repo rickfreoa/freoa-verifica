@@ -156,3 +156,57 @@ def test_publicacao_original_de_normas_leg_e_entregue(tmp_path, monkeypatch):
                                     versao="publicacao_original", fonte="normas_leg")
     assert out["status"] == "encontrada", out
     assert "inciso I do art. 168" in (out.get("texto") or "")
+
+
+_SINAIS = ("source_id", "profile", "bloco", "url")
+_PARCIAIS = [c for n in (1, 2, 3) for c in __import__("itertools").combinations(_SINAIS, n)]
+
+
+def _rw_lc118(tmp_path, alterados, url_planalto="https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp118.htm"):
+    from freoa_verifica.aliases import WorkKey
+    from freoa_verifica.service import Verifica
+    urn = "urn:lex:br:federal:lei.complementar:2005;118"
+    con, _ = _conector(tmp_path, {
+        _api(urn): _real("normas_leg_meta_lc118", _api(urn), "application/json"),
+        BIN_LC118: _real("normas_leg_bin_lc118_original", BIN_LC118, "text/html"),
+    })
+    resp = con.fetch(con.search("Lei Complementar 118/2005")[0])
+    doc = con.parse(resp)
+    if "profile" in alterados:
+        doc.profile = "planalto"
+    if "bloco" in alterados:
+        doc.editorial_blocks = [b for b in doc.editorial_blocks if b.kind != "normas_leg_metadados"]
+    svc = Verifica(home=tmp_path / "db")
+    rw = svc.indexar_obra(source_id="planalto" if "source_id" in alterados else "normas_leg",
+                          work_key=WorkKey("federal", "lei_complementar", "118", 2005), document=doc,
+                          body=resp.body, url=url_planalto if "url" in alterados else resp.url,
+                          fetched_at=resp.fetched_at, content_type="text/html; charset=utf-8")
+    return svc, rw, doc
+
+
+@pytest.mark.parametrize("alterados", _PARCIAIS, ids=["+".join(c) for c in _PARCIAIS])
+def test_matriz_de_procedencia_qualquer_combinacao_parcial_bloqueia(tmp_path, alterados):
+    # Conferência 2 da auditoria 0085: as 14 combinações de 1 a 3 sinais adulterados permanecem
+    # `unknown/rota_nao_qualificada`. O caso dos quatro sinais está fora do modelo de ameaça (0085 §6.7).
+    from freoa_verifica.verify import MemoryResolver, verificar
+    assert len(_PARCIAIS) == 14
+    svc, rw, doc = _rw_lc118(tmp_path, set(alterados))
+    try:
+        resolver = MemoryResolver()
+        resolver.add(rw)
+        out = verificar("art. 3º da Lei Complementar 118/2005",
+                        trecho=doc.provision("art3").current_redaction().text, resolver=resolver)
+    finally:
+        svc.close()
+    assert "verified" not in {out.identity.status, out.text.status, out.temporal.status}
+    assert out.text.reason_code == "rota_nao_qualificada"
+
+
+def test_url_ilegivel_nao_atribui_normas_leg():
+    from types import SimpleNamespace
+
+    from freoa_verifica.verify import origem_normas_leg
+    doc = SimpleNamespace(profile="planalto", editorial_blocks=[])
+    assert origem_normas_leg(SimpleNamespace(source_id="planalto", document=doc, url="https://[::1")) is False
+    assert origem_normas_leg(SimpleNamespace(source_id="planalto", document=doc,
+                                             url="https://normas.leg.br/api/public/binario/x/texto")) is True

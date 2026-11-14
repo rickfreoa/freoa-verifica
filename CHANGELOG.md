@@ -1,11 +1,28 @@
 # Histórico de versões
 
-## 1.4.0a4 - não publicada
+## 1.4.0a4 - 14/11/2026
 
-- Conector `normas_leg`: API pública do Congresso Nacional por URN, seleção `Current`/`Original`, textos com hash, versão, valor legal, licença e atribuição (0085). Rota `nao_apurada`: verificação `unknown(rota_nao_qualificada)`.
-- Robots RFC 9309 com tokens do produto e de IA, validade de 24 h, ritmo mínimo de 5 s por host, trava persistente e teto de 12 requisições por chamada; barreiras sem repetição nem fallback.
-- Instalador detecta pacote MSIX e relança fora do contêiner por `Win32_Process.Create`, com log e código de saída; `-PermitirVirtualizado` é opção expressa. `doctor` alerta `home_virtualizado` por caminho ou identidade MSIX.
-- BCB: consulta com `Propriedade:"valor"`, conferência local de tipo e número (commit anterior `9bc6da6`, preservado).
+Decisão 0085. Corrige os erros do `doctor` com rede e acrescenta rota sob demanda para legislação federal.
+
+- BCB: a borda do BCB recusa `querytext` com `="` (HTML "Requisição inválida!", status 200), causa do
+  `resposta_invalida` na a2 e na a3. Consulta passa a `Propriedade:"valor"`, com tipo e número
+  conferidos no cliente; página filtrada com resultados não examinados é
+  `unavailable(resposta_parcial_sem_correspondencia)`, nunca ausência nem total fabricado.
+- Conector `normas_leg` (normas.leg.br, Congresso Nacional): metadados por URN e textos `Current`
+  (compilação monovigente da Câmara) ou `Original` (publicação no DOU), com hash, versão, valor legal
+  declarado (`UnofficialLegalValue`), licença CC BY 4.0 e atribuição. Robots RFC 9309, ritmo de 5 s,
+  teto de 12 requisições por chamada e barreiras persistidas, pelo portão da Câmara parametrizado.
+- Obra federal: Câmara primeiro; `normas_leg` só por ausência ou por motivo de alcance da Câmara
+  (`ativacao_ao_vivo_pendente`, `especie_busca_nao_demonstrada`). Cobre MPs, decretos, decretos-leis,
+  leis complementares e normas anteriores a 1970.
+- Rota `nao_apurada`: verificação por `normas_leg` é sempre `unknown(rota_nao_qualificada)`, com trecho,
+  âncora e evidência; a procedência é reconhecida por rótulo, perfil, metadados ou host.
+- Documentos antigos em quarentena no parser (CTN, Decreto-Lei 2.627/1940, decretos com regulamento
+  anexo) são capturados sem trecho.
+- Instalador detecta pacote MSIX e relança fora do contêiner por `Win32_Process.Create`, sem desvio;
+  `doctor` alerta `home_virtualizado`.
+- `scripts/ruff_catraca.py` deixa de aceitar Ruff ausente como zero achados.
+- Acervo: o snapshot da 1.4.0a3 (mesmo `derived_version`) é reanexado à release, sem nova exportação.
 
 ## 1.4.0a3 - 13/11/2026
 
