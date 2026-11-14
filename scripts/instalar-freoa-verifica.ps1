@@ -23,7 +23,8 @@ public static class FreoaPackageIdentity {
 }
 
 # Sem desvio: a 0085 §4 não prevê instalação deliberada no armazenamento virtualizado.
-& {
+# Função chamada pelo nome (não por `&`): a única invocação `&` do script fica em Invoke-NativeChecked.
+function Invoke-ForaDoPacoteMsix {
     try {
         if (Test-CurrentPackage) {
             if ($env:FV_INSTALL_RELAUNCHED) { throw "O processo relancado ainda esta em pacote MSIX" }
@@ -71,6 +72,7 @@ exit `$code
         exit 1
     }
 }
+Invoke-ForaDoPacoteMsix
 
 
 function Invoke-NativeChecked {
