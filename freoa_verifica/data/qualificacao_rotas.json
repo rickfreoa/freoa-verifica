@@ -168,6 +168,62 @@
           "relatorio_sha256": null
         }
       }
+    },
+    {
+      "rota": "normas_leg",
+      "fonte": "normas_leg",
+      "perfil": "normas_leg",
+      "capacidades": {
+        "identificacao": {
+          "estado": "nao_apurada",
+          "rotulo": "Porta L: identificação",
+          "versao": null,
+          "relatorio": null,
+          "relatorio_sha256": null
+        },
+        "texto_publicado": {
+          "estado": "nao_apurada",
+          "rotulo": "Porta L: texto publicado",
+          "versao": null,
+          "relatorio": null,
+          "relatorio_sha256": null
+        },
+        "texto_consolidado_vigente": {
+          "estado": "nao_apurada",
+          "rotulo": "Porta L: texto consolidado vigente",
+          "versao": null,
+          "relatorio": null,
+          "relatorio_sha256": null
+        },
+        "redacao_em_data": {
+          "estado": "nao_apurada",
+          "rotulo": "Porta L: redação em data",
+          "versao": null,
+          "relatorio": null,
+          "relatorio_sha256": null
+        },
+        "anexos": {
+          "estado": "nao_apurada",
+          "rotulo": "Porta L: anexos",
+          "versao": null,
+          "relatorio": null,
+          "relatorio_sha256": null
+        },
+        "remissoes": {
+          "estado": "nao_apurada",
+          "rotulo": "Porta L: remissões",
+          "versao": null,
+          "relatorio": null,
+          "relatorio_sha256": null
+        },
+        "vigencia_declarada": {
+          "estado": "nao_apurada",
+          "rotulo": "Porta L: vigência declarada",
+          "versao": null,
+          "relatorio": null,
+          "relatorio_sha256": null
+        }
+      }
     }
   ]
 }

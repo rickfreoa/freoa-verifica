@@ -1,0 +1,29 @@
+{
+ "conector": null,
+ "versao": "1.4.0a3",
+ "url": "https://normas.leg.br/987.9451176cf8cb4e12.js",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a3 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-14T11:33:18.851280+00:00",
+ "sonda": true,
+ "fonte_sonda": "normas_leg",
+ "confirmacao_host": "A",
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://normas.leg.br/987.9451176cf8cb4e12.js",
+ "status": 200,
+ "content_type": "text/javascript",
+ "cabecalhos": {
+  "content-length": "879862",
+  "content-type": "text/javascript",
+  "date": "Sat, 14 Nov 2026 11:33:19 GMT",
+  "last-modified": "Tue, 10 Nov 2026 23:08:26 GMT"
+ },
+ "sha256": "b04f0e8b48bce6635e570de4f52bb3a8af58bf70c4162ed6b237f92324039324",
+ "bytes": 879862,
+ "arquivo": "s_987_js.bin"
+}

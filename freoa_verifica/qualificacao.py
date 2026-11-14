@@ -194,3 +194,18 @@ def anexar_rotas(itens: list[dict[str, Any]], rotas: list[dict[str, Any]]) -> li
             it["rotas"] = lista
         saida.append(it)
     return saida
+
+
+def rota_aprovada(fonte: str, perfil: str) -> bool:
+    """Gate fechado por rota (0085): exige apuração válida de todas as capacidades.
+
+    O catálogo não atesta capacidade: `carregar` reconfere os relatórios antes de aceitar estados.
+    """
+    try:
+        from importlib.resources import files
+        rotas = carregar(files("freoa_verifica").joinpath("data/qualificacao_rotas.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return False
+    matching = [r for r in rotas if r.get("fonte") == fonte and r.get("perfil") == perfil]
+    return len(matching) == 1 and all(matching[0]["capacidades"].get(c, {}).get("estado") == "aprovada"
+                                      for c in CAPACIDADES)

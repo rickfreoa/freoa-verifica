@@ -1,10 +1,79 @@
 ﻿# Instala FREOA Verifica; Python 3.11+. O padrão de -Versao é o __version__ do repositório na release.
 # A attestation é obrigatória; -SemAttestation pula a verificação e grava attestation_verificada: false.
 param(
-    [string]$Versao = "1.4.0a3",
+    [string]$Versao = "1.4.0a4",
     [switch]$SemAttestation
 )
 $ErrorActionPreference = "Stop"
+
+# Detection happens before any installation/home write (0085 §4).
+function Test-CurrentPackage {
+    if (-not ("FreoaPackageIdentity" -as [type])) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class FreoaPackageIdentity {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetCurrentPackageFullName(ref uint length, System.Text.StringBuilder name);
+}
+"@
+    }
+    [uint32]$length = 0
+    return [FreoaPackageIdentity]::GetCurrentPackageFullName([ref]$length, $null) -ne 15700
+}
+
+# Sem desvio: a 0085 §4 não prevê instalação deliberada no armazenamento virtualizado.
+# Função chamada pelo nome (não por `&`): a única invocação `&` do script fica em Invoke-NativeChecked.
+function Invoke-ForaDoPacoteMsix {
+    try {
+        if (Test-CurrentPackage) {
+            if ($env:FV_INSTALL_RELAUNCHED) { throw "O processo relancado ainda esta em pacote MSIX" }
+            # USERPROFILE is shared with the uncontained process; no installation state lives here.
+            $runDir = Join-Path $env:USERPROFILE ("freoa-instalar-" + [guid]::NewGuid().ToString("N"))
+            New-Item -ItemType Directory -Path $runDir | Out-Null
+            $log = Join-Path $runDir "instalacao.log"
+            $exitFile = Join-Path $runDir "exit.txt"
+            $scriptLiteral = $PSCommandPath.Replace("'", "''")
+            $versionLiteral = $Versao.Replace("'", "''")
+            $logLiteral = $log.Replace("'", "''")
+            $exitLiteral = $exitFile.Replace("'", "''")
+            $attArg = if ($SemAttestation) { " -SemAttestation" } else { "" }
+            $bootstrap = @"
+`$env:FV_INSTALL_RELAUNCHED = '1'
+`$code = 1
+try {
+    & '$scriptLiteral' -Versao '$versionLiteral'$attArg *> '$logLiteral'
+    if (`$null -ne `$LASTEXITCODE) { `$code = `$LASTEXITCODE } elseif (`$?) { `$code = 0 }
+} catch {
+    `$_ | Out-String | Add-Content -LiteralPath '$logLiteral' -Encoding UTF8
+} finally {
+    [System.IO.File]::WriteAllText('$exitLiteral', [string]`$code)
+}
+exit `$code
+"@
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
+            $shell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+            $command = "`"$shell`" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand $encoded"
+            $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $command }
+            if ($created.ReturnValue -ne 0 -or -not $created.ProcessId) { throw "Win32_Process.Create recusou o relancamento" }
+            $deadline = (Get-Date).AddHours(2)
+            while (-not (Test-Path -LiteralPath $exitFile)) {
+                if ((Get-Date) -gt $deadline) { throw "Tempo esgotado aguardando instalacao; log: $log" }
+                Start-Sleep -Milliseconds 500
+                $running = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $($created.ProcessId)"
+                if (-not $running -and -not (Test-Path -LiteralPath $exitFile)) { throw "Instalador terminou sem codigo; log: $log" }
+            }
+            if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log | Write-Output }
+            $code = [int](Get-Content -LiteralPath $exitFile -Raw)
+            exit $code
+        }
+    } catch {
+        Write-Error "Nao foi possivel instalar fora do pacote MSIX. Use o terminal comum (PowerShell). $_" -ErrorAction Continue
+        exit 1
+    }
+}
+Invoke-ForaDoPacoteMsix
+
 
 function Invoke-NativeChecked {
     param([string]$Etapa, [string]$Comando, [string[]]$Argumentos)

@@ -64,7 +64,8 @@ EXCEPT_JUSTIFICADOS: dict[tuple[str, str], str] = {
     (f"connectors/{m}.py", f"{c}Connector.health"): _HEALTH
     for m, c in (("bcb", "Bcb"), ("cvm_colegiado", "CvmColegiado"), ("cvm_normas", "CvmNormas"),
                  ("datajud", "Datajud"), ("planalto", "Planalto"), ("senado", "Senado"), ("stf", "Stf"),
-                 ("stj", "Stj"), ("tcu", "Tcu"), ("tjdft", "Tjdft"), ("tjsp", "Tjsp"))
+                 ("stj", "Stj"), ("tcu", "Tcu"), ("tjdft", "Tjdft"), ("tjsp", "Tjsp"),
+                 ("normas_leg", "NormasLeg"))
 }
 
 # --- coleta AST -------------------------------------------------------------------------------------------------

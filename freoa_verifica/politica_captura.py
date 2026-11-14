@@ -2,7 +2,7 @@
 
 from freoa_verifica.connectors.base import Unavailable
 
-LEGIS_CONNECTORS = ("planalto", "camara_legin", "cvm_normas", "bcb", "senado")
+LEGIS_CONNECTORS = ("planalto", "camara_legin", "normas_leg", "cvm_normas", "bcb", "senado")
 LEGIS_NOVA_CAPTURA = frozenset(LEGIS_CONNECTORS) - {"planalto"}
 
 

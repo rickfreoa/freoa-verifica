@@ -2,7 +2,9 @@
 
 Uma fonte-sonda NÃO é fonte do produto: não entra em `registry()`, não é importada pelo serviço nem pelo servidor
 MCP (teste estrutural em `tests/test_sondas.py`) e só é alcançada por `scripts/capturar_fixture.py --fonte-sonda`
-com `--sonda` e `--url`. O pedido sai pelo transporte comum, com UA identificado do pacote.
+com `--sonda` e `--url`. Exceção 0085: `normas_leg` também tem conector e sua gramática de API/binários
+é validada pelo adaptador; as duas entradas usam o mesmo portão. O pedido sai pelo transporte comum,
+com UA identificado do pacote.
 
 Proveniência (`confirmacao`, `hosts_b`): nível A = o host consta de página oficial (tribunal, CNJ ou CJF) que foi
 LIDA, ou de configuração publicada pelo próprio portal; `origem_hosts` registra, host a host, a URL da confirmação.
@@ -202,12 +204,13 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
             "pendência IL.2-b. Crawl-delay: 5; o instrumento não interpreta esse intervalo: pendência IL.2-b, "
             "sem novas sondas nesta entrega. Só robots.txt no catálogo."),
     _f("normas_leg", "normas.leg.br: portal de normas da legislação federal (Congresso Nacional)",
-       {"normas.leg.br": ()},
-       "normas.leg.br=https://www12.senado.leg.br/noticias/materias/2025/11/13/senado-ganha-premio-pela-criacao-do-portal-normas-leg.br "
-       "(página oficial lida, com link para https://normas.leg.br/)",
-       nota="nível A só no host: o portal é de página única, a leitura oficial não menciona API, download em massa nem "
-            "texto por dispositivo. A API pública que o br-eli-mcp usa (base /api/public, URN mais sufixo de dispositivo) "
-            "vem só de projeto de terceiros, sem página oficial lida: " + _IL2B.strip() + " só robots.txt."),
+       {"normas.leg.br": ("/api/public/normas", "/api/public/binario/",
+                           "/main.9e54abd8eff4fac4.js", "/987.9451176cf8cb4e12.js")},
+       "normas.leg.br=https://normas.leg.br/ (cliente oficial e API pública, decisão 0085 §2)",
+       consultas={"normas.leg.br": ("/api/public/normas",)},
+       mimes=_MIMES | {"application/ld+json", "text/javascript", "application/javascript"},
+       nota="0085: API e reescrita de binários declaradas pelos dois scripts do cliente oficial; "
+            "robots RFC 9309, UA identificado, CC BY 4.0; rota nao_apurada, sem verified."),
     _f("camara_legislacao", "Câmara dos Deputados: Legislação Informatizada (publicação original e texto publicado)",
        {"www.camara.leg.br": ("/legislacao", "/legislacao/busca"), "www2.camara.leg.br": (
             "/legin/fed/lei/1970-1979/lei-6404-15-dezembro-1976-368447-norma-pl.html",

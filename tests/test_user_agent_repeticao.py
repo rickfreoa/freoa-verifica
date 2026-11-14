@@ -21,6 +21,7 @@ from freoa_verifica.connectors.cvm_colegiado import CvmColegiadoConnector
 from freoa_verifica.connectors.cvm_normas import CvmNormasConnector
 from freoa_verifica.connectors.datajud import DatajudConnector
 from freoa_verifica.connectors.planalto import PlanaltoConnector
+from freoa_verifica.connectors.normas_leg import NormasLegConnector
 from freoa_verifica.connectors.senado import SenadoConnector
 from freoa_verifica.connectors.stf import StfConnector
 from freoa_verifica.connectors.stj import StjConnector
@@ -29,7 +30,7 @@ from freoa_verifica.connectors.tjdft import TjdftConnector
 from freoa_verifica.connectors.tjsp import TjspConnector
 
 CLASSES = [
-    BcbConnector, CamaraLeginConnector, CvmColegiadoConnector, CvmNormasConnector, DatajudConnector, PlanaltoConnector,
+    BcbConnector, CamaraLeginConnector, CvmColegiadoConnector, CvmNormasConnector, DatajudConnector, PlanaltoConnector, NormasLegConnector,
     SenadoConnector, StfConnector, StjConnector, TcuConnector, TjdftConnector, TjspConnector,
 ]
 HOST = "example.org"

@@ -62,6 +62,10 @@ class Evidence:
     esfera: str = "nao_identificado"
     atribuicao: dict | None = None  # só origem Câmara (0080, §7); aditivo, omitido quando ausente
 
+    versao_texto: str | None = None
+    legislationLegalValue: str | None = None
+    license: str | None = None
+
     def __post_init__(self) -> None:
         if self.captured_at is None and self.fetched_at is not None:
             self.captured_at = self.fetched_at
@@ -278,17 +282,43 @@ def origem_camara(rw: ResolvedWork) -> bool:
     return rw.source_id == "camara_legin" or str(getattr(rw.document, "profile", "")).startswith("camara")
 
 
+def origem_normas_leg(rw: ResolvedWork) -> bool:
+    """Procedência normas.leg.br por QUALQUER sinal (0085 §3.3): rótulo, perfil, metadados do conector ou host.
+
+    Basta um: trocar `source_id` e `profile` não promove a `verified` texto obtido por esta rota.
+    """
+    from urllib.parse import urlsplit
+    doc = rw.document
+    if rw.source_id == "normas_leg" or getattr(doc, "profile", None) == "normas_leg":
+        return True
+    if any(getattr(b, "kind", None) == "normas_leg_metadados" for b in (getattr(doc, "editorial_blocks", None) or [])):
+        return True
+    try:
+        host = (urlsplit(rw.url or "").hostname or "").lower()
+    except ValueError:
+        return False  # URL ilegível não é procedência normas.leg.br; os demais sinais já decidiram
+    return host == "normas.leg.br" or host.endswith(".normas.leg.br")
+
+
 def campos_evidencia_obra(rw: ResolvedWork, acervo_ate: str | None) -> dict[str, Any]:
     atribuicao = rw.atribuicao
     if atribuicao is None and origem_camara(rw):  # obra montada fora do serviço: home padrão, autoria declarada
         from freoa_verifica.connectors.camara_atribuicao import atribuicao as montar, autoria_declarada
         atribuicao = montar(None, autoria_declarada(getattr(rw.document, "text", None)), sha256=rw.sha256, url=rw.url)
-    return campos_evidencia(
+    extra = {}
+    if origem_normas_leg(rw):
+        from freoa_verifica.connectors.normas_leg import ATRIBUICAO
+        meta = next((json.loads(b.text) for b in rw.document.editorial_blocks
+                     if b.kind == "normas_leg_metadados"), {})
+        atribuicao = {"texto": ATRIBUICAO}
+        extra = {"versao_texto": meta.get("version"),
+                 "legislationLegalValue": meta.get("legislationLegalValue"), "license": meta.get("license")}
+    return {**extra, **campos_evidencia(
         rw.capture_id, rw.sha256, rw.url, rw.fetched_at,
         source_kind=_inferir_source_kind(rw.work_key), natureza_texto=_inferir_natureza_texto(rw),
         procedencia=_inferir_procedencia(rw), esfera=_inferir_esfera(rw.work_key), acervo_ate=acervo_ate,
         atribuicao=atribuicao,
-    )
+    )}
 
 
 def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, span=None) -> Evidence:
@@ -704,6 +734,23 @@ def verificar(
             temporal=Dimension("unknown", "DADOS_PERSISTIDOS_INCOMPLETOS"),
             support=support, citation=cite,
         ))
+    from freoa_verifica.qualificacao import rota_aprovada
+    if origem_normas_leg(rw) and not rota_aprovada("normas_leg", "normas_leg"):
+        # 0085 §3.3: material parcial, sem confirmação, inclusive na API Python sem serviço.
+        evidence = _ev_from_resolved(rw, cite.path, None)
+        provision = _find_provision(rw.document, cite.path) if cite.path else None
+        if (provision is not None and not provision.ambiguous and not rw.quarantined
+                and not _reading_blockers(rw, cite.path)):
+            try:
+                red = provision.current_redaction()
+                evidence.trecho_oficial, evidence.span = red.text, red.span
+            except (AmbiguousProvision, RevokedProvision):
+                pass
+        return _persist(repo, citacao, trecho, data, modo, VerificationResult(
+            identity=Dimension("unknown", "rota_nao_qualificada", [evidence]),
+            text=Dimension("unknown", "rota_nao_qualificada", [evidence]),
+            temporal=Dimension("unknown", "rota_nao_qualificada", [evidence]),
+            support=support, citation=cite))
     path = cite.path
     if motivo := _caput_nao_representado(rw, path):
         return _persist(repo, citacao, trecho, data, modo, VerificationResult(
@@ -1014,7 +1061,7 @@ def _result_to_json(result: VerificationResult) -> dict[str, Any]:
             "status": d.status,
             "reason_code": d.reason_code,
             "evidence": [{**{k: v for k, v in asdict(e).items()
-                             if k not in ("fontes_consultadas", "proveniencia", "atribuicao") or v},
+                             if k not in ("fontes_consultadas", "proveniencia", "atribuicao", "versao_texto", "legislationLegalValue", "license") or v},
                           "span": list(e.span) if e.span is not None else None}
                          for e in d.evidence],
         }

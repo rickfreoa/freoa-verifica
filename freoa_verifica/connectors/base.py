@@ -75,7 +75,7 @@ def sanitizar_falha_parser(exc: Unavailable, *, perfil=None, url=None, sha256=No
     safe = {"fase": "interpretacao", "causa": evidence.get("causa")
             if isinstance(evidence.get("causa"), str) and evidence["causa"] in CAUSAS_PARSER else "protocolo"}
     profile = perfil or evidence.get("perfil")
-    if isinstance(profile, str) and profile in {"planalto", "cvm_docx", "bcb_json", "cvm_pdf", "pdf_texto", "camara_legin", "camara_anexo"}:
+    if isinstance(profile, str) and profile in {"planalto", "cvm_docx", "bcb_json", "cvm_pdf", "pdf_texto", "camara_legin", "camara_anexo", "normas_leg"}:
         safe["perfil"] = profile
     if type(evidence.get("exit_code")) is int:
         safe["exit_code"] = evidence["exit_code"]
@@ -250,6 +250,7 @@ def registry() -> dict[str, type[Connector]]:
         cvm_normas,
         datajud,
         planalto,
+        normas_leg,
         senado,
         stf,
         stj,

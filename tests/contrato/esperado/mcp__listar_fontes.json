@@ -129,6 +129,36 @@
         "ultimo_health": null
       },
       {
+        "autoridade": "Congresso Nacional / normas.leg.br",
+        "circuito": [
+          {
+            "estado": "fechado",
+            "falhas": 0,
+            "host": "normas.leg.br"
+          }
+        ],
+        "cobertura": {
+          "atualizacao": "sob demanda (0085)",
+          "busca_textual": false,
+          "colecoes": [
+            "lei",
+            "lei_complementar",
+            "decreto",
+            "decreto_lei",
+            "medida_provisoria",
+            "decreto_legislativo",
+            "emenda_constitucional",
+            "constituicao"
+          ],
+          "ementa": true,
+          "inteiro_teor": true,
+          "periodo": "legislação federal",
+          "qualificacao": "nao_apurada"
+        },
+        "id": "normas_leg",
+        "ultimo_health": null
+      },
+      {
         "autoridade": "Presidência da República / Planalto",
         "circuito": [
           {
@@ -352,6 +382,6 @@
         "ultimo_health": null
       }
     ],
-    "total": 11
+    "total": 12
   }
 }

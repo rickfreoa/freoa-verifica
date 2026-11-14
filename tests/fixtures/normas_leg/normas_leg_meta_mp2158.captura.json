@@ -1,0 +1,27 @@
+{
+ "conector": "normas_leg",
+ "versao": "1.4.0a3",
+ "url": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:medida.provisoria:2001;2158-35&tipo_documento=maior-detalhe",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a3 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-14T11:32:43.032134+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:medida.provisoria:2001;2158-35&tipo_documento=maior-detalhe",
+ "status": 200,
+ "content_type": "application/json",
+ "cabecalhos": {
+  "content-type": "application/json",
+  "date": "Sat, 14 Nov 2026 11:32:43 GMT"
+ },
+ "sha256": "4f4a5dc854aaab84b494087a7cf07fc58bfc31c7cadf4897cd4b41e6c5225877",
+ "bytes": 21400,
+ "arquivo": "normas_leg_meta_mp2158.json"
+}

@@ -1,0 +1,29 @@
+{
+ "conector": "normas_leg",
+ "versao": "1.4.0a3",
+ "url": "https://normas.leg.br/robots.txt",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a3 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-14T11:32:28.760526+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://normas.leg.br/robots.txt",
+ "status": 200,
+ "content_type": "text/plain",
+ "cabecalhos": {
+  "content-length": "25",
+  "content-type": "text/plain",
+  "date": "Sat, 14 Nov 2026 11:32:29 GMT",
+  "last-modified": "Tue, 10 Nov 2026 23:09:01 GMT"
+ },
+ "sha256": "1cbdbc6504be7abe1267d01d7f565bfcfe5851ba3f6a3754d1d61c8f8a2c6aa3",
+ "bytes": 25,
+ "arquivo": "normas_leg_robots.txt"
+}

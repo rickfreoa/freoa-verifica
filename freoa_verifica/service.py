@@ -102,6 +102,9 @@ from freoa_verifica.politica_captura import (  # noqa: E402
     LEGIS_NOVA_CAPTURA as _LEGIS_NOVA_CAPTURA,
     exigir_nova_captura,
 )
+# Motivos da Câmara que indicam norma fora do alcance da rota, não falha dela (0085): só estes
+# autorizam a consulta seguinte a normas_leg.
+_CAMARA_FORA_DE_ALCANCE = frozenset({"ativacao_ao_vivo_pendente", "especie_busca_nao_demonstrada"})
 # Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
 _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
 
@@ -693,7 +696,7 @@ class Verifica:
             if connector_id == "stj":
                 self._connectors[connector_id].db_path = self.home / "stj_fts.sqlite"
                 self._connectors[connector_id].resource_dir = self.home / "stj-resources"
-            if connector_id == "camara_legin":
+            if connector_id in {"camara_legin", "normas_leg"}:
                 self._connectors[connector_id].home = self.home
         return self._connectors[connector_id]
 
@@ -903,6 +906,11 @@ class Verifica:
             cap = repo.get_capture(self.conn, capture_id)
             if cap and cap.get("source_id") == "camara_legin":
                 atribuicao = self._atribuicao_camara(texto, cap["sha256"], cap["url"], cap["fetched_at"])
+                if atribuicao not in saida:
+                    saida.append(atribuicao)
+            if cap and cap.get("source_id") == "normas_leg":
+                from freoa_verifica.connectors.normas_leg import ATRIBUICAO
+                atribuicao = {"texto": ATRIBUICAO}
                 if atribuicao not in saida:
                     saida.append(atribuicao)
         return saida
@@ -1197,7 +1205,7 @@ class Verifica:
     def _offline(self) -> bool:
         return self._read_only or os.environ.get("FV_OFFLINE", "").strip() in {"1", "true", "yes"}
 
-    def _capture_work(self, work: WorkKey, requested_work_date=None, *, versao="vigente") -> ResolvedWork | list[ResolvedWork] | None:
+    def _capture_work(self, work: WorkKey, requested_work_date=None, *, versao="vigente", fonte=None) -> ResolvedWork | list[ResolvedWork] | None:
         if self._offline():
             return None
         key = {
@@ -1215,7 +1223,9 @@ class Verifica:
         elif work.authority in {"bcb", "cmn"}:
             order = ["bcb"]
         elif work.authority == "federal":
-            order = ["camara_legin"]
+            # 0085: normas_leg é rota adicional, depois da Câmara (0058: fonte oficial distinta,
+            # declarada em fontes_consultadas); nunca a substitui.
+            order = [fonte] if fonte else ["camara_legin", "normas_leg"]
         else:
             order = list(_LEGIS_CONNECTORS)
 
@@ -1232,6 +1242,8 @@ class Verifica:
                     continue
                 if cid == "camara_legin":
                     cand = replace(cand, metadata={**cand.metadata, "versao": versao})
+                if cid == "normas_leg" and versao == "publicacao_original":
+                    cand = replace(cand, metadata={**cand.metadata, "versao": "Original"})
                 resp = conn_obj.fetch(cand)
                 parsed = conn_obj.parse(resp)
                 if cid == "camara_legin":
@@ -1257,6 +1269,9 @@ class Verifica:
                     for page in conn_obj.paginas.values():
                         repo.save_capture(self.conn, page, cid, home=self.home)
                     consultadas.append({"fonte": cid, "resultado": "capturada", "motivo": None, "categoria": None})
+                if cid == "normas_leg":
+                    for page in conn_obj.paginas.values():
+                        repo.save_capture(self.conn, page, cid, home=self.home)
                 if cid == "cvm_normas":  # C2: página do ato sempre capturada como evidência de situação
                     situacao.registrar_cvm(self.conn, self.home, conn_obj, cand, rw_novo)
                 rw_novo.fontes_consultadas = consultadas
@@ -1274,6 +1289,10 @@ class Verifica:
                 consultadas.append({"fonte": cid, "resultado": "indisponivel", "motivo": exc.reason,
                                     "categoria": exc.categoria,
                                     **({"evidencia_indisponibilidade": exc.evidencia} if exc.evidencia else {})})
+                if cid == "camara_legin" and exc.reason not in _CAMARA_FORA_DE_ALCANCE:
+                    # 0085: normas_leg só supre o que a rota da Câmara não alcança; falha de
+                    # integridade ou barreira da Câmara não é encoberta por outra rota.
+                    break
             except Exception as exc:  # noqa: BLE001 — captura sob demanda
                 errors.append(f"{cid}:{type(exc).__name__}")
                 consultadas.append({"fonte": cid, "resultado": "erro", "motivo": type(exc).__name__,
@@ -1286,13 +1305,31 @@ class Verifica:
     def _resolve(self, work: WorkKey, requested_work_date=None, *, strict: bool = False,
                  versao="vigente", fonte=None) -> ResolvedWork | list[ResolvedWork] | None:
         """strict: obra ausente do acervo sem poder consultar a fonte é lacuna de cobertura, não negativa (A2)."""
+        if work.authority == "federal" and fonte == "normas_leg":
+            local = self._rebuild_from_db(work)
+            if isinstance(local, ResolvedWork) and local.source_id == "normas_leg":
+                meta = next((json.loads(b.text) for b in local.document.editorial_blocks
+                             if b.kind == "normas_leg_metadados"), {})
+                versoes = {e.get("version") for e in meta.get("encoding") or [] if isinstance(e, dict)}
+                if versao == "vigente":
+                    # Auditoria 0085, I3: vigente é a compilação; Original só quando não há Current.
+                    aceita = meta.get("version") == "Current" or (meta.get("version") == "Original"
+                                                                  and "Current" not in versoes)
+                else:
+                    aceita = meta.get("version") == "Original"
+                if aceita:
+                    return local
+            captured = self._capture_work(work, requested_work_date, versao=versao, fonte=fonte)
+            if captured is None:
+                raise SourceUnavailable("fonte_selecionada_nao_capturada")
+            return captured
         if work.authority == "federal":
             try:
                 selected = self._selecionar_camara(work, versao, fonte)
             except SourceUnavailable as exc:
                 if exc.reason != "versao_nao_capturada" or self._offline():
                     raise
-                selected = self._capture_work(work, requested_work_date, versao=versao)
+                selected = self._capture_work(work, requested_work_date, versao=versao, fonte=fonte)
             if selected is not None:
                 if isinstance(selected, ResolvedWork):
                     validate_identity(work, selected.document, requested_work_date)
@@ -1300,7 +1337,7 @@ class Verifica:
             if fonte is not None and fonte != "camara_legin":
                 raise SourceUnavailable("fonte_selecionada_nao_capturada")
             if versao != "vigente" or fonte == "camara_legin":
-                got = self._capture_work(work, requested_work_date, versao=versao)
+                got = self._capture_work(work, requested_work_date, versao=versao, fonte=fonte)
                 if got is None:
                     raise SourceUnavailable("versao_nao_capturada")
                 return got
@@ -1559,7 +1596,7 @@ class Verifica:
                     if candidate_cite and candidate_cite.work:
                         authority = candidate_cite.work.authority
                         kind = candidate_cite.work.kind
-                wk = WorkKey(authority, kind, re.sub(r"\D", "", number) or number, year)
+                wk = WorkKey(authority, kind, number if connector.id == "normas_leg" else (re.sub(r"\D", "", number) or number), year)
                 if connector.id == "camara_legin":
                     wk, work_date = declared_identity(parsed)
                     if wk is None:
@@ -1586,6 +1623,10 @@ class Verifica:
                     for page in connector.paginas.values():
                         repo.save_capture(self.conn, page, connector.id, home=self.home)
                     atribuicao = self._atribuicao_camara(parsed.text, rw.sha256, rw.url, rw.fetched_at)
+                if connector.id == "normas_leg":
+                    for page in connector.paginas.values():
+                        repo.save_capture(self.conn, page, connector.id, home=self.home)
+                    atribuicao = cand.metadata["atribuicao"]
                 if connector.id == "cvm_normas":  # C2
                     situacao.registrar_cvm(self.conn, self.home, connector, cand, rw)
                 if parsed.provisions:
@@ -1774,7 +1815,12 @@ class Verifica:
         if rw.source_id == "camara_legin":
             return self._obter_camara(rw, path, data, versao)
         if versao == "publicacao_original":
-            return {"status": "unknown", "reason_code": "primeira_publicacao_nao_identificada", "texto": None}
+            meta = next((json.loads(b.text) for b in rw.document.editorial_blocks
+                         if b.kind == "normas_leg_metadados"), {}) if rw.source_id == "normas_leg" else {}
+            if meta.get("version") != "Original":
+                return {"status": "unknown", "reason_code": "primeira_publicacao_nao_identificada", "texto": None}
+            # Auditoria 0085, I3: o texto `Original` de normas.leg.br reproduz a publicação no DOU,
+            # declarada nos metadados da captura (sem valor oficial; atribuição na resposta).
         return self._resposta_dispositivo(rw, path, data)
 
     def _resposta_dispositivo(self, rw, path, data):
@@ -3834,6 +3880,7 @@ class Verifica:
         slice_ = text[offset : offset + max_chars]
         truncado = offset + max_chars < len(text)
         envolto = envolver(slice_)
+        from freoa_verifica.connectors.normas_leg import ATRIBUICAO
         return {
             "status": "encontrada",
             "capture_id": capture_id,
@@ -3854,6 +3901,8 @@ class Verifica:
             "cursor": str(offset + max_chars) if truncado else None,
             **({"atribuicao": self._atribuicao_camara(text, cap["sha256"], cap["url"], cap["fetched_at"])}
                if cap.get("source_id") == "camara_legin" else {}),
+            **({"atribuicao": {"texto": ATRIBUICAO}}
+               if cap.get("source_id") == "normas_leg" else {}),
             **({} if ctype else {"proveniencia": {
                 "interpretacao": ORIGEM_LEGADO_CONFERIDO if conferida is not None else ORIGEM_LEGADO}}),
         }
@@ -4190,13 +4239,15 @@ class Verifica:
 
     def doctor(self, *, offline: bool = False) -> dict[str, Any]:
         from freoa_verifica import __version__
+        from freoa_verifica.windows_package import home_virtualizado
 
+        virtualizado = home_virtualizado(self.home)
         checks: list[dict[str, Any]] = [
             {"nome": "versao", "status": "ok", "detalhe": __version__},
             {
                 "nome": "home",
-                "status": "ok" if self.home.is_dir() else "falha",
-                "detalhe": str(self.home),
+                "status": "alerta" if virtualizado else ("ok" if self.home.is_dir() else "falha"),
+                "detalhe": "home_virtualizado" if virtualizado else str(self.home),
             },
             {
                 "nome": "banco",

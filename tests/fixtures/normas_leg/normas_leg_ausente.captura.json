@@ -1,0 +1,28 @@
+{
+ "conector": "normas_leg",
+ "versao": "1.4.0a3",
+ "url": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei:2099;999999&tipo_documento=maior-detalhe",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a3 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-14T11:32:50.486431+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei:2099;999999&tipo_documento=maior-detalhe",
+ "status": 200,
+ "content_type": "application/json",
+ "cabecalhos": {
+  "content-length": "46",
+  "content-type": "application/json",
+  "date": "Sat, 14 Nov 2026 11:32:50 GMT"
+ },
+ "sha256": "03989985df5687c52cf7b330b434693b1c9b51c5c8ff692f092e3aed823a1f77",
+ "bytes": 46,
+ "arquivo": "normas_leg_ausente.json"
+}
