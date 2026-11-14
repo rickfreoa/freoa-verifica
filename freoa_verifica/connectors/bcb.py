@@ -134,19 +134,26 @@ class BcbConnector(Connector):
             tipo = tipo or tipo_q
         rowlimit = min(MAX_ROWS, max(1, int(filtros.get("limite") or filtros.get("rowlimit") or 15)))
         startrow = max(0, int(filtros.get("startrow") or 0))
+        # Desde 11/2026 a borda do BCB recusa `Propriedade="valor"` com uma página HTML
+        # "Requisição inválida!" (status 200). A forma `Propriedade:"valor"` é aceita, mas
+        # casa por frase contida ("Resolução" alcança "Resolução BCB"); a igualdade do tipo
+        # passa a ser conferida no cliente (`tipos_aceitos`).
         parts = ["ContentType:normativo", "AND", "contentSource:normativos"]
+        tipos_aceitos: frozenset[str] | None = None
         if tipo:
             if str(tipo) in {"Resolução CMN", "Resolução"}:
+                tipos_aceitos = frozenset({"Resolução CMN", "Resolução"})
                 parts.append(
-                    'AND (TipodoNormativoOWSCHCS="Resolução CMN" OR TipodoNormativoOWSCHCS="Resolução")'
+                    'AND (TipodoNormativoOWSCHCS:"Resolução CMN" OR TipodoNormativoOWSCHCS:"Resolução")'
                 )
             else:
-                parts.append(f'AND TipodoNormativoOWSCHCS="{tipo}"')
+                tipos_aceitos = frozenset({str(tipo)})
+                parts.append(f'AND TipodoNormativoOWSCHCS:"{_sem_aspas(str(tipo))}"')
         if numero is not None:
             n = _clean_numero(numero)
-            parts.append(f"AND (NumeroOWSNMBR:{n} OR NumeroOWSNMBR=\"{n}.00000000000\")")
+            parts.append(f"AND NumeroOWSNMBR:{n}")
         if terms and not numero:
-            # termos livres além da base
+            # termos livres além da base (sem `=`: a borda recusa `="`)
             safe = re.sub(r"[^\wÀ-ÿ\s\-\"\.]", " ", terms)
             parts.append(f"AND ({safe})")
         querytext = " ".join(parts)
@@ -185,6 +192,7 @@ class BcbConnector(Connector):
         if total > 0 and not rows:
             raise Unavailable("resposta_invalida")
         out = CandidateList()
+        descartadas = 0
         for row in rows:
             if not isinstance(row, dict):
                 raise Unavailable("resposta_invalida")
@@ -192,6 +200,12 @@ class BcbConnector(Connector):
             num = _clean_numero(row.get("NumeroOWSNMBR"))
             if not tipo_row or not num:
                 raise Unavailable("resposta_invalida")
+            if tipos_aceitos is not None and tipo_row not in tipos_aceitos:
+                descartadas += 1
+                continue
+            if numero is not None and num != _clean_numero(numero):
+                descartadas += 1
+                continue
             title = str(row.get("title") or f"{tipo_row} {num}")
             assunto = row.get("AssuntoNormativoOWSMTXT") or ""
             if isinstance(assunto, str):
@@ -215,7 +229,7 @@ class BcbConnector(Connector):
                     },
                 )
             )
-        out.total = max(total, len(out))
+        out.total = max(total - descartadas, len(out))
         return out
 
     def resolve(self, key: Any) -> Candidate | None:
@@ -287,6 +301,10 @@ class BcbConnector(Connector):
     def parse(self, resp: Response):
         from freoa_verifica.parsers.isolated import parse_ou_indisponivel
         return parse_ou_indisponivel("bcb_json", texto_do_response(resp), 120.0)
+
+
+def _sem_aspas(valor: str) -> str:
+    return valor.replace('"', " ").strip()
 
 
 def _sem_conteudo(texto: str) -> bool:
