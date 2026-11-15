@@ -30,6 +30,8 @@ decretos de anexos, o CTN (faixa `1960-1969`, 0077) nem a LC 118/2005.
 4. Diagnóstico ao titular (emenda, seção 8): manter o Jusratio para legislação;
    aceitar capacidade parcial rotulada quando houver aprovação; ou outra rota
    (Planalto, LexML, INLABS) para MPs, decretos e normas anteriores a 1970.
+   Decidido pelo titular em 14/11/2026: decisões 0085 (rota normas.leg.br, sem `verified`)
+   e 0086 (Jusratio subsidiário para legislação).
 
 ## 3. Limites
 
