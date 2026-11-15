@@ -112,7 +112,9 @@ def test_c1_consulta_corrente_continua_negando_pela_situacao(svc160):
     """Controle: com `data` ausente ou igual a hoje a situação revogada ainda converte (0075, §2, item 4)."""
     svc, rw, _ = svc160
     _situacao(svc, rw, "revogada", "2022-12-01")
-    for data in (None, HOJE.isoformat()):
+    # Data de hoje lida na execução, não na importação: o CI coletou antes da meia-noite de São Paulo e
+    # executou depois (15/11/2026), e o HOJE do módulo virou consulta histórica.
+    for data in (None, today_sp().isoformat()):
         out = svc.verificar_citacao("art. 1º da Resolução CVM nº 160/2022", data=data)
         assert out["temporal"]["status"] == "divergent"
         assert out["temporal"]["reason_code"] == "OBRA_REVOGADA_NA_FONTE"
@@ -264,7 +266,7 @@ def test_c3_consulta_corrente_identica_a_430e654_em_inclusao_e_redacao_futuras(d
     base = _temporal_da_base()
     if base is None:
         pytest.skip("git indisponível")
-    d = HOJE.isoformat() if data == "HOJE" else None
+    d = today_sp().isoformat() if data == "HOJE" else None
     for prov in _provisoes_de_inclusao_futura():
         a = base.select(prov, d, work_date="1976-12-15")
         b = temporal_select(prov, d, work_date="1976-12-15")
@@ -277,7 +279,7 @@ def test_c3_consulta_corrente_identica_a_430e654_em_todos_os_dispositivos_da_rcv
     if base is None:
         pytest.skip("git indisponível")
     doc = parse_cvm_docx(load_fixture("cvm_resol_160_consolid_docx"))
-    for d in (None, HOJE.isoformat()):
+    for d in (None, today_sp().isoformat()):
         for prov in doc.provisions:
             kw = {"work_date": "2022-07-13", "fetched_at": "2026-10-18T00:00:00Z"}
             assert _tudo(base.select(prov, d, **kw)) == _tudo(temporal_select(prov, d, **kw)), prov.path

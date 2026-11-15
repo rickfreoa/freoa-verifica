@@ -1,5 +1,29 @@
 # Histórico de versões
 
+## 1.4.0a4 - 14/11/2026
+
+Decisão 0085. Corrige os erros do `doctor` com rede e acrescenta rota sob demanda para legislação federal.
+
+- BCB: a borda do BCB recusa `querytext` com `="` (HTML "Requisição inválida!", status 200), causa do
+  `resposta_invalida` na a2 e na a3. Consulta passa a `Propriedade:"valor"`, com tipo e número
+  conferidos no cliente; página filtrada com resultados não examinados é
+  `unavailable(resposta_parcial_sem_correspondencia)`, nunca ausência nem total fabricado.
+- Conector `normas_leg` (normas.leg.br, Congresso Nacional): metadados por URN e textos `Current`
+  (compilação monovigente da Câmara) ou `Original` (publicação no DOU), com hash, versão, valor legal
+  declarado (`UnofficialLegalValue`), licença CC BY 4.0 e atribuição. Robots RFC 9309, ritmo de 5 s,
+  teto de 12 requisições por chamada e barreiras persistidas, pelo portão da Câmara parametrizado.
+- Obra federal: Câmara primeiro; `normas_leg` só por ausência ou por motivo de alcance da Câmara
+  (`ativacao_ao_vivo_pendente`, `especie_busca_nao_demonstrada`). Cobre MPs, decretos, decretos-leis,
+  leis complementares e normas anteriores a 1970.
+- Rota `nao_apurada`: verificação por `normas_leg` é sempre `unknown(rota_nao_qualificada)`, com trecho,
+  âncora e evidência; a procedência é reconhecida por rótulo, perfil, metadados ou host.
+- Documentos antigos em quarentena no parser (CTN, Decreto-Lei 2.627/1940, decretos com regulamento
+  anexo) são capturados sem trecho.
+- Instalador detecta pacote MSIX e relança fora do contêiner por `Win32_Process.Create`, sem desvio;
+  `doctor` alerta `home_virtualizado`.
+- `scripts/ruff_catraca.py` deixa de aceitar Ruff ausente como zero achados.
+- Acervo: o snapshot da 1.4.0a3 (mesmo `derived_version`) é reanexado à release, sem nova exportação.
+
 ## 1.4.0a3 - 13/11/2026
 
 Pré-release das correções do incremento IL (IL.1 a IL.3-c) sobre a rota Câmara (Legislação Informatizada). **Não é o IL qualificado:** a Porta L não foi aprovada; a matriz de capacidades por rota continua `nao_apurada` e nenhuma capacidade de legislação recebe rótulo de substituição (decisão 0084).

@@ -9,6 +9,19 @@ class IdentityMismatch(ValueError):
     pass
 
 def declared_identity(document):
+    # 0085: JSON-LD já confrontado com a consulta e vinculado ao binário pelo conector.
+    # Não usa remissões do corpo nem infere identidade do endereço de download.
+    if document.profile == "normas_leg" and any(b.kind == "normas_leg_metadados" for b in document.editorial_blocks):
+        from freoa_verifica.connectors.normas_leg import identidade, TIPOS, URN
+        from freoa_verifica.connectors.base import Unavailable
+        try:
+            meta = json.loads(next(b.text for b in document.editorial_blocks if b.kind == "normas_leg_metadados"))
+            key = identidade(meta)
+            match = URN.fullmatch(meta.get("urn", ""))
+            if match and (match[1], int(match[2][:4]), match[3]) == (TIPOS[key.kind], key.year, key.number):
+                return key, match[2] if len(match[2]) == 10 else None
+        except (ValueError, TypeError, AttributeError, StopIteration, Unavailable):
+            return None, None
     # Somente epígrafe; remissões no corpo não identificam o ato capturado.
     if document.profile == 'senado_norma':
         try:

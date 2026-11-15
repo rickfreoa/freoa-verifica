@@ -24,6 +24,7 @@ snapshot 1.1.0 reprocessado com o código 1.2.0 e da semente TJDFT. Instalado em
 | Fonte | O que entra e qual prova | Limite |
 |---|---|---|
 | Planalto | HTML oficial com hash; árvore de dispositivos sob sentinelas (ADCT com escopo próprio); redações e atos alteradores presentes na página; parse em processo isolado com limites. | História anterior só quando riscada na própria página; data do ato não é início de vigência (decisão 0002). **Sem atualização ao vivo na 1.3.0:** o Planalto encerra a conexão do cliente que se identifica (UA `freoa-verifica/<versão>`, sem exceção de navegador; decisão 0048), e o pedido ao vivo responde `unavailable(recusa_identificado_planalto)`, categoria `recusa_identificado`, vermelha na saúde das fontes. O acervo instalado continua atendendo consultas sem rede. |
+| normas.leg.br (0085, 1.4.0a4 não publicada) | API pública do Congresso Nacional por URN (oito espécies federais). Captura sob demanda, `Current` preferido, senão `Original`; parse isolado, hash, URL, instante, versão, `legislationLegalValue` e licença na evidência. | **Rota `nao_apurada`, sem `verified`:** `unknown(rota_nao_qualificada)`, com texto e âncora disponíveis. `UnofficialLegalValue`; não substitui o DOU. Sem aritmética multivigente (`hasPart`). Validação desta implementação somente offline; capturas formais pelo instrumento pendentes de ambiente com rede. |
 | Senado | JSON de identificação e datas de atos alteradores. | Metadados não substituem o texto normativo. |
 | CVM normas | DOCX, PDF ou HTML oficial; página do ato capturada sempre (situação: revogação bloqueia vigência); PDF com estrutura inferida (decisão 0037). | Dispositivo junto a margem descartada fica `unknown`; redações antigas sem rasura ficam `ambiguous`. |
 | BCB/CMN | JSON oficial; situação e data de efeito declarada da revogação (decisão 0035); parse em processo isolado. | Circulares cujo JSON só remete a outro endereço respondem `DOCUMENTO_SEM_ESTRUTURA`. |
@@ -61,3 +62,11 @@ Toda indisponibilidade de fonte mantém o `motivo` e, quando há prova, traz `ca
 | `regressao` | exceção não prevista do próprio código | falha |
 
 Sem prova não há categoria. Desafio e recusa continuam sem contorno.
+
+## normas.leg.br: obtenção e atribuição (0085)
+
+A consulta exige espécie, número e ano; Constituição usa `1988-10-05;1988`. Ausência só pelo corpo exato `{"urn": "<URN consultada>"}`. Identidade divergente, formato ou endereço inesperado são indisponibilidade, nunca zero. Binários só em HTTPS no host exato e na gramática UUID documentada; `/api/binario/` é reescrito para `/api/public/binario/`.
+
+Todas as requisições usam o transporte comum e UA identificado. O portão reutiliza o avaliador RFC 9309 da Câmara com os mesmos tokens, política de 24 h, persistência em `<home>/normas_leg`, trava por host, intervalo `max(5 s, Crawl-delay)` e teto de 12 requisições por chamada. Não segue redirects nem repete internamente. 401/403/429/desafio ou robots proibindo bloqueiam até reabertura registrada; 5xx/timeout bloqueiam por uma hora. Não há fallback após barreira. A reabertura explícita em Python é `NormasLegConnector(home=...).portao().reabrir("<decisão>")`; descarta a política para exigir nova leitura de robots.
+
+A evidência inclui: “Fonte: normas.leg.br (Congresso Nacional), licença CC BY 4.0; texto sem valor oficial”. A atribuição acompanha texto e recortes, inclusive após reabertura offline. A resposta da fonte declara a licença; esta implementação não afirma nova captura ao vivo neste ambiente.

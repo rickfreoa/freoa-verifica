@@ -53,6 +53,9 @@ def rodar_ruff() -> list[dict]:
     )
     if p.returncode not in (0, 1):  # 1 = há achados; outro valor = o Ruff falhou
         sys.exit(f"ruff falhou ({p.returncode}): {p.stderr.strip()}")
+    if p.returncode == 1 and not p.stdout.strip():
+        # `python -m ruff` sem o módulo instalado também sai com 1, sem JSON: não é "zero achados".
+        sys.exit(f"ruff indisponível ou sem saída JSON: {p.stderr.strip()[:300]}")
     return json.loads(p.stdout or "[]")
 
 

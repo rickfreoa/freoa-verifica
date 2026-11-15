@@ -82,6 +82,24 @@ def verifica_populada(tmp_path, monkeypatch, _lsa_art254a):
 
 
 @pytest.fixture(autouse=True)
+def normas_leg_sem_rede(request, monkeypatch):
+    """0085: normas.leg.br não tem portão de ativação; fora de `live`, o transporte real da rota fica fechado.
+
+    Sem isto, a pendência da Câmara nos homes de teste leva ao fallback e a requisições reais (achado de
+    14/11/2026). Testes da rota injetam o próprio transporte no `NormasPortao` e não passam por aqui.
+    """
+    if request.node.get_closest_marker("live"):
+        return
+    from freoa_verifica.connectors import normas_leg
+    from freoa_verifica.connectors.base import Unavailable
+
+    def bloqueado(url, **kwargs):
+        raise Unavailable("rede_bloqueada_em_teste", "fonte_fora")
+
+    monkeypatch.setattr(normas_leg, "connector_fetch", bloqueado)
+
+
+@pytest.fixture(autouse=True)
 def isolated_staging(tmp_path, monkeypatch):
     """Todo staging de testes permanece no temporario do proprio teste."""
     monkeypatch.setenv("FV_STAGING_DIR", str(tmp_path / "staging-root"))

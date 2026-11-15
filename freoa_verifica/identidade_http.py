@@ -22,6 +22,7 @@ UA_POR_CONECTOR = {
     "cvm_normas": MODO_IDENTIFICADO,
     "datajud": MODO_IDENTIFICADO,
     "planalto": MODO_IDENTIFICADO,
+    "normas_leg": MODO_IDENTIFICADO,
     "senado": MODO_IDENTIFICADO,
     "stf": MODO_IDENTIFICADO,
     "stj": MODO_IDENTIFICADO,

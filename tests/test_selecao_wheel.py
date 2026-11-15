@@ -99,7 +99,9 @@ def test_selecao_ancorada_em_arquivo_roda_na_copia_isolada(tmp_path):
     alvos = [a for a in alvos if Path(a).name != Path(__file__).name]
     r = subprocess.run(
         [sys.executable, "-m", "pytest", *alvos, "-q", "-m", "not live and not repositorio", "-p", "no:cacheprovider"],
-        cwd=copia, env={**os.environ, "PYTHONSAFEPATH": "1"}, capture_output=True, text=True, timeout=900,
+        # Limite contra travamento, não meta de desempenho: o conjunto ancorado em `__file__` cresce a cada
+        # arquivo novo (0085: ~4.660 testes, 12m44s fora da cópia em 15/11/2026, mais a montagem da cópia).
+        cwd=copia, env={**os.environ, "PYTHONSAFEPATH": "1"}, capture_output=True, text=True, timeout=1800,
     )
     diagnostico = tmp_path / "wheel-execucao.txt"
     if r.returncode:

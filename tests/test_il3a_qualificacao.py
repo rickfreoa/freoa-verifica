@@ -26,7 +26,8 @@ CAPS_ESPERADAS = {
 }
 ROTAS_ESPERADAS = {("camara_atualizado", "camara_legin", "camara_atualizado"),
                    ("camara_original", "camara_legin", "camara_original"),
-                   ("planalto_acervo", "planalto", "planalto")}
+                   ("planalto_acervo", "planalto", "planalto"),
+                   ("normas_leg", "normas_leg", "normas_leg")}
 
 
 def _dados():

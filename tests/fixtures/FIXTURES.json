@@ -1828,6 +1828,101 @@
   "file": "camara_legin/il3c_13874_original.captura.json",
   "sha256": "5e5b7d983641448c21dfab594edbe28daa605617e0d11642dc7c0908f5ba1288"
  },
+ "normas_leg_ausente": {
+  "bytes": 46,
+  "capturado_em": "2026-11-14T11:32:50.486431+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "normas_leg/normas_leg_ausente.json",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "03989985df5687c52cf7b330b434693b1c9b51c5c8ff692f092e3aed823a1f77",
+  "status": 200,
+  "url": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei:2099;999999&tipo_documento=maior-detalhe",
+  "url_final": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei:2099;999999&tipo_documento=maior-detalhe"
+ },
+ "normas_leg_ausente__captura": {
+  "bytes": 965,
+  "categoria": "metadados_captura",
+  "descreve": "normas_leg_ausente",
+  "file": "normas_leg/normas_leg_ausente.captura.json",
+  "sha256": "c141c071e5f967b0cd2815707b16b4263b9f6c72e088d59f114b9a88f1ea1fc1"
+ },
+ "normas_leg_bin_lc118_original": {
+  "bytes": 19263,
+  "capturado_em": "2026-11-14T11:32:57.458242+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/html",
+  "file": "normas_leg/normas_leg_bin_lc118_original.html",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "bc644be658e33eec87e547b0c20748d2bd316352c3c8ce31ad8c3939f2c4d9df",
+  "status": 200,
+  "url": "https://normas.leg.br/api/public/binario/2d8f8857-d7d2-4f31-b1ad-6e64cc27e7fe/texto",
+  "url_final": "https://normas.leg.br/api/public/binario/2d8f8857-d7d2-4f31-b1ad-6e64cc27e7fe/texto"
+ },
+ "normas_leg_bin_lc118_original__captura": {
+  "bytes": 920,
+  "categoria": "metadados_captura",
+  "descreve": "normas_leg_bin_lc118_original",
+  "file": "normas_leg/normas_leg_bin_lc118_original.captura.json",
+  "sha256": "9856583037f0d592a40a3f9a1bcc7e11851220bd19952d7a2f41327346b934a3"
+ },
+ "normas_leg_meta_lc118": {
+  "bytes": 4600,
+  "capturado_em": "2026-11-14T11:32:35.733600+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "normas_leg/normas_leg_meta_lc118.json",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "de7480d00a4d4db0a718c8ac945336a95adf62afa58f3793ec163bad2247358c",
+  "status": 200,
+  "url": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei.complementar:2005;118&tipo_documento=maior-detalhe",
+  "url_final": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:lei.complementar:2005;118&tipo_documento=maior-detalhe"
+ },
+ "normas_leg_meta_lc118__captura": {
+  "bytes": 964,
+  "categoria": "metadados_captura",
+  "descreve": "normas_leg_meta_lc118",
+  "file": "normas_leg/normas_leg_meta_lc118.captura.json",
+  "sha256": "feeb8f19c826463b4683b55b82bd951add98cdf1db992d02413a555621d5918d"
+ },
+ "normas_leg_meta_mp2158": {
+  "bytes": 21400,
+  "capturado_em": "2026-11-14T11:32:43.032134+00:00",
+  "categoria": "captura_real",
+  "content_type": "application/json",
+  "file": "normas_leg/normas_leg_meta_mp2158.json",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "4f4a5dc854aaab84b494087a7cf07fc58bfc31c7cadf4897cd4b41e6c5225877",
+  "status": 200,
+  "url": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:medida.provisoria:2001;2158-35&tipo_documento=maior-detalhe",
+  "url_final": "https://normas.leg.br/api/public/normas?urn=urn:lex:br:federal:medida.provisoria:2001;2158-35&tipo_documento=maior-detalhe"
+ },
+ "normas_leg_meta_mp2158__captura": {
+  "bytes": 976,
+  "categoria": "metadados_captura",
+  "descreve": "normas_leg_meta_mp2158",
+  "file": "normas_leg/normas_leg_meta_mp2158.captura.json",
+  "sha256": "506e1b5437d0e500e1c04c174af907adf41faa262c82676b96f11572944463f8"
+ },
+ "normas_leg_robots": {
+  "bytes": 25,
+  "capturado_em": "2026-11-14T11:32:28.760526+00:00",
+  "categoria": "captura_real",
+  "content_type": "text/plain",
+  "file": "normas_leg/normas_leg_robots.txt",
+  "origem_metadados": "captura_instrumento",
+  "sha256": "1cbdbc6504be7abe1267d01d7f565bfcfe5851ba3f6a3754d1d61c8f8a2c6aa3",
+  "status": 200,
+  "url": "https://normas.leg.br/robots.txt",
+  "url_final": "https://normas.leg.br/robots.txt"
+ },
+ "normas_leg_robots__captura": {
+  "bytes": 853,
+  "categoria": "metadados_captura",
+  "descreve": "normas_leg_robots",
+  "file": "normas_leg/normas_leg_robots.captura.json",
+  "sha256": "450faa4fdb16d237fefbed0bd641e498c1fd5517c5c100445f310b5eb42e4458"
+ },
  "planalto_lei_10303_2001": {
   "bytes": 104183,
   "capturado_em": "2026-10-17T20:46:08.268794+00:00",

@@ -1,0 +1,28 @@
+{
+ "conector": "normas_leg",
+ "versao": "1.4.0a3",
+ "url": "https://normas.leg.br/api/public/binario/2d8f8857-d7d2-4f31-b1ad-6e64cc27e7fe/texto",
+ "metodo": "GET",
+ "parametros": null,
+ "user_agent": "freoa-verifica/1.4.0a3 (+https://github.com/rickfreoa/freoa-verifica)",
+ "capturado_em": "2026-11-14T11:32:57.458242+00:00",
+ "sonda": false,
+ "fonte_sonda": null,
+ "confirmacao_host": null,
+ "confirmado_por_titular": false,
+ "unavailable": false,
+ "motivo": null,
+ "categoria": null,
+ "evidencia": {},
+ "url_final": "https://normas.leg.br/api/public/binario/2d8f8857-d7d2-4f31-b1ad-6e64cc27e7fe/texto",
+ "status": 200,
+ "content_type": "text/html",
+ "cabecalhos": {
+  "content-length": "19263",
+  "content-type": "text/html",
+  "date": "Sat, 14 Nov 2026 11:32:58 GMT"
+ },
+ "sha256": "bc644be658e33eec87e547b0c20748d2bd316352c3c8ce31ad8c3939f2c4d9df",
+ "bytes": 19263,
+ "arquivo": "normas_leg_bin_lc118_original.html"
+}

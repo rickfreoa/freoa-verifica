@@ -180,13 +180,13 @@ def _conferir_com_o_corpo(registro: dict, corpo: bytes) -> None:
         _invalido("politica_decisoes_divergem_dos_bytes")
 
 
-def validar_politica(registro, host: str | None = None, corpo: bytes | None = None) -> dict:
+def validar_politica(registro, host: str | None = None, corpo: bytes | None = None, *, hosts=HOSTS) -> dict:
     """Esquema do recibo de política (0080 §4.4). Estrutura inválida é falha local, não `KeyError`. Com `corpo`
     (bytes originais preservados) confere também a coerência integral do recibo com eles."""
     if not isinstance(registro, dict):
         _invalido("politica")
     if (not isinstance(registro.get("host"), str) or (host is not None and registro["host"] != host)
-            or registro["host"] not in HOSTS or registro.get("url") != f"https://{registro['host']}/robots.txt"):
+            or registro["host"] not in hosts or registro.get("url") != f"https://{registro['host']}/robots.txt"):
         _invalido("politica_host")
     if not eh_sha256(registro.get("sha256")):
         _invalido("politica_sha256")
@@ -294,14 +294,16 @@ _TRAVAS_LOCAIS_GUARDA = threading.Lock()
 
 
 class Estado:
-    def __init__(self, home: Path | str | None):
+    def __init__(self, home: Path | str | None, *, hosts=HOSTS, diretorio="camara"):
+        self.hosts = hosts
+        self.diretorio = diretorio
         self.home = None if home is None else Path(home)
         self._memoria: dict[str, object] = {}
 
     # --- armazenamento ---------------------------------------------------------------------------------------
     @property
     def pasta(self) -> Path | None:
-        return None if self.home is None else self.home / "camara"
+        return None if self.home is None else self.home / self.diretorio
 
     def _ler(self, nome: str, padrao):
         if self.home is None:
@@ -384,8 +386,8 @@ class Estado:
         registro = self._ler(f"robots-{host}.json", None)
         if registro is None:
             return None
-        validar_politica(registro, host)
-        return validar_politica(registro, host, self.corpo_da_politica(host, registro["sha256"]))
+        validar_politica(registro, host, hosts=self.hosts)
+        return validar_politica(registro, host, self.corpo_da_politica(host, registro["sha256"]), hosts=self.hosts)
 
     @staticmethod
     def _nome_arquivado(host: str, registro: dict) -> str:
@@ -397,7 +399,7 @@ class Estado:
 
     def gravar_politica(self, host: str, registro: dict, corpo: bytes) -> None:
         """`corpo` são os bytes ORIGINAIS da resposta; o recibo tem de ser coerente com eles (hash, tamanho, derivados)."""
-        validar_politica(registro, host, corpo)
+        validar_politica(registro, host, corpo, hosts=self.hosts)
         nome = self._nome_arquivado(host, registro)
         self._gravar_bytes(f"robots-{host}-{registro['sha256']}.txt", corpo)
         self._gravar(nome, registro)
@@ -406,7 +408,7 @@ class Estado:
     def regravar_politica(self, host: str, registro: dict) -> None:
         """Atualiza o recibo vigente E o arquivado de mesmo nome (decisões por caminho): o artefato arquivado é o que
         viaja no snapshot e não pode ficar com as decisões iniciais. O corpo e o hash não mudam."""
-        validar_politica(registro, host, self.corpo_da_politica(host, registro["sha256"]))
+        validar_politica(registro, host, self.corpo_da_politica(host, registro["sha256"]), hosts=self.hosts)
         self._gravar(self._nome_arquivado(host, registro), registro)
         self._gravar(f"robots-{host}.json", registro)
 
@@ -440,7 +442,7 @@ class Estado:
                 raise LeituraLocalFalhou(str(exc)) from exc
             registros = [_json_de(a, None) for a in arquivos]
         return [validar_politica(r, host, self.corpo_da_politica(host, r["sha256"])
-                                 if isinstance(r, dict) and eh_sha256(r.get("sha256")) else None) for r in registros]
+                                 if isinstance(r, dict) and eh_sha256(r.get("sha256")) else None, hosts=self.hosts) for r in registros]
 
     def descartar_politica(self, host: str) -> None:
         if self.home is None:
