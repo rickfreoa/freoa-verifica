@@ -121,6 +121,18 @@ sob `%LOCALAPPDATA%\Packages\`.
    declara total zero. `publicacao_original` de `normas_leg` entrega o texto `Original` (I3).
    URL ilegível não é atribuída a `normas_leg`.
 
+9. Instalador (15/11): a detecção por compilação C# em tempo de execução falhava com `%TEMP%`
+   longo e abortava a instalação mesmo fora do app Claude (reproduzido; sete testes do instalador
+   na cópia isolada do `test_selecao_wheel`). P/Invoke por Reflection.Emit foi descartado porque o
+   EDR corporativo do notebook (Bitdefender) bloqueou o arquivo com esse padrão. A detecção passa a
+   `Windows.ApplicationModel.Package.Current` (WinRT do Windows PowerShell; `0x80073D54` = sem
+   pacote); no PowerShell 7 avisa e segue, cabendo ao `doctor` o alerta `home_virtualizado`.
+   Limite da prova: em 15/11 o shell do Desktop Commander não tinha identidade de pacote nem
+   escrita redirecionada (sonda em `%LOCALAPPDATA%` fora do armazenamento do pacote), de modo que
+   o relançamento não foi exercitado contra o cenário real dos defeitos 24 e 25; questão aberta.
+10. `test_selecao_wheel`: limite da execução aninhada de 900 s para 1.800 s, como proteção contra
+   travamento; o conjunto ancorado em `__file__` passou a ~4.660 testes (12m44s fora da cópia).
+
 ## 7. Verificação ao vivo (14/11/2026, home temporário)
 
 `doctor` da fonte: positivo `ok`, negativo `zero`, documento `ok` (LC 118, `Original`).

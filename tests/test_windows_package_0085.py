@@ -37,7 +37,9 @@ def test_doctor_home_alerta(tmp_path, monkeypatch):
 @pytest.mark.repositorio
 def test_instalador_detecta_e_relanca_antes_de_gravar_home():
     text = (Path(__file__).resolve().parents[1] / "scripts/instalar-freoa-verifica.ps1").read_text(encoding="utf-8-sig")
-    assert '[DllImport("kernel32.dll"' in text and "GetCurrentPackageFullName" in text and "15700" in text
+    assert "Windows.ApplicationModel.Package" in text and "-2147009196" in text
+    # Sem Add-Type (compila em %TEMP%, falha com caminho longo) nem P/Invoke emitido (bloqueado por EDR).
+    assert "Add-Type" not in text and "DefinePInvokeMethod" not in text and "DllImport" not in text
     assert "PermitirVirtualizado" not in text  # auditoria 0085, I4: sem desvio da detecção
     assert "Invoke-CimMethod -ClassName Win32_Process -MethodName Create" in text
     assert text.index("Test-CurrentPackage") < text.index('$etapa = "preparar"')

@@ -7,19 +7,22 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Detection happens before any installation/home write (0085 §4).
+# Identidade de pacote pela API WinRT do Windows PowerShell, sem compilar C# (a compilação grava em %TEMP% e falha
+# com caminho longo) nem emitir P/Invoke dinâmico (padrão bloqueado por EDR corporativo). Achados de 15/11/2026.
 function Test-CurrentPackage {
-    if (-not ("FreoaPackageIdentity" -as [type])) {
-        Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class FreoaPackageIdentity {
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    public static extern int GetCurrentPackageFullName(ref uint length, System.Text.StringBuilder name);
-}
-"@
+    if ($PSVersionTable.PSEdition -eq "Core") {
+        # PowerShell 7 não projeta WinRT; o README manda usar o Windows PowerShell. O doctor alerta home virtualizado.
+        Write-Warning "Deteccao de pacote MSIX indisponivel no PowerShell 7; use o Windows PowerShell."
+        return $false
     }
-    [uint32]$length = 0
-    return [FreoaPackageIdentity]::GetCurrentPackageFullName([ref]$length, $null) -ne 15700
+    try {
+        $null = [Windows.ApplicationModel.Package, Windows.ApplicationModel, ContentType = WindowsRuntime]::Current
+        return $true
+    } catch {
+        $e = $_.Exception
+        while ($e) { if ($e.HResult -eq -2147009196) { return $false }; $e = $e.InnerException }  # APPMODEL_ERROR_NO_PACKAGE
+        throw
+    }
 }
 
 # Sem desvio: a 0085 §4 não prevê instalação deliberada no armazenamento virtualizado.
