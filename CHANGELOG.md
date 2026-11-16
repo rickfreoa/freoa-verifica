@@ -1,6 +1,14 @@
 # Histórico de versões
 
-## 1.4.0a4 - 14/11/2026
+## 1.4.0a5 - 15/11/2026
+
+Mesmo conteúdo funcional da 1.4.0a4, que foi construída (tag `v1.4.0a4`, rascunho no GitHub) e não
+publicada: o wheel não registrava snapshot da própria versão, e a regra de vínculo (snapshot exportado
+pela mesma versão do pacote) recusou o da 1.4.0a3 (`SNAPSHOT_OUTRA_VERSAO`), apurado na auditoria dos
+bytes antes da publicação. A 1.4.0a5 traz snapshot próprio, exportado por ela a partir do corpus da 1.4.0a3 (mesmo
+`derived_version`).
+
+## 1.4.0a4 - não publicada
 
 Decisão 0085. Corrige os erros do `doctor` com rede e acrescenta rota sob demanda para legislação federal.
 
@@ -22,7 +30,8 @@ Decisão 0085. Corrige os erros do `doctor` com rede e acrescenta rota sob deman
 - Instalador detecta pacote MSIX e relança fora do contêiner por `Win32_Process.Create`, sem desvio;
   `doctor` alerta `home_virtualizado`.
 - `scripts/ruff_catraca.py` deixa de aceitar Ruff ausente como zero achados.
-- Acervo: o snapshot da 1.4.0a3 (mesmo `derived_version`) é reanexado à release, sem nova exportação.
+- Acervo: previa reanexar o snapshot da 1.4.0a3, sem nova exportação; recusado pela regra de vínculo
+  (ver 1.4.0a5).
 
 ## 1.4.0a3 - 13/11/2026
 
