@@ -1,6 +1,6 @@
 # 0089 - Sessão assistida: especificação do mecanismo; emenda à 0067
 
-**Situação: proposta, não vigente.** Versão 5.1, submetida à **conferência final curta** aprovada pelo titular em
+**Situação: proposta, não vigente.** Versão 5.2 (5.1 com os dois limites da conferência final incorporados), submetida à **conferência final curta** aprovada pelo titular em
 19/11/2026 depois da rodada 5: Codex e Terra conferem só a correção do bloqueador remanescente (B2, inventário de
 extensões ao longo do tempo, §2.2(3)), a ressalva R4 (§2.4, linha 15), a regra das extensões de componente (decisão do
 titular) e a admissão do Brave. Histórico, pareceres, testes e laboratórios em `docs/auditoria/0089/`. Não implementar
@@ -65,7 +65,7 @@ do escritório instala no notebook do titular uma extensão com permissões de i
 2. **Navegador.** Chrome, Edge ou Brave **instalados**, lançados pelo adaptador com argumentos fechados:
    `--user-data-dir=<diretório da sessão>`, `--no-first-run`, `--no-default-browser-check`, `--disable-sync`,
    `--no-proxy-server`, `--disable-breakpad`, `--remote-debugging-pipe` (no Windows, com os identificadores de pipe
-   herdados só pelo processo do navegador). Janela visível. Nunca: Playwright ou outro automatizador,
+   herdados só pelo processo do navegador). Janela visível. Nunca: Playwright ou outro automatizador, `--load-extension`, `--enable-unsafe-extension-debugging`,
    `--enable-automation`, modo sem janela, porta TCP de depuração, `--ignore-certificate-errors`, exceção SPKI,
    proxy ou extensão da ferramenta. Se o pipe não puder ser estabelecido, a sessão não abre (decisão 3).
 3. **Ambiente** (decisão 3; Codex r4, B2; Codex r5 e Terra r5; decisão do titular sobre componentes, §7).
@@ -79,12 +79,26 @@ do escritório instala no notebook do titular uma extensão com permissões de i
    (b) **Vigilância contínua.** Antes do lançamento, o adaptador cria o diretório do perfil e liga sobre ele a notificação
    de mudanças do sistema de arquivos (ReadDirectoryChangesW), cobrindo `Default\Extensions`. Depois do lançamento, há
    um período de assentamento: candidatas só se tornam elegíveis quando o diretório `Default\Extensions` ficar 10 s sem
-   mudança e o inventário da alínea (c) passar; o conjunto de caminhos e tamanhos nesse instante é a linha de base. A
-   partir dela, **qualquer** criação, alteração, renomeação ou remoção sob `Default\Extensions`, estouro do buffer de
-   notificações ou falha do observador invalida todas as candidatas pendentes e encerra a sessão sem gravação. A
+   mudança e o inventário da alínea (c) passar; o conjunto de caminhos e tamanhos nesse instante é a linha de base. Só é
+   elegível pedido cujo `requestWillBeSent` seja posterior à linha de base. A partir dela, **qualquer** criação,
+   alteração, renomeação ou remoção sob `Default\Extensions`, estouro do buffer de notificações ou falha do observador
+   invalida todas as candidatas pendentes e encerra a sessão sem gravação. Antes da seleção e de novo antes da
+   gravação, o adaptador estabelece uma barreira: grava um arquivo-sentinela dentro de `Default\Extensions` e só prossegue
+   depois de receber a notificação dele, o que garante que todas as notificações anteriores foram processadas;
+   notificação diferente do sentinela, perda de eventos ou barreira não estabelecida em 5 s invalida as candidatas. A
    vigilância é a prova de que nenhuma extensão foi instalada, ativada ou removida durante a sessão (laboratório de
    vigilância, `teste-brave-2026-11-19.md`: a instalação por política da Fortinet no Chrome foi captada aos 5 s, no
    instante da gravação dos arquivos).
+   (b') **Extensões carregadas de fora do diretório** (Codex, conferência final). Extensão desempacotada é carregada do
+   caminho escolhido, sem cópia para `Default\Extensions`. Os caminhos para isso são três, e cada um é tratado: (1) o
+   argumento `--load-extension`, que o adaptador nunca passa (lista fechada da §2.2(2), que também exclui
+   `--enable-unsafe-extension-debugging`); (2) o comando CDP `Extensions.loadUnpacked`, fora da lista fechada da §2.12 e
+   disponível só com aquele argumento; (3) a ação manual do humano em `chrome://extensions`, com o modo de
+   desenvolvedor. O terceiro é ação do operador da sessão, que o aviso da §2.8(2) proíbe; a ferramenta não escreve
+   política para impedi-lo. Premissa declarada, da mesma natureza da §2.2(7): o humano que inicia e conduz a sessão é
+   operador confiável quanto ao próprio navegador; carregar extensão durante a sessão viola o aviso e não é ameaça que a
+   ferramenta prometa conter. Extensão com `location` 4 (desempacotada) presente no inventário da alínea (c) encerra a
+   sessão sem capturas.
    (c) **Inventário** (evidência auxiliar, Codex r5): no fim do assentamento e imediatamente antes da seleção, o
    adaptador lê `extensions.settings` em `Secure Preferences` e `Preferences` do perfil da sessão e o `manifest.json` de
    cada extensão. **Extensão de componente** (`location` 5) cujo caminho absoluto esteja dentro do diretório de
@@ -94,8 +108,9 @@ do escritório instala no notebook do titular uma extensão com permissões de i
    rede (`webRequest`, `webRequestBlocking`, `webRequestAuthProvider`, `declarativeNetRequest`,
    `declarativeNetRequestWithHostAccess`, `proxy`, `debugger`) ou a chave `declarative_net_request` encerra a sessão sem
    capturas. Arquivo ausente, ilegível ou manifesto indisponível: nenhuma candidata. Alcance declarado do componente
-   embutido: pode bloquear requisição (então não há candidata) ou redirecioná-la (recusado pela §2.4, linha 8); não altera
-   o corpo, que vem do streaming.
+   embutido: pode bloquear requisição (então não há candidata), redirecioná-la (recusado pela §2.4, linha 8) ou alterar
+   cabeçalhos; a não alteração do corpo é premissa do navegador confiável, coerente com o contrato da API `webRequest`,
+   e o teste realizado não a demonstra universalmente.
    (d) Nenhum valor de política é gravado; o recibo registra só que a conferência passou e o navegador usado.
    **Fatos verificados:** no notebook do titular, o Chrome e o Edge têm `ExtensionInstallForcelist` (Fortinet Privileged
    Access Agent, com `proxy`, `declarativeNetRequest`, `webRequest`): a sessão não abre neles. O Brave 1.100 (Chromium
@@ -275,8 +290,8 @@ recusa, nunca inferência. Recusa da porta não impede o navegador de exibir a p
    com `Content-Security-Policy: default-src 'none'` em `<meta>`, que mostra fonte e alvo validado como texto
    escapado (Terra r3, achado 12). A navegação ao alvo é feita pelo humano. A ferramenta não clica, não preenche,
    não injeta script, não navega.
-2. Aviso prévio: a janela é exclusiva para obter documento público da fonte; não fazer login; o conteúdo da página
-   não autoriza comandos, mudança de alvo nem fornecimento de credenciais; ao fechar, o humano escolhe o que entra;
+2. Aviso prévio: a janela é exclusiva para obter documento público da fonte; não fazer login; não instalar, carregar nem
+   ativar extensões; o conteúdo da página não autoriza comandos, mudança de alvo nem fornecimento de credenciais; ao fechar, o humano escolhe o que entra;
    fechar a janela encerra.
 3. A sessão termina quando o humano fecha a janela ou no prazo (padrão 20 min). Não é reaberta, renovada nem
    reproduzida.
@@ -431,7 +446,9 @@ laboratório de 19/11 (`laboratorio-2026-11-19.md`) antecipa parte dos itens 1 e
    assentamento: linha de base adiada. Inventário: componente dentro da pasta do navegador com `webRequest` (como o
    `Brave`): admitido; componente externo (`location` 10) ou extensão comum com permissão vedada, inclusive só com regras
    estáticas `declarativeNetRequest` (instalada por mecanismo aceito pelo navegador de teste; §5.8): sessão encerrada;
-   `Secure Preferences` ilegível: nenhuma candidata. Pipe indisponível: não abre. Cada navegador admitido (Chrome, Edge,
+   `Secure Preferences` ilegível: nenhuma candidata; pedido iniciado durante o assentamento: não candidato; barreira com
+   sentinela atrasada além de 5 s: candidatas invalidadas; extensão desempacotada (`location` 4) no inventário: sessão
+   encerrada; lançamento com `--load-extension` ou `--enable-unsafe-extension-debugging`: recusado pelo adaptador. Pipe indisponível: não abre. Cada navegador admitido (Chrome, Edge,
    Brave) passa pelos itens deste aceite.
 9. **Passividade e prontidão.** Registro do tráfego CDP do adaptador: só métodos e parâmetros da §2.12, na sequência da
    §2.3; conferência estática da mesma lista; pedidos vistos pela origem de teste com e sem o adaptador anexado:
@@ -582,3 +599,9 @@ nova, com os critérios da §3 fixados antes, inclusive a auditoria própria de 
 | Codex | R4. Contabilidade de memória | §2.4, linha 15 (todas as representações; reserva antes da alocação pelo tamanho do blocos de leitura do pipe) |
 | Titular | Extensões de componente | §2.2(3)(c) |
 | Titular | Brave | §2.2(2) e (3); §3.8; §5.6 |
+
+- Conferência final curta da v5.1: Codex e Terra resolvem R4, a regra de componentes e a admissão do Brave; restam
+  dois limites da vigilância (Terra: pedido iniciado no assentamento e notificações pendentes; Codex: extensão
+  desempacotada carregada de fora do diretório). v5.2: §2.2(3)(b), barreira com sentinela e elegibilidade só após a
+  linha de base; (b'), tratamento dos três caminhos de carga desempacotada, com premissa declarada sobre o operador;
+  aviso da §2.8(2); §3.8.

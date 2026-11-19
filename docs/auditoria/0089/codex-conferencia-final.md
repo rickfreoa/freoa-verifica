@@ -1,0 +1,13 @@
+Conferidos ramo `docs/0089-sessao-assistida`, HEAD `1d8d67c` e árvore limpa. Sem alterações nem testes. “Resolvido” refere-se à especificação.
+
+1. **B2 — BLOQUEADOR.** A vigilância fecha a passagem transitória de instalações que escrevem em `Default\Extensions`, mas não cobre necessariamente extensões desempacotadas carregadas de outro diretório. O Chromium as carrega do caminho escolhido, sem exigir cópia para esse diretório monitorado. Instalação, atuação e remoção entre inventários continuam, portanto, sendo um contraexemplo documental; não o reproduzi. [Implementação do Chromium](https://raw.githubusercontent.com/chromium/chromium/main/extensions/browser/unpacked_installer.cc). O laboratório demonstra detecção da Fortinet, mas não cobertura desse caminho; a própria §5.8 contempla navegador que aceite extensão desempacotada.
+
+   **Redação mínima:** “A elegibilidade exige também impedimento comprovado do carregamento de extensões fora do diretório monitorado, inclusive desempacotadas, ou cobertura contínua desses carregamentos e remoções. Sem essa garantia, a sessão não admite candidatas.” Incluir esse cenário na §3.8.
+
+2. **R4 — RESOLVIDO.** A linha 15 contabiliza mensagem em processamento, base64, bytes decodificados e cópias, exige reserva antes de cada alocação e limita a leitura antes do delimitador. Isso basta como contrato de contenção do adaptador. A reserva deve abranger também a expansão durante parsing e decodificação, como o texto já exige. Sem redação adicional.
+
+3. **Componentes — RESOLVIDO, na premissa determinada pelo titular.** A exceção exige cumulativamente `location` 5 e caminho dentro da instalação do navegador. Nome, permissões ou autodeclaração no manifesto não bastam. Componente externo (`location` 10), extensão de usuário e extensão de política não recebem essa exceção. Sem redação adicional.
+
+4. **Brave — RESOLVIDO quanto à admissão especificada.** Não identifiquei mecanismo específico demonstrado de aceitação indevida por Shields ou pelo componente `Brave`. `webRequestBlocking`, isoladamente, não demonstra alteração do corpo: seus controles abrangem bloqueio, redirecionamento e cabeçalhos. [Contrato da API](https://developer.chrome.com/docs/extensions/reference/api/webRequest). As regras continuam exigindo troca de rede, status concordantes, cadeia admitida e streaming completo. O laboratório confirma recusas previstas para 304 apresentado como 200, cache e streaming ausente; não substitui o aceite por navegador da §3.8. Subsiste apenas o bloqueador comum do ponto 1.
+
+BLOQUEADOR
