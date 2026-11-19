@@ -266,11 +266,15 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
 FONTES_BARRADAS: Mapping[str, str] = MappingProxyType({
     "senado_legislacao": "04/11/2026: robots.txt de legis.senado.leg.br: unavailable(http_403), recusa_identificado; barreira, sem nova tentativa",
     "dou": "04/11/2026: robots.txt de www.in.gov.br: unavailable(http_403), recusa_identificado; barreira, sem nova tentativa",
+    "npl": "19/11/2026: GET com UA identificado pelo instrumento (sonda, transporte comum): unavailable(transporte_TransportError); TLS concluído e conexão reiniciada pelo servidor depois do pedido HTTP, em robots.txt, llms.txt e ato (l6404consol.htm); plano de testes NPL, T6; barreira, sem nova tentativa",
+    "npl_classico": "19/11/2026: GET com UA identificado pelo instrumento (sonda, transporte comum): unavailable(transporte_TransportError); TLS concluído e conexão reiniciada pelo servidor depois do pedido HTTP, no ato l6404consol.htm; plano de testes NPL, T6; barreira, sem nova tentativa",
 })
 
 HOSTS_RECUSADOS: Mapping[str, str] = MappingProxyType({
     "legis.senado.leg.br": FONTES_BARRADAS["senado_legislacao"],
     "www.in.gov.br": FONTES_BARRADAS["dou"],
+    "portaldalegislacao.presidencia.gov.br": FONTES_BARRADAS["npl"],
+    "portaldalegislacao-classico.presidencia.gov.br": FONTES_BARRADAS["npl_classico"],
     "jurisprudencia.trf1.jus.br": "não consta de página oficial lida; o TRF1 publica a pesquisa no CJF",
     "jurisprudencia.trf3.jus.br": "não consta de página oficial lida; o TRF3 publica em web.trf3.jus.br",
     "juris.trf2.jus.br": "apenas resultado de busca, sem página oficial lida",

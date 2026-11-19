@@ -1171,7 +1171,7 @@ def test_redirecionamento_de_rota_exata_nao_e_seguido(monkeypatch, tmp_path, des
 # --- B2: barreira registrada --------------------------------------------------------------------------
 
 def test_fontes_barradas_registradas_e_tjrs_de_volta_em_nivel_b():
-    assert set(FONTES_BARRADAS) == {"senado_legislacao", "dou"}
+    assert set(FONTES_BARRADAS) == {"senado_legislacao", "dou", "npl", "npl_classico"}
     assert not set(FONTES_BARRADAS) & set(FONTES_SONDA)
     assert "tjrs" in FONTES_SONDA and FONTES_SONDA["tjrs"].hosts_b == {"www.tjrs.jus.br"}
     assert "www.tjrs.jus.br" not in HOSTS_RECUSADOS
