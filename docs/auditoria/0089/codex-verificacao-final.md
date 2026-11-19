@@ -1,0 +1,4 @@
+(a) **Fechado:** §2.2(3)(b) exige `requestWillBeSent` posterior à linha de base e barreira com arquivo-sentinela antes da seleção e novamente antes da gravação, invalidando candidatas diante de outras notificações, perda de eventos ou falha da barreira.
+(b) **Fechado:** §2.2(3)(b') declara claramente a carga manual como premissa de operador confiável quanto ao próprio navegador, da mesma natureza de §2.2(7), e fecha os outros dois caminhos pelas listas de argumentos e comandos CDP permitidos.
+(c) **Fechado:** §2.2(3)(c) declara a não alteração do corpo pelo componente embutido como premissa do navegador confiável e reconhece expressamente que o teste não a demonstra universalmente.
+SEM_BLOQUEADOR
