@@ -110,3 +110,27 @@ def load_fixture(key: str) -> bytes:
 def fixture_path(key: str) -> Path:
     meta = load_meta()
     return FIXTURES_DIR / meta[key]["file"]
+
+
+def guardar_data_da_captura(monkeypatch, capturado_em: str) -> None:
+    """Pendência 23: frescor de captura real (ou de data fixa) medido como se a captura fosse de ontem.
+
+    A regra de 30 dias (`temporal._CAPTURE_MAX_AGE`, decisão 0002) é do produto e continua valendo; o que envelhece
+    é a fixture, cuja data de captura é proveniência e não pode ser reescrita. Alarga-se só a janela de frescor, pela
+    idade da captura menos um dia, no escopo do teste (monkeypatch). "Hoje", a consulta corrente e a guarda de captura
+    futura ficam intactos. Sem isto, a suíte vira bomba-relógio (17/11/2026: 20 falhas sem mudança de código).
+
+    Limite: a janela é do módulo, não da captura. No teste que a usa, outra captura até 29 dias mais velha que a
+    guardada também fica fresca; com 30 ou mais, não. Teste que precise observar `CAPTURA_DESATUALIZADA` não usa
+    esta guarda (ver `test_m3_audit_fix.py`).
+    """
+    from datetime import timedelta
+
+    from freoa_verifica import temporal
+
+    capturada = temporal._parse_fetched_at(capturado_em)
+    if capturada is None:
+        raise AssertionError(f"capturado_em ilegível: {capturado_em!r}")
+    atraso = temporal.today_sp() - capturada.date() - timedelta(days=1)
+    if atraso > timedelta(0):
+        monkeypatch.setattr(temporal, "_CAPTURE_MAX_AGE", temporal._CAPTURE_MAX_AGE + atraso)

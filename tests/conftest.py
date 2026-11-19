@@ -8,7 +8,7 @@ from freoa_verifica.aliases import WorkKey
 from freoa_verifica.parsers.model import ParsedDocument, Provision, Redaction
 from freoa_verifica.parsers.planalto import parse_planalto
 from freoa_verifica.service import Verifica
-from tests.fixture_util import load_fixture, load_meta
+from tests.fixture_util import guardar_data_da_captura, load_fixture, load_meta
 
 LSA_KEY = WorkKey("federal", "lei", "6404", 1976)
 WORK_DATE_LSA = "1976-12-15"
@@ -63,6 +63,7 @@ def verifica_populada(tmp_path, monkeypatch, _lsa_art254a):
     monkeypatch.setenv("FV_HOME", str(home))
     monkeypatch.setenv("FV_OFFLINE", "1")
     body, doc, entry = _lsa_art254a
+    guardar_data_da_captura(monkeypatch, entry["capturado_em"])
     svc = Verifica(home=home)
     rw = svc.indexar_obra(
         source_id="planalto",
