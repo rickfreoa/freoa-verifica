@@ -11,7 +11,10 @@ import pytest
 pytestmark = pytest.mark.repositorio
 
 ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("ci_escopo", ROOT / "scripts" / "ci_escopo.py")
+SCRIPT = ROOT / "scripts" / "ci_escopo.py"
+if not SCRIPT.exists():  # job da wheel: sem checkout
+    pytest.skip("exige o checkout (scripts/)", allow_module_level=True)
+_spec = importlib.util.spec_from_file_location("ci_escopo", SCRIPT)
 ce = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ce)
 
@@ -72,13 +75,55 @@ def test_diff_por_merge_base_sem_renomeacao(monkeypatch):
     assert visto["check"] is True and "--no-renames" in visto["cmd"] and f"{'a' * 40}...{'b' * 40}" in visto["cmd"]
 
 
+CONDICAO = "${{ !cancelled() && !(needs.escopo.result == 'success' && needs.escopo.outputs.so_registro == 'true') }}"
+
+
+def _chave_efetiva(bloco: str, chave: str) -> list[str]:
+    """Valores de `chave` no nível do job (4 espaços), ignorando comentários: o que o runner avalia."""
+    valores = []
+    for linha in bloco.splitlines():
+        if linha.startswith(f"    {chave}:") and not linha.startswith("     "):
+            valores.append(linha.split(":", 1)[1].split(" #", 1)[0].strip())
+    return valores
+
+
 def test_workflow_falha_fechada():
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     teste = ci.split("\n  test:\n", 1)[1].split("\n  repositorio:", 1)[0]
-    assert "needs: escopo" in teste
-    assert "if: ${{ !cancelled() && needs.escopo.outputs.so_registro != 'true' }}" in teste
+    assert _chave_efetiva(teste, "needs") == ["escopo"]
+    assert _chave_efetiva(teste, "if") == [CONDICAO]
     repositorio = ci.split("\n  repositorio:\n", 1)[1].split("\n  lint:\n", 1)[0]
     lint = ci.split("\n  lint:\n", 1)[1]
     for bloco in (repositorio, lint):
         assert "needs:" not in bloco and "if:" not in bloco, "repositorio e lint rodam sempre"
     assert "workflow_call" in ci and "fetch-depth: 0" in ci
+
+
+@pytest.mark.parametrize("bloco", [
+    "    needs: escopo\n    # if: " + CONDICAO + "\n    if: false\n",
+    "    needs: escopo\n    if: ${{ !cancelled() && needs.escopo.outputs.so_registro != 'true' }}\n",
+    "    needs: escopo\n    if: ${{ needs.escopo.outputs.so_registro != 'true' }}\n",
+    "    needs: escopo\n    if: " + CONDICAO + "\n    if: false\n",
+    "    needs: escopo\n",
+])
+def test_condicao_afrouxada_ou_comentada_e_reprovada(bloco):
+    assert _chave_efetiva(bloco, "if") != [CONDICAO]
+
+
+def _avaliar(cancelado: bool, resultado: str, saida: str) -> bool:
+    """Semântica da condição (docs do GitHub: `!cancelled()` remove o `success()` implícito)."""
+    return (not cancelado) and not (resultado == "success" and saida == "true")
+
+
+@pytest.mark.parametrize("cancelado,resultado,saida,roda", [
+    (False, "success", "true", False),   # único caso que dispensa
+    (False, "success", "false", True),
+    (False, "failure", "true", True),    # saída publicada antes de falha posterior não dispensa
+    (False, "failure", "", True),
+    (False, "cancelled", "true", True),  # cancelamento isolado de `escopo`
+    (False, "skipped", "", True),
+    (True, "cancelled", "", False),      # workflow cancelado: nada roda
+])
+def test_tabela_de_verdade_da_condicao(cancelado, resultado, saida, roda):
+    assert CONDICAO == "${{ !cancelled() && !(needs.escopo.result == 'success' && needs.escopo.outputs.so_registro == 'true') }}"
+    assert _avaliar(cancelado, resultado, saida) is roda

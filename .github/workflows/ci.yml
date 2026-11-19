@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   # CI em camadas: PR que só toca registros (docs/decisoes, docs/auditoria) dispensa a matriz; push na main e
-  # release (workflow_call) rodam tudo. Falha deste job não dispensa nada (condição do job test).
+  # release (workflow_call) rodam tudo. Só `escopo` com sucesso e `so_registro=true` dispensa (condição do job test).
   escopo:
     runs-on: ubuntu-latest
     outputs:
@@ -29,7 +29,7 @@ jobs:
 
   test:
     needs: escopo
-    if: ${{ !cancelled() && needs.escopo.outputs.so_registro != 'true' }}
+    if: ${{ !cancelled() && !(needs.escopo.result == 'success' && needs.escopo.outputs.so_registro == 'true') }}
     strategy:
       fail-fast: false
       matrix:
