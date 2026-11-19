@@ -8,7 +8,7 @@ A arquitetura passou por duas rodadas de crítica adversarial antes da implement
 4. Acessibilidade das fontes não se presume: positivo, negativo e documento por conector; desafio nunca vira zero.
 5. `verified` exige pergunta delimitada, documento oficial, hash, âncora e confronto efetivo.
 6. Caminho de execução sem consumo de tokens.
-7. Segurança do transporte preservada em todas as requisições.
+7. Segurança do transporte preservada em todas as requisições. Na sessão assistida, a leitura da regra 4 é a da 0089 §2.1: toda admissão de resposta como captura passa por `transport.capturar_assistida`, com a matriz da §2.4; requisições do navegador dedicado não são emitidas nem encaminhadas pelo transporte. O fluxo automático não muda.
 8. Snapshot por exportação dedicada, com manifesto e instalação atômica.
 9. Licenciamento por componente e por fonte.
 

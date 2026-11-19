@@ -1,4 +1,12 @@
 {
+ "0089_streaming_sintetico": {
+  "bytes": 1300,
+  "categoria": "sintetica",
+  "file": "0089_streaming_sintetico.json",
+  "gerador": "tests/gerar_0089_sintetica.py:gerar",
+  "proposito": "0089 §2.4(11), §2.5(2): identidade de bytes e interpretação estrita offline",
+  "sha256": "07a56e01b17b5b2b574b3d19abc7e427dd7522a9bbc76b04481751fafa81f0cc"
+ },
  "bcb_busca_cmn_4966": {
   "bytes": 1621,
   "capturado_em": "2026-10-17T21:40:06.617309+00:00",
