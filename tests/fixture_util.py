@@ -119,6 +119,10 @@ def guardar_data_da_captura(monkeypatch, capturado_em: str) -> None:
     é a fixture, cuja data de captura é proveniência e não pode ser reescrita. Alarga-se só a janela de frescor, pela
     idade da captura menos um dia, no escopo do teste (monkeypatch). "Hoje", a consulta corrente e a guarda de captura
     futura ficam intactos. Sem isto, a suíte vira bomba-relógio (17/11/2026: 20 falhas sem mudança de código).
+
+    Limite: a janela é do módulo, não da captura. No teste que a usa, outra captura até 29 dias mais velha que a
+    guardada também fica fresca; com 30 ou mais, não. Teste que precise observar `CAPTURA_DESATUALIZADA` não usa
+    esta guarda (ver `test_m3_audit_fix.py`).
     """
     from datetime import timedelta
 

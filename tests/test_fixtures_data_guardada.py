@@ -8,6 +8,7 @@ import pytest
 
 from freoa_verifica import temporal
 from tests.fixture_util import guardar_data_da_captura, load_meta
+from tests.test_decisao_0075 import CAPTURA_160, svc_160  # noqa: F401  (svc_160 é fixture)
 
 CAPTURA = load_meta()["planalto_lei_6404_1976"]["capturado_em"]
 
@@ -25,13 +26,25 @@ def test_captura_guardada_fica_fresca_em_qualquer_data(monkeypatch, dias):
     assert temporal._capture_fresh(CAPTURA, futuro) == (True, [])
 
 
-def test_guarda_nao_alcanca_captura_mais_velha_que_a_guardada(monkeypatch):
+@pytest.mark.parametrize("dias_antes,fresca", [(29, True), (30, False), (31, False)])
+def test_limite_da_guarda_para_captura_mais_velha_que_a_guardada(monkeypatch, dias_antes, fresca):
     base = temporal._parse_fetched_at(CAPTURA)
     futuro = base.date() + timedelta(days=400)
     _hoje(monkeypatch, futuro)
     guardar_data_da_captura(monkeypatch, CAPTURA)
-    mais_velha = (base - timedelta(days=31)).isoformat()
-    assert temporal._capture_fresh(mais_velha, futuro) == (False, ["CAPTURA_DESATUALIZADA"])
+    mais_velha = (base - timedelta(days=dias_antes)).isoformat()
+    assert temporal._capture_fresh(mais_velha, futuro) == (fresca, [] if fresca else ["CAPTURA_DESATUALIZADA"])
+
+
+def test_verifica_populada_aplica_a_guarda(verifica_populada):
+    """Ligação: sem a chamada em `conftest.py`, a captura de 17/10/2026 já passou dos 30 dias e isto reprova."""
+    assert temporal._capture_fresh(CAPTURA, temporal.today_sp()) == (True, [])
+    svc, _, _ = verifica_populada
+    assert svc.obter_dispositivo("Lei 6.404/1976, art. 254-A")["vigencia"]["status"] == "vigente_na_fonte"
+
+
+def test_svc_160_aplica_a_guarda(svc_160):  # noqa: F811
+    assert temporal._capture_fresh(CAPTURA_160, temporal.today_sp()) == (True, [])
 
 
 def test_guarda_nao_libera_captura_futura(monkeypatch):
