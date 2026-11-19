@@ -1,10 +1,8 @@
 # 0089 - Sessão assistida: especificação do mecanismo; emenda à 0067
 
-**Situação: proposta, não vigente.** Versão 5.2 (5.1 com os dois limites da conferência final incorporados), submetida à **conferência final curta** aprovada pelo titular em
-19/11/2026 depois da rodada 5: Codex e Terra conferem só a correção do bloqueador remanescente (B2, inventário de
-extensões ao longo do tempo, §2.2(3)), a ressalva R4 (§2.4, linha 15), a regra das extensões de componente (decisão do
-titular) e a admissão do Brave. Histórico, pareceres, testes e laboratórios em `docs/auditoria/0089/`. Não implementar
-antes do parecer.
+**Situação: vigente desde 19/11/2026.** Versão 5.2, aprovada depois da verificação final de Codex e Terra
+(SEM_BLOQUEADOR) e da aprovação, pelo titular, da premissa sobre o operador (§2.2(3)(b')). Histórico, pareceres, testes
+e laboratórios em `docs/auditoria/0089/`. A implementação segue a §6, com auditoria própria de `transport` (D5).
 
 19/11/2026. Supervisor (Opus), sob a autorização do titular (plano 1.4, seção 9, item 5), a ordem da 0087 §2.1(a)
 e as decisões do titular de 19/11 (opção A; decisões 1 a 6 da rodada 3, §7). Especifica o mecanismo que a 0067
@@ -41,7 +39,8 @@ do escritório instala no notebook do titular uma extensão com permissões de i
    assistida, a regra 4 ("toda requisição passa por `freoa_verifica.transport`") exige que **toda admissão de
    resposta como captura** passe por `transport.capturar_assistida`. As requisições do navegador dedicado não são
    emitidas nem encaminhadas pelo transporte. A exceção não alcança requisição alguma da ferramenta nem o fluxo
-   automático. `AGENTS.md` (regra 4) e a 0001 recebem, no PR desta decisão, remissão a esta leitura.
+   automático. `AGENTS.md` (regra 4) e a 0001 recebem remissão a esta leitura no PR da implementação, que é quando a
+   leitura passa a ter efeito; o PR desta decisão só altera documentos de decisão e auditoria.
 2. **Quarto item da regra 3 da 0067**, nova redação:
 
    > regra 4: o navegador da sessão só é usado pelo humano; a captura entra no sistema exclusivamente pela porta
@@ -605,3 +604,5 @@ nova, com os critérios da §3 fixados antes, inclusive a auditoria própria de 
   desempacotada carregada de fora do diretório). v5.2: §2.2(3)(b), barreira com sentinela e elegibilidade só após a
   linha de base; (b'), tratamento dos três caminhos de carga desempacotada, com premissa declarada sobre o operador;
   aviso da §2.8(2); §3.8.
+- Verificação final (0070) sobre a v5.2: Codex e Terra SEM_BLOQUEADOR. 19/11: o titular aprova a premissa sobre o
+  operador (§2.2(3)(b')). A 0089 torna-se vigente; as remissões em `AGENTS.md` e na 0001 passam ao PR da implementação.

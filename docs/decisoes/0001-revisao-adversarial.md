@@ -1,7 +1,5 @@
 # 0001 — Revisão adversarial da arquitetura
 
-> Leitura da regra 4 na sessão assistida: 0089 §2.1(1) (quando vigente).
-
 A arquitetura passou por duas rodadas de crítica adversarial antes da implementação e por auditoria a cada marco. As objeções aceitas moldaram o desenho:
 
 1. Texto consolidado capturado não é versão jurídica: modelo por dispositivo, redação e evento temporal, com publicação, vigência e efeitos separados.
