@@ -10,7 +10,26 @@ permissions:
   contents: read
 
 jobs:
+  # CI em camadas: PR que só toca registros (docs/decisoes, docs/auditoria) dispensa a matriz; push na main e
+  # release (workflow_call) rodam tudo. Só `escopo` com sucesso e `so_registro=true` dispensa (condição do job test).
+  escopo:
+    runs-on: ubuntu-latest
+    outputs:
+      so_registro: ${{ steps.escopo.outputs.so_registro }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - id: escopo
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          CABECA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/ci_escopo.py
+
   test:
+    needs: escopo
+    if: ${{ !cancelled() && !(needs.escopo.result == 'success' && needs.escopo.outputs.so_registro == 'true') }}
     strategy:
       fail-fast: false
       matrix:

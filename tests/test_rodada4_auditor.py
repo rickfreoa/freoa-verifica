@@ -113,11 +113,15 @@ def _docx_continuacoes(n):
 
 
 def test_continuacoes_escalam_linearmente():
-    def t(n):
+    def t(n):  # defeito 12: mínimo de três medidas (robusto a ruído do runner), limiar inalterado
         raw = _docx_continuacoes(n)
-        t0 = time.perf_counter()
-        d = parse_cvm_docx(raw)
-        return time.perf_counter() - t0, d
+        melhor = d = None
+        for _ in range(3):
+            t0 = time.perf_counter()
+            d = parse_cvm_docx(raw)
+            dt = time.perf_counter() - t0
+            melhor = dt if melhor is None else min(melhor, dt)
+        return melhor, d
 
     t(500)  # aquecimento
     a, d = t(8000)
