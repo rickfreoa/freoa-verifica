@@ -12,12 +12,15 @@ from freoa_verifica.parsers.cvm_docx import parse_cvm_docx
 from freoa_verifica.parsers.model import Annotation, Provision, Redaction
 from freoa_verifica.service import Verifica
 from freoa_verifica.temporal import select as temporal_select
-from tests.fixture_util import load_fixture
+from tests.fixture_util import guardar_data_da_captura, load_fixture
+
+CAPTURA_160 = "2026-10-18T00:00:00Z"
 
 
 @pytest.fixture
 def svc_160(tmp_path, monkeypatch):
     monkeypatch.setenv("FV_OFFLINE", "1")
+    guardar_data_da_captura(monkeypatch, CAPTURA_160)
     s = Verifica(home=tmp_path)
     body_160 = load_fixture("cvm_resol_160_consolid_docx")
     doc_160 = parse_cvm_docx(body_160)
@@ -27,7 +30,7 @@ def svc_160(tmp_path, monkeypatch):
         document=doc_160,
         body=body_160,
         url="https://conteudo.cvm.gov.br/legislacao/resolucoes/resol160.docx",
-        fetched_at="2026-10-18T00:00:00Z",
+        fetched_at=CAPTURA_160,
         work_date="2022-07-13",
         label="Resolução CVM nº 160/2022",
     )
