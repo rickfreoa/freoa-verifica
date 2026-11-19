@@ -266,11 +266,15 @@ FONTES_SONDA: Mapping[str, FonteSonda] = MappingProxyType(dict([
 FONTES_BARRADAS: Mapping[str, str] = MappingProxyType({
     "senado_legislacao": "04/11/2026: robots.txt de legis.senado.leg.br: unavailable(http_403), recusa_identificado; barreira, sem nova tentativa",
     "dou": "04/11/2026: robots.txt de www.in.gov.br: unavailable(http_403), recusa_identificado; barreira, sem nova tentativa",
+    "npl": "19/11/2026: GET com UA identificado pelo instrumento (sonda, transporte comum): unavailable(transporte_TransportError); TLS concluído e conexão reiniciada pelo servidor depois do pedido HTTP, em robots.txt, llms.txt e ato (l6404consol.htm); plano de testes NPL, T6; barreira, sem nova tentativa",
+    "npl_classico": "19/11/2026: GET com UA identificado pelo instrumento (sonda, transporte comum): unavailable(transporte_TransportError); TLS concluído e conexão reiniciada pelo servidor depois do pedido HTTP, no ato l6404consol.htm; plano de testes NPL, T6; barreira, sem nova tentativa",
 })
 
 HOSTS_RECUSADOS: Mapping[str, str] = MappingProxyType({
     "legis.senado.leg.br": FONTES_BARRADAS["senado_legislacao"],
     "www.in.gov.br": FONTES_BARRADAS["dou"],
+    "portaldalegislacao.presidencia.gov.br": FONTES_BARRADAS["npl"],
+    "portaldalegislacao-classico.presidencia.gov.br": FONTES_BARRADAS["npl_classico"],
     "jurisprudencia.trf1.jus.br": "não consta de página oficial lida; o TRF1 publica a pesquisa no CJF",
     "jurisprudencia.trf3.jus.br": "não consta de página oficial lida; o TRF3 publica em web.trf3.jus.br",
     "juris.trf2.jus.br": "apenas resultado de busca, sem página oficial lida",
@@ -285,6 +289,8 @@ HOSTS_RECUSADOS: Mapping[str, str] = MappingProxyType({
     "docs.pdpj.jus.br": "documentação do BNP, não é fonte de decisões",
     "marketplace.pdpj.jus.br": "marketplace de serviços da PDPJ, não é fonte de decisões",
     "juridico.ai": "agregador privado: nunca",
+    "in.gov.br": "19/11/2026 (sonda autorizada pelo titular): 302 para www.in.gov.br, barrado; transporte recusa (BlockedHost); arquivos do DOU em formato aberto (dados.gov.br) só por www.in.gov.br",
+    "www.imprensanacional.gov.br": "19/11/2026 (sonda autorizada pelo titular): HTTPS sem resposta (TransportError); HTTP responde 302 para www.in.gov.br, barrado; host legado dos arquivos 2002-2018 do DOU",
     "inlabs.in.gov.br": "INLABS exige cadastro e login: só sessão assistida (decisão 0067), nunca automatizada",
     "dadosabertos.camara.leg.br": "API de Dados Abertos da Câmara: nenhum endpoint de legislação em página oficial lida",
     "projeto.lexml.gov.br": "portal de documentação e download do projeto LexML, não é fonte de normas",
