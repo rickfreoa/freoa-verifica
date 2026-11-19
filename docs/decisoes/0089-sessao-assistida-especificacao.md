@@ -1,10 +1,10 @@
 # 0089 - Sessão assistida: especificação do mecanismo; emenda à 0067
 
-**Situação: proposta, não vigente.** Versão 5, submetida à rodada 5 **de escopo fechado**, aprovada pelo titular em
-19/11/2026 depois do BLOQUEADOR da rodada 4: a rodada confere só os bloqueadores B1 a B3 e as ressalvas R1 a R9 do
-Codex r4 e os achados do Terra r4, com base no laboratório de 19/11; não reabre o restante. Novo BLOQUEADOR encerra
-esta especificação. Histórico, pareceres, testes e laboratório em `docs/auditoria/0089/`. Não implementar antes do
-parecer.
+**Situação: proposta, não vigente.** Versão 5.1, submetida à **conferência final curta** aprovada pelo titular em
+19/11/2026 depois da rodada 5: Codex e Terra conferem só a correção do bloqueador remanescente (B2, inventário de
+extensões ao longo do tempo, §2.2(3)), a ressalva R4 (§2.4, linha 15), a regra das extensões de componente (decisão do
+titular) e a admissão do Brave. Histórico, pareceres, testes e laboratórios em `docs/auditoria/0089/`. Não implementar
+antes do parecer.
 
 19/11/2026. Supervisor (Opus), sob a autorização do titular (plano 1.4, seção 9, item 5), a ordem da 0087 §2.1(a)
 e as decisões do titular de 19/11 (opção A; decisões 1 a 6 da rodada 3, §7). Especifica o mecanismo que a 0067
@@ -62,29 +62,45 @@ do escritório instala no notebook do titular uma extensão com permissões de i
    recusa execução sem TTY, agendada, por script, por bateria, pelo MCP do produto ou por processo remoto (WMI,
    SSH). Antes de abrir, mostra a fonte, o alvo público sanitizado (§2.7) e o aviso da §2.8, e exige confirmação
    interativa para aquela sessão e aquele alvo.
-2. **Navegador.** Chrome ou Edge **instalados**, lançados pelo adaptador com argumentos fechados:
+2. **Navegador.** Chrome, Edge ou Brave **instalados**, lançados pelo adaptador com argumentos fechados:
    `--user-data-dir=<diretório da sessão>`, `--no-first-run`, `--no-default-browser-check`, `--disable-sync`,
    `--no-proxy-server`, `--disable-breakpad`, `--remote-debugging-pipe` (no Windows, com os identificadores de pipe
    herdados só pelo processo do navegador). Janela visível. Nunca: Playwright ou outro automatizador,
    `--enable-automation`, modo sem janela, porta TCP de depuração, `--ignore-certificate-errors`, exceção SPKI,
    proxy ou extensão da ferramenta. Se o pipe não puder ser estabelecido, a sessão não abre (decisão 3).
-3. **Ambiente** (decisão 3; Codex r4, B2; Terra r4, achado 1). Antes do lançamento, o adaptador lê as políticas de
-   máquina e de usuário no Registro do Windows (`Software\Policies\Google\Chrome` ou `Software\Policies\Microsoft\Edge`,
-   em HKLM e HKCU), sem abrir página alguma; a sessão não abre se houver política de proxy (`ProxySettings`,
-   `ProxyMode`, `ProxyServer`, `ProxyPacUrl`) ou token de gerência em nuvem (`CloudManagementEnrollmentToken`), cujas
-   políticas não são enumeráveis localmente. Depois do lançamento e **antes de qualquer candidata**, o adaptador faz o
-   inventário completo das extensões pelo arquivo `Secure Preferences` (e `Preferences`, se houver) do perfil da
-   sessão, chave `extensions.settings`, que lista toda extensão instalada, com ou sem alvo CDP (laboratório,
-   resultado 5); para cada uma, lê as permissões do manifesto registrado e, se houver, do `manifest.json` no caminho
-   indicado. A sessão encerra sem capturas se qualquer extensão, inclusive de componente ou instalada por política,
-   tiver permissão de interceptação ou controle de rede (`webRequest`, `webRequestBlocking`, `webRequestAuthProvider`,
-   `declarativeNetRequest`, `declarativeNetRequestWithHostAccess`, `proxy`, `debugger`) ou a chave
-   `declarative_net_request` no manifesto. Arquivo ausente, ilegível ou manifesto indisponível: a sessão não admite
-   candidata. O inventário é refeito a cada 10 s e imediatamente antes da seleção; extensão nova ou alterada que viole
-   a regra encerra a sessão e invalida todas as candidatas pendentes. Nenhum valor de política é gravado; o recibo da
-   sessão registra só que a conferência passou. **Fato verificado** (laboratório, resultado 6): no notebook do
-   titular, a política do escritório instala em todo perfil novo a extensão Fortinet Privileged Access Agent, com
-   `proxy`, `declarativeNetRequest` e `webRequest`; a sessão assistida não abre ali (§5.6).
+3. **Ambiente** (decisão 3; Codex r4, B2; Codex r5 e Terra r5; decisão do titular sobre componentes, §7).
+   (a) **Antes do lançamento**, o adaptador lê, sem abrir página alguma, as políticas de máquina e de usuário do
+   navegador escolhido no Registro do Windows (HKLM e HKCU; `Software\Policies\Google\Chrome`,
+   `Software\Policies\Microsoft\Edge` ou `Software\Policies\BraveSoftware\Brave`). A sessão não abre se houver: política de
+   proxy (`ProxySettings`, `ProxyMode`, `ProxyServer`, `ProxyPacUrl`); token de gerência em nuvem
+   (`CloudManagementEnrollmentToken`), cujas políticas não são enumeráveis localmente; `ExtensionInstallForcelist` com
+   qualquer item; ou `ExtensionSettings` com qualquer entrada cujo `installation_mode` seja `force_installed` ou
+   `normal_installed`. Leitura do Registro que falhe impede a sessão.
+   (b) **Vigilância contínua.** Antes do lançamento, o adaptador cria o diretório do perfil e liga sobre ele a notificação
+   de mudanças do sistema de arquivos (ReadDirectoryChangesW), cobrindo `Default\Extensions`. Depois do lançamento, há
+   um período de assentamento: candidatas só se tornam elegíveis quando o diretório `Default\Extensions` ficar 10 s sem
+   mudança e o inventário da alínea (c) passar; o conjunto de caminhos e tamanhos nesse instante é a linha de base. A
+   partir dela, **qualquer** criação, alteração, renomeação ou remoção sob `Default\Extensions`, estouro do buffer de
+   notificações ou falha do observador invalida todas as candidatas pendentes e encerra a sessão sem gravação. A
+   vigilância é a prova de que nenhuma extensão foi instalada, ativada ou removida durante a sessão (laboratório de
+   vigilância, `teste-brave-2026-11-19.md`: a instalação por política da Fortinet no Chrome foi captada aos 5 s, no
+   instante da gravação dos arquivos).
+   (c) **Inventário** (evidência auxiliar, Codex r5): no fim do assentamento e imediatamente antes da seleção, o
+   adaptador lê `extensions.settings` em `Secure Preferences` e `Preferences` do perfil da sessão e o `manifest.json` de
+   cada extensão. **Extensão de componente** (`location` 5) cujo caminho absoluto esteja dentro do diretório de
+   instalação do próprio navegador é parte do navegador e não entra na regra seguinte: vem com o binário, nenhuma
+   política ou usuário a acrescenta, e o navegador já é a parte em que se confia para relatar os eventos de rede. Toda
+   outra extensão, inclusive de componente externo (`location` 10), que tenha permissão de interceptação ou controle de
+   rede (`webRequest`, `webRequestBlocking`, `webRequestAuthProvider`, `declarativeNetRequest`,
+   `declarativeNetRequestWithHostAccess`, `proxy`, `debugger`) ou a chave `declarative_net_request` encerra a sessão sem
+   capturas. Arquivo ausente, ilegível ou manifesto indisponível: nenhuma candidata. Alcance declarado do componente
+   embutido: pode bloquear requisição (então não há candidata) ou redirecioná-la (recusado pela §2.4, linha 8); não altera
+   o corpo, que vem do streaming.
+   (d) Nenhum valor de política é gravado; o recibo registra só que a conferência passou e o navegador usado.
+   **Fatos verificados:** no notebook do titular, o Chrome e o Edge têm `ExtensionInstallForcelist` (Fortinet Privileged
+   Access Agent, com `proxy`, `declarativeNetRequest`, `webRequest`): a sessão não abre neles. O Brave 1.100 (Chromium
+   158), instalado na conta do usuário, não tem política; o perfil novo não recebe extensão instalada, só os componentes
+   `Chrome PDF Viewer` e `Brave` (este com `webRequest` e `webRequestBlocking`, admitido pela regra do componente).
 4. **Observação pura** (decisão 2; Codex r3, achado 2). O adaptador usa só a lista fechada de métodos CDP da §2.12;
    nenhum deles altera requisição, cache, service worker, cabeçalho ou identidade; o único de configuração nega
    downloads. Não navega, não injeta script, não clica, não interrompe carga. Cache e service worker do navegador ficam como estão; a porta recusa toda
@@ -124,7 +140,9 @@ por isso, nunca é candidata; o humano recarrega a página na aba já aberta.
    nomes declarados no perfil (§2.7(4)), lidos de `requestWillBeSentExtraInfo.associatedCookies` só entre os que não
    foram bloqueados; resposta sem `Cache-Control: private` e sem `Vary` que inclua `Cookie` ou `Authorization`.
 3. **Recurso admitido pelo perfil** (§2.11): `Document` **do quadro principal**, provado por `frameId` do pedido igual
-   ao `id` da raiz de `Page.getFrameTree` (quadro sem `parentId`) no momento do pedido (laboratório, resultado 4), ou
+   ao `id` da raiz da árvore de quadros vigente no momento do pedido, obtida por `Page.getFrameTree` na anexação e mantida
+   pelos eventos `Page.frameNavigated` e `Page.frameAttached` (quadro sem `parentId`; laboratório, resultado 4;
+   `teste-brave-2026-11-19.md`, resultado 6), ou
    `XHR`/`Fetch` declarado, iniciado por documento do quadro principal da mesma aba; host, caminho e query conforme a
    gramática exata do recurso; fragmento descartado; esquema só `https`. WebSocket, Early Hints, iframes e recursos não
    declarados nunca são candidatos.
@@ -175,7 +193,7 @@ recusa, nunca inferência. Recusa da porta não impede o navegador de exibir a p
 | 12 | Prazo total da chamada; classificação da falha pelo progresso: antes de qualquer byte de resposta `Timeout`, depois `RespostaInvalida` (941–983, 1063–1077, 1344–1345) | Igual em valor (30 s, padrão de `fetch`). Começa no `requestWillBeSent`; fiscalizado pelo relógio da porta, independentemente de eventos; inclui o streaming e a admissão. Declarada a diferença observacional: o primeiro sinal de resposta visível é `responseReceived` ou `responseReceivedExtraInfo` (cabeçalhos completos), não o primeiro byte. Sem nenhum dos dois no prazo: `Timeout`; com um deles e sem `loadingFinished`: `RespostaInvalida` | carimbos | `Timeout`, `RespostaInvalida` |
 | 13 | Taxa mínima de leitura (2 KiB/s em 30 s) | Inaplicável: protege a ferramenta de leitura travada, e quem lê é o navegador; o prazo total continua | — | — |
 | 14 | Limite de taxa e disjuntor por host (796–880) | Inaplicável às requisições, feitas pelo navegador por ação humana | — | — |
-| 15 | Concorrência global de captura (65–66, 1346–1348) | Declarada: no máximo 4 candidatas em streaming simultâneo (o padrão de `FV_MAX_CONCURRENCY`); 32 candidatas pendentes por sessão; 64 MiB de bytes de corpo retidos pelo adaptador, contados ao chegar cada bloco já decodificado de base64 e reservados antes da cópia; fila de mensagens CDP não processadas limitada a 10.000 mensagens ou 32 MiB. Excedido limite de candidata, ela é descartada; excedida a fila ou a memória, a sessão encerra sem gravar candidatas pendentes. Memória interna do navegador excluída | — | recusa de candidata; encerramento |
+| 15 | Concorrência global de captura (65–66, 1346–1348) | Declarada: no máximo 4 candidatas em streaming simultâneo (o padrão de `FV_MAX_CONCURRENCY`); 32 candidatas pendentes por sessão; 64 MiB para todas as representações de corpo mantidas ao mesmo tempo pelo adaptador (mensagem JSON em processamento, texto base64, bytes decodificados e cópias), com reserva **antes** de cada alocação: o pipe entrega mensagens JSON delimitadas por caractere nulo, sem cabeçalho de tamanho, e o adaptador o lê em blocos de no máximo 1 MiB, cada bloco reservado contra o saldo antes da leitura; mensagem que, antes do delimitador, ultrapasse o saldo encerra a sessão sem gravação; fila de mensagens CDP não processadas limitada a 10.000 mensagens ou 32 MiB. Excedido limite de candidata, ela é descartada; excedida a fila ou a memória, a sessão encerra sem gravar candidatas pendentes. Memória interna do navegador excluída | — | recusa de candidata; encerramento |
 | 16 | Repetição automática (502 a 504, Retry-After, 882–993) | Inaplicável: a porta nunca pede nem repete; o humano recarrega se quiser | — | — |
 | 17 | Validação dos parâmetros da chamada (1325–1341) | Declarada: o perfil é validado ao carregar, com os mesmos limites (`max_bytes` ≤ `MAX_BYTES`, método só `GET`); media types contidos em `DEFAULT_ALLOWED_MIMES` mais `application/json`, este admitido só na sessão assistida e só para recurso que o declare; o fluxo automático não muda. Perfil inválido impede a sessão | perfil | erro de configuração |
 | 18 | Cabeçalhos do chamador (429–447) e identidade da requisição (474–497) | Inaplicável: a porta não emite requisição nem recebe cabeçalhos de chamador. Identidade pública: §2.3, "Identidade da obtenção" | — | — |
@@ -406,11 +424,15 @@ laboratório de 19/11 (`laboratorio-2026-11-19.md`) antecipa parte dos itens 1 e
 7. **Diretório e artefatos.** ACL conferida (falha fecha a sessão); acesso negado a outra conta sem privilégio;
    inventário dos locais de gravação do navegador durante e depois da sessão; limpeza em fim normal, erro, interrupção
    e recuperação após término abrupto.
-8. **Ambiente.** Política de proxy simulada (HKCU) e token de nuvem: não abre. Inventário: extensão com
-   `declarativeNetRequest` só com regras estáticas, sem página de fundo nem service worker, instalada por mecanismo
-   aceito pelo navegador de teste (o Chrome de marca 157 ignora `--load-extension`; ver §5.8): detectada pelo
-   inventário e sessão encerrada; extensão instalada durante a sessão: candidatas invalidadas; `Secure Preferences`
-   ilegível: nenhuma candidata. Pipe indisponível: não abre.
+8. **Ambiente.** Política de proxy simulada (HKCU), token de nuvem, `ExtensionInstallForcelist` com item e
+   `ExtensionSettings` com `force_installed`: não abre. Vigilância: criação, alteração e remoção de arquivo sob
+   `Default\Extensions` depois da linha de base, inclusive instalação e remoção entre duas leituras do inventário:
+   candidatas invalidadas e sessão encerrada; estouro do buffer e falha do observador: idem; instalação durante o
+   assentamento: linha de base adiada. Inventário: componente dentro da pasta do navegador com `webRequest` (como o
+   `Brave`): admitido; componente externo (`location` 10) ou extensão comum com permissão vedada, inclusive só com regras
+   estáticas `declarativeNetRequest` (instalada por mecanismo aceito pelo navegador de teste; §5.8): sessão encerrada;
+   `Secure Preferences` ilegível: nenhuma candidata. Pipe indisponível: não abre. Cada navegador admitido (Chrome, Edge,
+   Brave) passa pelos itens deste aceite.
 9. **Passividade e prontidão.** Registro do tráfego CDP do adaptador: só métodos e parâmetros da §2.12, na sequência da
    §2.3; conferência estática da mesma lista; pedidos vistos pela origem de teste com e sem o adaptador anexado:
    iguais (cabeçalhos inclusive).
@@ -455,16 +477,19 @@ da ferramenta; capturar o DOM; instalar AC no sistema; modo sem janela; OCR.
 3. Abertura de NPL e DOU à sessão.
 4. Pipe de depuração no Windows: confirmar no teste do adaptador; sem ele a sessão não existe (§2.2(2)), e a
    questão volta ao titular.
-5. Nomes reais dos cookies do Planalto e de normas.leg.br: confirmar na sessão manual (§3.16); divergência corrige o
+5. Nomes reais dos cookies do Planalto e de normas.leg.br: confirmar na sessão manual (§3.17); divergência corrige o
    perfil por registro, nunca por inferência em tempo de execução.
-6. **Onde a sessão roda.** No notebook do titular a sessão não abre (Fortinet Privileged Access Agent instalado por
-   política, §2.2(3)). Usar outro navegador ou outra conta para escapar da política do escritório não é decisão técnica:
-   depende das regras de TI do escritório e fica com o titular. Alternativa sem esse conflito: máquina pessoal sem
-   política corporativa.
+6. **Onde a sessão roda.** No notebook do titular, Chrome e Edge recebem a Fortinet por política e não admitem a sessão;
+   o titular indicou o Brave instalado na própria conta, que não tem política nem extensão instalada (§2.2(3)). A
+   compatibilidade desse uso com as regras de TI do escritório é do titular.
 7. A versão `Original` de normas.leg.br como árbitro `texto_publicado` não oficial (teste de normas, achado 9):
    fora desta decisão.
 8. Mecanismo de instalação de extensão no harness de teste (§3.8): o Chrome de marca 157 ignora `--load-extension`;
    usar política de teste em HKCU com pacote local ou navegador de teste que aceite extensão desempacotada.
+9. **Streaming sem bytes em rajada.** Na sessão de teste no Brave, nove XHR de normas.leg.br, entre eles o binário da
+   Lei 6.404, terminaram sem bytes de streaming e sem `responseReceivedExtraInfo`, sem erro do comando. Pela §2.3, são
+   recusados; a causa (corrida ou pedido repetido pela página) deve ser isolada na implementação, porque afeta a
+   utilidade, não a correção.
 
 ## 6. Execução
 
@@ -543,3 +568,17 @@ nova, com os critérios da §3 fixados antes, inclusive a auditoria própria de 
 | Terra | 5. Cookies e personalização | §2.3(2) (cookies bloqueados não contam); §3.6; §5.5 |
 | Terra | 6. `f5_cspm` | como R8 |
 | Terra | 7. HSTS e lista CDP | §2.4, linha 8; §2.12; §3.1 e §3.9 |
+
+- v5: Codex r5 e Terra r5 resolvem B1, B3, R1 a R3, R5 a R9 e Terra 2 a 7; resta, comum aos dois, B2 (inventário ao
+  longo do tempo: o Chrome grava as preferências com atraso; extensão transitória entre leituras) e, do Codex, R4.
+- 19/11: o titular aprova a correção de B2 e R4 com conferência final curta; indica o Brave; aprova que extensões de
+  componente embutidas no navegador sejam tratadas como parte dele. Laboratório de vigilância e sessão de teste no
+  Brave (`teste-brave-2026-11-19.md`): vigilância capta instalação por política aos 5 s; Brave sem política; 304
+  apresentado como 200 detectado pelo `statusCode` bruto; bytes do binário de normas iguais entre Chrome e Brave. v5.1.
+
+| Parecer r5 | Achado | Resposta na v5.1 |
+|---|---|---|
+| Codex e Terra | B2. Inventário ao longo do tempo | §2.2(3)(a) recusa prévia de extensão forçada por política; (b) vigilância contínua do diretório com linha de base e invalidação; (c) inventário como evidência auxiliar |
+| Codex | R4. Contabilidade de memória | §2.4, linha 15 (todas as representações; reserva antes da alocação pelo tamanho do blocos de leitura do pipe) |
+| Titular | Extensões de componente | §2.2(3)(c) |
+| Titular | Brave | §2.2(2) e (3); §3.8; §5.6 |
