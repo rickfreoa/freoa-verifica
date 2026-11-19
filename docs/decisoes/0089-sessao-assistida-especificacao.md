@@ -1,9 +1,10 @@
 # 0089 - Sessão assistida: especificação do mecanismo; emenda à 0067
 
-**Situação: proposta, não vigente.** Versão 4, submetida à rodada 4 por **exceção ao teto do D5 aprovada pelo
-titular em 19/11/2026**, nas condições da 0074 e da 0076: a v4 incorpora todos os achados da rodada 3; a exceção
-fica registrada antes de qualquer merge; novo BLOQUEADOR encerra esta especificação na forma atual e devolve a
-questão ao titular. Histórico, pareceres e testes em `docs/auditoria/0089/`. Não implementar antes do parecer.
+**Situação: proposta, não vigente.** Versão 5, submetida à rodada 5 **de escopo fechado**, aprovada pelo titular em
+19/11/2026 depois do BLOQUEADOR da rodada 4: a rodada confere só os bloqueadores B1 a B3 e as ressalvas R1 a R9 do
+Codex r4 e os achados do Terra r4, com base no laboratório de 19/11; não reabre o restante. Novo BLOQUEADOR encerra
+esta especificação. Histórico, pareceres, testes e laboratório em `docs/auditoria/0089/`. Não implementar antes do
+parecer.
 
 19/11/2026. Supervisor (Opus), sob a autorização do titular (plano 1.4, seção 9, item 5), a ordem da 0087 §2.1(a)
 e as decisões do titular de 19/11 (opção A; decisões 1 a 6 da rodada 3, §7). Especifica o mecanismo que a 0067
@@ -26,6 +27,11 @@ resposta, que nada veio de cache, service worker ou prefetch, mesmo sem alterar 
 navegador; o Planalto injeta um script variável do WAF F5; o texto de normas.leg.br chega por XHR, com vínculo
 determinístico entre o JSON-LD da norma e o binário do texto; a política corporativa do navegador abre o SSO do
 escritório em cada aba nova; o filtro de hosts antes de gravar elimina esse tráfego dos registros.
+
+O laboratório de 19/11 (`laboratorio-2026-11-19.md`, só `127.0.0.1`) mostrou ainda: `Network.streamResourceContent`
+entrega os bytes do corpo sem interpretação de charset, onde `Network.getResponseBody` os altera; o inventário de
+extensões pelo perfil independe de alvo CDP; a raiz de `Page.getFrameTree` identifica o quadro principal; e a política
+do escritório instala no notebook do titular uma extensão com permissões de interceptação de rede.
 
 ## 2. Decisão
 
@@ -62,21 +68,26 @@ escritório em cada aba nova; o filtro de hosts antes de gravar elimina esse tr�
    herdados só pelo processo do navegador). Janela visível. Nunca: Playwright ou outro automatizador,
    `--enable-automation`, modo sem janela, porta TCP de depuração, `--ignore-certificate-errors`, exceção SPKI,
    proxy ou extensão da ferramenta. Se o pipe não puder ser estabelecido, a sessão não abre (decisão 3).
-3. **Ambiente** (decisão 3; Terra r3, achado 1; Codex r3, achado 10). Antes do lançamento, o adaptador lê as
-   políticas de máquina e de usuário no Registro do Windows (`Software\Policies\Google\Chrome` ou
-   `Software\Policies\Microsoft\Edge`, em HKLM e HKCU), sem abrir página alguma. A sessão não abre se houver: política
-   de proxy (`ProxySettings`, `ProxyMode`, `ProxyServer`, `ProxyPacUrl`); token de gerência em nuvem
-   (`CloudManagementEnrollmentToken`), cujas políticas não são enumeráveis localmente. Depois do lançamento, a cada extensão que apareça como alvo, o adaptador lê o `manifest.json` no
-   diretório da sessão; extensão com permissão de interceptação ou controle de rede (`webRequest`,
-   `webRequestBlocking`, `webRequestAuthProvider`, `declarativeNetRequest`, `declarativeNetRequestWithHostAccess`,
-   `proxy`, `debugger`) encerra a sessão sem capturas. Extensões de componente embutidas no próprio navegador são
-   parte dele. Nenhum valor de política é gravado; o recibo da sessão registra só que a conferência passou.
-   Consequência declarada: no notebook do titular, se a política do escritório forçar extensão ou proxy, a sessão
-   não abre ali.
+3. **Ambiente** (decisão 3; Codex r4, B2; Terra r4, achado 1). Antes do lançamento, o adaptador lê as políticas de
+   máquina e de usuário no Registro do Windows (`Software\Policies\Google\Chrome` ou `Software\Policies\Microsoft\Edge`,
+   em HKLM e HKCU), sem abrir página alguma; a sessão não abre se houver política de proxy (`ProxySettings`,
+   `ProxyMode`, `ProxyServer`, `ProxyPacUrl`) ou token de gerência em nuvem (`CloudManagementEnrollmentToken`), cujas
+   políticas não são enumeráveis localmente. Depois do lançamento e **antes de qualquer candidata**, o adaptador faz o
+   inventário completo das extensões pelo arquivo `Secure Preferences` (e `Preferences`, se houver) do perfil da
+   sessão, chave `extensions.settings`, que lista toda extensão instalada, com ou sem alvo CDP (laboratório,
+   resultado 5); para cada uma, lê as permissões do manifesto registrado e, se houver, do `manifest.json` no caminho
+   indicado. A sessão encerra sem capturas se qualquer extensão, inclusive de componente ou instalada por política,
+   tiver permissão de interceptação ou controle de rede (`webRequest`, `webRequestBlocking`, `webRequestAuthProvider`,
+   `declarativeNetRequest`, `declarativeNetRequestWithHostAccess`, `proxy`, `debugger`) ou a chave
+   `declarative_net_request` no manifesto. Arquivo ausente, ilegível ou manifesto indisponível: a sessão não admite
+   candidata. O inventário é refeito a cada 10 s e imediatamente antes da seleção; extensão nova ou alterada que viole
+   a regra encerra a sessão e invalida todas as candidatas pendentes. Nenhum valor de política é gravado; o recibo da
+   sessão registra só que a conferência passou. **Fato verificado** (laboratório, resultado 6): no notebook do
+   titular, a política do escritório instala em todo perfil novo a extensão Fortinet Privileged Access Agent, com
+   `proxy`, `declarativeNetRequest` e `webRequest`; a sessão assistida não abre ali (§5.6).
 4. **Observação pura** (decisão 2; Codex r3, achado 2). O adaptador usa só a lista fechada de métodos CDP da §2.12;
    nenhum deles altera requisição, cache, service worker, cabeçalho ou identidade; o único de configuração nega
-   downloads. Não navega, não injeta script,
-   não clica, não interrompe carga. Cache e service worker do navegador ficam como estão; a porta recusa toda
+   downloads. Não navega, não injeta script, não clica, não interrompe carga. Cache e service worker do navegador ficam como estão; a porta recusa toda
    resposta que não prove origem de rede (§2.3(1)). Se a página vier do cache, o humano recarrega (Ctrl+F5) por
    ação própria.
 5. **Filtro na origem.** Evento de alvo, requisição ou resposta fora das origens da fonte (§2.11) é descartado em
@@ -93,101 +104,111 @@ escritório em cada aba nova; o filtro de hosts antes de gravar elimina esse tr�
 
 ### 2.3 O que vira captura
 
+**Prontidão** (Codex r4, B3). A sequência é normativa: `Target.setDiscoverTargets`; `Target.setAutoAttach` com
+espera pelo depurador; em cada alvo anexado, `Network.enable` e `Page.enable`, e só então
+`Runtime.runIfWaitingForDebugger`. Só é elegível pedido cujo `requestWillBeSent` foi observado numa sessão que já
+cumpriu essa sequência. A primeira navegação de aba aberta já com URL não é observada (laboratório, resultado 3) e,
+por isso, nunca é candidata; o humano recarrega a página na aba já aberta.
+
 **Candidata.** A porta aceita como candidata só a resposta que cumprir, cumulativamente:
 
 1. **Troca de rede provada pelo navegador.** `Network.responseReceived` com `fromDiskCache`, `fromServiceWorker` e
    `fromPrefetchCache` **presentes e falsos** (ausência não vale como falso); nenhum
    `Network.requestServedFromCache` para o pedido; `remoteIPAddress`, `remotePort` e `securityDetails` presentes;
-   `Network.responseReceivedExtraInfo` correspondente, com `statusCode` igual ao status da resposta (304 exposto
-   como 200 é recusado); `Network.loadingFinished` (não `loadingFailed`); alvo do tipo `page` sem subtipo de
-   pré-renderização desde a criação; status 200. 304, 206, 103 e os demais status nunca viram captura. Restauração
-   de página sem troca nova (bfcache, histórico) não gera evento de resposta e, por isso, nunca vira captura nem
-   renova frescor.
-2. Método `GET`; nenhum salto de rede na cadeia (§2.4, linha 8); sem `Authorization` e sem cookie fora dos nomes
-   declarados no perfil (§2.7(4)); resposta sem `Cache-Control: private` e sem `Vary` que inclua `Cookie` ou
-   `Authorization`.
-3. **Recurso admitido pelo perfil** (§2.11): tipo (`Document` de quadro principal ou `XHR`/`Fetch`), host, caminho e
-   query conforme a gramática exata do recurso; fragmento descartado; esquema só `https` (`blob:`, `data:`,
-   `filesystem:` e semelhantes recusados). WebSocket, Early Hints e recursos não declarados nunca são candidatos.
+   `Network.responseReceivedExtraInfo` correspondente, com `statusCode` igual ao status da resposta (304 exposto como
+   200 é recusado); `Network.loadingFinished` (não `loadingFailed`); alvo do tipo `page` sem subtipo de
+   pré-renderização desde a criação; status 200. 304, 206 e os demais status nunca viram captura; a resposta final
+   que suceda a um 103 é avaliada por si, e recurso iniciado por Early Hints nunca é candidato. Restauração de página
+   sem troca nova (bfcache, histórico) não gera evento de resposta e nunca vira captura nem renova frescor.
+2. Método `GET`; nenhum salto de rede na cadeia (§2.4, linha 8); sem `Authorization` e sem cookie enviado fora dos
+   nomes declarados no perfil (§2.7(4)), lidos de `requestWillBeSentExtraInfo.associatedCookies` só entre os que não
+   foram bloqueados; resposta sem `Cache-Control: private` e sem `Vary` que inclua `Cookie` ou `Authorization`.
+3. **Recurso admitido pelo perfil** (§2.11): `Document` **do quadro principal**, provado por `frameId` do pedido igual
+   ao `id` da raiz de `Page.getFrameTree` (quadro sem `parentId`) no momento do pedido (laboratório, resultado 4), ou
+   `XHR`/`Fetch` declarado, iniciado por documento do quadro principal da mesma aba; host, caminho e query conforme a
+   gramática exata do recurso; fragmento descartado; esquema só `https`. WebSocket, Early Hints, iframes e recursos não
+   declarados nunca são candidatos.
 4. Media type declarado para aquele recurso.
-5. Todas as linhas da matriz da §2.4 aprovadas.
+5. **Corpo obtido por streaming** desde antes da chegada de dados (§2.5(2)).
+6. Todas as linhas da matriz da §2.4 aprovadas.
 
-**Correlação** (Codex r3, achado 7; Terra r3, achado 4). Toda associação de eventos usa a chave (sessão CDP, alvo,
-`requestId`, ordinal do salto). O adaptador se anexa a cada alvo antes de ele iniciar requisições
-(`Target.setAutoAttach` com espera pelo depurador); requisição cujo `requestWillBeSent` não foi observado, evento
-fora de ordem que não se associe sem ambiguidade, chave repetida ou perda da conexão CDP descartam a candidata.
-Nenhum evento herda autorização de retenção de outro salto ou de outro alvo.
+**Correlação.** Toda associação de eventos usa a chave (sessão CDP, alvo, `requestId`, ordinal do salto). Evento fora
+de ordem que não se associe sem ambiguidade, chave repetida, histórico incompleto ou perda da conexão CDP descartam a
+candidata. Nenhum evento herda autorização de retenção de outro salto ou de outro alvo.
 
-**Vínculo.** A candidata é atribuída à sua própria URL validada e aos seus próprios eventos, nunca ao alvo sugerido
-nem à navegação anterior. Navegação iniciada por conteúdo (script, meta refresh, janela aberta pela página) é
-navegação nova, validada por si. Recurso dependente (o binário de texto de normas.leg.br) só é candidato quando o
-vínculo declarado no perfil se verifica entre capturas da mesma sessão (§2.11).
+**Vínculo.** A candidata é atribuída à sua própria URL validada e aos seus próprios eventos, nunca ao alvo sugerido nem
+à navegação anterior. Navegação iniciada por conteúdo é navegação nova, validada por si. Recurso dependente segue a
+§2.11.
 
-**Seleção** (decisão 4; Terra r3, achado 5; Codex r3, achado 12). Ao fechar a janela, a CLI lista as candidatas
-aceitas pela porta, cada uma com a identidade pública (fonte, URN ou caminho, tipo de recurso, versão quando
-houver, tamanho e hash curto), e o humano marca as que entram. As não marcadas são descartadas sem gravação.
-Recurso dependente segue o documento marcado; não é marcado à parte nem entra sem ele. Sem marcação, nada entra.
+**Seleção** (decisão 4). Ao fechar a janela, a CLI resolve primeiro o grafo de vínculos de toda a sessão (§2.11) e só
+depois lista as candidatas aceitas, cada uma com identidade pública (fonte, URN ou caminho, tipo, versão quando houver,
+tamanho e hash curto), e, abaixo de cada documento, seus dependentes com os respectivos hashes. O humano marca os
+documentos que entram; os dependentes seguem o documento marcado. As não marcadas são descartadas sem gravação. Sem
+marcação, nada entra.
 
-**Identidade da obtenção.** Cada candidata recebe identificador opaco único; não há cache nem reutilização por
-método e URL. A identidade pública sanitizada nunca reúne destinos distintos; se reunisse, recusa.
+**Identidade da obtenção.** Cada candidata recebe identificador opaco único; não há cache nem reutilização por método e
+URL. A identidade pública exibida e persistida é separada da URL operacional e nunca reúne destinos distintos.
 
-Recusas são listadas ao humano com URL sanitizada e código.
+Recusas são listadas ao humano com URL sanitizada e código. "Não examinado" nunca equivale a "sem desafio": resposta
+que não chegou a ser examinada é recusada, não classificada.
 
 ### 2.4 Matriz de validação
 
 Exaustiva quanto às validações e controles de `freoa_verifica/transport.py` (`35dd8bc`). **Igual**: mesma função ou
-mesma regra, mesmo código. **Metadados**: mesma regra sobre dado de rede do navegador. **Declarada**: regra
-substituta aprovada por esta emenda. **Inaplicável**: com a razão. Dado necessário ausente, opcional não presente
-ou ambíguo causa recusa, nunca inferência. Recusa da porta não impede o navegador de exibir a página: só impede a
-captura.
+mesma regra, mesmo código. **Metadados**: mesma regra sobre dado de rede do navegador. **Declarada**: regra substituta
+aprovada por esta emenda. **Inaplicável**: com a razão. Dado necessário ausente, opcional não presente ou ambíguo causa
+recusa, nunca inferência. Recusa da porta não impede o navegador de exibir a página: só impede a captura.
 
 | # | Controle automático (código) | Na sessão assistida | Dado (CDP) | Recusa |
 |---|---|---|---|---|
-| 1 | URL ASCII, `https`, host permitido, porta 443, caminho não ambíguo, prefixos (`validate_reference`, `_path_allowed`, 605–629, 507–530) | Igual, pela mesma função, sobre a URL da resposta, e gramática exata do recurso (§2.11) | `request.url`, `response.url` | `BlockedHost` |
-| 2 | DNS pela ferramenta com prazo e concorrência próprios; só IP público unicast; conexão ao IP validado (`validate_url`, `_public_unicast`, 64, 665–719, 770–783) | Metadados: o IP efetivo da conexão que entregou os bytes passa por `_public_unicast`; porta 443. Declarada: a resolução é do navegador, lançado sem proxy (§2.2(2) e (3)); prazo e concorrência de DNS inaplicáveis porque a ferramenta não resolve; o tempo de resolução entra no prazo total (linha 12) | `remoteIPAddress`, `remotePort` | `BlockedHost` |
+| 1 | URL ASCII, `https`, host permitido, porta 443, caminho não ambíguo, prefixos (`validate_reference`, `_path_allowed`, 605–629, 507–530) | Igual, pela mesma função, sobre a URL da resposta, e gramática exata do recurso (§2.11). A URL `http` interna de um salto HSTS (linha 8) não é candidata e recebe só a validação estrutural da exceção; a URL `https` efetiva passa integralmente por esta linha | `request.url`, `response.url` | `BlockedHost` |
+| 2 | DNS pela ferramenta com prazo e concorrência próprios; só IP público unicast; conexão ao IP validado (64, 665–719, 770–783) | Metadados: o IP efetivo da conexão passa por `_public_unicast`; porta 443. Declarada: a resolução é do navegador, lançado sem proxy (§2.2(2) e (3)); prazo e concorrência de DNS inaplicáveis porque a ferramenta não resolve; o tempo de resolução entra no prazo total (linha 12) | `remoteIPAddress`, `remotePort` | `BlockedHost` |
 | 3 | TLS verificado pelo contexto padrão | Metadados: navegador sem exceção de certificado; `securityDetails` com protocolo TLS 1.2 ou 1.3 e `securityState` seguro | `securityDetails`, `securityState` | `RespostaInvalida` |
-| 4 | Sintaxe estrita da linha de status e dos campos; `Transfer-Encoding` só `chunked` e único; `Content-Length` com até 20 dígitos e único; recusa de coexistência de ambos (`_campos_estritos`, `_validar_framing`, 323–378) | HTTP/1.x: **igual**, por `_campos_estritos` e `_validar_framing` aplicados a `headersText`, que é então obrigatório. HTTP/2 e HTTP/3: declarada; o framing é o do protocolo, aplicado pelo navegador, e a porta confere nos cabeçalhos com multiplicidade (duplicatas separadas por `\n`) `Content-Length` único com até 20 dígitos e ausência de `Transfer-Encoding`. Protocolo vai ao recibo | `responseReceivedExtraInfo.headersText`, `.headers`, `response.protocol` | `RespostaInvalida` |
-| 5 | Gramática e término dos chunks, trailers (`_get_chunk_left`, `_ler_trailer`, 243–320) | Declarada: o navegador recusa chunk malformado ou incompleto como erro de rede (`loadingFailed`), e a porta só aceita `loadingFinished`. Trailers não são observáveis nem usados. Diferença de aceitação admitida: o navegador pode tolerar extensão de chunk ou trailer que o transporte recusaria | `loadingFinished`, `loadingFailed` | recusa de candidata |
+| 4 | Sintaxe estrita da linha de status e dos campos; `Transfer-Encoding` só `chunked` e único; `Content-Length` com até 20 dígitos e único; recusa de coexistência (`_campos_estritos`, `_validar_framing`, 323–378) | HTTP/1.x: **igual**, por `_campos_estritos` e `_validar_framing` aplicados a `headersText`, então obrigatório. HTTP/2 e HTTP/3: declarada; o framing é o do protocolo, aplicado pelo navegador; a porta confere nos cabeçalhos com multiplicidade (duplicatas separadas por `\n`, sem escolher um valor) `Content-Length` único com até 20 dígitos, ausência de `Transfer-Encoding` e recusa de coexistência. Protocolo vai ao recibo | `responseReceivedExtraInfo.headersText`, `.headers`, `response.protocol` | `RespostaInvalida` |
+| 5 | Gramática e término dos chunks, trailers (243–320) | Declarada: o navegador recusa chunk malformado ou incompleto como erro de rede (`loadingFailed`), e a porta só aceita `loadingFinished`. Trailers não são observáveis nem usados. Diferença de aceitação admitida: o navegador pode tolerar extensão de chunk ou trailer que o transporte recusaria | `loadingFinished`, `loadingFailed` | recusa de candidata |
 | 6 | Content-Encoding ausente ou `identity`, em todo status (0060, 1128–1136) | Declarada (emenda): admitidos ausente, `identity`, `gzip`, `deflate`, `br`, `zstd`, decodificados pelo navegador; outra codificação é recusada. A codificação original vai ao recibo; o hash é dos bytes decodificados (§2.5) | cabeçalhos com multiplicidade | `RespostaInvalida` |
-| 7 | Tamanho declarado acima do limite recusado de imediato; bytes acima do limite durante a leitura; corpo vazio (1199–1203, 1238–1267) | Metadados: `Content-Length` declarado acima de `max_bytes` recusa a candidata ao chegar `responseReceivedExtraInfo`. Dois contadores independentes por pedido, a soma de `dataReceived.encodedDataLength` e a soma de `dataReceived.dataLength`, cada um contra `max_bytes`; excedido qualquer deles, a candidata é descartada e o corpo nunca é lido. Corpo vazio, recusado. Alcance declarado: o limite garante o que a ferramenta aceita e copia, não o consumo de memória do navegador | `dataReceived`, cabeçalhos | `TooLarge`, `EmptyBody` |
-| 8 | Redirecionamentos: até 3, `Location`, destino validado, 307/308 entre origens recusados, desafio no corpo do salto (1137–1166, 1293) | Declarada: **nenhum salto de rede admitido** (máximo 0), porque o corpo do salto não é obtenível e o exame de desafio nele seria impossível. Única exceção: redirecionamento interno HSTS, provado por `redirectResponse` com status 307, sem `remoteIPAddress`, cabeçalho `Non-Authoritative-Reason: HSTS`, mudança só de `http` para `https` no mesmo host, caminho e query; não conta como salto. Documento obtido por redirecionamento de rede é recusado; o humano abre a URL final | `redirectResponse` | `BlockedHost` |
-| 9 | Desafio (`detect_challenge`) em todo status, amostra de 64 KiB (381–418) | Igual, sobre status, cabeçalhos e os primeiros 64 KiB do corpo decodificado, como a 0060 §2 prevê para decodificação. Página de desafio nunca é candidata | corpo da candidata | `HTTPStatusError` com desafio |
+| 7 | Tamanho declarado acima do limite; bytes acima do limite durante a leitura; confronto final do corpo com `Content-Length`; corpo vazio (1199–1203, 1238–1267) | Metadados: `Content-Length` acima de `max_bytes` recusa a candidata ao chegar `responseReceivedExtraInfo`. Contador decodificado: soma de `dataReceived.dataLength` contra `max_bytes`; excedido, o streaming é abandonado e a candidata descartada. Contador codificado: soma de `dataReceived.encodedDataLength` contra `max_bytes`, só onde o navegador o informa (em `XHR`/`Fetch`; em `Document` vem 0, laboratório, resultado 2). Confrontos finais: tamanho dos bytes do streaming igual à soma de `dataLength`, sempre; sem Content-Encoding, igual também ao `Content-Length`; com Content-Encoding em `XHR`/`Fetch`, `Content-Length` igual à soma de `encodedDataLength`; com Content-Encoding em `Document`, declarada a substituição pela completude de `loadingFinished`. Corpo vazio, recusado. Alcance declarado: o limite garante o que a ferramenta aceita e copia, não o consumo de memória do navegador | `dataReceived`, `loadingFinished`, cabeçalhos | `TooLarge`, `RespostaInvalida`, `EmptyBody` |
+| 8 | Redirecionamentos: até 3, `Location`, destino validado, 307/308 entre origens recusados, desafio no corpo do salto (1137–1166, 1293) | Declarada: **nenhum salto de rede admitido**, porque o corpo do salto não é obtenível. Única exceção: redirecionamento interno HSTS, provado por `redirectResponse` com status 307, sem `remoteIPAddress`, com o cabeçalho `Non-Authoritative-Reason` de valor `HSTS` no mapa de cabeçalhos, e mudança só de `http` para `https` no mesmo host, caminho e query; não conta como salto. Outro redirecionamento interno, inclusive de extensão, recusa. Documento obtido por redirecionamento de rede é recusado; o humano abre a URL final | `redirectResponse` | `BlockedHost` |
+| 9 | Desafio (`detect_challenge`) em todo status, amostra de 64 KiB (381–418) | Igual, sobre status, cabeçalhos e os primeiros 64 KiB dos bytes do streaming (decodificados), como a 0060 §2 prevê para decodificação. Página de desafio nunca é candidata; resposta não examinada é recusada, não declarada sem desafio | bytes do streaming | `HTTPStatusError` com desafio |
 | 10 | Content-Type sintaticamente válido; media type na lista (1188–1197) | Igual, sobre o Content-Type bruto; único parâmetro admitido no valor persistido é `charset`; o `mimeType` inferido pelo navegador não é usado | cabeçalhos | `RespostaInvalida` |
-| 11 | Charset e interpretação textual (conectores, `texto_resposta.py`) | Igual, sobre os bytes da §2.5, com a mesma decodificação estrita | corpo | código do conector |
-| 12 | Prazo total da chamada, compartilhado pela cadeia; classificação da falha pelo progresso: antes de resposta iniciada `Timeout`, depois `RespostaInvalida` (941–983, 1063–1077, 1344–1345) | Igual em valor (30 s, padrão de `fetch`) e em classificação. Começa no `requestWillBeSent` do pedido; é fiscalizado pelo relógio da porta, independentemente de eventos; inclui obtenção do corpo e admissão. Sem `responseReceived` no prazo: `Timeout`; com resposta iniciada e sem `loadingFinished`: `RespostaInvalida` | carimbos | `Timeout`, `RespostaInvalida` |
-| 13 | Taxa mínima de leitura (2 KiB/s em 30 s, 43–44, 1210–1258) | Inaplicável: protege a ferramenta de leitura travada, e quem lê é o navegador; o prazo total (linha 12) continua | — | — |
+| 11 | Charset e interpretação textual (conectores, `texto_resposta.py`) | Igual, sobre os bytes do streaming, com a mesma decodificação estrita | bytes | código do conector |
+| 12 | Prazo total da chamada; classificação da falha pelo progresso: antes de qualquer byte de resposta `Timeout`, depois `RespostaInvalida` (941–983, 1063–1077, 1344–1345) | Igual em valor (30 s, padrão de `fetch`). Começa no `requestWillBeSent`; fiscalizado pelo relógio da porta, independentemente de eventos; inclui o streaming e a admissão. Declarada a diferença observacional: o primeiro sinal de resposta visível é `responseReceived` ou `responseReceivedExtraInfo` (cabeçalhos completos), não o primeiro byte. Sem nenhum dos dois no prazo: `Timeout`; com um deles e sem `loadingFinished`: `RespostaInvalida` | carimbos | `Timeout`, `RespostaInvalida` |
+| 13 | Taxa mínima de leitura (2 KiB/s em 30 s) | Inaplicável: protege a ferramenta de leitura travada, e quem lê é o navegador; o prazo total continua | — | — |
 | 14 | Limite de taxa e disjuntor por host (796–880) | Inaplicável às requisições, feitas pelo navegador por ação humana | — | — |
-| 15 | Concorrência global de captura (65–66, 1346–1348) | Declarada: no máximo 4 candidatas com corpo em leitura simultânea (mesmo valor padrão), 32 candidatas pendentes por sessão e 64 MiB de corpos em memória; excedido, a candidata excedente é descartada. Fila de eventos CDP limitada; estouro encerra a sessão sem gravar candidatas pendentes | — | recusa de candidata |
+| 15 | Concorrência global de captura (65–66, 1346–1348) | Declarada: no máximo 4 candidatas em streaming simultâneo (o padrão de `FV_MAX_CONCURRENCY`); 32 candidatas pendentes por sessão; 64 MiB de bytes de corpo retidos pelo adaptador, contados ao chegar cada bloco já decodificado de base64 e reservados antes da cópia; fila de mensagens CDP não processadas limitada a 10.000 mensagens ou 32 MiB. Excedido limite de candidata, ela é descartada; excedida a fila ou a memória, a sessão encerra sem gravar candidatas pendentes. Memória interna do navegador excluída | — | recusa de candidata; encerramento |
 | 16 | Repetição automática (502 a 504, Retry-After, 882–993) | Inaplicável: a porta nunca pede nem repete; o humano recarrega se quiser | — | — |
-| 17 | Validação dos parâmetros da chamada (1325–1341) | Declarada: valida-se o perfil ao carregá-lo, com os mesmos limites (`max_bytes` ≤ `MAX_BYTES`, media types contidos em `DEFAULT_ALLOWED_MIMES`, método só `GET`); perfil inválido impede a sessão | perfil | erro de configuração |
-| 18 | Cabeçalhos do chamador (429–447) e identidade da requisição (474–497) | Inaplicável: a porta não emite requisição nem recebe cabeçalhos de chamador. Identidade pública: método e URL sanitizada; cada obtenção com identificador opaco (§2.3) | — | — |
-| 19 | Cookies da `Session` do transporte (546–603) | Inaplicável: cookies ficam no perfil temporário; a porta só lê os **nomes** dos cookies do pedido, em memória, para a §2.3(2) | `requestWillBeSentExtraInfo` | recusa de candidata |
-| 20 | Revalidação de resposta reaproveitada (`revalidar_captura`, 635–661) | Inaplicável: não há reaproveitamento (§2.3, "Identidade da obtenção") | — | — |
-| 21 | Metadados HTTP do recibo (`observe_http_response`, `HTTPMetadata`, 124–214) | Igual: a porta constrói o recibo pela mesma função, alimentada com os cabeçalhos da resposta, com os mesmos limites e descarte de duplicatas | cabeçalhos | `RespostaInvalida` |
+| 17 | Validação dos parâmetros da chamada (1325–1341) | Declarada: o perfil é validado ao carregar, com os mesmos limites (`max_bytes` ≤ `MAX_BYTES`, método só `GET`); media types contidos em `DEFAULT_ALLOWED_MIMES` mais `application/json`, este admitido só na sessão assistida e só para recurso que o declare; o fluxo automático não muda. Perfil inválido impede a sessão | perfil | erro de configuração |
+| 18 | Cabeçalhos do chamador (429–447) e identidade da requisição (474–497) | Inaplicável: a porta não emite requisição nem recebe cabeçalhos de chamador. Identidade pública: §2.3, "Identidade da obtenção" | — | — |
+| 19 | Cookies da `Session` do transporte (546–603) | Inaplicável: cookies ficam no perfil temporário; a porta só lê **nomes** dos cookies enviados, em memória, para a §2.3(2) | `requestWillBeSentExtraInfo.associatedCookies` | recusa de candidata |
+| 20 | Revalidação de resposta reaproveitada (635–661) | Inaplicável: não há reaproveitamento | — | — |
+| 21 | Metadados HTTP do recibo (`observe_http_response`, `HTTPMetadata`, 124–214) | Igual: a porta constrói o recibo pela mesma função, com os mesmos limites e descarte de duplicatas | cabeçalhos | `RespostaInvalida` |
 | 22 | `fetched_at` (1277) | `wallTime` do `requestWillBeSent` + (`timestamp` de `loadingFinished` − `timestamp` do `requestWillBeSent`), do mesmo pedido, em UTC | `wallTime`, `timestamp` | — |
 
 ### 2.5 Bytes, hash e comparação entre capturas
 
-1. **Objeto do hash.** O exemplar (0088) é o corpo como o navegador o entregou depois de decodificar o
-   Content-Encoding; o SHA-256 é desses bytes. Sem compressão, coincidem com os bytes do fio (Planalto, teste
-   exploratório). Com compressão, o hash não prova os bytes comprimidos da rede; o recibo registra a codificação
-   original e a soma de `dataReceived.encodedDataLength`.
-2. **Identidade de bytes** (Codex r3, achado 5; Terra r3, achado 6). Corpo entregue em base64 é aceito como bytes.
-   Corpo entregue como texto só é aceito se, cumulativamente: (a) o texto não contém U+FFFD; (b) a codificação do
-   texto em UTF-8 tem exatamente o tamanho da soma de `dataReceived.dataLength`; (c) os próprios bytes declaram
-   UTF-8 (cabeçalho ou `<meta charset>`/`http-equiv` no início do documento), ou não declaram charset e são só
-   ASCII. Fundamento: um decodificador UTF-8 é injetivo sobre entrada válida, e entrada inválida produz U+FFFD,
-   barrado por (a); um decodificador de byte único (ISO-8859-1, windows-1252) leva todo byte não ASCII a dois ou
-   três bytes em UTF-8, o que (b) detecta; codificações multibyte legadas são excluídas por (c). BOM removido
-   pelo navegador altera o tamanho e causa recusa. Fora dessas condições, recusa.
-3. **Conteúdo variável injetado** (Terra r3, achado 10). O Planalto acrescenta depois de `</html>` um
-   `<script id="f5_cspm">` com token por requisição. O exemplar é guardado íntegro; o hash bruto nunca é usado
-   para afirmar que duas capturas têm o mesmo conteúdo. O perfil do Planalto declara a forma estrutural estrita do
-   bloco: depois do último `</html>`, só espaço em branco e exatamente um elemento
-   `<script id="f5_cspm">(function(){var f5_cspm={f5_p:'<A-Z>+',` … `})();</script>`, sem outro `</script>` no
-   interior. Equivalência textual entre capturas só se afere quando essa forma se verifica em todas; bloco ausente,
-   duplicado, deslocado ou com conteúdo fora da forma impede a afirmação de equivalência e vai ao humano. A
-   equivalência é textual (texto extraído pelo parser, sem o bloco), não equivalência normativa integral.
+1. **Objeto do hash.** O exemplar (0088) é o corpo como o navegador o recebeu depois de decodificar o
+   Content-Encoding, antes de qualquer interpretação de charset; o SHA-256 é desses bytes. Sem compressão, coincidem
+   com os bytes do fio. Com compressão, o hash não prova os bytes comprimidos da rede; o recibo registra a
+   codificação original e, onde informada, a soma de `dataReceived.encodedDataLength`.
+2. **Obtenção dos bytes** (Codex r4, B1; Terra r4, achado 2). O corpo é obtido **exclusivamente** por
+   `Network.streamResourceContent`, chamado no `requestWillBeSent` do pedido elegível: os bytes são o `bufferedData`
+   devolvido, seguido dos `dataReceived.data` subsequentes, todos em base64. `Network.getResponseBody` não é usado:
+   no laboratório, ele devolveu texto reinterpretado e diferente dos bytes originais para BOM UTF-16 sob cabeçalho
+   UTF-8 e para ISO-8859-1, e o campo `Response.charset` informou `utf-8` no primeiro caso; o streaming foi idêntico
+   aos bytes originais em todos os dez casos (laboratório, resultado 1). Se o streaming falhar ou não estiver ativo
+   antes do primeiro `dataReceived`, a candidata é recusada. Tamanho dos bytes diferente da soma de `dataLength`
+   recusa (§2.4, linha 7).
+3. **Conteúdo variável injetado** (Codex r4, R8; Terra r4, achado 6). O Planalto acrescenta, depois do último
+   `</html>`, um script do WAF F5. O exemplar é guardado íntegro; o hash bruto nunca é usado para afirmar que duas
+   capturas têm o mesmo conteúdo. O perfil do Planalto registra o **modelo literal** do bloco: a cauda do documento
+   depois do último `</html>`, em que a única região variável é o valor de `f5_p`, gramática `[A-P]{128}`;
+   substituído esse valor por `<TOKEN>`, a cauda tem 1.440 bytes e SHA-256
+   `57e730d2a5f31c72f6d347d198d2e426eb7495188129242fe024c14961be4f3f`. Conferido em três fixtures do repositório
+   (Leis 6.385, 6.404 e 10.303) e nas duas capturas do teste exploratório; as fixtures do CC e das Leis 14.195 e
+   14.430 **não** casam o modelo (cauda diferente). Equivalência textual entre capturas só se afirma quando a cauda de
+   todas casa exatamente o modelo; caso contrário, a equivalência não é afirmada e o caso vai ao humano. A
+   equivalência é textual (texto extraído pelo parser, sem o bloco), não equivalência normativa integral. Mudança
+   do modelo pela fonte é tratada como cauda diferente até registro de novo modelo.
 
 ### 2.6 Proveniência, `verified` e frescor
 
@@ -218,8 +239,10 @@ captura.
 3. Nunca se gravam ou exibem cabeçalhos de requisição, valores de cookie, valores de query ou segmentos de caminho
    fora da gramática pública declarada, em log, erro, recibo, evidência, fixture, snapshot, relatório ou resposta
    MCP/REST. Cabeçalhos de resposta seguem `HEADER_NAMES`; o Content-Type persistido só admite o parâmetro
-   `charset`. As gramáticas do perfil são estritas (URN:LEX, UUID canônico, caminhos sem segmento livre), de modo
-   que valor que as satisfaça é público por construção.
+   `charset`. As gramáticas do perfil são estritas (URN:LEX, UUID canônico, caminhos sem segmento livre) e reduzem
+   o que pode ser persistido, mas não provam que um valor é público: a publicidade decorre da declaração do perfil
+   sobre a classe de recurso (decisão 5) e dos indicadores de recusa da §2.3(2) (Codex r4, R9; Terra r4, achado 4).
+   Risco residual declarado: valor secreto que satisfaça a gramática de recurso declarado público seria persistido.
 4. **Conteúdo público** (decisão 5; Codex r3, achado 11; Terra r3, achado 8). Cada perfil declara por que o recurso
    é público e não personalizado (licença, ausência de autenticação) e os **nomes** de cookie admitidos (os do WAF
    e de métricas, por padrão de nome). Pedido com `Authorization`, com cookie de nome não declarado ou resposta com
@@ -271,10 +294,11 @@ max_bytes, max_capturas, operacoes, barreiras)`, validado ao carregar (§2.4, li
 - Origem: `www.planalto.gov.br:443`.
 - Recurso: `document`, `GET`, caminho `^/ccivil_03/[A-Za-z0-9_\-/]+\.htm[l]?$` sem `..` nem segmento vazio, sem
   query; media type `text/html`.
-- Cookies admitidos: padrões de nome do WAF F5 (`^TS[0-9a-f]{6,}$`, `^BIGipServer[\w.\-]+$`, `^f5avr\w+$`). Nome
+- Cookies admitidos: padrões de nome do WAF F5 (`^TS[0-9a-f]{6,}$`, `^BIGipServer[\w.\-]+$`, `^f5avr\w+$`, `^f5_cspm$`; os dois últimos constam do próprio script
+  do WAF, §2.5(3)). Nome
   diferente recusa a candidata; a correção do perfil é registrada.
 - Fundamento público: compilação oficial publicada sem autenticação.
-- `limpeza_texto`: bloco `f5_cspm` na forma da §2.5(3).
+- `limpeza_texto`: cauda do WAF F5 no modelo literal da §2.5(3).
 - `max_bytes`: `MAX_BYTES` (10 MiB). `max_capturas`: 50.
 - Barreira: reinício de conexão (`transporte_TransportError`) depois do GET com o UA identificado, na
   reclassificação de `connectors/planalto.py`, ou recusa com UA identificado da 0048; validade de 30 dias.
@@ -287,14 +311,19 @@ max_bytes, max_capturas, operacoes, barreiras)`, validado ao carregar (§2.4, li
   `application/json`.
 - Recurso B (texto): `xhr`, `GET`, caminho `^/api/public/binario/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/texto$`,
   sem query; media type `text/html`.
-- **Vínculo B → A** (Terra r3, achado 3; dados reais em `teste-normas-2026-11-19.md`): B só é candidato se, na
-  mesma sessão e antes dele, houver candidata A aceita cujo JSON tenha `legislationIdentifier` igual à URN da
-  query de A, e exatamente um elemento de `encoding[]` com `@type` `LegislationObject` e `contentUrl` igual a
-  `https://normas.leg.br/api/binario/<uuid>/texto` com o mesmo UUID de B (a página busca o mesmo UUID sob
-  `/api/public/`; essa é a única equivalência de caminho admitida). JSON inválido, URN divergente, UUID ausente,
-  repetido em mais de um elemento ou presente em mais de uma URN da sessão: B recusado. A captura B registra a URN,
-  o UUID, o `version` (`Original` ou `Current`) e o `@id` do elemento; pela 0088, `Current` (`@versao.atualizada`)
-  e `Original` (`@<data>`) são expressões distintas, e ambas têm `legislationLegalValue: UnofficialLegalValue`.
+- **Vínculo B → A** (Terra r3, achado 3; Terra r4, achado 3; Codex r4, R7; dados reais em `teste-normas-2026-11-19.md`).
+  O vínculo é resolvido sobre o conjunto completo das candidatas da sessão, ao fechar a janela, antes da seleção e de
+  qualquer gravação. Uma candidata A vale para o vínculo se o JSON for válido, `legislationIdentifier` for igual à URN da
+  query de A e cada elemento de `encoding[]` com `@type` `LegislationObject` tiver `contentUrl` na forma
+  `https://normas.leg.br/api/binario/<uuid>/texto`, `version` em {`Original`, `Current`} e `@id` com a URN e, para
+  `Current`, a expressão `@versao.atualizada`, para `Original`, a expressão `@<data>`; elemento fora disso invalida a A.
+  Uma candidata B (UUID tirado do caminho `/api/public/binario/<uuid>/texto`, única equivalência de caminho admitida)
+  liga-se à A cujo `encoding[]` contém o mesmo UUID. B é recusado se: nenhuma A válida o contém; o UUID aparece em mais
+  de um elemento, em mais de uma URN ou em A com hashes diferentes para a mesma URN; há dois B do mesmo UUID com hashes
+  diferentes (o grupo inteiro é recusado; B idênticos contam como um). Conflito detectado em qualquer momento da sessão
+  invalida todas as candidatas que ele alcança. A captura B registra o identificador e o hash da captura A que a
+  fundamenta, a URN, o UUID, o `version` e o `@id`; pela 0088, `Current` e `Original` são expressões distintas, ambas
+  com `legislationLegalValue: UnofficialLegalValue`.
 - Cookies admitidos: métricas por padrão de nome (`^_ga$`, `^_ga_[A-Z0-9]+$`, `^_gid$`, `^_gat\w*$`). A sessão de
   teste não registrou os nomes reais (redigidos); nome diferente recusa a candidata, e a correção do perfil é
   registrada.
@@ -308,20 +337,25 @@ NPL e DOU (`www.in.gov.br`) seguem barrados (pendências 28 e 31); abri-los à s
 
 ### 2.12 Métodos CDP admitidos (lista fechada)
 
-| Método | Finalidade | Alvo |
-|---|---|---|
-| `Target.setAutoAttach` (`autoAttach`, `waitForDebuggerOnStart`, `flatten`) | anexar antes de qualquer requisição | navegador |
-| `Target.setDiscoverTargets` | conhecer alvos e subtipos (pré-renderização, extensões) | navegador |
-| `Runtime.runIfWaitingForDebugger` | liberar o alvo depois de anexado | cada alvo |
-| `Network.enable` | receber eventos de rede | `page`, `iframe`, `worker` |
-| `Network.getResponseBody` | ler o corpo de candidata já terminada e dentro dos limites | `page` |
-| `Browser.getVersion` | versão para o recibo | navegador |
-| `Browser.setDownloadBehavior` (`deny`) | negar downloads; não altera requisição | navegador |
-| `Browser.close` | encerrar ao fim ou no prazo | navegador |
+Cada chamada leva exatamente os parâmetros indicados; parâmetro ausente, adicional ou com outro valor é recusado pelo
+próprio adaptador antes do envio. Chamada a alvo vai com o `sessionId` da sessão anexada; chamada ao navegador vai sem
+ele. Métodos sem parâmetros usam objeto vazio.
 
-Qualquer outro método, ou parâmetro diferente dos indicados, é recusado pelo próprio adaptador antes do envio.
-`Page.enable` não é usado: os eventos de navegação necessários vêm de `Network` (`documentURL`, `loaderId`,
-`frameId`).
+| Método e parâmetros | Natureza | Alvo |
+|---|---|---|
+| `Target.setDiscoverTargets` `{discover: true}` | observação de alvos e subtipos | navegador |
+| `Target.setAutoAttach` `{autoAttach: true, waitForDebuggerOnStart: true, flatten: true}` | anexação antes de qualquer requisição do alvo | navegador |
+| `Network.enable` `{}` | eventos de rede | `page` |
+| `Page.enable` `{}` | eventos de quadro (`frameNavigated`, `frameAttached`) | `page` |
+| `Runtime.runIfWaitingForDebugger` `{}` | liberar o alvo depois de `Network.enable` e `Page.enable` | cada alvo anexado |
+| `Page.getFrameTree` `{}` | prova do quadro principal (§2.3(3)), somente leitura | `page` |
+| `Network.streamResourceContent` `{requestId}` | bytes do corpo (§2.5(2)), só para pedido elegível, no `requestWillBeSent` | `page` |
+| `Browser.getVersion` `{}` | versão para o recibo | navegador |
+| `Browser.setDownloadBehavior` `{behavior: "deny"}` | negar downloads; não altera requisição | navegador |
+| `Browser.close` `{}` | encerrar ao fim ou no prazo | navegador |
+
+Nenhum desses métodos altera requisição, cache, service worker, cabeçalho ou identidade, nem navega. Alvos que não
+sejam `page` (extensões, workers) são liberados com `Runtime.runIfWaitingForDebugger` e não recebem outro comando.
 
 ### 2.13 Cobertura
 
@@ -335,57 +369,71 @@ instalador oficial do Windows não muda; o teste de instalação confere que `fv
 
 ## 3. Aceite (o incremento só conclui com testes que provem)
 
-Cada item liga norma, cenário e resultado esperado; fixtures seguem a regra 9.
+Cada item liga norma, cenário e resultado esperado (aceitação ou código de recusa); fixtures seguem a regra 9. O
+laboratório de 19/11 (`laboratorio-2026-11-19.md`) antecipa parte dos itens 1 e 2, sem substituí-los.
 
 1. **Adaptador real contra origem controlada.** Chrome instalado contra servidor HTTPS local. A confiança na AC de
    teste e a admissão do IP de loopback vêm de parâmetros exclusivos do harness; um teste prova que o caminho de
-   produto se recusa a lançar com eles. Casos, cada um com aceitação ou código de recusa esperado: as 22 linhas da
-   §2.4; `headersText` com campo malformado, `Content-Length` com 21 dígitos, duplicado, conflitante, coexistência
-   com `Transfer-Encoding`; chunk malformado e truncado; `gzip`, `deflate`, `br`, `zstd` e codificação não
-   admitida; bomba de compressão (descarte sem leitura do corpo); `Content-Length` declarado acima do limite;
-   corpo vazio; redirecionamento de rede (recusa), HSTS interno provado (aceito) e interno sem prova (recusa); 304
-   exposto como 200; prazo sem resposta (`Timeout`) e com resposta iniciada sem término (`RespostaInvalida`);
-   corpos UTF-8 válidos, UTF-8 inválido, sequência incompleta, U+FFFD literal, BOM, ISO-8859-1 e windows-1252 em
-   base64 e em texto, com o resultado da §2.5(2); eventos fora de ordem, `requestId` repetido entre alvos, alvo
-   criado antes da anexação, perda do canal; concorrência acima dos limites da linha 15.
+   produto se recusa a lançar com eles. Casos: as 22 linhas da §2.4; `headersText` com campo malformado,
+   `Content-Length` com 21 dígitos, duplicado, conflitante, coexistência com `Transfer-Encoding`; chunk malformado e
+   truncado; `gzip`, `deflate`, `br`, `zstd` e codificação não admitida; bomba de compressão (streaming abandonado,
+   candidata descartada); `Content-Length` declarado acima do limite; confrontos finais da linha 7 (sem codificação,
+   com codificação em `fetch`, com codificação em documento); corpo vazio; redirecionamento de rede (recusa), HSTS
+   interno provado (aceito, sem que a URL `http` vire candidata) e interno sem prova (recusa); 304 exposto como 200;
+   prazo sem cabeçalhos (`Timeout`), com cabeçalhos e sem término (`RespostaInvalida`) e com cabeçalho parcial;
+   **identidade de bytes pelo streaming** em UTF-8, UTF-8 só no `<meta>`, UTF-8 inválido, sequência incompleta,
+   U+FFFD literal, BOM UTF-16 sob cabeçalho UTF-8 (inclusive com tamanhos compensados), ISO-8859-1 e windows-1252;
+   streaming iniciado tarde ou falho (recusa); eventos fora de ordem, `requestId` repetido entre alvos, alvo criado
+   antes da anexação, aba aberta já com URL (primeiro documento não candidato), perda do canal; limites da linha 15.
 2. **Proveniência.** Resposta de cache, de service worker que sintetiza resposta, de prefetch, de pré-renderização
-   (inclusive em transição para página), restauração por bfcache e Early Hints: nenhuma vira candidata; recarga
-   forçada pelo humano vem da rede e vira.
-3. **Recusas de escopo e conteúdo público.** `POST`, `Authorization`, cookie de nome não declarado,
-   `Cache-Control: private`, `Vary: Cookie`, caminho e query fora da gramática, media type não declarado, página de
-   desafio, terceiro em iframe, `blob:` e `data:`, download, WebSocket; normas.leg.br: UUID trocado, JSON com URN
-   divergente, UUID em dois elementos, B sem A, B de outra URN.
-4. **Seleção.** Sem marcação, nada é gravado; dependente segue o documento; candidata não marcada não deixa rastro.
-5. **Filtro na origem.** Sessão sintética com tráfego de terceiros, SSO simulado e eventos de terceiros com
-   `requestId` coincidente: nada fora das origens persiste, nem em diagnóstico.
-6. **Segredos.** Varredura sobre sessão sintética com cookies, `Authorization`, tokens em query, caminho, corpo e
-   parâmetros extras do Content-Type: nada em log, erro, recibo, evidência, fixture, snapshot, relatório ou resposta
-   MCP/REST; recusa onde a §2.7 manda recusar.
+   (inclusive em transição para página), restauração por bfcache, recurso iniciado por Early Hints: nenhuma vira
+   candidata; resposta final depois de 103: avaliada por si; recarga forçada pelo humano vem da rede e vira.
+3. **Escopo, quadro e vínculo.** `POST`, `Authorization`, cookie de nome não declarado, cookie bloqueado (não conta),
+   `Cache-Control: private`, `Vary: Cookie`, caminho e query fora da gramática, media type não declarado, desafio,
+   documento de iframe (inclusive no mesmo processo), `XHR` iniciado por iframe, `blob:` e `data:`, download,
+   WebSocket. normas.leg.br: UUID trocado, URN divergente, UUID em dois elementos, B sem A, B de outra URN, **segunda A
+   posterior que torna o UUID ambíguo** (invalida o B já aceito), dois B com hashes diferentes para o mesmo UUID
+   (grupo recusado), dois B idênticos (um só), `version` ou `@id` incoerentes.
+4. **Seleção.** Grafo resolvido antes da lista; sem marcação, nada é gravado; dependente segue o documento e é exibido
+   com seu hash; candidata não marcada não deixa rastro.
+5. **Filtro na origem.** Sessão sintética com tráfego de terceiros, SSO simulado, eventos extras antes e depois do
+   evento principal, `requestId` coincidente entre terceiro e fonte, mudança de origem na cadeia: nada fora das
+   origens persiste, nem em diagnóstico.
+6. **Segredos e conteúdo público.** Varredura sobre sessão sintética com cookies, `Authorization`, tokens em query, em
+   caminho **que satisfaça a gramática** (o valor é persistido só porque o perfil declara a classe de recurso pública;
+   o teste documenta esse limite), em corpo e em parâmetros extras do Content-Type (recusados ou não persistidos, conforme
+   a §2.7); documento público com dado pessoal publicado (preservado no exemplar, fora do texto extraído).
 7. **Diretório e artefatos.** ACL conferida (falha fecha a sessão); acesso negado a outra conta sem privilégio;
-   inventário dos locais de gravação do navegador durante e depois da sessão; limpeza em fim normal, erro,
-   interrupção e recuperação após término abrupto.
-8. **Ambiente.** Política de proxy simulada (HKCU) e token de nuvem: a sessão não abre; extensão de teste com
-   `declarativeNetRequest` que altera pedido e com `webRequest` que redireciona: a sessão encerra sem capturas;
-   pipe indisponível: a sessão não abre.
-9. **Passividade.** Registro do tráfego CDP do adaptador no teste: só métodos e parâmetros da §2.12; conferência
-   estática da mesma lista; comparação dos pedidos vistos pela origem de teste com e sem o adaptador anexado:
-   iguais.
-10. **Porta única.** Nenhum conector ou parser lê bytes do adaptador sem passar pela porta (AST e teste de
-    execução com tentativa de contorno).
-11. **`verified`, frescor e cobertura.** Captura assistida sem identidade, âncora ou confronto não ganha
-    `verified`; os 30 dias só afetam `vigente_na_fonte` em consulta corrente; cobertura assistida publicada à parte
-    e nunca somada à automática.
-12. **Proveniência gravada.** `modalidade_acesso` e `procedencia` gravados, publicados nas evidências dos
-    adaptadores e preservados em exportação e instalação de snapshot.
-13. **Disparo.** Nenhum caminho MCP do produto, agendado, de bateria ou remoto alcança porta ou adaptador (AST e
-    teste de execução); sem TTY ou sem confirmação, nada é lançado; expiração, fechamento e queda do canal encerram
-    sem reabertura, renovação ou repetição.
-14. **Contrato.** Indicação só nas condições da §2.10, inclusive o envelhecimento com todos os requisitos; operação
-    não habilitada e fonte barrada não indicam; motivo e categoria originais preservados; nenhum tipo muda.
-15. **Conteúdo variável.** Planalto: tokens distintos, mesmo texto; bloco duplicado, deslocado, ausente, com texto
-    normativo dentro ou malformado: equivalência não afirmada.
-16. **Sessão manual** pelo titular, no terminal, com Planalto e normas.leg.br, antes da reapuração da Porta L; o
-    supervisor só lê os resultados. Complementa os itens anteriores; não os substitui.
+   inventário dos locais de gravação do navegador durante e depois da sessão; limpeza em fim normal, erro, interrupção
+   e recuperação após término abrupto.
+8. **Ambiente.** Política de proxy simulada (HKCU) e token de nuvem: não abre. Inventário: extensão com
+   `declarativeNetRequest` só com regras estáticas, sem página de fundo nem service worker, instalada por mecanismo
+   aceito pelo navegador de teste (o Chrome de marca 157 ignora `--load-extension`; ver §5.8): detectada pelo
+   inventário e sessão encerrada; extensão instalada durante a sessão: candidatas invalidadas; `Secure Preferences`
+   ilegível: nenhuma candidata. Pipe indisponível: não abre.
+9. **Passividade e prontidão.** Registro do tráfego CDP do adaptador: só métodos e parâmetros da §2.12, na sequência da
+   §2.3; conferência estática da mesma lista; pedidos vistos pela origem de teste com e sem o adaptador anexado:
+   iguais (cabeçalhos inclusive).
+10. **Porta única.** Nenhum conector ou parser lê bytes do adaptador sem passar pela porta (AST e teste de execução
+    com tentativa de contorno).
+11. **`verified`, frescor e cobertura.** Captura assistida sem identidade, âncora ou confronto não ganha `verified`;
+    regressões nos caminhos finais da 0075 (`verificar_texto`, `obter_dispositivo`), com histórico e juízo pendente;
+    os 30 dias só afetam `vigente_na_fonte` em consulta corrente; cobertura assistida publicada à parte.
+12. **Proveniência gravada.** `modalidade_acesso` e `procedencia` gravados, publicados nas evidências dos adaptadores;
+    em snapshot instalado, procedência `snapshot` e `modalidade_acesso` preservada.
+13. **Disparo e perfil pessoal.** Nenhum caminho MCP do produto, agendado, de bateria ou remoto alcança porta ou
+    adaptador (AST e execução); sem TTY ou sem confirmação, nada é lançado; expiração, fechamento e queda do canal
+    encerram sem reabertura, renovação ou repetição; nenhum acesso ao diretório de perfil pessoal do navegador
+    (monitoramento de arquivos durante a sessão).
+14. **Contrato.** Indicação só nas condições da §2.10, inclusive envelhecimento com todos os requisitos; sem barreira
+    registrada, barreira expirada, 401, operação não habilitada e fonte barrada: não indica; motivo e categoria
+    originais preservados; nenhum tipo muda.
+15. **Conteúdo variável.** Planalto: cauda que casa o modelo da §2.5(3) com tokens distintos, mesmo texto; cauda
+    diferente, bloco duplicado, deslocado, ausente, com texto inserido ou malformado: equivalência não afirmada.
+16. **Instalação.** O teste de instalação do Windows confere que `fv sessao` existe e que, sem pipe disponível, sai com
+    a recusa da §2.2(2).
+17. **Sessão manual** pelo titular, no terminal, em máquina sem política que viole a §2.2(3), com Planalto e
+    normas.leg.br, antes da reapuração da Porta L; o supervisor só lê os resultados. Complementa; não substitui.
 
 ## 4. O que não muda e alternativas rejeitadas
 
@@ -409,9 +457,14 @@ da ferramenta; capturar o DOM; instalar AC no sistema; modo sem janela; OCR.
    questão volta ao titular.
 5. Nomes reais dos cookies do Planalto e de normas.leg.br: confirmar na sessão manual (§3.16); divergência corrige o
    perfil por registro, nunca por inferência em tempo de execução.
-6. Notebook do titular: se as políticas do escritório impedirem a sessão (§2.2(3)), decidir onde ela roda.
+6. **Onde a sessão roda.** No notebook do titular a sessão não abre (Fortinet Privileged Access Agent instalado por
+   política, §2.2(3)). Usar outro navegador ou outra conta para escapar da política do escritório não é decisão técnica:
+   depende das regras de TI do escritório e fica com o titular. Alternativa sem esse conflito: máquina pessoal sem
+   política corporativa.
 7. A versão `Original` de normas.leg.br como árbitro `texto_publicado` não oficial (teste de normas, achado 9):
    fora desta decisão.
+8. Mecanismo de instalação de extensão no harness de teste (§3.8): o Chrome de marca 157 ignora `--load-extension`;
+   usar política de teste em HKCU com pacote local ou navegador de teste que aceite extensão desempacotada.
 
 ## 6. Execução
 
@@ -464,3 +517,29 @@ nova, com os critérios da §3 fixados antes, inclusive a auditoria própria de 
 | Terra | 10. Bloco `f5_cspm` | §2.5(3); §3.15 |
 | Terra | 11. Tráfego não controlado | §2.4, linha 15; premissa: o tráfego do navegador é o da navegação humana, fora do controle da ferramenta, e nada dele é capturado sem passar pela porta |
 | Terra | 12. Página inicial | §2.8(1) |
+
+- v4: Codex r4 (B1 a B3, R1 a R9) e Terra r4 (quatro bloqueadores, três ressalvas) BLOQUEADOR. Pelas condições da
+  exceção, a especificação voltou ao titular.
+- 19/11: o titular aprova a rodada 5 de escopo fechado, precedida de laboratório (`laboratorio-2026-11-19.md`); v5.
+
+| Parecer r4 | Achado | Resposta na v5 |
+|---|---|---|
+| Codex | B1. Identidade de bytes (BOM UTF-16) | §2.5(2): só `streamResourceContent`; `getResponseBody` excluído; laboratório, resultado 1 |
+| Codex | B2. Extensão sem alvo CDP | §2.2(3): inventário por `Secure Preferences`, antes de candidata e periódico; laboratório, resultado 5 |
+| Codex | B3. Quadro principal e prontidão | §2.3, "Prontidão" e item 3; §2.12 (`Page.enable`, `Page.getFrameTree`); laboratório, resultados 3 e 4 |
+| Codex | R1. `application/json` | §2.4, linha 17 |
+| Codex | R2. Confrontos finais de tamanho | §2.4, linha 7; laboratório, resultado 2 |
+| Codex | R3. "Resposta iniciada" | §2.4, linha 12 (diferença declarada) |
+| Codex | R4. Fila e memória | §2.4, linha 15 (valores fixados) |
+| Codex | R5. URL `http` do HSTS | §2.4, linhas 1 e 8 |
+| Codex | R6. Parâmetros CDP | §2.12 (parâmetros exatos, `sessionId`) |
+| Codex | R7. Grafo de vínculos | §2.3, "Seleção"; §2.11 (`normas_leg`) |
+| Codex | R8. Bloco `f5_cspm` | §2.5(3): modelo literal com hash, token `[A-P]{128}` |
+| Codex | R9. Publicidade por sintaxe | §2.7(3), com risco residual declarado |
+| Terra | 1. Extensões | como B2 |
+| Terra | 2. Identidade de bytes | como B1 |
+| Terra | 3. Vínculo e seleção | como R7 |
+| Terra | 4. Gramática e publicidade | como R9; decisão 5 mantida |
+| Terra | 5. Cookies e personalização | §2.3(2) (cookies bloqueados não contam); §3.6; §5.5 |
+| Terra | 6. `f5_cspm` | como R8 |
+| Terra | 7. HSTS e lista CDP | §2.4, linha 8; §2.12; §3.1 e §3.9 |
