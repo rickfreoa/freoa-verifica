@@ -1,5 +1,9 @@
 # 0067 — Sessão assistida e modelos de ranqueamento; revê as regras invariáveis 3 e 7
 
+> **Emendada** pela 0089 §2.1 (quando vigente): na sessão assistida, o quarto item da regra 3 passa a admitir os
+> bytes recebidos pela conexão do próprio navegador, com a matriz de validação da 0089 §2.4. Fluxo automático
+> inalterado.
+
 Data: 26/10/2026 · Versão: 1.4.0 · Origem: `docs/PLANO-1.4.0.md` (D2, D3 e seção 9), aprovado pelo titular
 
 ## Problema
