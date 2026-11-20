@@ -1663,3 +1663,119 @@ cache pytest desabilitado. Não são a suíte offline global, a matriz CI, o ace
 real completo ou novo parecer independente. A prova real de SW e a limpeza
 sinalizada acima continuam pendentes do ambiente externo; os gestos humanos e
 a sessão manual continuam sujeitos às exigências da 0089 e da nota de escopo.
+
+## Auditoria Codex r3
+
+Correção de desenvolvimento restrita ao único achado médio do parecer
+`C:\dev\tmp\v5\audit\parecer-codex-r3.md`, sobre o HEAD
+`5f5a58530e4b1cd3cff37fe982e2d486a2f523b0`, no worktree
+`C:\dev\fv14-0089i`, ramo `feat/0089-sessao-assistida`.
+
+### Correção e regressões causais
+
+As duas reproduções exatas foram escritas antes da alteração do produto:
+ExtraInfo de pedido com `associatedCookies=[null]` e sem `headers`; ExtraInfo de
+resposta com `statusCode="bad"`, `blockedCookies=[]` e sem `headers`. Ambas
+falharam na base com **DID NOT RAISE RecusaSessao**: **2 failed**, exit 1, em
+`tests/test_assistida_0089_r3.py -k reproducoes`, com `.venv`, cache desabilitado
+e basetemp externo. Não houve navegador nem rede nessas provas.
+
+Em `cdp.py`, a validação de todos os campos presentes das projeções agora
+precede a classificação de ausência e o encaminhamento à porta. O tratamento
+genérico de `KeyError` foi substituído por uma conferência explícita: tipos ou
+estruturas malformados chegam a `processar`, que invalida o adaptador, encerra
+a sessão e retorna **`EVENTO_CDP_INVALIDO`**. Só a falta de prova com estrutura
+presente íntegra recusa a candidata por
+**`METADADOS_SEGURANCA_ASSISTIDOS_AUSENTES`**, sem completar headers, cookies,
+TLS ou indicadores de cache com valores presumidos.
+
+A ordem foi aplicada aos dois ExtraInfo, inclusive elementos e estruturas
+internas dos cookies e `headersText` quando presente; à resposta e seus campos
+projetados de conexão/status/protocolo; aos campos de `securityDetails`; aos
+três indicadores de cache/SW; e ao iniciador, quadro, documento e tempos
+projetados do pedido. Uma origem derivada comprovada continua sendo recusada
+pela porta com **`ORIGEM_ASSISTIDA_SEM_PROVA`**, mesmo se não emitir TLS ou
+ExtraInfo, mas somente depois de validar todos os metadados presentes.
+`headersText` continua condicional ao protocolo na porta, sem criar exigência
+de texto HTTP/1 em HTTP/2 ou HTTP/3.
+
+Os filtros anteriores de alvos não candidatos e de quadros filhos foram
+preservados: não se validam como prova de candidata os metadados de workers,
+service workers ou OOPIFs, nem se promove um quadro filho a candidato. A falta
+da estrutura do evento (`response`) ou de campos estruturais de um quadro de
+controle (`Page.frameNavigated`) continua sendo protocolo inválido, como nas
+regressões preexistentes; isso é distinto da falta de um campo de prova de
+uma candidata.
+
+O novo módulo de regressão sintética cobre as duas reproduções; ausência pura
+em cada campo de prova, com admissão de uma candidata boa posterior na mesma
+sessão; malformação pura; o produto cartesiano de ausência e malformação em
+campos distintos de cada projeção, inclusive irmãos dentro de `securityDetails`;
+alvos não candidatos; origem derivada com metadado presente malformado; e
+quadros de controle com ausência e malformação combinadas. Uma candidata já
+recusada continua sem admissão após eventos tardios. O encerramento impede
+novo pedido na mesma sessão. Todos os cenários são gerados em teste, rotulados
+sintéticos, sem acrescentar capturas ou arquivos em `tests/fixtures`.
+
+O teste r1 de pedido incompleto foi ajustado somente na distinção exigida pela
+r3: ausência de `initiator`, `frameId` ou `documentURL`, ou de `initiator.type`
+no objeto vazio, exige agora recusa da candidata com motivo exato e sessão
+aberta. Tipos e estruturas malformados continuam exigindo motivo exato de
+protocolo inválido, agora também com asserção explícita de encerramento.
+Nenhuma asserção de não admissão foi retirada.
+
+Sem alteração de `transport.py`, critérios de `verified`, decisões aprovadas,
+manifesto de aceite, registro de release ou baseline Ruff. Sem troca de ramo,
+stage, tentativa de commit ou push. Este registro não substitui o novo parecer
+independente exigido pelo projeto.
+
+### Validação local
+
+* Confirmação focada após a correção e a atualização da expectativa de ausência
+  no r1: **586 passed**, exit 0, **5,23 s**, nos módulos r3 e r1, com `.venv`,
+  `-p no:cacheprovider` e basetemp `%TEMP%\r3confirm`.
+* Bateria afetada final: **1341 passed, 1 skipped, 57 deselected**, exit 0,
+  **48,31 s**. Todos os módulos `test_assistida_0089*.py` e
+  `tests/test_transport_assistida_0089.py`, com `.venv`, exclusão de live e
+  navegador assistido, cache desabilitado e basetemp externo. O skip é da
+  prova HTTP/2/Early Hints em memória que exige `h2`, não instalado. Log
+  `%TEMP%\r3-afetados-final.log`. Comando executado no worktree:
+
+  ```powershell
+  $r3Modulos = @(rg --files tests -g 'test_assistida_0089*.py') + @('tests/test_transport_assistida_0089.py')
+  .venv\Scripts\python.exe -m pytest @r3Modulos -q -m "not live and not navegador_assistido" -p no:cacheprovider --basetemp "$env:TEMP\r3af" --tb=short
+  ```
+
+* Catraca `C:\dev\tmp\venv-ruff\Scripts\python.exe
+  scripts\ruff_catraca.py`: **exit 0**, sem novos achados e sem alteração da
+  baseline. `.venv` do projeto não contém Ruff; utilizou-se o mesmo ambiente
+  Ruff da rodada anterior, sem instalar dependências. Log
+  `%TEMP%\r3-ruff-final.log`. `git diff --check`: **exit 0**.
+* Conjunto `repositorio` final: **619 passed, 1 skipped, 15481 deselected**,
+  exit 0, **870,25 s (14min30s)**, incluindo a execução efetiva da cópia
+  isolada. Log `%TEMP%\r3-repositorio-final.log`. Comando executado:
+
+  ```powershell
+  .venv\Scripts\python.exe -m pytest tests -q -m "repositorio and not live and not navegador_assistido" -p no:cacheprovider --basetemp "$env:TEMP\r3rp" --tb=short
+  ```
+
+Estado de produto/testes registrado antes das duas baterias finais em
+`%TEMP%\r3-estado-final.json`:
+
+| Arquivo | SHA-256 |
+|---|---|
+| `freoa_verifica/assistida/cdp.py` | `5ff36b33e3a5ba8d8ce438fa6aee8569d68aa7dd24b6ef5f58d36d33a4ab1723` |
+| `tests/test_assistida_0089_r1.py` | `1de2d6299731494a4bc4855ca39db48720c1841d7417fbe4b53b5eb74e467ff7` |
+| `tests/test_assistida_0089_r3.py` | `420174a4dd439888723644ab137e1a118ac71af22d970a51cbff6c2613650e68` |
+
+Conferência após ambas as baterias: **3 de 3 hashes idênticos** ao registro
+anterior aos testes. O diff de produto limita-se aos métodos `_pedido`,
+`_evento` e `_evento_validado` do adaptador, e à nova conferência local
+`_metadados_ausentes`; nenhum método removido. `transport.py` e a baseline
+Ruff sem diff; index sem alterações staged; ramo e HEAD iguais aos iniciais.
+`git diff --check` final: **exit 0**. Apenas este registro documental recebeu
+os resultados após os testes; não houve nova alteração de produto ou testes.
+
+Estas execuções não são suíte offline global, CI remota, novo aceite em
+navegador real ou parecer independente. As pendências ambientais e os gestos
+humanos registrados anteriormente permanecem no fluxo do supervisor.

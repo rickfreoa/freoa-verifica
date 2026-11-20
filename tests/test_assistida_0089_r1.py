@@ -200,8 +200,14 @@ def test_metadados_pedido_incompletos_recusados(sessao, monkeypatch, campo, valo
         return original(sid, alvo, p)
 
     monkeypatch.setattr(ad, "_pedido", truncar)
-    with pytest.raises(RecusaSessao, match="EVENTO_CDP_INVALIDO"):
+    if valor == AUSENTE or (campo == "initiator" and valor == {}):
         request(ad)
+        assert not ad.fechado and not sessao._encerrada
+        assert ad.motivos_recusas == [(URL, "METADADOS_SEGURANCA_ASSISTIDOS_AUSENTES")]
+    else:
+        with pytest.raises(RecusaSessao, match="EVENTO_CDP_INVALIDO"):
+            request(ad)
+        assert ad.fechado and sessao._encerrada
     assert not ad.pedidos and not ad.canal.comandos
     ad.descartar()
 

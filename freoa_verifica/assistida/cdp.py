@@ -633,15 +633,32 @@ class AdaptadorCDP:
                     url_publica, "RespostaInvalida", "PEDIDO_ASSISTIDO_SEM_PROVA"
                 )
             return
-        iniciador = p["initiator"]
-        if (
-            not isinstance(iniciador, dict)
-            or not isinstance(iniciador["type"], str)
-            or not self.id_valido(p["frameId"])
-            or not isinstance(p["documentURL"], str)
-            or not p["documentURL"]
+        # Valida todos os campos presentes antes de classificar falta de prova.
+        # Os filtros de não candidatas acima continuam precedendo esta projeção.
+        if "initiator" in p and (
+            not isinstance(p["initiator"], dict)
+            or (
+                "type" in p["initiator"]
+                and not isinstance(p["initiator"]["type"], str)
+            )
         ):
             raise ValueError
+        if "frameId" in p and not self.id_valido(p["frameId"]):
+            raise ValueError
+        if "documentURL" in p and (
+            not isinstance(p["documentURL"], str) or not p["documentURL"]
+        ):
+            raise ValueError
+        for k in ("timestamp", "wallTime"):
+            if k in p and type(p[k]) not in (int, float):
+                raise ValueError
+        obrigatorios = ("initiator", "frameId", "documentURL", "timestamp", "wallTime")
+        if any(k not in p for k in obrigatorios) or "type" not in p["initiator"]:
+            self._recusar(
+                url_publica, "RespostaInvalida", "METADADOS_SEGURANCA_ASSISTIDOS_AUSENTES"
+            )
+            return
+        iniciador = p["initiator"]
         tipo_iniciador = iniciador["type"]
         inicio = {"tipo": tipo_iniciador}
         if tipo != "Document":
@@ -708,36 +725,7 @@ class AdaptadorCDP:
         curso = self.pedidos.get((sid, rid))
         if curso is None or curso.recusada:
             return
-        try:
-            self._evento_validado(curso, metodo, dados)
-        except KeyError:
-            obrigatorios = {
-                "requestWillBeSentExtraInfo": ("headers", "associatedCookies"),
-                "responseReceivedExtraInfo": (
-                    "headers",
-                    "blockedCookies",
-                    "statusCode",
-                ),
-            }
-            ausente = any(k not in dados for k in obrigatorios.get(metodo, ()))
-            if metodo == "responseReceived":
-                r = dados["response"]
-                ausente = any(
-                    k not in r
-                    for k in (
-                        "securityDetails",
-                        "fromDiskCache",
-                        "fromServiceWorker",
-                        "fromPrefetchCache",
-                    )
-                ) or (
-                    isinstance(r.get("securityDetails"), dict)
-                    and any(
-                        k not in r["securityDetails"] for k in ("protocol", "issuer")
-                    )
-                )
-            if not ausente:
-                raise
+        if self._metadados_ausentes(metodo, dados):
             # Ausência de prova nesta resposta não é corrupção do protocolo.
             # Nunca se substitui por headers/cookies vazios ou TLS presumido.
             curso.porta.descartar()
@@ -746,55 +734,97 @@ class AdaptadorCDP:
             self._recusar(
                 curso.url, "RespostaInvalida", "METADADOS_SEGURANCA_ASSISTIDOS_AUSENTES"
             )
+            return
+        self._evento_validado(curso, metodo, dados)
 
-    def _evento_validado(self, curso, metodo, dados):
+    @staticmethod
+    def _metadados_ausentes(metodo, dados):
+        """Confere a estrutura presente inteira antes de decidir pela ausência."""
+        if metodo in {"requestWillBeSentExtraInfo", "responseReceivedExtraInfo"}:
+            if "headers" in dados:
+                _headers_seguros(dados["headers"])
         if metodo == "requestWillBeSentExtraInfo":
-            headers = _headers_seguros(dados["headers"])
-            cookies = dados["associatedCookies"]
-            if not isinstance(cookies, list):
+            if "associatedCookies" in dados and not isinstance(
+                dados["associatedCookies"], list
+            ):
                 raise ValueError
-            projetados = []
-            for c in cookies:
-                if not isinstance(c, dict) or not isinstance(c["cookie"], dict):
+            for c in dados["associatedCookies"] if "associatedCookies" in dados else ():
+                if not isinstance(c, dict) or not isinstance(c.get("cookie"), dict):
                     raise ValueError
-                nome = c["cookie"]["name"]
+                nome = c["cookie"].get("name")
                 if not isinstance(nome, str) or not nome:
                     raise ValueError
-                projetados.append(
-                    {
-                        "nome": nome,
-                        "blockedReasons": _motivos_seguros(c["blockedReasons"]),
-                    }
-                )
-            dados = {
-                "authorization_presente": any(
-                    k.lower() == "authorization" for k in headers
-                ),
-                "associatedCookies": projetados,
-            }
+                _motivos_seguros(c.get("blockedReasons"))
+            return any(k not in dados for k in ("headers", "associatedCookies"))
         elif metodo == "responseReceivedExtraInfo":
-            headers = _headers_seguros(dados["headers"])
-            cookies = dados["blockedCookies"]
-            if not isinstance(cookies, list) or type(dados["statusCode"]) is not int:
+            if "blockedCookies" in dados and not isinstance(dados["blockedCookies"], list):
                 raise ValueError
-            for c in cookies:
+            for c in dados["blockedCookies"] if "blockedCookies" in dados else ():
                 if (
                     not isinstance(c, dict)
-                    or not isinstance(c["cookieLine"], str)
+                    or not isinstance(c.get("cookieLine"), str)
                     or not c["cookieLine"]
                 ):
                     raise ValueError
-                _motivos_seguros(c["blockedReasons"])
+                _motivos_seguros(c.get("blockedReasons"))
                 if "cookie" in c and (
                     not isinstance(c["cookie"], dict)
-                    or not isinstance(c["cookie"]["name"], str)
+                    or not isinstance(c["cookie"].get("name"), str)
                     or not c["cookie"]["name"]
                 ):
                     raise ValueError
-            bruto = dados.get("headersText", "")
-            if not isinstance(bruto, str):
+            if "statusCode" in dados and type(dados["statusCode"]) is not int:
                 raise ValueError
-            tamanho = len(bruto) + sum(len(k) + len(v) for k, v in headers.items())
+            if "headersText" in dados and not isinstance(dados["headersText"], str):
+                raise ValueError
+            return any(k not in dados for k in ("headers", "blockedCookies", "statusCode"))
+        elif metodo == "responseReceived":
+            if "response" not in dados or not isinstance(dados["response"], dict):
+                raise ValueError
+            resposta = dados["response"]
+            flags = ("fromDiskCache", "fromServiceWorker", "fromPrefetchCache")
+            if any(k in resposta and type(resposta[k]) is not bool for k in flags):
+                raise ValueError
+            textos = ("url", "protocol", "securityState", "remoteIPAddress")
+            if any(k in resposta and not isinstance(resposta[k], str) for k in textos):
+                raise ValueError
+            if "status" in resposta and type(resposta["status"]) not in (int, float):
+                raise ValueError
+            if "remotePort" in resposta and type(resposta["remotePort"]) is not int:
+                raise ValueError
+            if "securityDetails" in resposta:
+                seguranca = resposta["securityDetails"]
+                if not isinstance(seguranca, dict) or any(
+                    k in seguranca
+                    and (not isinstance(seguranca[k], str) or not seguranca[k])
+                    for k in ("protocol", "issuer")
+                ):
+                    raise ValueError
+            if any(resposta.get(k) is True for k in flags):
+                # Só depois de conferir todos os campos presentes: a porta
+                # recusa origem derivada mesmo sem TLS/ExtraInfo emitidos pelo SW.
+                return False
+            obrigatorios = (*flags, *textos, "status", "remotePort", "securityDetails")
+            return any(k not in resposta for k in obrigatorios) or any(
+                k not in resposta["securityDetails"] for k in ("protocol", "issuer")
+            )
+        return False
+
+    def _evento_validado(self, curso, metodo, dados):
+        if metodo == "requestWillBeSentExtraInfo":
+            dados = {
+                "authorization_presente": any(
+                    k.lower() == "authorization" for k in dados["headers"]
+                ),
+                "associatedCookies": [
+                    {"nome": c["cookie"]["name"], "blockedReasons": c["blockedReasons"]}
+                    for c in dados["associatedCookies"]
+                ],
+            }
+        elif metodo == "responseReceivedExtraInfo":
+            tamanho = len(dados.get("headersText", "")) + sum(
+                len(k) + len(v) for k, v in dados["headers"].items()
+            )
             # A porta mantém esses campos até o confronto; a reserva da mensagem
             # JSON termina antes disso. Não projeta blockedCookies nem seus valores.
             self._reter(tamanho * 16 + 4096)
@@ -803,28 +833,6 @@ class AdaptadorCDP:
                 for k in ("statusCode", "headers", "headersText")
                 if k in dados
             }
-        elif metodo == "responseReceived":
-            if "response" not in dados or not isinstance(dados["response"], dict):
-                raise ValueError
-            resposta = dados["response"]
-            flags = ("fromDiskCache", "fromServiceWorker", "fromPrefetchCache")
-            if any(k in resposta and type(resposta[k]) is not bool for k in flags):
-                raise ValueError
-            if any(resposta.get(k) is True for k in flags):
-                # A porta recusa a origem derivada antes de exigir TLS ou ExtraInfo
-                # que uma resposta sintetizada pelo SW pode legitimamente omitir.
-                self._observar(curso, metodo, dados)
-                return
-            # Nenhum True foi demonstrado: a admissão ainda exige todos os False
-            # explícitos. Ausência não se converte em origem/credenciais provadas.
-            if any(k not in resposta for k in flags):
-                raise KeyError
-            seguranca = resposta["securityDetails"]
-            if not isinstance(seguranca, dict) or any(
-                not isinstance(seguranca[k], str) or not seguranca[k]
-                for k in ("protocol", "issuer")
-            ):
-                raise ValueError
         self._observar(curso, metodo, dados)
 
     def _observar(self, curso, metodo, dados):
