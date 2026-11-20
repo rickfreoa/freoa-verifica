@@ -30,6 +30,7 @@ from tests.harness_assistida_0089_cenarios import (
     bombear,
     capturas,
     cenarios_https,
+    coletar_controles_passividade,
     comparar_passividade,
     conferir_recusa_streaming,
     exigir_recusa,
@@ -643,8 +644,7 @@ def test_item8_politica_maquina_recusa_antes_de_abrir(
 
 
 def test_item9_pedidos_e_cabecalhos_iguais_com_sem_adaptador(tmp_path, monkeypatch):
-    registros = []
-    for nome, observar in (("sem1", False), ("sem2", False), ("com", True)):
+    def executar(nome, observar):
         path = tmp_path / nome
         path.mkdir()
         with monkeypatch.context() as patch:
@@ -669,8 +669,13 @@ def test_item9_pedidos_e_cabecalhos_iguais_com_sem_adaptador(tmp_path, monkeypat
                             for m, p in sonda.comandos
                         )
                 # Inclui pedidos concorrentes até o encerramento do navegador.
-                registros.append(list(estado["pedidos"]))
-    diagnostico = comparar_passividade(*registros)
+                return list(estado["pedidos"])
+
+    controles = coletar_controles_passividade(executar)
+    com = executar("com", True)
+    diagnostico = comparar_passividade(
+        *controles[:2], com, controles_adicionais=controles[2:]
+    )
     mensagem = json.dumps(diagnostico, ensure_ascii=False, indent=2)
     print(mensagem)
     if not diagnostico["passou"]:

@@ -486,6 +486,87 @@ def conferir_recusa_streaming(sonda, url, motivo):
         raise AssertionError("motivo não é recusa de streaming demonstrável")
 
 
+def conferir_condicao_item1(ad, sonda, caso, estado):
+    """Exige a condição e o código normativo; aborto próprio nunca é aprovação."""
+    url = BASE + "/case/" + caso
+    chaves = [k for k, u in sonda.pedidos.items() if u == url]
+    diagnostico = json.dumps(
+        {
+            "caso": caso,
+            "origem": estado,
+            "recusas": ad.motivos_recusas,
+            "codigos": ad.recusas,
+            "eventos": sonda.eventos,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    print(diagnostico)
+    assert len(chaves) == (2 if caso == "304" else 1), diagnostico
+    chave = chaves[-1]
+    curso = ad.pedidos[chave]
+    assert curso.recusada and curso.admitida is None, diagnostico
+    assert all(
+        c.admitida is None
+        for k, c in ad.pedidos.items()
+        if caso != "304" or k != chaves[0]
+    ), diagnostico
+    eventos = [e for e in sonda.eventos if e["chave"] == chave]
+    abortos = [e for e in eventos if e["metodo"] == "Network.loadingFailed"]
+    if caso == "304":
+        troca = [
+            {"status": 200, "condicional": False},
+            {"status": 304, "condicional": True},
+        ]
+        assert estado["respostas"] in ([troca, troca[:1]] if abortos else [troca]), (
+            diagnostico
+        )
+        assert ad.pedidos[chaves[0]].admitida is not None, diagnostico
+    else:
+        assert len(estado["respostas"]) == 1, diagnostico
+        assert estado["respostas"][0]["caso"] == caso, diagnostico
+    if abortos:
+        erros = {e["erro_rede"] for e in abortos}
+        assert all(isinstance(e, str) and e for e in erros), diagnostico
+        exigir_recusa(ad, url, {"EVENTO_ASSISTIDO_RECUSADO"}, sonda=sonda, chave=chave)
+        conferir_recusa_evento(sonda, url, erros)
+        pytest.skip(
+            "CENARIO_ITEM1_NAO_REPRODUZIVEL_NO_NAVEGADOR: "
+            + caso
+            + ": "
+            + ", ".join(sorted(erros))
+            + "; nenhuma admissão do pedido afetado; "
+            "código normativo coberto offline pela porta"
+        )
+    if caso == "304":
+        assert any(
+            e["metodo"] == "Network.responseReceived" and e["status"] == 200
+            for e in eventos
+        ), diagnostico
+        assert any(
+            e["metodo"] == "Network.responseReceivedExtraInfo" and e["status"] == 304
+            for e in eventos
+        ), diagnostico
+        exigir_recusa(
+            ad, url, {"STATUS_ASSISTIDO_DIVERGENTE"}, sonda=sonda, chave=chave
+        )
+        assert (url, "RespostaInvalida") in ad.recusas, diagnostico
+    else:
+        completos = {e["metodo"] for e in eventos} & {
+            "Network.responseReceived",
+            "Network.responseReceivedExtraInfo",
+        }
+        assert bool(completos) is (caso == "sem_termino"), diagnostico
+        assert not any(e["metodo"] == "Network.loadingFinished" for e in eventos)
+        codigo, motivo = (
+            ("RespostaInvalida", "PRAZO_ASSISTIDO_INCOMPLETO")
+            if caso == "sem_termino"
+            else ("Timeout", "PRAZO_ASSISTIDO_SEM_RESPOSTA")
+        )
+        exigir_recusa(ad, url, {motivo})
+        assert (url, codigo) in ad.recusas, diagnostico
+
+
 def _agrupar_pedidos(pedidos):
     grupos = defaultdict(list)
     for metodo, caminho, headers in pedidos:
@@ -553,25 +634,27 @@ _PARAMETRO_Q = re.compile(
 
 def _normalizar_q_variavel(controles, adaptador):
     """Só mascara posições q que diferem; preserva todo o restante literalmente."""
-    um, dois = controles
-    if um is None or dois is None or um == dois or len(um) != len(dois):
+    um = controles[0]
+    if any(v is None for v in controles) or all(v == um for v in controles):
+        return None
+    if any(len(v) != len(um) for v in controles):
         return None
     if adaptador is None or len(adaptador) != len(um):
         return None
-    normalizados = [[], [], []]
+    normalizados = [[] for _ in (*controles, adaptador)]
     variou = False
-    for valores in zip(um, dois, adaptador):
+    for valores in zip(*controles, adaptador):
         # Não interpretar como parâmetro um trecho dentro de string entre aspas.
         if any('"' in valor for valor in valores):
             return None
         matches = [list(_PARAMETRO_Q.finditer(v)) for v in valores]
         estruturas = [_PARAMETRO_Q.sub(r"\1<Q>", v) for v in valores]
-        if not estruturas[0] == estruturas[1] == estruturas[2] or not (
-            len(matches[0]) == len(matches[1]) == len(matches[2])
-        ):
+        if len(set(estruturas)) != 1 or len({len(m) for m in matches}) != 1:
             return None
         posicoes = {
-            i for i, (a, b) in enumerate(zip(matches[0], matches[1])) if a[2] != b[2]
+            i
+            for i, posicao in enumerate(zip(*matches[:-1]))
+            if len({m[2] for m in posicao}) > 1
         }
         variou |= bool(posicoes)
         for destino, valor, encontrados in zip(normalizados, valores, matches):
@@ -586,37 +669,69 @@ def _normalizar_q_variavel(controles, adaptador):
     return [tuple(v) for v in normalizados] if variou else None
 
 
-def comparar_passividade(sem1, sem2, com):
-    """Só desconta variação provada nos dois controles, por método/caminho.
+def coletar_controles_passividade(executar):
+    """Dois a quatro controles até provar q variável em Accept-Language."""
+    controles = []
+    for numero in range(1, 5):
+        controles.append(executar(f"sem{numero}", False))
+        if len(controles) < 2:
+            continue
+        grupos = [_agrupar_pedidos(p) for p in controles]
+        if any(
+            {k: len(v) for k, v in g.items()}
+            != {k: len(v) for k, v in grupos[0].items()}
+            for g in grupos[1:]
+        ):
+            continue
+        for chave in grupos[0]:
+            for headers in zip(*(g[chave] for g in grupos)):
+                campos = list(map(_campos, headers))
+                for nome in campos[0]:
+                    if nome.casefold() != "accept-language":
+                        continue
+                    valores = [c.get(nome) for c in campos]
+                    if _normalizar_q_variavel(valores, valores[0]) is not None:
+                        return controles
+    return controles
+
+
+def comparar_passividade(sem1, sem2, com, *, controles_adicionais=()):
+    """Só desconta variação provada nos controles, por método/caminho.
 
     Nem favicon nem cabeçalho têm exclusão fixa. Valor novo exclusivo do
     adaptador continua falha, salvo posições q comprovadamente variáveis.
     Ordem de chegada só é descontada se também variar nos controles.
     """
-    grupos = [_agrupar_pedidos(p) for p in (sem1, sem2, com)]
+    controles = [sem1, sem2, *controles_adicionais]
+    conjuntos = [*controles, com]
+    grupos = [_agrupar_pedidos(p) for p in conjuntos]
     diagnostico = {
         "controle_sem_sem": diferenca_pedidos(sem1, sem2),
         "comparacao_sem1_com": diferenca_pedidos(sem1, com),
         "comparacao_sem2_com": diferenca_pedidos(sem2, com),
+        "controles": controles,
+        "adaptador": com,
+        "comparacoes_controles_com": [diferenca_pedidos(p, com) for p in controles],
         "ruido_declarado": [],
         "passou": True,
     }
     contagens = [{k: len(v) for k, v in g.items()} for g in grupos]
-    if not contagens[0] == contagens[1] == contagens[2]:
+    if any(c != contagens[0] for c in contagens[1:]):
         diagnostico["passou"] = False
         return diagnostico
-    ordens = [[(m, p) for m, p, _ in pedidos] for pedidos in (sem1, sem2, com)]
-    diagnostico["ordem_chegada_variavel_no_controle"] = ordens[0] != ordens[1]
-    if ordens[0] == ordens[1] and ordens[0] != ordens[2]:
+    ordens = [[(m, p) for m, p, _ in pedidos] for pedidos in conjuntos]
+    ordem_variavel = any(o != ordens[0] for o in ordens[1:-1])
+    diagnostico["ordem_chegada_variavel_no_controle"] = ordem_variavel
+    if not ordem_variavel and ordens[0] != ordens[-1]:
         diagnostico["passou"] = False
     for chave in sorted(grupos[0]):
-        normalizados = [[], [], []]
+        normalizados = [[] for _ in conjuntos]
         for i, headers in enumerate(zip(*(g[chave] for g in grupos))):
             campos = list(map(_campos, headers))
-            substituicoes = [{}, {}, {}]
-            for nome in campos[0].keys() & campos[1].keys():
+            substituicoes = [{} for _ in conjuntos]
+            for nome in campos[0]:
                 valores = [c.get(nome) for c in campos]
-                q = _normalizar_q_variavel(valores[:2], valores[2])
+                q = _normalizar_q_variavel(valores[:-1], valores[-1])
                 if q is None:
                     continue
                 for destino, valor in zip(substituicoes, q):
@@ -627,8 +742,8 @@ def comparar_passividade(sem1, sem2, com):
                         "caminho": chave[1],
                         "ocorrencia": i,
                         "cabecalho": nome,
-                        "controles": valores[:2],
-                        "adaptador": valores[2],
+                        "controles": valores[:-1],
+                        "adaptador": valores[-1],
                         "normalizados": q,
                         "justificativa": "somente posições q variáveis entre controles normalizadas",
                     }
@@ -643,17 +758,20 @@ def comparar_passividade(sem1, sem2, com):
             variantes = [Counter(c.get(nome) for c in campos) for campos in colecoes]
             # Repetições do mesmo método/caminho não podem combinar variantes
             # em uma multiplicidade que só exista com o adaptador.
-            if variantes[2] not in variantes[:2]:
+            if variantes[-1] not in variantes[:-1]:
                 diagnostico["passou"] = False
-        for i, (h1, h2, hc) in enumerate(zip(*normalizados)):
-            c1, c2, cc = map(_campos, (h1, h2, hc))
-            ruido = {k for k in c1.keys() | c2.keys() if c1.get(k) != c2.get(k)}
+        for i, hs in enumerate(zip(*normalizados)):
+            cs = list(map(_campos, hs))
+            nomes = {k for c in cs[:-1] for k in c}
+            ruido = {
+                k for k in nomes if any(c.get(k) != cs[0].get(k) for c in cs[1:-1])
+            }
             # A exclusão só vale neste pedido e para valores já demonstrados.
-            novos = {k for k in ruido if cc.get(k) not in (c1.get(k), c2.get(k))}
-            estaveis = [
-                tuple((k, v) for k, v in hs if k not in ruido) for hs in (h1, h2, hc)
-            ]
-            ordem_variavel = estaveis[0] != estaveis[1]
+            novos = {
+                k for k in ruido if cs[-1].get(k) not in [c.get(k) for c in cs[:-1]]
+            }
+            estaveis = [tuple((k, v) for k, v in h if k not in ruido) for h in hs]
+            ordem_variavel = any(e != estaveis[0] for e in estaveis[1:-1])
             if ruido or ordem_variavel:
                 diagnostico["ruido_declarado"].append(
                     {
@@ -661,16 +779,16 @@ def comparar_passividade(sem1, sem2, com):
                         "caminho": chave[1],
                         "ocorrencia": i,
                         "cabecalhos_excluidos": {
-                            k: [c1.get(k), c2.get(k)] for k in sorted(ruido)
+                            k: [c.get(k) for c in cs[:-1]] for k in sorted(ruido)
                         },
                         "ordem_cabecalhos_variavel": ordem_variavel,
-                        "justificativa": "variação observada entre duas execuções SEM adaptador; só valores dos controles são admitidos",
+                        "justificativa": "variação observada entre execuções SEM adaptador; só valores dos controles são admitidos",
                     }
                 )
             iguais = (
-                sorted(estaveis[0]) == sorted(estaveis[1]) == sorted(estaveis[2])
+                all(sorted(e) == sorted(estaveis[0]) for e in estaveis[1:])
                 if ordem_variavel
-                else estaveis[0] == estaveis[2]
+                else estaveis[0] == estaveis[-1]
             )
             if novos or not iguais:
                 diagnostico["passou"] = False

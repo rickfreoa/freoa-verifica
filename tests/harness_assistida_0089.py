@@ -49,6 +49,68 @@ CORPOS = {
 }
 
 
+def sinal_unico(script):
+    # O documento antigo continua vivo enquanto a navegação espera cabeçalhos.
+    # A sondagem do arquivo não pode disparar outra navegação e abortar a primeira.
+    return "if(!window.disparou0089){window.disparou0089=true;" + script + "}"
+
+
+def responder_condicao_item1(handler, caso, manter_aberta, estado):
+    """Condições sintéticas; a conexão só é liberada no teardown do ensaio."""
+    if caso in {"sem_cabecalhos", "parcial", "sem_termino"}:
+        if caso == "parcial":
+            handler.connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Typ")
+        elif caso == "sem_termino":
+            handler.connection.sendall(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
+                b"Content-Length: 999\r\n\r\n"
+            )
+            # Dá ao consumidor a mesma janela de streaming dos casos positivos.
+            time.sleep(0.3)
+            handler.connection.sendall(b"<html>")
+        estado["respostas"].append({"caso": caso, "inicio": time.monotonic()})
+        manter_aberta.wait()  # sem sleep/fechamento concorrendo com os 30 s da porta
+        return True
+    if caso != "304":
+        return False
+    if handler.path == "/driver":
+        corpo = (
+            b"<!doctype html><script>(async()=>{"
+            b"await fetch('/case/304').then(r=>r.text());"
+            b"await fetch('/case/304',{cache:'no-cache'}).then(r=>r.text()).catch(()=>{});"
+            b"await fetch('/done')})().catch(()=>fetch('/erro_driver'))</script>"
+        )
+        status = 200
+        headers = [("Cache-Control", "no-store")]
+    elif handler.path == "/case/304":
+        condicional = handler.headers.get("If-None-Match") == '"0089-etag"'
+        status = 304 if condicional else 200
+        corpo = b"" if condicional else CORPOS["utf8"][1]
+        headers = [
+            ("Cache-Control", "public, max-age=0, must-revalidate"),
+            ("ETag", '"0089-etag"'),
+        ]
+        estado["respostas"].append({"status": status, "condicional": condicional})
+    else:
+        corpo, status, headers = b"", 404, []
+    handler.send_response(status)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    # 304 não tem corpo; omitir CL evita declarar tamanho zero do recurso em cache.
+    if status != 304:
+        handler.send_header("Content-Length", str(len(corpo)))
+    for nome, valor in headers:
+        handler.send_header(nome, valor)
+    handler.end_headers()
+    if corpo:
+        meio = len(corpo) // 2
+        handler.wfile.write(corpo[:meio])
+        handler.wfile.flush()
+        time.sleep(0.3)
+        handler.wfile.write(corpo[meio:])
+        handler.wfile.flush()
+    return True
+
+
 def certificados(path):
     exe = shutil.which("openssl")
     if not exe:
@@ -93,15 +155,20 @@ def certificados(path):
 
 
 @contextmanager
-def origem_https(path, caso, *, atraso_primeiro_byte=0.15):
+def origem_https(path, caso, *, atraso_primeiro_byte=0.15, estado=None):
     """150 ms emulam latência de rede na origem, não comportamento do navegador."""
     import gzip
     import zlib
 
     cert, key, spki = certificados(path)
     vistos = []
+    estado = estado if estado is not None else {}
+    estado["respostas"] = []
+    manter_aberta = threading.Event()
 
     class Handler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1" if caso == "304" else "HTTP/1.0"
+
         def log_message(self, *_):
             pass
 
@@ -109,14 +176,9 @@ def origem_https(path, caso, *, atraso_primeiro_byte=0.15):
             vistos.append((self.path, list(self.headers.items())))
             time.sleep(atraso_primeiro_byte)
             ctype, corpo = CORPOS.get(caso, CORPOS["utf8"])
-            if caso == "sem_cabecalhos":
-                time.sleep(31)
+            if responder_condicao_item1(self, caso, manter_aberta, estado):
                 return
-            if caso == "parcial":
-                self.connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Typ")
-                time.sleep(31)
-                return
-            status = 302 if caso == "redirect" else 304 if caso == "304" else 200
+            status = 302 if caso == "redirect" else 200
             encoding = (
                 "gzip"
                 if caso in {"gzip", "bomba"}
@@ -166,6 +228,7 @@ def origem_https(path, caso, *, atraso_primeiro_byte=0.15):
     try:
         yield spki, vistos
     finally:
+        manter_aberta.set()
         server.shutdown()
         server.server_close()
         thread.join(2)
@@ -258,7 +321,7 @@ def navegador_pipe(
                     raise a.RecusaSessao("AMBIENTE_NAO_ASSENTADO")
                 time.sleep(0.05)
             sinal.write_text(
-                script or "location.href='https://127.0.0.1/case/utf8';",
+                sinal_unico(script or "location.href='https://127.0.0.1/case/utf8';"),
                 encoding="utf-8",
             )
             try:
@@ -292,8 +355,10 @@ def navegador_pipe(
             ad.passo()
         # Só o HTML de teste simula a ação humana, após prontidão observada.
         sinal.write_text(
-            script
-            or "location.href=" + json.dumps("https://127.0.0.1/case/" + caso) + ";",
+            sinal_unico(
+                script
+                or "location.href=" + json.dumps("https://127.0.0.1/case/" + caso) + ";"
+            ),
             encoding="utf-8",
         )
         yield ad, proc, vigia

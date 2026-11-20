@@ -10,9 +10,7 @@ from tests.harness_assistida_0089_cenarios import (
     SondaEventos,
     bombear,
     capturas,
-    conferir_recusa_evento,
-    conferir_recusa_streaming,
-    exigir_recusa,
+    conferir_condicao_item1,
 )
 
 pytestmark = pytest.mark.navegador_assistido
@@ -38,6 +36,7 @@ def test_item8_brave_pipe_e_acl_reais(tmp_path, monkeypatch):
         "304",
         "cl21",
         "sem_cabecalhos",
+        "sem_termino",
         "parcial",
     ],
 )
@@ -46,8 +45,17 @@ def test_item1_https_adaptador_real(tmp_path, monkeypatch, caso):
         a.proteger_diretorio(tmp_path)
     except a.RecusaSessao as exc:
         pytest.skip("pré-requisito de navegador/pipe: " + str(exc))
-    with origem_https(tmp_path, caso) as (spki, vistos):
-        with navegador_pipe(tmp_path, monkeypatch, spki=spki, caso=caso) as (
+    estado = {}
+    with origem_https(tmp_path, caso, estado=estado) as (spki, vistos):
+        with navegador_pipe(
+            tmp_path,
+            monkeypatch,
+            spki=spki,
+            caso=caso,
+            script="location.href='https://127.0.0.1/driver';"
+            if caso == "304"
+            else None,
+        ) as (
             ad,
             _,
             vigia,
@@ -56,8 +64,27 @@ def test_item1_https_adaptador_real(tmp_path, monkeypatch, caso):
             limite = time.monotonic() + 48
             while time.monotonic() < limite:
                 ad.passo()
-                if any(c.admitida for c in ad.pedidos.values()) or ad.recusas:
+                if caso == "304":
+                    chaves = [
+                        k
+                        for k, u in sonda.pedidos.items()
+                        if u == "https://127.0.0.1/case/304"
+                    ]
+                    if len(chaves) == 2 and ad.pedidos[chaves[-1]].recusada:
+                        # Drena os eventos da segunda troca, inclusive 200 aparente.
+                        bombear(
+                            ad,
+                            vigia,
+                            ate=lambda: any(p == "/done" for p, _ in vistos),
+                            prazo=10,
+                        )
+                        break
+                elif any(c.admitida for c in ad.pedidos.values()) or ad.recusas:
                     break
+            if caso in {"304", "sem_cabecalhos", "parcial", "sem_termino"}:
+                assert vistos
+                conferir_condicao_item1(ad, sonda, caso, estado)
+                return
             capturas = [c.admitida for c in ad.pedidos.values() if c.admitida]
             if caso in {
                 "utf8",
@@ -78,68 +105,8 @@ def test_item1_https_adaptador_real(tmp_path, monkeypatch, caso):
                     "encoding": "CONTENT_ENCODING_ASSISTIDO_INVALIDO",
                     "bomba": "TAMANHO_ASSISTIDO_EXCEDIDO",
                     "cl21": "CABECALHOS_ASSISTIDOS_INVALIDOS",
-                    "sem_cabecalhos": "PRAZO_ASSISTIDO_SEM_RESPOSTA",
-                    "parcial": "PRAZO_ASSISTIDO_SEM_RESPOSTA",
                 }.get(caso)
-                if caso == "304":
-                    assert any(e["status"] == 304 for e in sonda.eventos)
-                    url = "https://127.0.0.1/case/304"
-                    exigir_recusa(
-                        ad,
-                        url,
-                        {
-                            "STATUS_ASSISTIDO_DIVERGENTE",
-                            "CONTENT_LENGTH_ASSISTIDO_DIVERGENTE",
-                            "CORPO_ASSISTIDO_VAZIO",
-                            "HTTPStatusError",
-                            "STREAMING_ASSISTIDO_TARDIO",
-                            "COMANDO_STREAMING_RECUSADO",
-                            "EVENTO_ASSISTIDO_RECUSADO",
-                        },
-                    )
-                    for u, motivo in ad.motivos_recusas:
-                        if u == url and motivo in {
-                            "STREAMING_ASSISTIDO_TARDIO",
-                            "COMANDO_STREAMING_RECUSADO",
-                        }:
-                            conferir_recusa_streaming(sonda, url, motivo)
-                        elif u == url and motivo == "EVENTO_ASSISTIDO_RECUSADO":
-                            conferir_recusa_evento(sonda, url, {"net::ERR_CACHE_MISS"})
-                elif caso in {"sem_cabecalhos", "parcial"}:
-                    url = "https://127.0.0.1/case/" + caso
-                    exigir_recusa(
-                        ad,
-                        url,
-                        {
-                            esperado,
-                            "COMANDO_STREAMING_RECUSADO",
-                            "EVENTO_ASSISTIDO_RECUSADO",
-                        },
-                    )
-                    for u, motivo in ad.motivos_recusas:
-                        if u == url and motivo == "COMANDO_STREAMING_RECUSADO":
-                            conferir_recusa_streaming(sonda, url, motivo)
-                        elif u == url and motivo == "EVENTO_ASSISTIDO_RECUSADO":
-                            conferir_recusa_evento(
-                                sonda,
-                                url,
-                                {
-                                    "net::ERR_EMPTY_RESPONSE",
-                                    "net::ERR_INVALID_HTTP_RESPONSE",
-                                    "net::ERR_CONNECTION_CLOSED",
-                                    "net::ERR_CONNECTION_RESET",
-                                },
-                            )
-                    assert not any(
-                        e["url"] == url
-                        and e["metodo"]
-                        in {
-                            "Network.responseReceived",
-                            "Network.responseReceivedExtraInfo",
-                        }
-                        for e in sonda.eventos
-                    ), sonda.eventos
-                elif caso == "cl21":
+                if caso == "cl21":
                     assert any(
                         m in {esperado, "EVENTO_ASSISTIDO_RECUSADO"}
                         for _, m in ad.motivos_recusas

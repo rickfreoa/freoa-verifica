@@ -988,3 +988,128 @@ Questões pendentes:
 4. Suíte completa do repositório e auditoria independente: **NOT RUN**.
    A implementação não declara o marco aprovado. O supervisor fará o commit;
    não houve tentativa de commit nem alteração de outro checkout.
+
+## Sétimo ensaio real
+
+### Escopo, evidência e classificação
+
+Papel Desenvolvedor, `C:\dev\fv14-0089i`, ramo
+`feat/0089-sessao-assistida`, HEAD `deacd20`. Correção dos testes autorizada
+pelo supervisor; nenhum navegador lançado nesta rodada. Produto, transporte,
+regras de admissão e decisão 0089 preservados. Sem commit, push ou troca de ramo.
+
+* `C:\dev\tmp\v5\impl-b\nav-7.log`, SHA-256
+  `d9d39f7997fb3af2729fa0fff326dbe37402e26432ba409758e7d60982018474`:
+  **3 failed, 48 passed, 5 skipped**, 1124,30 s. Os três negativos do item 1
+  mostram `Network.loadingFailed` e `net::ERR_ABORTED` (linhas 236, 479, 722).
+* `C:\dev\tmp\v5\impl-b\item9.log`, SHA-256
+  `509274c35174b5926ec31faf9e47517ac1f940640e71cde334891861143f2976`:
+  rodada 1 falha, rodadas 2–4 passam. `ler9.py` foi lido e executado; só a
+  rodada 1 tem JSON nesse log. Os controles dessa rodada têm o mesmo
+  `Accept-Language` (`pt-BR,pt;q=0.9`), enquanto o adaptador tem q=0.7.
+  Não havia variação nos controles que autorizasse normalizar q.
+
+Classificação **B**, insuficiência do harness, nos dois itens. O antigo caso
+304 enviava 304 diretamente, sem primeira carga cacheável nem condicional.
+Os outros dois encerravam a conexão depois de `sleep(31)`, sem sincronizar seu
+tempo com o início da candidata. Além disso, o HTML inicial relê o sinal a cada
+100 ms e executava novamente `location.href`: enquanto espera cabeçalhos, o
+documento antigo continua vivo, podendo abortar sua própria navegação. Esse
+mecanismo foi identificado por inspeção; sua contribuição para os abortos do
+log não foi isolada em navegador nesta rodada. Não há prova de defeito **A**
+do produto que autorize alterá-lo.
+
+### Item 9: controles até variação ou teto
+
+`coletar_controles_passividade` executa no mínimo dois e no máximo quatro
+controles SEM adaptador, em perfis distintos, antes da execução COM adaptador.
+Só encerra antes do teto quando encontra variação de q no mesmo campo
+`Accept-Language`, método, caminho e ocorrência. Variação de outro campo não
+encerra a coleta. O comparador considera todos os controles efetivamente
+colhidos e normaliza somente posições q que variaram entre eles; quatro
+controles idênticos não autorizam normalização. Idiomas, ordem, demais
+parâmetros, posições q estáveis, contagens e multiplicidades continuam sob os
+guardiões anteriores. Não há cabeçalho ignorado por regra fixa.
+
+O JSON contém todos os controles brutos, o conjunto COM adaptador, comparações
+de cada controle com ele e justificativa por campo/ocorrência. As chaves antigas
+de diagnóstico dos dois primeiros controles foram preservadas.
+
+### Item 1: condições efetivas e códigos
+
+* **304 exposto como 200:** página local faz duas cargas sequenciais da mesma
+  URL. Primeira resposta 200 com ETag e cache público permitido, sujeito a
+  revalidação; segunda carga usa a API web `fetch` com `cache: 'no-cache'`.
+  A origem só responde 304 ao receber o ETag correto em `If-None-Match`.
+  O teste exige primeira captura de rede, segundo requestId distinto, origem
+  304 condicional, `responseReceived` 200 e ExtraInfo bruto 304 do segundo
+  pedido, recusa `STATUS_ASSISTIDO_DIVERGENTE` / `RespostaInvalida` e nenhuma
+  admissão da revalidação. A primeira captura legítima é preservada.
+* **Sem cabeçalhos:** a origem aceita e lê o pedido, sem enviar resposta, e
+  mantém a conexão até o teardown. Exige `PRAZO_ASSISTIDO_SEM_RESPOSTA` / `Timeout`.
+* **Cabeçalho parcial:** envia apenas a linha de status e `Content-Typ`, sem
+  completar o cabeçalho, mantendo a conexão até o teardown. Exige o mesmo
+  `Timeout`, sem evento de cabeçalhos completos.
+* **Cabeçalhos completos, sem término:** novo caso `sem_termino`; envia status,
+  Content-Type, Content-Length 999, fim dos cabeçalhos e apenas `<html>`.
+  A origem separa os cabeçalhos desse fragmento por 300 ms, como nos positivos,
+  para permitir o início do streaming antes dos dados.
+  Mantém a conexão até o teardown; exige `PRAZO_ASSISTIDO_INCOMPLETO` /
+  `RespostaInvalida`, com sinal de resposta completa e sem `loadingFinished`.
+
+As conexões pendentes usam `Event.wait()` sem prazo próprio, liberado apenas
+quando o contexto do servidor termina, depois do contexto do navegador. O sinal
+da página é executado uma única vez, também no controle SEM adaptador.
+
+Se houver aborto próprio antes da conclusão normativa, o teste exige recusa
+por `Network.loadingFailed` do mesmo requestId, com `errorText` não vazio, e
+ausência de admissão do pedido afetado; publica o diagnóstico completo e marca
+**skip `CENARIO_ITEM1_NAO_REPRODUZIVEL_NO_NAVEGADOR`**, contendo o erro observado.
+Isso não aprova o código normativo. Outros motivos, ausência de recusa ou
+admissão indevida continuam falhando. Os códigos são provados offline pela
+porta: `test_linha_12_prazo_sem_eventos` tem os três casos nomeados e
+`test_proveniencia_304_oculto` conserva o confronto 200/304.
+
+### Provas e validação
+
+Arquivos Python tocados: `harness_assistida_0089.py`,
+`harness_assistida_0089_cenarios.py`, `test_assistida_0089_harness.py`,
+`test_assistida_0089_navegador.py`, `test_assistida_0089_navegador_cenarios.py`
+e `test_transport_assistida_0089.py`, todos sob `tests/`.
+
+* Provas offline novas: 2/3/4 controles com e sem variação; parada na variação
+  ou no teto; variação de outro campo não encerra coleta; posições q estáveis,
+  idioma e outro campo preservados; bytes parciais/completos e espera sem
+  fechamento prematuro; 200 cacheável antes do 304 condicional; códigos de
+  prazo corretos; ausência de status bruto/aparente correto, código errado e
+  admissão indevida recusados; aborto comprovado vira skip, nunca admissão.
+* A regressão que troca apenas q de outro campo foi executada antes de fixar
+  o alvo da coleta: **1 failed**, pois a coleta terminava com dois controles.
+  A correção limita a parada antecipada ao campo investigado.
+* `.venv\Scripts\python.exe -X utf8 -m pytest -q -p no:cacheprovider
+  -m "not live and not navegador_assistido"`, nos nove módulos
+  `test_transport_assistida_0089.py` e
+  `test_assistida_0089_{cdp,harness,grafo,ambiente,cortes,indicacao,integracao,fronteiras}.py`,
+  `--tb=short -ra`: **513 passed, 1 skipped**, exit 0. O skip é o HTTP/2 em
+  memória sem `h2`; nenhuma dependência instalada. `TMP`, `TEMP` e `--basetemp`
+  fora do checkout, em `%LOCALAPPDATA%\Temp\fv0089-nav7-final3`.
+* Prova adicional com o Node já instalado: o JavaScript gerado pelo sinal foi
+  executado dez vezes no mesmo contexto: **um único disparo**, exit 0. Node
+  não foi introduzido como dependência de teste ou produto.
+* Coleta dos dois módulos de navegador com `.venv`, `-p no:cacheprovider` e
+  `--collect-only`: **57 testes**, exit 0, sem abrir navegador.
+* `C:\dev\tmp\venv-ruff\Scripts\python.exe scripts\ruff_catraca.py`:
+  **exit 0**. Nos seis arquivos Python: `ruff check --no-cache` e
+  `ruff format --no-cache --check`: **exit 0**, seis arquivos formatados.
+* `git diff --check`: limpo. Produto e `transport.py` sem diferenças.
+
+### Questões
+
+Reensaio real do harness corrigido, suíte completa do repositório e auditoria
+independente: **NOT RUN**. A comprovação real do 304 oculto e dos três prazos
+depende da próxima rodada; recomenda-se conservar stdout dos aprovados (`-rP`)
+e motivos dos skips (`-ra`). A origem não força o navegador a completar a
+condição: aborto próprio demonstrado permanece não reproduzível, com cobertura
+offline explícita. Os cinco pré-requisitos ausentes do ensaio original continuam
+pendentes. Nenhum método CDP novo, dependência, fixture ou alteração do produto.
+O marco não foi declarado aprovado; o supervisor fará o commit.

@@ -460,13 +460,19 @@ def test_linha_11_bytes_charset(sessao, caso):
 
 
 @pytest.mark.parametrize(
-    "cabecalhos,erro", [(False, t.Timeout), (True, t.RespostaInvalida)]
+    "caso,erro",
+    [
+        ("sem_cabecalhos", t.Timeout),
+        ("parcial", t.Timeout),
+        ("sem_termino", t.RespostaInvalida),
+    ],
 )
-def test_linha_12_prazo_sem_eventos(sessao, monkeypatch, cabecalhos, erro):
+def test_linha_12_prazo_sem_eventos(sessao, monkeypatch, caso, erro):
     # Timer real com prazo curto; Event.wait evita depender de novos eventos CDP.
     p = pedido()
     c = t.capturar_assistida(sessao, p)
-    if cabecalhos:
+    # Bytes parciais de cabeçalho não geram sinal de resposta completa para a porta.
+    if caso == "sem_termino":
         c.observar(eventos(p)[2])
     c._timer.cancel()
     terminou = threading.Event()

@@ -9,9 +9,12 @@ from types import SimpleNamespace
 import pytest
 
 from tests.gerar_0089_wire import BODY, gerar
+from tests.harness_assistida_0089 import responder_condicao_item1
 from tests.harness_assistida_0089_cenarios import (
     SondaEventos,
     comparar_passividade,
+    coletar_controles_passividade,
+    conferir_condicao_item1,
     conferir_recusa_evento,
     conferir_recusa_streaming,
     diferenca_pedidos,
@@ -23,6 +26,227 @@ from tests.assistida_0089_util import adapter, entregar, request, sessao as sess
 
 def _pedido_origem(*headers, caminho="/case/passividade", metodo="GET"):
     return metodo, caminho, tuple(headers)
+
+
+@pytest.mark.parametrize("quantidade", [2, 3, 4])
+@pytest.mark.parametrize("variou", [False, True])
+def test_passividade_dois_a_quatro_controles(quantidade, variou):
+    controles = [
+        [_pedido_origem(("Accept-Language", "pt-BR,pt;q=" + q))]
+        for q in ["0.9"] * (quantidade - 1) + ["0.8" if variou else "0.9"]
+    ]
+    com = [_pedido_origem(("Accept-Language", "pt-BR,pt;q=0.7"))]
+    d = comparar_passividade(*controles[:2], com, controles_adicionais=controles[2:])
+    assert d["passou"] is variou
+    assert d["controles"] == controles
+    assert d["adaptador"] == com
+    if variou:
+        assert len(d["ruido_declarado"][0]["controles"]) == quantidade
+    else:
+        assert d["ruido_declarado"] == []
+
+
+@pytest.mark.parametrize("variacao_em", [2, 3, 4, None])
+def test_coleta_controles_para_na_variacao_ou_no_teto(variacao_em):
+    chamadas = []
+
+    def executar(nome, observar):
+        chamadas.append((nome, observar))
+        q = "0.8" if len(chamadas) == variacao_em else "0.9"
+        return [_pedido_origem(("Accept-Language", "pt;q=" + q))]
+
+    controles = coletar_controles_passividade(executar)
+    assert len(controles) == (variacao_em or 4)
+    assert chamadas == [(f"sem{n}", False) for n in range(1, len(controles) + 1)]
+
+
+def test_coleta_nao_para_por_variacao_de_outro_campo_ou_idioma():
+    chamadas = []
+
+    def executar(nome, observar):
+        chamadas.append(nome)
+        return [
+            _pedido_origem(
+                ("Accept-Language", f"idioma{nome};q=0.9"),
+                ("Outro", f"text/html;q=0.{len(chamadas)}"),
+            )
+        ]
+
+    assert len(coletar_controles_passividade(executar)) == 4
+
+
+@pytest.mark.parametrize("quantidade", [3, 4])
+def test_q_com_mais_controles_preserva_posicao_estavel_e_outros_campos(quantidade):
+    controles = [
+        [_pedido_origem(("Accept-Language", f"pt;q={q},en;q=0.8"), ("Outro", "igual"))]
+        for q in ["0.9"] * (quantidade - 1) + ["0.6"]
+    ]
+    for valor, outro in [
+        ("pt;q=0.7,en;q=0.5", "igual"),
+        ("pt;q=0.7,en;q=0.8", "novo"),
+        ("de;q=0.7,en;q=0.8", "igual"),
+    ]:
+        com = [_pedido_origem(("Accept-Language", valor), ("Outro", outro))]
+        assert not comparar_passividade(
+            *controles[:2], com, controles_adicionais=controles[2:]
+        )["passou"]
+
+
+@pytest.mark.parametrize("caso", ["sem_cabecalhos", "parcial", "sem_termino"])
+def test_origem_pendente_nao_fecha_antes_da_porta(caso):
+    wire = []
+    handler = SimpleNamespace(connection=SimpleNamespace(sendall=wire.append))
+    estado = {"respostas": []}
+
+    class AteTeardown:
+        def wait(self):
+            # Sem argumento de prazo, sem fechamento de socket: só teardown libera.
+            assert len(estado["respostas"]) == 1
+            enviado = b"".join(wire)
+            if caso == "sem_cabecalhos":
+                assert enviado == b""
+            elif caso == "parcial":
+                assert enviado.startswith(b"HTTP/1.1 200 OK\r\n")
+                assert not enviado.endswith(b"\r\n\r\n")
+            else:
+                headers, corpo = enviado.split(b"\r\n\r\n")
+                assert b"Content-Length: 999" in headers
+                assert 0 < len(corpo) < 999
+
+    assert responder_condicao_item1(handler, caso, AteTeardown(), estado)
+
+
+def test_origem_304_exige_etag_e_primeira_carga_cacheavel(monkeypatch):
+    from tests import harness_assistida_0089 as h
+
+    monkeypatch.setattr(h.time, "sleep", lambda _: None)
+    estado = {"respostas": []}
+    respostas = []
+    for headers in ({}, {"If-None-Match": '"0089-etag"'}):
+        campos = {}
+        status = []
+        handler = SimpleNamespace(
+            path="/case/304",
+            headers=headers,
+            wfile=io.BytesIO(),
+            send_response=status.append,
+            send_header=campos.__setitem__,
+            end_headers=lambda: None,
+        )
+        assert responder_condicao_item1(handler, "304", None, estado)
+        respostas.append((status, campos, handler.wfile.getvalue()))
+    assert respostas[0][0] == [200] and respostas[0][2]
+    assert respostas[0][1]["ETag"] == '"0089-etag"'
+    assert respostas[0][1]["Cache-Control"] == "public, max-age=0, must-revalidate"
+    assert respostas[1][0] == [304] and respostas[1][2] == b""
+    assert "Content-Length" not in respostas[1][1]
+    assert estado["respostas"] == [
+        {"status": 200, "condicional": False},
+        {"status": 304, "condicional": True},
+    ]
+
+
+@pytest.mark.parametrize("caso", ["sem_cabecalhos", "parcial", "sem_termino"])
+def test_item1_aborto_provado_e_skip_nunca_admite_candidata(sessao, caso):
+    ad = adapter(sessao)
+    sonda = SondaEventos(ad)
+    # Usa URL do utilitário e depois ajusta só o endereço esperado no diagnóstico.
+    request(ad)
+    url = "https://127.0.0.1/case/" + caso
+    ad.pedidos["cdp", "pedido"].url = url
+    sonda.pedidos["cdp", "pedido"] = url
+    ad.processar(
+        {
+            "method": "Network.loadingFailed",
+            "sessionId": "cdp",
+            "params": {"requestId": "pedido", "errorText": "net::ERR_ABORTED"},
+        }
+    )
+    estado = {"respostas": [{"caso": caso, "inicio": 0}]}
+    with pytest.raises(pytest.skip.Exception, match="net::ERR_ABORTED"):
+        conferir_condicao_item1(ad, sonda, caso, estado)
+    ad.pedidos["cdp", "pedido"].admitida = object()
+    with pytest.raises(AssertionError):
+        conferir_condicao_item1(ad, sonda, caso, estado)
+    ad.descartar()
+
+
+@pytest.mark.parametrize(
+    "quebra", [None, "status_aparente", "status_cru", "codigo", "admissao"]
+)
+def test_item1_304_exige_revalidacao_status_e_recusa_do_segundo_pedido(quebra):
+    url = "https://127.0.0.1/case/304"
+    primeira, segunda = ("cdp", "rede"), ("cdp", "revalidada")
+    cursos = {
+        primeira: SimpleNamespace(admitida=object()),
+        segunda: SimpleNamespace(recusada=True, admitida=None),
+    }
+    ad = SimpleNamespace(
+        pedidos=cursos,
+        motivos_recusas=[(url, "STATUS_ASSISTIDO_DIVERGENTE")],
+        recusas=[(url, "RespostaInvalida")],
+    )
+    eventos = [
+        {"chave": segunda, "metodo": "Network.responseReceived", "status": 200},
+        {
+            "chave": segunda,
+            "metodo": "Network.responseReceivedExtraInfo",
+            "status": 304,
+        },
+    ]
+    sonda = SimpleNamespace(
+        pedidos={primeira: url, segunda: url},
+        eventos=eventos,
+        recusas=[{"chave": segunda, "motivo": "STATUS_ASSISTIDO_DIVERGENTE"}],
+    )
+    estado = {
+        "respostas": [
+            {"status": 200, "condicional": False},
+            {"status": 304, "condicional": True},
+        ]
+    }
+    if quebra == "status_aparente":
+        eventos[0]["status"] = 304
+    elif quebra == "status_cru":
+        eventos[1]["status"] = 200
+    elif quebra == "codigo":
+        ad.recusas = [(url, "Timeout")]
+    elif quebra == "admissao":
+        cursos[segunda].admitida = object()
+    if quebra:
+        with pytest.raises(AssertionError):
+            conferir_condicao_item1(ad, sonda, "304", estado)
+    else:
+        conferir_condicao_item1(ad, sonda, "304", estado)
+
+
+@pytest.mark.parametrize("caso", ["sem_cabecalhos", "parcial", "sem_termino"])
+def test_item1_prazo_exige_codigo_correspondente(caso):
+    url = "https://127.0.0.1/case/" + caso
+    chave = ("cdp", "pedido")
+    codigo, motivo = (
+        ("RespostaInvalida", "PRAZO_ASSISTIDO_INCOMPLETO")
+        if caso == "sem_termino"
+        else ("Timeout", "PRAZO_ASSISTIDO_SEM_RESPOSTA")
+    )
+    ad = SimpleNamespace(
+        pedidos={chave: SimpleNamespace(recusada=True, admitida=None)},
+        recusas=[(url, codigo)],
+        motivos_recusas=[(url, motivo)],
+    )
+    sonda = SimpleNamespace(
+        pedidos={chave: url},
+        eventos=[{"chave": chave, "metodo": "Network.responseReceived"}]
+        if caso == "sem_termino"
+        else [],
+    )
+    estado = {"respostas": [{"caso": caso, "inicio": 0}]}
+    conferir_condicao_item1(ad, sonda, caso, estado)
+    ad.recusas = [
+        (url, "Timeout" if codigo == "RespostaInvalida" else "RespostaInvalida")
+    ]
+    with pytest.raises(AssertionError):
+        conferir_condicao_item1(ad, sonda, caso, estado)
 
 
 @pytest.mark.parametrize("campo", ["Priority", "sec-ch-ua", "Accept-Language"])
