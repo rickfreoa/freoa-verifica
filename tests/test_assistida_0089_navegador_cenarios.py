@@ -1,7 +1,7 @@
 """§3: cenários reais pendentes de execução externa pelo supervisor, com Brave.
 
 Cada fase começa após inventário/base/prontidão (até 60 s + assentamento).
-Prazos de cenário explícitos, sem pytest-timeout; HTTP/2 usa o extra test-navegador.
+Prazos de cenário explícitos, sem pytest-timeout; HTTP/2 requer h2 no ambiente.
 """
 
 import json
@@ -30,6 +30,7 @@ from tests.harness_assistida_0089_cenarios import (
     bombear,
     capturas,
     cenarios_https,
+    comparar_passividade,
     conferir_recusa_streaming,
     exigir_recusa,
     varrer_artefatos,
@@ -284,14 +285,22 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
             bombear(ad, vigia, ate=lambda: "/done" in estado["marcas"], prazo=55)
             assert not estado["erros"]
             if caso in {"cache", "sw", "prefetch"}:
+                url = BASE + "/case/" + caso
                 campo = {"cache": "cache", "sw": "sw", "prefetch": "prefetch"}[caso]
                 derivados = {
                     e["chave"]
                     for e in sonda.eventos
-                    if e[campo]
-                    or (
-                        caso == "cache"
-                        and e["metodo"] == "Network.requestServedFromCache"
+                    if e["url"] == url
+                    and (
+                        e[campo]
+                        or (
+                            caso == "cache"
+                            and (e["memoria"] or e["prefetch"] or e["status"] == 304)
+                        )
+                        or (
+                            caso == "cache"
+                            and e["metodo"] == "Network.requestServedFromCache"
+                        )
                     )
                 }
                 assert derivados, (
@@ -308,7 +317,43 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
                         {
                             "ORIGEM_ASSISTIDA_SEM_PROVA",
                             "EVENTO_ASSISTIDO_RECUSADO",
-                        },
+                        }
+                        | (
+                            {"STATUS_ASSISTIDO_DIVERGENTE"}
+                            if caso == "cache"
+                            else set()
+                        ),
+                        sonda=sonda,
+                        chave=k,
+                    )
+                if caso == "cache":
+                    url = BASE + "/case/cache"
+                    cargas = [
+                        e["chave"]
+                        for e in sonda.eventos
+                        if e["metodo"] == "Network.requestWillBeSent"
+                        and e["url"] == url
+                    ]
+                    assert len(cargas) == 2 and cargas[0] != cargas[1], cargas
+                    assert cargas[0] not in derivados and cargas[1] in derivados, cargas
+                    assert sum(p[1] == "/case/cache" for p in estado["pedidos"]) == 1
+                    assert ad.pedidos[cargas[1]].admitida is None
+                    print(
+                        json.dumps(
+                            {
+                                "cache_cargas": [
+                                    {
+                                        "chave": k,
+                                        "derivada": k in derivados,
+                                        "admitida": k in ad.pedidos
+                                        and ad.pedidos[k].admitida is not None,
+                                    }
+                                    for k in cargas
+                                ]
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        )
                     )
                 if caso == "sw":
                     assert not any(c.resposta.url.endswith("/sw") for c in capturas(ad))
@@ -533,7 +578,6 @@ def test_item6_varredura_todos_artefatos_publicados(tmp_path, monkeypatch, capsy
             (home / "diagnostico.json").write_text(
                 json.dumps(ad.recusas), encoding="utf-8"
             )
-        a.limpar_diretorio(perfil, tmp_path)
         assert not perfil.exists()
     saida = capsys.readouterr()
     (home / "terminal.txt").write_text(saida.out + saida.err, encoding="utf-8")
@@ -600,8 +644,8 @@ def test_item8_politica_maquina_recusa_antes_de_abrir(
 
 def test_item9_pedidos_e_cabecalhos_iguais_com_sem_adaptador(tmp_path, monkeypatch):
     registros = []
-    for observar in (False, True):
-        path = tmp_path / str(observar)
+    for nome, observar in (("sem1", False), ("sem2", False), ("com", True)):
+        path = tmp_path / nome
         path.mkdir()
         with monkeypatch.context() as patch:
             with cenarios_https(path, "passividade") as (spki, estado):
@@ -624,7 +668,10 @@ def test_item9_pedidos_e_cabecalhos_iguais_com_sem_adaptador(tmp_path, monkeypat
                             m in METODOS and (METODOS[m] is None or p == METODOS[m])
                             for m, p in sonda.comandos
                         )
-                    # Lista inteira vista pela origem, cabeçalhos sem normalização
-                    # ou exclusões. Ordenação só neutraliza intercalação concorrente.
-                    registros.append(sorted(estado["pedidos"]))
-    assert registros[0] == registros[1]
+                # Inclui pedidos concorrentes até o encerramento do navegador.
+                registros.append(list(estado["pedidos"]))
+    diagnostico = comparar_passividade(*registros)
+    mensagem = json.dumps(diagnostico, ensure_ascii=False, indent=2)
+    print(mensagem)
+    if not diagnostico["passou"]:
+        pytest.fail(mensagem)

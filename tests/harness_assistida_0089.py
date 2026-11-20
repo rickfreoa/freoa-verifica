@@ -17,7 +17,7 @@ import ssl
 import subprocess
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 
 import pytest
 
@@ -302,11 +302,24 @@ def navegador_pipe(
             raise
         pytest.skip("pré-requisito de navegador/pipe: " + str(exc))
     finally:
-        if proc is not None:
-            a.fechar_navegador(proc)
-        if canal is not None:
-            canal.fechar()
-        if sessao is not None:
-            sessao.encerrar()
-        if observador is not None:
-            observador.fechar()
+        # Executa toda a limpeza mesmo se um fechamento anterior falhar.
+        with ExitStack() as limpeza:
+            limpeza.callback(limpar_perfil_harness, perfil_dir, path)
+            if observador is not None:
+                limpeza.callback(observador.fechar)
+            if sessao is not None:
+                limpeza.callback(sessao.encerrar)
+            if canal is not None:
+                limpeza.callback(canal.fechar)
+            if proc is not None:
+                limpeza.callback(a.fechar_navegador, proc)
+
+
+def limpar_perfil_harness(perfil, raiz):
+    """§3(7): usa a limpeza do produto e torna sobra de perfil falha explícita."""
+    try:
+        a.limpar_diretorio(perfil, raiz)
+        assert not perfil.exists(), "perfil ainda existe após limpar_diretorio"
+    except Exception as exc:
+        print(f"LIMPEZA_PERFIL_HARNESS_FALHOU: {perfil}: {type(exc).__name__}: {exc}")
+        raise

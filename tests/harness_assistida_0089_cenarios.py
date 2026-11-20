@@ -5,14 +5,18 @@ O log bruto de pedidos pertence à origem sintética, nunca ao produto.
 """
 
 from contextlib import contextmanager
+from collections import Counter, defaultdict
 import gzip
 import hashlib
 import http.server
+import json
 from pathlib import Path
 import ssl
 import threading
 import time
 from urllib.parse import urlsplit
+
+import pytest
 
 from tests.gerar_0089_wire import BODY
 from tests.harness_assistida_0089 import certificados
@@ -316,6 +320,7 @@ class SondaEventos:
         self.eventos = []
         self.pedidos = {}
         self.comandos = []
+        self.recusas = []
         self._streams = {}
         self._processar = ad.processar
         self._enviar = ad.canal.enviar
@@ -335,7 +340,6 @@ class SondaEventos:
         alvo = self.ad.alvos.get(obj.get("sessionId"))
         subtipo_alvo = alvo.subtipo if alvo else None
         primeira_url = alvo.primeira_url if alvo else None
-        resultado = self._processar(obj)
         metodo, p = obj.get("method", ""), obj.get("params", {})
         chave = (obj.get("sessionId"), p.get("requestId"))
         stream = obj.get("id") in self._streams
@@ -343,6 +347,17 @@ class SondaEventos:
             chave = self._streams[obj["id"]]
         if metodo == "Network.requestWillBeSent":
             self.pedidos[chave] = p.get("request", {}).get("url", "")
+        antes = len(getattr(self.ad, "motivos_recusas", ()))
+        resultado = self._processar(obj)
+        for url, motivo in getattr(self.ad, "motivos_recusas", ())[antes:]:
+            self.recusas.append(
+                {
+                    "chave": chave,
+                    "url": url,
+                    "motivo": motivo,
+                    "causa": metodo or "resposta_streaming",
+                }
+            )
         r = p.get("response", {})
         alvo = self.ad.alvos.get(obj.get("sessionId"))
         self.eventos.append(
@@ -352,6 +367,7 @@ class SondaEventos:
                 "url": self.pedidos.get(chave, ""),
                 "tipo": p.get("type"),
                 "cache": r.get("fromDiskCache"),
+                "memoria": r.get("fromMemoryCache"),
                 "sw": r.get("fromServiceWorker"),
                 "prefetch": r.get("fromPrefetchCache"),
                 "iniciador": p.get("initiator", {}).get("type"),
@@ -400,12 +416,58 @@ def capturas(ad):
     return [c.admitida for c in ad.pedidos.values() if c.admitida is not None]
 
 
-def exigir_recusa(ad, url, motivos):
+def exigir_recusa(ad, url, motivos, *, sonda=None, chave=None):
     """Negativo não passa por zero capturas ou por falha alheia ao mecanismo."""
+    if chave is not None:
+        assert sonda is not None and sonda.pedidos[chave] == url
+        observados = [r["motivo"] for r in sonda.recusas if r["chave"] == chave]
+        curso = ad.pedidos.get(chave)
+        diagnostico = json.dumps(
+            {
+                "chave": chave,
+                "url": url,
+                "motivos": observados,
+                "eventos": [e for e in sonda.eventos if e["chave"] == chave],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        assert observados and all(m in motivos for m in observados), diagnostico
+        assert curso is None or (curso.recusada and curso.admitida is None), diagnostico
+        return
     observados = [m for u, m in ad.motivos_recusas if u == url]
     assert observados, (url, ad.motivos_recusas)
     assert all(m in motivos for m in observados), (url, observados)
     assert not any(c.resposta.url == url for c in capturas(ad))
+
+
+def conferir_recusa_evento(sonda, url, erros_rede):
+    """EVENTO_ASSISTIDO_RECUSADO deve vir do evento impeditivo do mesmo pedido."""
+    recusas = [
+        r
+        for r in sonda.recusas
+        if r["url"] == url and r["motivo"] == "EVENTO_ASSISTIDO_RECUSADO"
+    ]
+    assert recusas
+    for recusa in recusas:
+        eventos = [e for e in sonda.eventos if e["chave"] == recusa["chave"]]
+        prova = any(
+            e["metodo"] == recusa["causa"]
+            and (
+                e["metodo"] == "Network.requestServedFromCache"
+                or (
+                    e["metodo"] == "Network.loadingFailed"
+                    and e["erro_rede"] in erros_rede
+                )
+            )
+            for e in eventos
+        )
+        if not prova:
+            pytest.fail(
+                json.dumps(
+                    {"recusa": recusa, "eventos": eventos}, ensure_ascii=False, indent=2
+                )
+            )
 
 
 def conferir_recusa_streaming(sonda, url, motivo):
@@ -421,6 +483,129 @@ def conferir_recusa_streaming(sonda, url, motivo):
         assert fins and (not respostas or fins[0] < respostas[0]), eventos
     else:
         raise AssertionError("motivo não é recusa de streaming demonstrável")
+
+
+def _agrupar_pedidos(pedidos):
+    grupos = defaultdict(list)
+    for metodo, caminho, headers in pedidos:
+        grupos[metodo, caminho].append(tuple(headers))
+    return {k: sorted(v) for k, v in grupos.items()}
+
+
+def _campos(headers):
+    campos = defaultdict(list)
+    for nome, valor in headers:
+        campos[nome].append(valor)
+    return {k: tuple(v) for k, v in campos.items()}
+
+
+def diferenca_pedidos(esquerda, direita):
+    """Diagnóstico completo, sem depender do diff truncado do pytest."""
+    a, b = _agrupar_pedidos(esquerda), _agrupar_pedidos(direita)
+    cont_a = Counter({k: len(v) for k, v in a.items()})
+    cont_b = Counter({k: len(v) for k, v in b.items()})
+    detalhes = []
+    for metodo, caminho in sorted(a.keys() | b.keys()):
+        chave = metodo, caminho
+        for i, (ha, hb) in enumerate(zip(a.get(chave, ()), b.get(chave, ()))):
+            ca, cb = _campos(ha), _campos(hb)
+            if ha != hb:
+                detalhes.append(
+                    {
+                        "metodo": metodo,
+                        "caminho": caminho,
+                        "ocorrencia": i,
+                        "cabecalhos_so_esquerda": {
+                            k: ca[k] for k in ca.keys() - cb.keys()
+                        },
+                        "cabecalhos_so_direita": {
+                            k: cb[k] for k in cb.keys() - ca.keys()
+                        },
+                        "valores_diferentes": {
+                            k: [ca[k], cb[k]]
+                            for k in ca.keys() & cb.keys()
+                            if ca[k] != cb[k]
+                        },
+                        "mesma_colecao_cabecalhos_ordem_diferente": sorted(ha)
+                        == sorted(hb),
+                        "cabecalhos_esquerda": ha,
+                        "cabecalhos_direita": hb,
+                    }
+                )
+    return {
+        "numero_pedidos": [len(esquerda), len(direita)],
+        "pedidos_so_esquerda": [[*k, n] for k, n in sorted((cont_a - cont_b).items())],
+        "pedidos_so_direita": [[*k, n] for k, n in sorted((cont_b - cont_a).items())],
+        "mesma_colecao_pedidos_ordem_diferente": a == b and esquerda != direita,
+        "ordem_metodos_caminhos": [
+            [(m, p) for m, p, _ in pedidos] for pedidos in (esquerda, direita)
+        ],
+        "diferencas": detalhes,
+    }
+
+
+def comparar_passividade(sem1, sem2, com):
+    """Só desconta variação provada nos dois controles, por método/caminho.
+
+    Nem favicon nem cabeçalho têm exclusão fixa. Valor novo exclusivo do
+    adaptador continua falha, inclusive em campo variável nos controles.
+    Ordem de chegada só é descontada se também variar nos controles.
+    """
+    grupos = [_agrupar_pedidos(p) for p in (sem1, sem2, com)]
+    diagnostico = {
+        "controle_sem_sem": diferenca_pedidos(sem1, sem2),
+        "comparacao_sem1_com": diferenca_pedidos(sem1, com),
+        "comparacao_sem2_com": diferenca_pedidos(sem2, com),
+        "ruido_declarado": [],
+        "passou": True,
+    }
+    contagens = [{k: len(v) for k, v in g.items()} for g in grupos]
+    if not contagens[0] == contagens[1] == contagens[2]:
+        diagnostico["passou"] = False
+        return diagnostico
+    ordens = [[(m, p) for m, p, _ in pedidos] for pedidos in (sem1, sem2, com)]
+    diagnostico["ordem_chegada_variavel_no_controle"] = ordens[0] != ordens[1]
+    if ordens[0] == ordens[1] and ordens[0] != ordens[2]:
+        diagnostico["passou"] = False
+    for chave in sorted(grupos[0]):
+        colecoes = [[_campos(hs) for hs in g[chave]] for g in grupos]
+        nomes = {nome for campos in colecoes for c in campos for nome in c}
+        for nome in nomes:
+            variantes = [Counter(c.get(nome) for c in campos) for campos in colecoes]
+            # Repetições do mesmo método/caminho não podem combinar variantes
+            # em uma multiplicidade que só exista com o adaptador.
+            if variantes[2] not in variantes[:2]:
+                diagnostico["passou"] = False
+        for i, (h1, h2, hc) in enumerate(zip(*(g[chave] for g in grupos))):
+            c1, c2, cc = map(_campos, (h1, h2, hc))
+            ruido = {k for k in c1.keys() | c2.keys() if c1.get(k) != c2.get(k)}
+            # A exclusão só vale neste pedido e para valores já demonstrados.
+            novos = {k for k in ruido if cc.get(k) not in (c1.get(k), c2.get(k))}
+            estaveis = [
+                tuple((k, v) for k, v in hs if k not in ruido) for hs in (h1, h2, hc)
+            ]
+            ordem_variavel = estaveis[0] != estaveis[1]
+            if ruido or ordem_variavel:
+                diagnostico["ruido_declarado"].append(
+                    {
+                        "metodo": chave[0],
+                        "caminho": chave[1],
+                        "ocorrencia": i,
+                        "cabecalhos_excluidos": {
+                            k: [c1.get(k), c2.get(k)] for k in sorted(ruido)
+                        },
+                        "ordem_cabecalhos_variavel": ordem_variavel,
+                        "justificativa": "variação observada entre duas execuções SEM adaptador; só valores dos controles são admitidos",
+                    }
+                )
+            iguais = (
+                sorted(estaveis[0]) == sorted(estaveis[1]) == sorted(estaveis[2])
+                if ordem_variavel
+                else estaveis[0] == estaveis[2]
+            )
+            if novos or not iguais:
+                diagnostico["passou"] = False
+    return diagnostico
 
 
 def varrer_artefatos(raiz, segredos):

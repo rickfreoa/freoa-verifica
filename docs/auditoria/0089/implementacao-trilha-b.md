@@ -746,3 +746,108 @@ CDP adicional foi usada para forçar funcionalidade.
 * Gesto humano, segunda conta Windows (item 7), novo ensaio real e auditoria
   independente continuam pendentes. A nota formal do titular sobre o defeito 49
   continua necessária; esta alteração só registra a leitura expressamente autorizada.
+
+## Quinto ensaio real
+
+20/11/2026. Desenvolvedor, no worktree `C:\dev\fv14-0089i`, ramo
+`feat/0089-sessao-assistida`, HEAD `e5b1012`. Correções do harness sob a
+instrução do supervisor. Nenhum arquivo do produto foi alterado, inclusive
+`transport.py` e o adaptador; nenhum método CDP, dependência ou regra de
+admissão foi acrescentado. Sem troca de ramo, commit ou push.
+
+### Evidência e classificação
+
+Logs externos lidos, sem alteração:
+
+* `C:\dev\tmp\v5\impl-b\nav-5.log`: **46 passed, 5 failed, 5 skipped**,
+  linha 599. SHA-256
+  `a3d0afc6f61866d513319c80faf979ad5dacc94d2018d149623936819f35c89d`.
+* `C:\dev\tmp\v5\impl-b\item9.log`: no arquivo lido há **quatro rodadas
+  falhas** (linhas 174, 347, 520 e 693), todas na igualdade dos pedidos;
+  a aprovação isolada informada pelo supervisor não consta desse arquivo.
+  SHA-256 `ff71a75bc9014eb5ec7603337ea4fb9b009abaa933c1ca32a579381439dfc750`.
+
+Classes: **A**, defeito do produto; **B**, defeito/insuficiência do harness;
+**C**, condição ou limitação do ambiente do ensaio. Corrigir diagnóstico não
+prova, por si, a causa de uma diferença do navegador.
+
+| Item do pedido | Análise e classificação | Alteração e limite |
+|---|---|---|
+| 1 — §3(9), passividade | **B confirmado no diagnóstico e no controle; causa da divergência real ainda não apurada.** `nav-5.log`, linhas 498–502, e as quatro rodadas isoladas mostram diff truncado em `/case/passividade`. Não provam qual campo mudou, nem que seja ruído do navegador. A §3(9) exige igualdade inclusive dos cabeçalhos, e a §2.12 mantém a lista fechada. | Duas execuções **SEM** adaptador e uma **COM**, cada qual com perfil novo e mesmas flags/origem/driver. JSON completo com método/caminho, contagens, campos exclusivos, valores diferentes e coleções iguais em ordem diferente. Só se desconta variação demonstrada nos controles, no mesmo método/caminho; valores e multiplicidades exclusivos do adaptador falham, mesmo em cabeçalho variável. Nenhuma lista fixa de exclusão para `Priority`, GREASE, idioma ou favicon. |
+| 2 — cache | **B, identificação indevida por URL.** Linhas 374–400: a asserção por chave que impede admissão das derivadas passou; também passaram a existência dos motivos e sua lista permitida. A falha é só a proibição de qualquer captura na mesma URL. O driver faz dois Fetch sequenciais, e a origem declara `public, max-age=600`. Por eliminação, a captura admitida é da primeira carga de rede, não da carga identificada como derivada. Essa conclusão decorre do fluxo e das asserções, pois o log antigo não imprime os requestIds. **Não há prova de admissão de cache pelo produto.** | O guardião exige recusa e ausência de admissão na chave `(sessão CDP, requestId)` correspondente. O teste identifica duas cargas distintas, primeira sem prova de cache e segunda com prova; exige só uma chegada à origem. A sonda registra flags de disco/memória/prefetch, evento de cache e 304 bruto. A recusa de 304 oculto continua obrigatória; seu motivo próprio é aceito somente no caso cache. Captura de rede anterior não invalida o negativo da segunda carga. |
+| 3 — 304, sem cabeçalhos e parcial | **B na expectativa causal; causa exata dos três casos históricos permanece não apurada.** Ao contrário da descrição resumida, as falhas do log estão nos ramos de `EVENTO_ASSISTIDO_RECUSADO` (linhas 87–94, 197–214 e 317–334), procurando `loadingFailed` e erro de rede. O código do teste já admitia `COMANDO_STREAMING_RECUSADO`, com prova de erro do comando. O log truncado não demonstra qual evento causou `EVENTO_ASSISTIDO_RECUSADO`; não autoriza afirmar que o Brave recusou o comando nesses três pedidos. | Mantida a aceitação de streaming recusado, só com erro demonstrado do comando correspondente. A sonda associa cada recusa ao requestId e evento/comando causal. `EVENTO_ASSISTIDO_RECUSADO` exige prova de `requestServedFromCache` ou `loadingFailed` com erro enumerado, no mesmo pedido; evento inócuo ou erro de outro pedido falha. Sem cabeçalhos/parcial continuam exigindo ausência de ambos os eventos de cabeçalhos completos. |
+| 4 — Early Hints | **B**, mensagem menciona extra removido. | Mensagem exata: “requer o pacote h2 no ambiente do ensaio; não é dependência do projeto”, no teste real e na prova em memória. Docstrings atualizadas; nenhuma instalação/dependência acrescentada. |
+| 5 — limpeza, §3(7) | **B**, o `finally` do harness fechava recursos, mas não chamava a limpeza do perfil; só o caso de segredos a fazia manualmente. A retenção do conftest amplificava o acúmulo. O volume histórico de 24 GB foi informado pelo supervisor, não medido nesta rodada. | Todo encerramento do harness executa `limpar_diretorio` do produto e verifica inexistência do perfil. Fechamentos independentes são todos tentados, mesmo quando um falha. Sobra/erro imprime caminho, classe e motivo e faz o teste falhar. O caso de segredos conserva sua asserção após a limpeza comum. Conftest e perfis históricos não foram alterados ou apagados. |
+
+### Leitura normativa do item 3
+
+* §2.4 linha 4: cabeçalhos completos malformados são `RespostaInvalida`;
+  não exige classificar como cabeçalho completo um prefixo parcial que o
+  navegador ainda não entregou como `responseReceived`/`ExtraInfo`.
+* Linha 5: chunk incompleto/malformado recusado pelo navegador exige **recusa
+  da candidata**, sem código específico adicional.
+* Linha 12 e §3(1): **expiração do prazo** de 30 s sem nenhum dos dois eventos
+  de cabeçalhos completos exige `Timeout`; com algum deles e sem término,
+  `RespostaInvalida`. Prefixo parcial permanece na primeira categoria.
+* §2.3(1): 304, inclusive exposto como 200, não pode ser captura;
+  §2.5(2): streaming falho ou tardio obriga recusar. Não há nessas condições
+  um motivo único obrigatório nem obrigação de esperar expirar um pedido
+  já recusado. `COMANDO_STREAMING_RECUSADO` só serve como alternativa com
+  erro do comando provado; não substitui os códigos da linha 12 na expiração.
+* As provas sintéticas da porta das linhas 4, 5 e 12 e do 304 oculto foram
+  preservadas e executadas. Novo ensaio real deve distinguir recusa de cache,
+  falha de rede e erro de streaming com a nova correlação; nenhum desses fatos
+  foi retroativamente atribuído ao navegador sem evidência.
+
+### Arquivos e validação
+
+Alterados seis arquivos Python de teste/harness:
+`tests/harness_assistida_0089.py`,
+`tests/harness_assistida_0089_cenarios.py`,
+`tests/harness_assistida_0089_h2.py`,
+`tests/test_assistida_0089_harness.py`,
+`tests/test_assistida_0089_navegador.py` e
+`tests/test_assistida_0089_navegador_cenarios.py`, além deste registro.
+
+* Regressões offline: campos variáveis só com controle e valores observados;
+  método/caminho/quantidade/favicon/campos exclusivos não descontados;
+  ordem de chegada/campos só descontada com controle; multiplicidades
+  preservadas em pedidos repetidos; diagnóstico estruturado; primeira captura
+  de rede seguida de disco/memória/prefetch/304 oculto, com rejeição de admissão
+  indevida; evento causal de outro pedido/inócuo recusado; erro de streaming
+  correlacionado mesmo sem `sessionId` na resposta do comando; limpeza em fim
+  normal, erro, skip, interrupção e falha de fechamento, com registro de sobra.
+  São provas sintéticas, sem navegador ou sockets, não prova real de Brave.
+* A regressão de multiplicidade foi executada antes de endurecer esse ponto
+  do novo comparador: **1 failed**, pois combinava duas ocorrências de uma
+  variante vista só uma vez por controle. O comparador corrigido preserva
+  também a coleção de valores de cada campo por método/caminho.
+* Validação final dos nove módulos
+  `test_transport_assistida_0089.py` e
+  `test_assistida_0089_{cdp,harness,grafo,ambiente,cortes,indicacao,integracao,fronteiras}.py`:
+  `.venv\Scripts\python.exe -X utf8 -m pytest -q -p no:cacheprovider
+  -m "not live and not navegador_assistido" ... --tb=short -ra`:
+  **453 passed, 1 skipped em 9,94 s**, exit 0. `TMP`, `TEMP` e `--basetemp`
+  ficaram fora do checkout, sob `%TEMP%\fv0089-nav5-final2`.
+* Único skip: prova HTTP/2 em memória por ausência de `h2`, com a mensagem
+  corrigida. Não é prova executada nem dependência nova do projeto.
+* Coleta dos dois módulos reais com `.venv`, `-p no:cacheprovider` e
+  `--collect-only`: **56 testes**, exit 0; nenhuma janela aberta.
+* `C:\dev\tmp\venv-ruff\Scripts\python.exe scripts\ruff_catraca.py`:
+  **exit 0**. Os seis arquivos Python passam `ruff check --no-cache` e
+  `ruff format --no-cache --check`. `git diff --check`: limpo.
+* `git diff --exit-code -- freoa_verifica/transport.py freoa_verifica/assistida`:
+  exit 0, nenhuma mudança de produto. Ramo e HEAD reconferidos e preservados.
+
+### Questões pendentes
+
+Reensaio real corrigido, suíte completa e auditoria independente: **NOT RUN**.
+O reensaio deverá conservar a saída completa do item 9 e a correlação causal
+dos três negativos; `-rP` expõe também os diagnósticos dos testes que passam.
+A variação real de cabeçalhos não foi provada nesta rodada; nenhuma exceção
+fixa foi autorizada. Se os novos controles não explicarem uma diferença do
+adaptador, o item 9 continuará falhando. Se o navegador produzir outro evento
+ou erro de rede não enumerado, o item 3 continuará falhando com diagnóstico,
+sem aprovação por mera ausência de captura. Limpeza real dos perfis do novo
+ensaio e os cenários sem pré-requisito (h2/prerender/gesto humano/segunda conta)
+continuam dependentes do ensaio externo. Não houve limpeza dos 24 GB históricos.

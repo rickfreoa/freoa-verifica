@@ -10,6 +10,7 @@ from tests.harness_assistida_0089_cenarios import (
     SondaEventos,
     bombear,
     capturas,
+    conferir_recusa_evento,
     conferir_recusa_streaming,
     exigir_recusa,
 )
@@ -103,11 +104,7 @@ def test_item1_https_adaptador_real(tmp_path, monkeypatch, caso):
                         }:
                             conferir_recusa_streaming(sonda, url, motivo)
                         elif u == url and motivo == "EVENTO_ASSISTIDO_RECUSADO":
-                            assert any(
-                                e["url"] == url
-                                and e["erro_rede"] == "net::ERR_CACHE_MISS"
-                                for e in sonda.eventos
-                            ), sonda.eventos
+                            conferir_recusa_evento(sonda, url, {"net::ERR_CACHE_MISS"})
                 elif caso in {"sem_cabecalhos", "parcial"}:
                     url = "https://127.0.0.1/case/" + caso
                     exigir_recusa(
@@ -123,18 +120,16 @@ def test_item1_https_adaptador_real(tmp_path, monkeypatch, caso):
                         if u == url and motivo == "COMANDO_STREAMING_RECUSADO":
                             conferir_recusa_streaming(sonda, url, motivo)
                         elif u == url and motivo == "EVENTO_ASSISTIDO_RECUSADO":
-                            assert any(
-                                e["url"] == url
-                                and e["metodo"] == "Network.loadingFailed"
-                                and e["erro_rede"]
-                                in {
+                            conferir_recusa_evento(
+                                sonda,
+                                url,
+                                {
                                     "net::ERR_EMPTY_RESPONSE",
                                     "net::ERR_INVALID_HTTP_RESPONSE",
                                     "net::ERR_CONNECTION_CLOSED",
                                     "net::ERR_CONNECTION_RESET",
-                                }
-                                for e in sonda.eventos
-                            ), sonda.eventos
+                                },
+                            )
                     assert not any(
                         e["url"] == url
                         and e["metodo"]

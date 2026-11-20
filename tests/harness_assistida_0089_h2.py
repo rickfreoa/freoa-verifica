@@ -1,6 +1,6 @@
 """Origem sintética HTTP/2 para 103: Chromium ignora Early Hints em HTTP/1.x.
 
-Somente harness. Requer o extra test-navegador; nenhuma dependência do produto.
+Somente harness. Requer o pacote h2 no ambiente do ensaio; não é dependência do projeto.
 """
 
 from contextlib import contextmanager
@@ -59,7 +59,7 @@ def responder_h2(conexao, caminho, stream_id, estado, *, hints=False):
 def origem_early_hints_h2(path, *, atraso_primeiro_byte=0.15):
     pytest.importorskip(
         "h2",
-        reason="Early Hints exige origem HTTP/2; instale o extra .[test-navegador] no ambiente do ensaio real",
+        reason="requer o pacote h2 no ambiente do ensaio; não é dependência do projeto",
     )
     from h2.config import H2Configuration
     from h2.connection import H2Connection
