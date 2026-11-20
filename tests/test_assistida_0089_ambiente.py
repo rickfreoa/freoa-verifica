@@ -192,6 +192,66 @@ def test_componentes_absolutos_embutidos_e_preferences_sem_settings(tmp_path):
     a.inventariar(perfil, instalacao / "brave.exe")
 
 
+@pytest.mark.parametrize("manifesto", [{"permissions": ["webRequest"]}, None, [], "{}"])
+@pytest.mark.parametrize(
+    "location,dentro,relativo",
+    [
+        (5, True, False),
+        (5, False, False),
+        (10, True, False),
+        (1, False, True),
+        (5, True, True),
+    ],
+)
+def test_manifesto_componente_nas_preferencias(
+    tmp_path, manifesto, location, dentro, relativo
+):
+    perfil, instalacao = tmp_path / "perfil", tmp_path / "Application"
+    default = perfil / "Default"
+    (default / "Extensions").mkdir(parents=True)
+    caminho = instalacao / "158/resources/pdf" if dentro else tmp_path / "externa"
+    # Inclusive o diretório do componente pode não existir: recursos embutidos.
+    item = {
+        "location": location,
+        "path": "pdf" if relativo else str(caminho),
+        "manifest": manifesto,
+    }
+    (default / "Secure Preferences").write_text(
+        json.dumps({"extensions": {"settings": {"pdf": item}}}), encoding="utf-8"
+    )
+    (default / "Preferences").write_text("{}", encoding="utf-8")
+    vigia = a.Vigilancia(perfil, instalacao / "brave.exe", relogio=lambda: 11)
+    if location == 5 and dentro and not relativo and isinstance(manifesto, dict):
+        vigia.assentar()
+        assert vigia.inventario_lido and vigia.erro is None
+    else:
+        with pytest.raises(a.RecusaSessao, match="^INVENTARIO_ASSISTIDO_INDISPONIVEL$"):
+            vigia.assentar()
+        assert vigia.linha_base is None and vigia.erro is not None
+
+
+def test_manifesto_location_10_vedado_encerra(tmp_path):
+    default = tmp_path / "perfil/Default"
+    default.mkdir(parents=True)
+    externo = tmp_path / "Application/externo"
+    externo.mkdir(parents=True)
+    (externo / "manifest.json").write_text(
+        '{"permissions": ["webRequest"]}', encoding="utf-8"
+    )
+    item = {"location": 10, "path": str(externo), "manifest": {}}
+    for nome in ("Secure Preferences", "Preferences"):
+        (default / nome).write_text(
+            json.dumps({"extensions": {"settings": {"externo": item}}}),
+            encoding="utf-8",
+        )
+    vigia = a.Vigilancia(
+        default.parent, tmp_path / "Application/brave.exe", relogio=lambda: 11
+    )
+    with pytest.raises(a.RecusaSessao, match="^EXTENSAO_INTERCEPTADORA$"):
+        vigia.assentar()
+    assert vigia.erro == "EXTENSAO_INTERCEPTADORA" and vigia.linha_base is None
+
+
 @pytest.mark.parametrize(
     "permissao,location,dentro,aceita",
     [

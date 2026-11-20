@@ -73,7 +73,7 @@ def certificados(path):
             "-subj",
             "/CN=localhost",
             "-addext",
-            "subjectAltName=IP:127.0.0.1",
+            "subjectAltName=IP:127.0.0.1,DNS:hsts.0089.test",
         ],
         check=True,
         capture_output=True,
@@ -168,14 +168,26 @@ def origem_https(path, caso):
 
 
 @contextmanager
-def navegador_pipe(path, monkeypatch, *, nome="brave", spki=None, caso="utf8"):
+def navegador_pipe(
+    path,
+    monkeypatch,
+    *,
+    nome="brave",
+    spki=None,
+    caso="utf8",
+    script=None,
+    observar=True,
+    hsts=False,
+):
     if os.name != "nt":
         pytest.skip("0089: pipe Windows exige Windows")
     try:
         _, exe = a.navegador_instalado(nome)
     except a.RecusaSessao as exc:
         pytest.skip(str(exc))
-    perfil_dir = path / "perfil"
+    # Mesma conferência de produto; política vedada nunca vira skip de pipe/ACL.
+    a.conferir_politicas(nome)
+    perfil_dir = path / "sessao-0089-harness"
     perfil_dir.mkdir()
     proc = canal = observador = None
     sessao = None
@@ -202,6 +214,10 @@ def navegador_pipe(path, monkeypatch, *, nome="brave", spki=None, caso="utf8"):
             def argumentos_harness(*args, **kw):
                 comando = produto(*args, **kw)
                 comando.insert(-1, "--ignore-certificate-errors-spki-list=" + spki)
+                if hsts:
+                    comando.insert(
+                        -1, "--host-resolver-rules=MAP hsts.0089.test 127.0.0.1"
+                    )
                 return comando
 
             monkeypatch.setattr(a, "argumentos", argumentos_harness)
@@ -210,10 +226,13 @@ def navegador_pipe(path, monkeypatch, *, nome="brave", spki=None, caso="utf8"):
                 t, "_public_unicast", lambda ip: ip == "127.0.0.1" or original(ip)
             )
         porta = t.PerfilPortaAssistida(
-            frozenset({"127.0.0.1"}),
+            frozenset({"127.0.0.1", "hsts.0089.test"} if hsts else {"127.0.0.1"}),
             (
-                t.RecursoAssistido(
-                    "Document", r"^/case/[a-z0-9_]+$", "^$", frozenset({"text/html"})
+                *(
+                    t.RecursoAssistido(
+                        tipo, r"^/case/[A-Za-z0-9_]+$", "^$", frozenset({"text/html"})
+                    )
+                    for tipo in ("Document", "XHR", "Fetch")
                 ),
             ),
             (),
@@ -224,6 +243,26 @@ def navegador_pipe(path, monkeypatch, *, nome="brave", spki=None, caso="utf8"):
         vigia = a.Vigilancia(perfil_dir, exe)
         observador = a.ObservadorWindows(vigia)
         proc, leitura, escrita = a.lancar_pipe(exe, perfil_dir, inicio.as_uri())
+        if not observar:
+            protocolo_iniciado = (
+                True  # erros de inventário após lançar são falhas, não skips
+            )
+            # Controle: mesmo pipe e flags, nenhum cliente envia comandos/anexa.
+            limite = vigia.limite_inventario + 10
+            while vigia.assentar() is None:
+                if time.monotonic() >= limite or proc.poll() is not None:
+                    raise a.RecusaSessao("AMBIENTE_NAO_ASSENTADO")
+                time.sleep(0.05)
+            sinal.write_text(
+                script or "location.href='https://127.0.0.1/case/utf8';",
+                encoding="utf-8",
+            )
+            try:
+                yield None, proc, vigia
+            finally:
+                leitura.close()
+                escrita.close()
+            return
         canal = CanalPipe(leitura, escrita, sessao)
         ad = AdaptadorCDP(perfil, sessao, canal, vigia)
         canal.iniciar()
@@ -253,7 +292,8 @@ def navegador_pipe(path, monkeypatch, *, nome="brave", spki=None, caso="utf8"):
                     ad.processar(obj)
         # Só o HTML de teste simula a ação humana, após prontidão observada.
         sinal.write_text(
-            "location.href=" + json.dumps("https://127.0.0.1/case/" + caso) + ";",
+            script
+            or "location.href=" + json.dumps("https://127.0.0.1/case/" + caso) + ";",
             encoding="utf-8",
         )
         yield ad, proc, vigia

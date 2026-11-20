@@ -117,15 +117,23 @@ def inventariar(perfil: Path, navegador: Path):
                 componente_absoluto = location == 5 and caminho.is_absolute()
                 if not caminho.is_absolute():
                     caminho = perfil / "Default" / "Extensions" / caminho
-                caminho = caminho.resolve(strict=True)
-                manifesto = json.loads(
-                    (caminho / "manifest.json").read_text(encoding="utf-8")
+                caminho = caminho.resolve()
+                componente_interno = componente_absoluto and caminho.is_relative_to(
+                    navegador.parent.resolve()
                 )
+                try:
+                    manifesto = json.loads(
+                        (caminho / "manifest.json").read_text(encoding="utf-8")
+                    )
+                except FileNotFoundError:
+                    # Leitura de execução da 0089: componentes embutidos podem
+                    # não materializar nem o diretório de recursos em disco.
+                    if not componente_interno:
+                        raise
+                    manifesto = item.get("manifest")
                 if not isinstance(manifesto, dict):
                     raise ValueError
-                if componente_absoluto and caminho.is_relative_to(
-                    navegador.parent.resolve()
-                ):
+                if componente_interno:
                     continue
                 permissoes = set(manifesto.get("permissions", [])) | set(
                     manifesto.get("optional_permissions", [])

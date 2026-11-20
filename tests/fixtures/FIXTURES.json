@@ -1,4 +1,20 @@
 {
+ "0089_wire_br": {
+  "file": "0089_wire_br.bin",
+  "categoria": "sintetica",
+  "bytes": 48,
+  "sha256": "29daee3329a80872a2bbd98f5a9788184e132e3c6f6bb42588212a06cfa62cea",
+  "gerador": "tests/gerar_0089_wire.py:gerar",
+  "proposito": "0089 §3.1: resposta HTTPS local Content-Encoding br; bloco raw sintético"
+ },
+ "0089_wire_zstd": {
+  "file": "0089_wire_zstd.bin",
+  "categoria": "sintetica",
+  "bytes": 53,
+  "sha256": "2e1a2e9e8c807d68ea3361cbe8ea66518035357c39adf438d916f41723971cc3",
+  "gerador": "tests/gerar_0089_wire.py:gerar",
+  "proposito": "0089 §3.1: resposta HTTPS local Content-Encoding zstd; bloco raw sintético"
+ },
  "0089_streaming_sintetico": {
   "bytes": 1300,
   "categoria": "sintetica",

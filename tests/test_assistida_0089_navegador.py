@@ -10,7 +10,7 @@ from tests.harness_assistida_0089 import CORPOS, navegador_pipe, origem_https
 pytestmark = pytest.mark.navegador_assistido
 
 
-def test_brave_pipe_e_acl_reais(tmp_path, monkeypatch):
+def test_item8_brave_pipe_e_acl_reais(tmp_path, monkeypatch):
     with navegador_pipe(tmp_path, monkeypatch) as (ad, proc, vigia):
         assert proc.poll() is None
         assert ad.fase == 3
@@ -34,7 +34,7 @@ def test_brave_pipe_e_acl_reais(tmp_path, monkeypatch):
         "parcial",
     ],
 )
-def test_https_adaptador_real(tmp_path, monkeypatch, caso):
+def test_item1_https_adaptador_real(tmp_path, monkeypatch, caso):
     try:
         a.proteger_diretorio(tmp_path)
     except a.RecusaSessao as exc:
