@@ -474,7 +474,11 @@ class AdaptadorCDP:
                 self._recusar(
                     curso.url,
                     codigo,
-                    "PRAZO_ASSISTIDO_INCOMPLETO"
+                    "METADADOS_SEGURANCA_ASSISTIDOS_AUSENTES"
+                    if "responseReceived" in curso.vistos
+                    and not {"requestWillBeSentExtraInfo", "responseReceivedExtraInfo"}
+                    <= curso.vistos
+                    else "PRAZO_ASSISTIDO_INCOMPLETO"
                     if codigo == "RespostaInvalida"
                     else "PRAZO_ASSISTIDO_SEM_RESPOSTA",
                 )
@@ -504,7 +508,7 @@ class AdaptadorCDP:
             return
         metodo, p = obj.get("method", ""), obj.get("params", {})
         sid = obj.get("sessionId")
-        for nome in ("requestId", "sessionId", "targetId", "frameId"):
+        for nome in ("requestId", "sessionId", "targetId"):
             if nome in p and not self.id_valido(p[nome]):
                 raise RecusaSessao("IDENTIFICADOR_CDP_INVALIDO")
         if sid is not None and not self.id_valido(sid):
@@ -552,6 +556,10 @@ class AdaptadorCDP:
                 self.desanexados[p["sessionId"]] = self.relogio() + 2
         elif sid in self.alvos:
             alvo = self.alvos[sid]
+            # Workers e OOPIFs são retomados, mas não produzem candidatas.
+            # Não se lhes exigem campos de Page/Network próprios de candidatas.
+            if alvo.tipo != "page":
+                return
             if metodo == "Page.frameNavigated":
                 f = p["frame"]
                 self._conferir_frame(f)
@@ -565,6 +573,8 @@ class AdaptadorCDP:
                 self._evento(sid, p.get("requestId"), metodo[8:], p)
 
     def _pedido(self, sid, alvo, p):
+        if alvo.tipo != "page":
+            return
         observado = (
             self._recebida_em if self._recebida_em is not None else self.relogio()
         )
@@ -614,6 +624,14 @@ class AdaptadorCDP:
             return
         base = self.vigia.linha_base
         if self.fase != 3 or not alvo.pronto or base is None or observado <= base:
+            return
+        # Um quadro filho não é candidato, mesmo se usar a URL de um recurso
+        # permitido. Sua exclusão precede a exigência de metadados do iniciador.
+        if self.id_valido(p.get("frameId")) and p["frameId"] != alvo.raiz:
+            if tipo == "Document":
+                self._recusar(
+                    url_publica, "RespostaInvalida", "PEDIDO_ASSISTIDO_SEM_PROVA"
+                )
             return
         iniciador = p["initiator"]
         if (
@@ -688,8 +706,48 @@ class AdaptadorCDP:
 
     def _evento(self, sid, rid, metodo, dados):
         curso = self.pedidos.get((sid, rid))
-        if curso is None:
+        if curso is None or curso.recusada:
             return
+        try:
+            self._evento_validado(curso, metodo, dados)
+        except KeyError:
+            obrigatorios = {
+                "requestWillBeSentExtraInfo": ("headers", "associatedCookies"),
+                "responseReceivedExtraInfo": (
+                    "headers",
+                    "blockedCookies",
+                    "statusCode",
+                ),
+            }
+            ausente = any(k not in dados for k in obrigatorios.get(metodo, ()))
+            if metodo == "responseReceived":
+                r = dados["response"]
+                ausente = any(
+                    k not in r
+                    for k in (
+                        "securityDetails",
+                        "fromDiskCache",
+                        "fromServiceWorker",
+                        "fromPrefetchCache",
+                    )
+                ) or (
+                    isinstance(r.get("securityDetails"), dict)
+                    and any(
+                        k not in r["securityDetails"] for k in ("protocol", "issuer")
+                    )
+                )
+            if not ausente:
+                raise
+            # Ausência de prova nesta resposta não é corrupção do protocolo.
+            # Nunca se substitui por headers/cookies vazios ou TLS presumido.
+            curso.porta.descartar()
+            curso.admitida = None
+            curso.recusada = True
+            self._recusar(
+                curso.url, "RespostaInvalida", "METADADOS_SEGURANCA_ASSISTIDOS_AUSENTES"
+            )
+
+    def _evento_validado(self, curso, metodo, dados):
         if metodo == "requestWillBeSentExtraInfo":
             headers = _headers_seguros(dados["headers"])
             cookies = dados["associatedCookies"]
@@ -746,18 +804,25 @@ class AdaptadorCDP:
                 if k in dados
             }
         elif metodo == "responseReceived":
+            if "response" not in dados or not isinstance(dados["response"], dict):
+                raise ValueError
             resposta = dados["response"]
+            flags = ("fromDiskCache", "fromServiceWorker", "fromPrefetchCache")
+            if any(k in resposta and type(resposta[k]) is not bool for k in flags):
+                raise ValueError
+            if any(resposta.get(k) is True for k in flags):
+                # A porta recusa a origem derivada antes de exigir TLS ou ExtraInfo
+                # que uma resposta sintetizada pelo SW pode legitimamente omitir.
+                self._observar(curso, metodo, dados)
+                return
+            # Nenhum True foi demonstrado: a admissão ainda exige todos os False
+            # explícitos. Ausência não se converte em origem/credenciais provadas.
+            if any(k not in resposta for k in flags):
+                raise KeyError
             seguranca = resposta["securityDetails"]
-            if (
-                not isinstance(seguranca, dict)
-                or any(
-                    not isinstance(seguranca[k], str) or not seguranca[k]
-                    for k in ("protocol", "issuer")
-                )
-                or any(
-                    type(resposta[k]) is not bool
-                    for k in ("fromDiskCache", "fromServiceWorker", "fromPrefetchCache")
-                )
+            if not isinstance(seguranca, dict) or any(
+                not isinstance(seguranca[k], str) or not seguranca[k]
+                for k in ("protocol", "issuer")
             ):
                 raise ValueError
         self._observar(curso, metodo, dados)
@@ -792,7 +857,13 @@ class AdaptadorCDP:
                 curso.porta.descartar()
                 curso.recusada = True
                 self._recusar(
-                    curso.url, "RespostaInvalida", "CAPTURA_ASSISTIDA_INCOMPLETA"
+                    curso.url,
+                    "RespostaInvalida",
+                    "METADADOS_SEGURANCA_ASSISTIDOS_AUSENTES"
+                    if "responseReceived" in curso.vistos
+                    and not {"requestWillBeSentExtraInfo", "responseReceivedExtraInfo"}
+                    <= curso.vistos
+                    else "CAPTURA_ASSISTIDA_INCOMPLETA",
                 )
         return [c.admitida for c in self.pedidos.values() if c.admitida is not None]
 

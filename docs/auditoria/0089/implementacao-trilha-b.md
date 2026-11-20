@@ -1403,3 +1403,263 @@ por este registro:
 Nova auditoria independente continua necessária para reconsiderar o
 veredito BLOQUEADOR. A bateria afetada e a seleção `repositorio` não são
 declaradas equivalentes à suíte offline global nem ao aceite real integral.
+
+## Auditoria Codex r2
+
+Data: 20/11/2026. Papel: Desenvolvedor. Base `16d4c7e7e3f26b0d54adca4353866d602d43dcc4`,
+ramo `feat/0089-sessao-assistida`, worktree `C:\dev\fv14-0089i`, PR #53.
+Fontes: `C:\dev\tmp\v5\audit\parecer-codex-r2.md` (BLOQUEADOR),
+`C:\dev\tmp\v5\impl-b\nav-10.log`, decisão 0089 e texto **aprovado** da
+`0090-notas-formais-0089.md`. Este registro não aprova o próprio trabalho nem
+substitui o parecer independente exigido pelo AGENTS.md.
+
+### Correções por achado e classe
+
+1. **Vínculo B → A e identidades.** A exigência decorre da 0089 §2.6(1), §2.11 e
+   §3(12); a 0090 §5 mantém essas regras. O snapshot identifica capturas assistidas
+   por procedência **ou** modalidade (esta sobrevive à cópia como snapshot), e
+   identifica explicitamente B pela gramática do recurso de `normas_leg`. B sem
+   `vinculo` completo é recusado. A assistida de metadados e o documento Planalto
+   continuam legitimamente sem vínculo; o legado/automático não é reclassificado
+   pela ausência do campo. Recurso desconhecido de perfil fechado não é tratado
+   como recurso autônomo. O contrato anterior IL.0, que só rotulava procedência
+   para fonte fora dos perfis da 0089, permanece: `save_capture` sem recibo nesse
+   caminho conserva `procedencia=sessao_assistida` e grava modalidade **NULL**,
+   sem inventar modalidade ou recibo. A/B e Planalto atuais não podem usar essa
+   compatibilidade. No store, snapshot e evidência, legado com modalidade NULL
+   e sem recibo é separado da captura moderna. Procedência assistida com
+   modalidade explícita, modalidade assistida ou qualquer recibo assistido
+   continuam sujeitos à validação, inclusive depois da cópia como snapshot.
+   Ausência apenas de `vinculo`
+   nunca transforma um recibo moderno em legado.
+
+   Os IDs de sessão, obtenção e referência local precisam ser strings não vazias
+   antes de comparação, uso em mapa ou consulta SQL. O vínculo confere identidade
+   da obtenção de A, hash, tipo de recurso, URN, UUID, versão e `@id`; referência a
+   A automática ou a outro B não prova o vínculo. A identidade original de
+   obtenção continua separada do ID SQL remapeado. A validação comum é aplicada
+   no grafo, na seleção/persistência, em `repo.save_capture`, no snapshot e na
+   exibição de evidência; recibo inválido retorna evidência `indisponivel`, motivo
+   `recibo_assistido_invalido`. As comparações CDP e da porta foram conferidas:
+   os IDs da chave já têm validação anterior; nenhuma mudança na porta foi feita
+   por este achado.
+
+   Regressões r2: campo ausente, null, vazio, espaços, inteiro, lista e objeto;
+   igualdade entre IDs ausentes em ambos os lados; ausência do vínculo inteiro
+   e de cada campo; colisão de identidade de obtenção; seleção adulterada;
+   persistência sem referência válida; snapshot pelo instalador público sem
+   publicação parcial; evidência; controles positivos de Planalto, A e legado.
+   As regressões r1 de colisões naturais A/B, remapeamento e reinstalação seguem
+   na bateria afetada.
+
+2. **Passividade.** A 0090 §3.3 é aplicada aos valores originais antes de mascarar
+   qualquer posição `q`. Uma alternativa inédita falha, inclusive `0`, `0.1` e `1`
+   diante de controles `0.5/0.6`. A posição precisa ser variável nos controles,
+   no `Accept-Language`, no mesmo método, caminho, ocorrência e posição de campo
+   repetido. As alternativas completas e a sequência original conservam
+   combinações, ordem e multiplicidades. Outros cabeçalhos não recebem essa
+   normalização. Um pedido literalmente igual a um controle pode passar sem
+   normalização, inclusive nos demais cabeçalhos.
+
+   O cenário real coleta o pedido com adaptador uma vez e depois de dois a quatro
+   controles, até reproduzir sua alternativa ou alcançar quatro. Não há nova
+   tentativa com adaptador nem aumento do teto. Se o valor continuar inédito, o
+   teste falha e publica os originais, diferenças, descontos e
+   `alternativas_nao_observadas`. Regressões cobrem valor observado/inédito,
+   posição estável, outro cabeçalho, combinações e multiplicidades, além de
+   parada no segundo, terceiro ou quarto controle e falha ao atingir o teto.
+
+3. **Evento zero antes do streaming.** Removida somente a recusa adicional de
+   `_antes_stream` com soma zero, em `transport.py`. Pela 0090 §3.2, `_copiar`
+   continua exigindo tamanho decodificado do buffer igual à soma anterior,
+   inclusive **0 = 0**. Reservas, limites, contadores codificados, confrontos por
+   evento e finais, prazos e recusas posteriores permanecem. Regressões positivas
+   com um e dois eventos zero anteriores, buffer vazio e corpo posterior não
+   vazio; a antiga negativa que contradizia a decisão foi substituída por essas
+   provas. As demais negativas continuam exigindo seus motivos.
+
+4. **Service worker e fronteira entre candidata e sessão.** No código de base,
+   `_evento(responseReceived)` acessava `response.securityDetails` antes de
+   encaminhar à porta a flag `fromServiceWorker`. Uma resposta sintetizada sem
+   esse campo provoca `KeyError`, capturado por `processar` como
+   `EVENTO_CDP_INVALIDO`, antes da recusa específica de origem derivada. Este é o
+   caminho causal provável do 10º ensaio. **O campo exato do evento original não
+   é demonstrável pelo log fornecido**: ele mostra `obj={}`, pois `Mensagem.__exit__`
+   limpa o objeto, e a exceção original foi suprimida com `from None`. O
+   `ConnectionResetError` posterior é compatível com o encerramento, não prova
+   que a conexão tenha causado a primeira recusa.
+
+   Reprodução causal adicional: método `_evento` extraído por AST do commit
+   `16d4c7e`, executado em memória sobre pedido sintético e resposta com
+   `fromServiceWorker=True`, demais flags `False` e sem TLS, levanta exatamente
+   **`KeyError('securityDetails')`**. O mesmo objeto entregue à implementação
+   corrigida produz `ORIGEM_ASSISTIDA_SEM_PROVA` e mantém a sessão aberta. Essa
+   prova fecha o mecanismo de código, mas não recupera o evento apagado no log
+   do 10º ensaio. Sem navegador/rede ou alteração de arquivos nessa reprodução.
+
+   Agora as flags têm presença/tipo conferidos e a porta recusa origem derivada
+   com `ORIGEM_ASSISTIDA_SEM_PROVA` antes de exigir TLS/ExtraInfo que o SW pode
+   não produzir. Metadado de segurança ausente de uma candidata recusa somente
+   essa candidata com `METADADOS_SEGURANCA_ASSISTIDOS_AUSENTES`; ExtraInfo não
+   emitido continua impedindo admissão e recebe esse motivo ao prazo/fechamento.
+   Não há defaults de headers/cookies vazios ou inferência de ausência de
+   credenciais (preservado o achado 1 da r1). Estrutura ou tipo malformado
+   continua invalidando a sessão. Workers/service workers/OOPIFs não são
+   candidatos; quadros filhos são excluídos antes dos metadados exigidos apenas
+   das candidatas. Eventos posteriores de uma candidata já recusada não a
+   readmitem.
+
+   Regressões offline distinguem as três classes, incluindo resposta SW sem TLS
+   nem ExtraInfo, candidata boa posterior na mesma sessão, ausência de prova de
+   credenciais, estrutura malformada e alvos não candidatos. O cenário real `sw`
+   exige agora **especificamente** `ORIGEM_ASSISTIDA_SEM_PROVA`, além da não
+   admissão e sessão preservada. A 0090 §5 conserva a matriz da 0089 §2.4; não se
+   acrescentou método CDP nem exceção à prova de segurança.
+
+5. **Preparação do manifesto de aceite.** A nota de escopo da a6 e a 0090 §5
+   foram respeitadas. `release/acceptance_manifest.json` e os registros de
+   release permanecem intocados. O payload abaixo corresponde a **uma** entrada
+   de `reducoes_de_escopo` para `I3.5`, como exige
+   `scripts/manifesto_aceite.py` (`CHAVES_REDUCAO`, `cmd_reducao` e catálogo I3).
+   O gerador não admite uma entrada por subcenário do §3 nem IDs de item novos;
+   a lista exata fica no campo textual `motivo`. O estado do item é `reduzido`,
+   e os testes enumerados são adiados para antes da 1.4.0 final. Não se marca
+   etapa concluída nem se acrescenta evidência de execução.
+
+### Payload para o supervisor (não aplicado)
+
+Formato consumido pelo gerador, para espelhar também no futuro registro da
+release 1.4.0a6. `cmd_reducao` calcula a data quando o supervisor executar; a data
+abaixo é a da decisão. Rótulo do incremento: `1.4.0a6: sessão assistida restrita
+ao Brave no notebook do titular; pendências ambientais antes da 1.4.0 final`.
+
+```json
+{
+  "item": "I3.5",
+  "data": "2026-11-20",
+  "decisao": "Titular, 20/11/2026, opção (b): nota de escopo da 1.4.0a6",
+  "registro": "docs/decisoes/0089-nota-escopo-1.4.0a6.md",
+  "motivo": "Não executados por impedimento do ambiente; adiados para antes da 1.4.0 final: 1. §3 item 7, acesso por segunda conta do Windows; §2.7(2) e §3 itens 7 e 13, monitoramento de gravações fora do perfil dedicado e de leituras do perfil pessoal por ferramenta do sistema (exigem privilégio de administrador). 2. §3 item 8, execução do aceite completo no Chrome e no Edge (recusados por política neste notebook; a recusa está provada). 3. §3 item 2, prerender (desativado no Brave) e Early Hints (exige origem HTTP/2 de teste)."
+}
+```
+
+Comando correspondente para o fluxo do supervisor, **não executado** nesta
+rodada (a versão/entrada de release pertence ao fluxo de publicação):
+
+```powershell
+$motivoEscopo = 'Não executados por impedimento do ambiente; adiados para antes da 1.4.0 final: 1. §3 item 7, acesso por segunda conta do Windows; §2.7(2) e §3 itens 7 e 13, monitoramento de gravações fora do perfil dedicado e de leituras do perfil pessoal por ferramenta do sistema (exigem privilégio de administrador). 2. §3 item 8, execução do aceite completo no Chrome e no Edge (recusados por política neste notebook; a recusa está provada). 3. §3 item 2, prerender (desativado no Brave) e Early Hints (exige origem HTTP/2 de teste).'
+.venv\Scripts\python.exe scripts\manifesto_aceite.py reducao --incremento I3 --item I3.5 --estado reduzido --rotulo '1.4.0a6: sessão assistida restrita ao Brave no notebook do titular; pendências ambientais antes da 1.4.0 final' --registro docs/decisoes/0089-nota-escopo-1.4.0a6.md --decisao 'Titular, 20/11/2026, opção (b): nota de escopo da 1.4.0a6' --motivo $motivoEscopo
+```
+
+Recarga forçada e instalação/ativação de extensão com gesto humano **não**
+integram os adiamentos: continuam exigidas com o titular antes da sessão manual
+da §3(17). A nota de escopo não dispensa CI nem parecer sem bloqueador.
+
+### Provas de desenvolvimento e limites desta rodada
+
+* AST de `transport.py` contra `87b43f7`: **77 definições preexistentes,
+  zero ausentes e zero alteradas**, por nome qualificado e
+  `ast.dump(include_attributes=False)`. Todos os nós preexistentes de módulo
+  permanecem na mesma ordem. Contra o HEAD inicial, só o método assistido
+  `_CapturaAssistidaEmCurso._observar` mudou (além do nó da classe que o contém):
+  remoção das duas linhas do item 3. Recibo local em `%TEMP%\r2-ast.json`.
+* Após o ajuste final da classificação SW (um `True` comprovado basta para
+  recusar a origem, mesmo se outras flags forem omitidas; a admissão continua
+  exigindo todos os `False` explícitos), **409 passed**, exit 0, **40,25 s**,
+  nos módulos r2, r1, CDP e integração, com `.venv`, `-p no:cacheprovider` e
+  basetemp externo. Log `%TEMP%\r2-cdp-final.log`.
+* Payload do manifesto conferido com as constantes e funções reais do gerador:
+  chaves/tipos de `CHAVES_REDUCAO`, item do catálogo I3, existência do registro,
+  estado/rotulagem por `_erros_de_reducao` e argumentos pelo parser de `reducao`.
+  Não se invocou a mutação do manifesto. A data do payload é a da decisão;
+  o gerador gravará a data da execução pelo supervisor.
+* Tentativa diagnóstica do cenário real `sw` nesta rodada: **não alcançou o
+  handshake nem a resposta SW**. A execução terminou no guardião de limpeza,
+  cuja enumeração de processos recusou com
+  `ENUMERACAO_ASSISTIDA_INDISPONIVEL_PROCESSO`, resultando em
+  `LIMPEZA_ASSISTIDA_PENDENTE` e mantendo a marca no perfil sintético
+  `%TEMP%\r2swdiag\pytest-c3f4f28aac604b51\test_item2_proved7fbfa1f1e3947e3\sessao-0089-harness`.
+  Não se burlou o guardião de processos/limpeza, não se acessou perfil pessoal
+  e não se elevou privilégio. A instrumentação diagnóstica foi somente em
+  memória, sem edição do produto, e não reteve eventos ou credenciais. O teste
+  real final de SW e a comprovação do campo original continuam pendentes de
+  execução fora deste impedimento pelo supervisor. Essa pendência de prova
+  **não** foi acrescentada aos adiamentos ambientais autorizados da a6.
+* Sem método CDP novo, dependência nova, alteração do fluxo automático ou do
+  critério de `verified`. Sem troca de ramo, stage, tentativa de commit ou push.
+  Sem alteração das decisões aprovadas, do manifesto de aceite, do registro de
+  release ou da baseline Ruff. A nova regressão `tests/test_assistida_0089_r2.py`
+  integra a entrega para o commit do supervisor.
+* Bateria afetada anterior ao ajuste de compatibilidade IL.0: **1435 passed,
+  1 skipped, 57 deselected**, exit 0, **262,22 s**. Com `.venv`,
+  `-p no:cacheprovider`, `-m "not live and not navegador_assistido"` e basetemp
+  `%TEMP%\r2affinal`, fora do checkout. Abrange todos os módulos
+  `test_assistida_0089*.py`, porta, decisão 0075, store, snapshot 1.3/0081,
+  sondas, garantias estruturais e instaladores 1.2/1.3. Skip: prova HTTP/2/Early
+  Hints em memória sem `h2`, que não foi instalado. Log
+  `%TEMP%\r2-afetados-final.log`. A rodada anterior (1434 passed) precedeu o
+  último ajuste de SW e não é a prova final.
+* Evidência fora da sessão assistida: **4 passed, 229 deselected**, exit 0,
+  **12,82 s**, seletor `-k evidencia` sobre os módulos service, atribuição Câmara
+  0080, legado F24, executor IL.3-a, correções IL.3-c e normas_leg 0085, com a
+  mesma exclusão de live/navegador e cache desabilitado. Log
+  `%TEMP%\r2-evidencia.log`. As provas assistidas e snapshot 0081 já constam da
+  bateria afetada; contagens de baterias sobrepostas não são somadas.
+* Catraca obrigatória: `C:\dev\tmp\venv-ruff\Scripts\python.exe
+  scripts\ruff_catraca.py`, **exit 0**, baseline intacta. Log
+  `%TEMP%\r2-ruff-final.log` (sem novos achados). `git diff --check` também
+  passou; os avisos de normalização CRLF/LF não são alterações adicionais.
+* A primeira execução `repositorio` encontrou uma regressão real desta rodada:
+  **1 failed, 618 passed, 1 skipped, 15064 deselected**, exit 1, **1042,74 s**.
+  A cópia isolada teve **1 failed, 5117 passed, 5 skipped**: o contrato existente
+  `test_il0r.py::test_c6_sessao_assistida_rotulada_e_persistida` grava somente o
+  rótulo anterior à 0089, sem recibo, para fonte genérica. A validação nova o
+  recusava. Corrigida a compatibilidade por fonte/modalidade descrita no achado
+  1, **sem editar o teste IL.0**. Novas regressões verificam tanto o legado quanto
+  a recusa de A, B e Planalto atuais sem recibo. O log desta execução reprovada
+  é `%TEMP%\r2-repositorio.log`; ele não constitui aceite. A rodada de
+  `repositorio` iniciada antes desse ajuste também não serve de prova final.
+* Após concluir a fronteira de compatibilidade, **168 passed**, exit 0,
+  **33,21 s**, em todas as regressões r2 e no caso IL.0 original, sem editar
+  este último. Inclui as seis combinações de procedência/modalidade de recibo
+  moderno (inclusive cópia como snapshot e modalidade NULL), que continuam
+  recusando B sem vínculo. Log `%TEMP%\r2-conferencia-final.log`.
+  Antes desse último complemento, r2 + módulo IL.0 inteiro registraram
+  **277 passed**, exit 0, **121,96 s**, em `%TEMP%\r2-legado.log`.
+* O estado final dos **12 arquivos de produto/teste** alterados foi registrado
+  por SHA-256 em `%TEMP%\r2-estado-final.json` no início da última validação,
+  para confronto após os comandos. O registro documental continua sendo
+  completado com os resultados; não altera o produto em execução.
+* Bateria afetada **sobre o estado final registrado**: **1562 passed,
+  1 skipped, 57 deselected**, exit 0, **386,55 s**. Comando `.venv\Scripts\python.exe
+  -m pytest <módulos> -q -m "not live and not navegador_assistido"
+  -p no:cacheprovider --basetemp "$env:TEMP\r2affinal3" --tb=short`.
+  Mesmos módulos da bateria anterior, agora também com `tests/test_il0r.py`
+  inteiro e todas as variantes r2 finais. Skip: HTTP/2/Early Hints em memória
+  sem `h2`. Log `%TEMP%\r2-afetados-final3.log`.
+* Conjunto `repositorio` **final**: **619 passed, 1 skipped, 15076 deselected**,
+  exit 0, **1044,55 s**. Comando exato, no worktree solicitado:
+
+  ```powershell
+  .venv\Scripts\python.exe -m pytest tests -q -m "repositorio and not live and not navegador_assistido" -p no:cacheprovider --basetemp "$env:TEMP\r2repofinal3" --tb=short
+  ```
+
+  Log `%TEMP%\r2-repositorio-final3.log`. Inclui a execução efetiva da cópia
+  isolada, agora aprovada. Rodada intermediária após o ajuste IL.0:
+  **619 passed, 1 skipped, 15070 deselected**, exit 0, **1112,63 s**, em
+  `%TEMP%\r2-repositorio-final2.log`; a prova final é a última execução acima,
+  iniciada depois do complemento de cobertura dos rótulos.
+* Conferência após as suítes: **12 de 12 hashes de produto/teste idênticos**
+  aos registrados antes da validação final. AST reexecutada: **77 definições
+  preservadas**, zero ausentes/alteradas e ordem dos nós de módulo intacta.
+  Catraca obrigatória repetida, **exit 0**; `git diff --check`, **exit 0**.
+  Manifesto/schema de aceite, baseline Ruff, decisões e teste IL.0 original
+  sem diff; index sem alterações staged. Ramo e HEAD continuam exatamente os
+  informados no início. Somente este registro documental foi completado depois
+  dos testes; não houve nova mudança de produto ou testes.
+
+Estas provas são locais Windows, com `.venv`, temporários fora do checkout e
+cache pytest desabilitado. Não são a suíte offline global, a matriz CI, o aceite
+real completo ou novo parecer independente. A prova real de SW e a limpeza
+sinalizada acima continuam pendentes do ambiente externo; os gestos humanos e
+a sessão manual continuam sujeitos às exigências da 0089 e da nota de escopo.

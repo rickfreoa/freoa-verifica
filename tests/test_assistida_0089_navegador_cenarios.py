@@ -315,7 +315,9 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
                     exigir_recusa(
                         ad,
                         sonda.pedidos[k],
-                        {
+                        {"ORIGEM_ASSISTIDA_SEM_PROVA"}
+                        if caso == "sw"
+                        else {
                             "ORIGEM_ASSISTIDA_SEM_PROVA",
                             "EVENTO_ASSISTIDO_RECUSADO",
                         }
@@ -357,6 +359,7 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
                         )
                     )
                 if caso == "sw":
+                    assert not ad.fechado
                     assert not any(c.resposta.url.endswith("/sw") for c in capturas(ad))
                 if caso == "prefetch":
                     assert any(
@@ -671,8 +674,8 @@ def test_item9_pedidos_e_cabecalhos_iguais_com_sem_adaptador(tmp_path, monkeypat
                 # Inclui pedidos concorrentes até o encerramento do navegador.
                 return list(estado["pedidos"])
 
-    controles = coletar_controles_passividade(executar)
     com = executar("com", True)
+    controles = coletar_controles_passividade(executar, adaptador=com)
     diagnostico = comparar_passividade(
         *controles[:2], com, controles_adicionais=controles[2:]
     )

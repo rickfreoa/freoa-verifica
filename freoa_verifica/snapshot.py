@@ -628,30 +628,30 @@ _FORA_DO_RECIBO = frozenset({"id", "procedencia", "edition_id"})
 
 
 def _conferir_vinculos_assistidos(conn, schema):
+    from freoa_verifica.assistida.perfis import (
+        conferir_recibo_assistido, conferir_referencia_assistida, identificador_presente,
+    )
+
     if schema not in {"main", "snap"}:
         raise ValueError("schema_snapshot_invalido")
     colunas = {r[1] for r in conn.execute(f"PRAGMA {schema}.table_info(capture)")}
     if "assistida_json" not in colunas:
         return
-    for row in conn.execute(f"SELECT assistida_json FROM {schema}.capture WHERE assistida_json IS NOT NULL"):  # noqa: S608 -- schema fechado acima
+    # Modalidade conserva a origem assistida depois de procedencia virar snapshot.
+    # Legado/automático sem esses rótulos não depende da ausência de vinculo.
+    for row in conn.execute(f"SELECT * FROM {schema}.capture WHERE modalidade_acesso='sessao_assistida' OR assistida_json IS NOT NULL OR (procedencia='sessao_assistida' AND modalidade_acesso IS NOT NULL)"):  # noqa: S608 -- schema fechado acima
         try:
-            recibo = json.loads(row[0])
-            if not isinstance(recibo, dict):
-                raise ValueError
-            if "vinculo" not in recibo:
+            recibo = json.loads(row["assistida_json"])
+            v = conferir_recibo_assistido(recibo, row["source_id"], row["final_url"])
+            if v is None:
                 continue
-            v = recibo["vinculo"]
-            if not isinstance(v, dict) or not isinstance(v["metadados_capture_id"], str):
+            if not identificador_presente(v.get("metadados_capture_id")):
                 raise ValueError
             dep = conn.execute(
-                f"SELECT sha256, assistida_json FROM {schema}.capture WHERE id=?",  # noqa: S608 -- schema fechado acima; ID parametrizado
+                f"SELECT * FROM {schema}.capture WHERE id=?",  # noqa: S608 -- schema fechado acima; ID parametrizado
                 (v["metadados_capture_id"],),
             ).fetchone()
-            if (
-                dep is None or dep[0] != v["metadados_sha256"]
-                or json.loads(dep[1])["obtencao_id"] != v["metadados_obtencao_id"]
-            ):
-                raise ValueError
+            conferir_referencia_assistida(v, dep)
         except (ValueError, TypeError, KeyError):
             raise ValueError("snapshot_vinculo_assistido_invalido") from None
 

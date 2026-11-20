@@ -35,7 +35,11 @@ def test_passividade_dois_a_quatro_controles(quantidade, variou):
         [_pedido_origem(("Accept-Language", "pt-BR,pt;q=" + q))]
         for q in ["0.9"] * (quantidade - 1) + ["0.8" if variou else "0.9"]
     ]
-    com = [_pedido_origem(("Accept-Language", "pt-BR,pt;q=0.7"))]
+    com = (
+        controles[-1]
+        if variou
+        else [_pedido_origem(("Accept-Language", "pt-BR,pt;q=0.7"))]
+    )
     d = comparar_passividade(*controles[:2], com, controles_adicionais=controles[2:])
     assert d["passou"] is variou
     assert d["controles"] == controles
@@ -348,7 +352,12 @@ def test_passividade_nao_admite_permutacao_nova(tipo):
 @pytest.mark.parametrize(
     "valor,passa",
     [
-        ("pt-BR,pt;q=0.9", True),
+        ("pt-BR,pt;q=0.5", True),
+        ("pt-BR,pt;q=0.6", True),
+        ("pt-BR,pt;q=0", False),
+        ("pt-BR,pt;q=0.1", False),
+        ("pt-BR,pt;q=1", False),
+        ("pt-BR,pt;q=0.9", False),
         ("en-US,pt;q=0.9", False),
         ("pt;q=0.9,pt-BR", False),
         ("pt-BR,pt;q=0.9,en", False),
@@ -363,12 +372,13 @@ def test_passividade_normaliza_apenas_q_variavel(campo, valor, passa):
     d = comparar_passividade(
         pedido("pt-BR,pt;q=0.5"), pedido("pt-BR,pt;q=0.6"), pedido(valor)
     )
-    passa = passa and campo.casefold() == "accept-language"
     assert d["passou"] is passa
-    if passa:
+    if passa and campo.casefold() == "accept-language":
         prova = d["ruido_declarado"][0]
         assert prova["controles"] == [("pt-BR,pt;q=0.5",), ("pt-BR,pt;q=0.6",)]
         assert prova["adaptador"] == (valor,)
+    if campo.casefold() != "accept-language":
+        assert not any("normalizados" in r for r in d["ruido_declarado"])
 
 
 @pytest.mark.parametrize(

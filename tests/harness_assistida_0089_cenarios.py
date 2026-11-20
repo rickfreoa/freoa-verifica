@@ -643,6 +643,10 @@ def _normalizar_q_variavel(controles, adaptador):
         return None
     if adaptador is None or len(adaptador) != len(um):
         return None
+    # 0090 §3.3: a alternativa inteira (inclusive campos repetidos e as
+    # combinações de q) precisa ter sido efetivamente observada.
+    if adaptador not in controles:
+        return None
     normalizados = [[] for _ in (*controles, adaptador)]
     variou = False
     for valores in zip(*controles, adaptador):
@@ -671,12 +675,18 @@ def _normalizar_q_variavel(controles, adaptador):
     return [tuple(v) for v in normalizados] if variou else None
 
 
-def coletar_controles_passividade(executar):
-    """Dois a quatro controles até provar q variável em Accept-Language."""
+def coletar_controles_passividade(executar, *, adaptador=None):
+    """Dois a quatro controles; com adaptador, até reproduzir a alternativa."""
     controles = []
     for numero in range(1, 5):
         controles.append(executar(f"sem{numero}", False))
         if len(controles) < 2:
+            continue
+        if adaptador is not None:
+            if comparar_passividade(
+                *controles[:2], adaptador, controles_adicionais=controles[2:]
+            )["passou"]:
+                return controles
             continue
         grupos = [_agrupar_pedidos(p) for p in controles]
         if any(
@@ -701,7 +711,7 @@ def comparar_passividade(sem1, sem2, com, *, controles_adicionais=()):
     """Só desconta variação provada nos controles, por método/caminho.
 
     Nem favicon nem cabeçalho têm exclusão fixa. Valor novo exclusivo do
-    adaptador continua falha, salvo posições q comprovadamente variáveis em
+    adaptador continua falha, inclusive nas posições q variáveis de
     Accept-Language. Valores, ordem e multiplicidades devem reproduzir um
     controle: não combinar variantes de campos ou permutações independentes.
     """
@@ -737,6 +747,12 @@ def comparar_passividade(sem1, sem2, com, *, controles_adicionais=()):
             }
         )
     for chave in sorted(grupos[0]):
+        # Conservar também a sequência original: mascarar q não autoriza
+        # novas multiplicidades nem combinar alternativas de controles distintos.
+        originais = [g[chave] for g in grupos]
+        if originais[-1] not in originais[:-1]:
+            diagnostico["passou"] = False
+            diagnostico.setdefault("alternativas_nao_observadas", []).append(chave)
         normalizados = [[] for _ in conjuntos]
         for i, headers in enumerate(zip(*(g[chave] for g in grupos))):
             campos = list(map(_campos, headers))

@@ -731,8 +731,6 @@ class _CapturaAssistidaEmCurso:
         elif metodo == "streamResourceContent":
             if dados.get("erro") or "bufferedData" not in dados:
                 raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
-            if self._antes_stream and not self._recebidos:
-                raise RespostaInvalida("STREAMING_ASSISTIDO_DIVERGENTE")
             self._copiar(dados["bufferedData"], self._recebidos)
             self._sessao.liberar(self._reserva_antes_stream)
             self._retido -= self._reserva_antes_stream

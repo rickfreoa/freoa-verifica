@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from freoa_verifica.assistida.ambiente import RecusaSessao
+from freoa_verifica.assistida.perfis import conferir_documentos, identificador_presente
 from freoa_verifica.identity import declared_identity
 from freoa_verifica.ids import new_ulid
 from freoa_verifica.parsers.model import EditorialBlock
@@ -45,6 +46,8 @@ def preparar_modelo(documento, fonte):
 
 
 def recibo(c, vinculo=None):
+    if any(not identificador_presente(v) for v in (c.sessao_id, c.obtencao_id)):
+        raise ValueError("IDENTIDADE_ASSISTIDA_INVALIDA")
     return {
         "sessao_id": c.sessao_id,
         "obtencao_id": c.obtencao_id,
@@ -71,6 +74,7 @@ def persistir(conn, home, perfil, documentos, marcadas, vigia, *, orcamento):
         for c in (d.captura, *d.dependentes)
     ):
         raise RecusaSessao("EXEMPLAR_NAO_ADMITIDO")
+    conferir_documentos(perfil, escolhidas)
     reserva = sum(
         len(c.resposta.body) * 64 + 4096
         for d in escolhidas

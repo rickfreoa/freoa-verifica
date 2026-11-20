@@ -83,6 +83,22 @@ def save_capture(
         raise ValueError(f"procedencia inválida: {procedencia!r}")
     if assistida is not None and procedencia != "sessao_assistida":
         raise ValueError("recibo assistido exclusivo da sessão")
+    legado_assistido = False
+    if procedencia == "sessao_assistida":
+        from freoa_verifica.assistida.perfis import (
+            PERFIS, conferir_recibo_assistido, conferir_referencia_assistida, identificador_presente,
+        )
+
+        # Contrato IL.0 anterior à 0089: só rotulava procedência, inclusive
+        # fontes fora dos perfis assistidos. Não inventar recibo/modalidade.
+        # Fontes da 0089 nunca usam esta compatibilidade, nem B sem vínculo.
+        legado_assistido = source_id not in PERFIS and assistida is None
+        v = None if legado_assistido else conferir_recibo_assistido(assistida, source_id, resp.final_url)
+        if v is not None:
+            if not identificador_presente(v.get("metadados_capture_id")):
+                raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+            a = conn.execute("SELECT * FROM capture WHERE id=?", (v["metadados_capture_id"],)).fetchone()
+            conferir_referencia_assistida(v, a)
     digest = hashlib.sha256(resp.body).hexdigest()
     if digest != resp.sha256:
         raise ValueError("sha256 da resposta diverge do corpo")
@@ -115,7 +131,7 @@ def save_capture(
             codificacao,
             origem,
             procedencia,
-            "sessao_assistida" if procedencia == "sessao_assistida" else "automatico",
+            None if legado_assistido else "sessao_assistida" if procedencia == "sessao_assistida" else "automatico",
             json.dumps(assistida, ensure_ascii=False, sort_keys=True) if assistida is not None else None,
         ),
     )

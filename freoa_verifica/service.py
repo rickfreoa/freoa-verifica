@@ -3844,6 +3844,25 @@ class Verifica:
         cap = repo.get_capture(self.conn, capture_id)
         if cap is None:
             return {"status": "inexistente", "capture_id": capture_id}
+        recibo_assistido = None
+        if cap.get("modalidade_acesso") == "sessao_assistida" or cap.get("assistida_json") is not None or (
+            cap.get("procedencia") == "sessao_assistida"
+            and (cap.get("modalidade_acesso") is not None or cap.get("assistida_json") is not None)
+        ):
+            from freoa_verifica.assistida.perfis import (
+                conferir_recibo_assistido, conferir_referencia_assistida, identificador_presente,
+            )
+
+            try:
+                recibo_assistido = json.loads(cap["assistida_json"])
+                v = conferir_recibo_assistido(recibo_assistido, cap["source_id"], cap["final_url"])
+                if v is not None:
+                    if not identificador_presente(v.get("metadados_capture_id")):
+                        raise ValueError
+                    a = self.conn.execute("SELECT * FROM capture WHERE id=?", (v["metadados_capture_id"],)).fetchone()
+                    conferir_referencia_assistida(v, a)
+            except (ValueError, TypeError, KeyError):
+                return {"status": "indisponivel", "capture_id": capture_id, "motivo": "recibo_assistido_invalido"}
         self._authenticate_capture(capture_id)
         try:
             body = blobs.get_blob(cap["sha256"], home=self.home)
@@ -3900,8 +3919,8 @@ class Verifica:
             "texto": envolto,
             **({"proveniencia": {"procedencia": cap.get("procedencia"),
                                    "modalidade_acesso": cap["modalidade_acesso"],
-                                   "recibo": json.loads(cap.get("assistida_json") or "{}")}}
-               if cap.get("modalidade_acesso") == "sessao_assistida" else {}),
+                                   "recibo": recibo_assistido}}
+               if recibo_assistido is not None else {}),
             "truncado": truncado,
             "offset": offset,
             "max_chars": max_chars,

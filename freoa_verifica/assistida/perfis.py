@@ -113,6 +113,139 @@ class DocumentoSelecionavel:
     vinculo: dict = field(default_factory=dict)
 
 
+def identificador_presente(valor):
+    return isinstance(valor, str) and bool(valor.strip())
+
+
+def recurso_dependente(fonte, url):
+    """Lista explícita da §2.11: só B de normas_leg depende de outra captura."""
+    return (
+        fonte == "normas_leg"
+        and PERFIS[fonte].recurso(url, "XHR") is not None
+        and re.fullmatch(rf"/api/public/binario/{UUID}/texto", urlsplit(url).path)
+        is not None
+    )
+
+
+def conferir_recibo_assistido(recibo, fonte, url):
+    """Valida as identidades antes de qualquer igualdade ou consulta por ID."""
+    if not isinstance(recibo, dict) or any(
+        not identificador_presente(recibo.get(k)) for k in ("sessao_id", "obtencao_id")
+    ):
+        raise ValueError("IDENTIDADE_ASSISTIDA_INVALIDA")
+    # Recurso desconhecido de perfil fechado não é um recurso autônomo.
+    if fonte in PERFIS and not any(
+        PERFIS[fonte].recurso(url, r.tipo) for r in PERFIS[fonte].porta.recursos
+    ):
+        raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+    dependente = recurso_dependente(fonte, url)
+    if not dependente and "vinculo" not in recibo:
+        return None
+    v = recibo.get("vinculo")
+    campos = (
+        "metadados_obtencao_id",
+        "metadados_sha256",
+        "urn",
+        "uuid",
+        "version",
+        "@id",
+        "legislationLegalValue",
+    )
+    if not isinstance(v, dict) or any(
+        not identificador_presente(v.get(k)) for k in campos
+    ):
+        raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+    if (
+        not dependente
+        or re.fullmatch(r"[0-9a-f]{64}", v["metadados_sha256"]) is None
+        or re.fullmatch(URN, v["urn"]) is None
+        or v["uuid"] != urlsplit(url).path.split("/")[4]
+        or v["version"] not in {"Current", "Original"}
+        or v["legislationLegalValue"] != "UnofficialLegalValue"
+        or re.fullmatch(
+            re.escape(v["urn"])
+            + (
+                r"@versao\.atualizada"
+                if v["version"] == "Current"
+                else r"@\d{4}-\d{2}-\d{2}"
+            ),
+            v["@id"],
+        )
+        is None
+    ):
+        raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+    return v
+
+
+def conferir_documentos(perfil, documentos):
+    """A seleção não transforma identidades ausentes em vínculos válidos."""
+    capturas = [c for d in documentos for c in (d.captura, *d.dependentes)]
+    por_id = {}
+    for c in capturas:
+        if not isinstance(c, t.CapturaAssistida) or any(
+            not identificador_presente(v) for v in (c.obtencao_id, c.sessao_id)
+        ):
+            raise ValueError("IDENTIDADE_ASSISTIDA_INVALIDA")
+        anterior = por_id.setdefault(c.obtencao_id, c)
+        if anterior != c:
+            raise ValueError("IDENTIDADE_ASSISTIDA_INVALIDA")
+    for d in documentos:
+        v = conferir_recibo_assistido(
+            {
+                "sessao_id": d.captura.sessao_id,
+                "obtencao_id": d.captura.obtencao_id,
+                **({"vinculo": d.vinculo} if d.vinculo else {}),
+            },
+            perfil.fonte,
+            d.captura.resposta.final_url,
+        )
+        if v is None:
+            if d.dependentes:
+                raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+            continue
+        if len(d.dependentes) != 1:
+            raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+        a = d.dependentes[0]
+        if (
+            a.obtencao_id != v["metadados_obtencao_id"]
+            or a.resposta.sha256 != v["metadados_sha256"]
+            or PERFIS["normas_leg"].recurso(a.resposta.final_url, "XHR") is None
+            or urlsplit(a.resposta.final_url).path != "/api/public/normas"
+        ):
+            raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+
+
+def conferir_referencia_assistida(vinculo, metadados):
+    """Confere o registro A no banco, inclusive a modalidade da captura copiada."""
+    if (
+        metadados is None
+        or not identificador_presente(vinculo.get("metadados_capture_id"))
+        or not identificador_presente(vinculo.get("metadados_obtencao_id"))
+        or not identificador_presente(vinculo.get("metadados_sha256"))
+    ):
+        raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+    a = dict(metadados)
+    if (
+        a["source_id"] != "normas_leg"
+        or not (
+            a["modalidade_acesso"] == "sessao_assistida"
+            or a["procedencia"] == "sessao_assistida"
+        )
+        or PERFIS["normas_leg"].recurso(a["final_url"], "XHR") is None
+        or urlsplit(a["final_url"]).path != "/api/public/normas"
+        or urlsplit(a["final_url"]).query.split("&", 1)[0].removeprefix("urn=")
+        != vinculo["urn"]
+    ):
+        raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+    recibo_a = json.loads(a["assistida_json"])
+    conferir_recibo_assistido(recibo_a, a["source_id"], a["final_url"])
+    if (
+        a["sha256"] != vinculo["metadados_sha256"]
+        or recibo_a["obtencao_id"] != vinculo["metadados_obtencao_id"]
+    ):
+        raise ValueError("VINCULO_ASSISTIDO_INVALIDO")
+
+
 class GrafoResolvido(list):
     """Mantém a reserva dos metadados exibidos até o descarte da seleção."""
 
@@ -179,6 +312,12 @@ def resolver_grafo(perfil, capturas, *, orcamento):
     """Só recebe exemplares admitidos pela porta. Nenhuma gravação ou estado jurídico."""
     if any(not isinstance(c, t.CapturaAssistida) for c in capturas):
         raise ValueError("EXEMPLAR_NAO_ADMITIDO")
+    if any(
+        not identificador_presente(v)
+        for c in capturas
+        for v in (c.obtencao_id, c.sessao_id)
+    ) or len({c.obtencao_id for c in capturas}) != len(capturas):
+        raise ValueError("IDENTIDADE_ASSISTIDA_INVALIDA")
     if perfil.fonte == "planalto":
         reserva = len(capturas) * 8192 + 128
         orcamento.reservar(reserva)

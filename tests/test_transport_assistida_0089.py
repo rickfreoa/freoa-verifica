@@ -754,6 +754,19 @@ def test_streaming_soma_varios_eventos_antes_da_resposta(sessao):
     assert fluxo(sessao, p, evs).resposta.body == BODY
 
 
+@pytest.mark.parametrize("quantidade", [1, 2])
+def test_streaming_eventos_zero_antes_buffer_vazio_corpo_posterior(sessao, quantidade):
+    p = pedido()
+    evs = eventos(p, antes_stream=0)
+    evs[:0] = [
+        evento(p, "dataReceived", dataLength=0, encodedDataLength=0)
+        for _ in range(quantidade)
+    ]
+    c = fluxo(sessao, p, evs)
+    assert c.resposta.body == BODY
+    assert c.resposta.sha256 == hashlib.sha256(BODY).hexdigest()
+
+
 @pytest.mark.parametrize("tipo", ["Fetch", "XHR"])
 @pytest.mark.parametrize("encoding", [None, "gzip"])
 @pytest.mark.parametrize("violacao", [None, "sem_data_positivo", "codificados"])
@@ -812,7 +825,6 @@ def test_streaming_contador_final_sem_data(sessao, tipo, encoding, violacao):
         ("buffer_maior", "DIVERGENTE"),
         ("buffer_vazio_antes", "DIVERGENTE"),
         ("buffer_sem_evento", "DIVERGENTE"),
-        ("evento_zero_buffer_vazio", "DIVERGENTE"),
         ("sem_data_depois", "INVALIDO"),
         ("data_menor_depois", "DIVERGENTE"),
         ("data_maior_depois", "DIVERGENTE"),
@@ -833,9 +845,6 @@ def test_streaming_violacoes_ordem_e_tamanho(sessao, caso, codigo):
             evs[1].dados["bufferedData"] = ""
         elif caso == "buffer_sem_evento":
             evs.pop(0)
-    elif caso == "evento_zero_buffer_vazio":
-        evs[0].dados["dataLength"] = 0
-        evs[1].dados["bufferedData"] = ""
     elif caso == "sem_data_depois":
         del evs[-2].dados["data"]
     elif caso in {"data_menor_depois", "data_maior_depois"}:
@@ -1150,7 +1159,9 @@ def test_sem_verified_ou_renovacao_frescor(sessao):
 def test_cauda_planalto_modelo_literal(sessao):
     from importlib.resources import files
 
-    modelo = files("freoa_verifica").joinpath("data/planalto_cauda_0089.bin").read_bytes()
+    modelo = (
+        files("freoa_verifica").joinpath("data/planalto_cauda_0089.bin").read_bytes()
+    )
     assert len(modelo) == 1440
     assert hashlib.sha256(modelo).hexdigest() == t._CAUDA_PLANALTO_SHA256
     a = BODY + modelo.replace(b"<TOKEN>", b"A" * 128)
@@ -1172,7 +1183,9 @@ def test_cauda_planalto_modelo_literal(sessao):
 def test_cauda_planalto_nao_afirma(sessao, mudanca):
     from importlib.resources import files
 
-    modelo = files("freoa_verifica").joinpath("data/planalto_cauda_0089.bin").read_bytes()
+    modelo = (
+        files("freoa_verifica").joinpath("data/planalto_cauda_0089.bin").read_bytes()
+    )
     cauda = modelo.replace(b"<TOKEN>", b"A" * 128)
     orig = BODY + cauda
     corpos = {
