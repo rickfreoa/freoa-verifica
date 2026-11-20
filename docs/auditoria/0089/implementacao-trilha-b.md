@@ -400,3 +400,123 @@ HEAD/ramo preservados; `transport.py` sem alteração; sem stage/commit/push.
     no worktree para revisão. O requisito de status limpo, portanto, não foi cumprido
     naquela entrega. Nesta complementação o supervisor expressamente reservou o commit
     para si: nenhuma tentativa de stage/commit foi feita; worktree modificado é a entrega.
+
+## Correção de latência após o ensaio nav-d (20/11/2026)
+
+Papel: **Desenvolvedor**. Base conferida: `ee9e338`, ramo
+`feat/0089-sessao-assistida`, worktree `C:\dev\fv14-0089i`.
+Sem troca de ramo, stage, tentativa de commit ou push. **`transport.py` não foi
+alterado**: SHA-256 `e692e24183eed13eb767fd56e40c118b26b7c1dff1f0606bc3045f4f521ddf62`.
+A exigência de streaming anterior ao primeiro `dataReceived`, inclusive quando
+este não traz `data`, permanece integral. Nenhuma mudança de regra ou de método
+CDP; os dez métodos e os parâmetros fechados continuam os mesmos.
+
+### Evidência e correção
+
+O log do supervisor `C:\dev\tmp\v5\impl-b\nav-d.log`, lido nesta correção,
+registra **31 passed, 23 failed, 1 skipped em 788,44 s** sobre a base. Também foram
+lidos `diag_trace.txt` e `diag_trace_plugin.py` daquele diretório. O rastreamento
+mostra o primeiro `dataReceived` sem resposta anterior ao comando de streaming;
+a recusa pela porta estava correta. O diagnóstico temporal do supervisor aponta
+~32 ms entre pedido e resposta da origem. Não se mediu aqui a latência anterior
+do adaptador, nem se apresenta aquele intervalo de rede como medida dela.
+
+* `AdaptadorCDP.passo()` recebe e processa a mensagem **antes** da manutenção.
+  A elegibilidade usa base/prontidão já estabelecidas; `_pedido` não chama mais
+  `assentar()`. A retomada do alvo apenas sincroniza a prontidão com a base
+  existente. O inventário/assentamento e a fiscalização de capturas têm cadência
+  de 200 ms. Depois da base, o assentamento não é repetido. A espera de leitura
+  é de até 50 ms, interrompida imediatamente por mensagem disponível.
+* A thread de `ReadDirectoryChangesW`, a inscrição anterior ao lançamento,
+  as notificações e a invalidação imediata não mudaram. `conferir()` e as
+  verificações de fechamento/prazo do canal continuam no processamento; são
+  leituras de estado, sem inventário ou varredura. Sentinelas, inventário nas
+  barreiras, limite de 5 s e impedimento de publicação permanecem em `Vigilancia`.
+* O canal conserva FIFO e registra o relógio monotônico ao receber cada mensagem
+  completa, antes da cópia para a fila. Esse instante acompanha a mensagem e
+  fundamenta tanto a comparação com a base como o prazo da candidata. Um pedido
+  recebido antes da base e processado depois dela continua excluído.
+* A escrita continua passando por `comando()` e `CanalPipe.enviar()` e suas
+  reservas. Reservas de leitura/cópia/JSON continuam precedendo as alocações;
+  timestamp cabe na folga de 128 bytes já contada para a entrada da fila. Novas
+  estruturas fixas têm reserva de 1024 bytes, e cada diagnóstico tem reserva
+  prévia de 512 bytes. A regressão do pipe confere liberação integral ao fechar.
+* `latencia_stream` contém somente `n`, `total_s`, `max_s` e `ultima_s`, em
+  memória, com espaço constante. Mede chegada completa à fila até retorno da
+  escrita/flush do comando, incluindo espera na fila e decodificação JSON. Não
+  contém URL, identificador ou dado de rede e não é persistido automaticamente.
+* URL validada para um tipo é sanitizada sem repetir a gramática no caminho
+  urgente. `PerfilSessaoAssistida.sanitizar()` também passa a admitir o casamento
+  completo por qualquer tipo individual, mantendo rejeição de query indevida e
+  origem alheia e remoção de fragmento. Corrige o `None` no perfil do harness,
+  que declara o mesmo caminho para Document, XHR e Fetch.
+* `recusas` mantém os pares `(URL pública, classe)`, preservando o consumidor
+  CLI. `motivos_recusas`, só em memória, acrescenta o código específico.
+  Texto livre de exceção não é propagado; só se admite código em maiúsculas,
+  limitado a 96 caracteres, com fallback à classe. Resposta tardia do comando
+  não substitui nem duplica uma recusa já decidida.
+
+### Harness e revisão dos 31 resultados verdes anteriores
+
+As duas origens HTTPS aceitam `atraso_primeiro_byte`, padrão **0,15 s**, aplicado
+antes dos primeiros bytes de resposta. É emulação de latência de rede na origem
+local, exclusivamente de teste; não representa mudança do navegador nem aparece
+no produto. A pausa de 0,3 s entre partes do corpo continua sendo segmentação do
+corpo e não prova início oportuno do streaming. Os laços do harness usam `passo()`.
+
+O novo `test_atraso_zero_consumidor_tardio_recusa_streaming_tardio` usa atraso
+zero na origem e atrasa deliberadamente o consumidor do teste até haver bytes
+na fila. Preserva os eventos e sua ordem, exige exatamente
+`STREAMING_ASSISTIDO_TARDIO` e nenhuma captura. Essa injeção explícita torna
+reproduzível a condição descrita na nota final do laboratório, sem depender de
+uma corrida que o adaptador corrigido pode vencer.
+
+O antigo `redirect` era um negativo (não exigia captura); falhava por exceção de
+cadeia. Foi isolado em `test_redirect_de_rede_recusa_cadeia_cdp_ambigua`, que exige
+`CADEIA_CDP_AMBIGUA`. A origem deixa de redirecionar indefinidamente o destino.
+Redirect de rede permanece vedado pela §2.3(2); HSTS interno com prova permanece
+positivo. Não se promoveu redirecionamento de rede a captura.
+
+| Grupo anteriormente verde | Casos | Revisão contra aprovação no vazio |
+|---|---:|---|
+| Pipe/ACL Brave | 1 | Positivo exige processo, fase 3, inventário/base, alvo pronto e ausência de erro; preservado |
+| UTF-8 inválido, encoding vedado, bomba, 304, CL de 21 dígitos, sem cabeçalhos, parcial | 7 | Exigem código de interpretação, encoding, tamanho, status/framing ou prazo. 304 exige status observado; rejeição de CL pelo navegador exige `net::ERR_INVALID_RESPONSE`. Streaming tardio não satisfaz esses testes |
+| Framing/chunks/vazio | 9 | Exigem código de cabeçalhos, tamanho ou corpo vazio; quando o navegador aborta, exigem também seu erro de rede específico. Só `ad.recusas` ou zero capturas não bastam |
+| HSTS com prova suprimida | 1 | Exige salto HSTS real e `REDIRECIONAMENTO_ASSISTIDO_RECUSADO` após a supressão explicitamente injetada |
+| Cache, SW, prefetch | 3 | Exigem mecanismo real e código de origem sem prova/evento recusado para a URL derivada |
+| Iframe, XHR de iframe, blob, data, download, WebSocket, POST, cookie | 8 | Exigem motivo de porta para iframe/POST/cookie/download, erro de aborto no download, ou prova da exclusão por quadro/esquema/tipo e ausência de comando de streaming nos demais |
+| Política de máquina Chrome/Edge | 2 | Já exigiam `POLITICA_ASSISTIDA_RECUSADA` e guardas contra preparar perfil/lançar; preservados |
+| **Total** | **31** | Revisão de asserções, não nova aprovação no navegador |
+
+Prerender, bfcache e Early Hints também conservam provas dos mecanismos;
+prerender verifica o subtipo/primeira URL do alvo observado, bfcache exige uma
+única troca/captura e Early Hints exige a exclusão do recurso iniciado e captura
+da resposta final. Os conjuntos explícitos de motivos cobrem caminhos de
+rejeição distintos do Chromium e da porta, sem aceitar streaming tardio como
+substituto. Seus valores reais ainda exigem o próximo ensaio do supervisor.
+
+### Medição e validação desta árvore
+
+* Prova determinística offline com pipe simulado: pedido e `dataReceived` posterior
+  no mesmo fluxo. A escrita/flush ocorre antes da segunda mensagem e antes da
+  manutenção, sem chamada de assentamento no pedido. Relógio injetado: **8 ms de
+  fila + 2 ms de escrita = 10 ms**, conferidos em última/máxima/total e contagem.
+  A mensagem seguinte sem streaming é recusada pelo motivo exato; erro posterior
+  do comando não muda esse motivo.
+* Medição complementar local, 50 pedidos, `CanalPipe` com BytesIO, thread leitora,
+  porta real e relógio monotônico real, sem navegador ou socket: **mínimo
+  0,1821 ms, mediana 0,2243 ms, máximo 0,6978 ms**. Não mede transporte do Brave,
+  não compara com execução anterior e não garante vencer qualquer origem rápida.
+* Testes finais afetados: `.venv\Scripts\python.exe -X utf8 -m pytest -q
+  -p no:cacheprovider -m "not live and not navegador_assistido"` com os oito
+  arquivos `test_assistida_0089_{cdp,harness,grafo,ambiente,cortes,indicacao,
+  integracao,fronteiras}.py`, `test_transport_assistida_0089.py`, `test_store.py`,
+  `test_cli.py` e `test_ruff_catraca.py`: **387 passed**. TMP/TEMP e `--basetemp`
+  em `%TEMP%\fv0089-latencia-final2`, fora do checkout. Suíte completa não executada.
+* `C:\dev\tmp\venv-ruff\Scripts\python.exe scripts/ruff_catraca.py`: código 0,
+  sem alteração de baseline. Formatação dos oito arquivos Python afetados
+  conferida. `git diff --check`: código 0.
+* Coleta dos dois módulos reais: **56 testes**, sem execução do navegador nesta
+  correção. **Ensaio Brave atualizado: NOT RUN. Aceite da §3 e auditoria
+  independente: pendentes.** Os números do supervisor sobre `ee9e338` continuam
+  sendo evidência histórica, não resultado desta árvore.

@@ -30,6 +30,7 @@ from tests.harness_assistida_0089_cenarios import (
     bombear,
     capturas,
     cenarios_https,
+    exigir_recusa,
     varrer_artefatos,
 )
 
@@ -53,7 +54,33 @@ def test_item1_codificacoes_e_framing_reais(tmp_path, monkeypatch, caso):
                 assert cs[0].content_encoding == caso
             else:
                 assert not capturas(ad)
-                assert ad.recusas
+                motivos = {
+                    "campo_malformado": {"CABECALHOS_ASSISTIDOS_INVALIDOS"},
+                    "cl_duplicado": {"CABECALHOS_ASSISTIDOS_INVALIDOS"},
+                    "cl_conflitante": {"CABECALHOS_ASSISTIDOS_INVALIDOS"},
+                    "cl_te": {"CABECALHOS_ASSISTIDOS_INVALIDOS"},
+                    "chunk_malformado": {"EVENTO_ASSISTIDO_RECUSADO"},
+                    "chunk_truncado": {"EVENTO_ASSISTIDO_RECUSADO"},
+                    "cl_truncado": {"EVENTO_ASSISTIDO_RECUSADO"},
+                    "cl_acima_limite": {"TAMANHO_ASSISTIDO_EXCEDIDO"},
+                    "vazio": {"CORPO_ASSISTIDO_VAZIO"},
+                }[caso]
+                # Chromium pode rejeitar os headers antes de responseReceived.
+                if caso in {"campo_malformado", "cl_conflitante", "cl_te"}:
+                    motivos = motivos | {"EVENTO_ASSISTIDO_RECUSADO"}
+                exigir_recusa(ad, BASE + "/case/" + caso, motivos)
+                if any(m == "EVENTO_ASSISTIDO_RECUSADO" for _, m in ad.motivos_recusas):
+                    erros = {
+                        "campo_malformado": {"net::ERR_INVALID_HTTP_RESPONSE"},
+                        "cl_conflitante": {
+                            "net::ERR_RESPONSE_HEADERS_MULTIPLE_CONTENT_LENGTH"
+                        },
+                        "cl_te": {"net::ERR_INVALID_HTTP_RESPONSE"},
+                        "chunk_malformado": {"net::ERR_INVALID_CHUNKED_ENCODING"},
+                        "chunk_truncado": {"net::ERR_INCOMPLETE_CHUNKED_ENCODING"},
+                        "cl_truncado": {"net::ERR_CONTENT_LENGTH_MISMATCH"},
+                    }[caso]
+                    assert any(e["erro_rede"] in erros for e in sonda.eventos)
             assert any(e["metodo"].startswith("Network.") for e in sonda.eventos)
 
 
@@ -120,6 +147,14 @@ def test_item1_hsts_interno_real_e_ausencia_de_prova(tmp_path, monkeypatch, sem_
                 for s in saltos
             )
             cs = capturas(ad)
+            if sem_prova:
+                exigir_recusa(
+                    ad,
+                    "https://hsts.0089.test/case/hsts",
+                    {
+                        "REDIRECIONAMENTO_ASSISTIDO_RECUSADO",
+                    },
+                )
             assert not any(c.resposta.url.startswith("http:") for c in cs)
             assert (
                 bool(
@@ -172,10 +207,7 @@ def test_item1_item8_instalacao_manual_desempacotada_recusa(tmp_path, monkeypatc
             while time.monotonic() < limite:
                 if recusa is None:
                     try:
-                        mensagem = ad.canal.receber()
-                        if mensagem:
-                            with mensagem as obj:
-                                ad.processar(obj)
+                        ad.passo()
                     except a.RecusaSessao as exc:
                         recusa = str(exc)
                 for nome in ("Secure Preferences", "Preferences"):
@@ -237,6 +269,15 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
                     k not in ad.pedidos or ad.pedidos[k].admitida is None
                     for k in derivados
                 )
+                for k in derivados:
+                    exigir_recusa(
+                        ad,
+                        sonda.pedidos[k],
+                        {
+                            "ORIGEM_ASSISTIDA_SEM_PROVA",
+                            "EVENTO_ASSISTIDO_RECUSADO",
+                        },
+                    )
                 if caso == "sw":
                     assert not any(c.resposta.url.endswith("/sw") for c in capturas(ad))
                 if caso == "prefetch":
@@ -249,6 +290,14 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
             elif caso == "prerender":
                 assert any(e["subtipo"] == "prerender" for e in sonda.eventos)
                 assert "/marca/prerender" in estado["marcas"]
+                observados = [
+                    e
+                    for e in sonda.eventos
+                    if e["metodo"] == "Network.requestWillBeSent"
+                    and e["url"].endswith("/prerender")
+                ]
+                for e in observados:
+                    assert e["subtipo_alvo"] != "" or e["primeira_url"]
                 assert not any(
                     c.resposta.url.endswith("/prerender") for c in capturas(ad)
                 )
@@ -267,6 +316,20 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
                     "origem deve ver o recurso de 103"
                 )
                 assert not any(c.resposta.url.endswith("/hinted") for c in capturas(ad))
+                iniciados = [
+                    e
+                    for e in sonda.eventos
+                    if e["metodo"] == "Network.requestWillBeSent"
+                    and e["url"].endswith("/hinted")
+                ]
+                assert iniciados
+                for e in iniciados:
+                    if any(u == e["url"] for u, _ in ad.motivos_recusas):
+                        exigir_recusa(ad, e["url"], {"INICIADOR_ASSISTIDO_SEM_PROVA"})
+                    else:
+                        assert e["tipo"] not in {"Document", "XHR", "Fetch"} or e[
+                            "iniciador"
+                        ] not in {"parser", "script", "other"}
                 assert any(
                     c.resposta.url.endswith("/early_hints") for c in capturas(ad)
                 ), "resposta final é avaliada por si"
@@ -309,18 +372,43 @@ def test_item3_escopo_e_quadros_reais(tmp_path, monkeypatch, caso):
             assert not capturas(ad)
             if caso in {"blob", "data"}:
                 assert any(e["frame"].startswith(caso + ":") for e in sonda.eventos)
+                assert not ad.pedidos
+                assert not any(
+                    m == "Network.streamResourceContent" for m, _ in sonda.comandos
+                )
             elif caso == "websocket":
                 assert any(
                     e["metodo"] == "Network.webSocketCreated" for e in sonda.eventos
                 )
                 assert any(p[1] == "/ws" for p in estado["pedidos"])
+                assert not ad.pedidos
+                assert not any(
+                    m == "Network.streamResourceContent" for m, _ in sonda.comandos
+                )
             else:
                 pedidos = [p for p in estado["pedidos"] if p[1] == "/case/" + caso]
                 assert pedidos
                 if caso == "post":
                     assert pedidos[0][0] == "POST"
+                    exigir_recusa(
+                        ad, BASE + "/case/post", {"PEDIDO_ASSISTIDO_SEM_PROVA"}
+                    )
                 if caso == "cookie":
                     assert "nao_declarado=" in dict(pedidos[0][2]).get("Cookie", "")
+                    exigir_recusa(
+                        ad, BASE + "/case/cookie", {"COOKIE_ASSISTIDO_RECUSADO"}
+                    )
+                if caso == "download":
+                    exigir_recusa(
+                        ad, BASE + "/case/download", {"EVENTO_ASSISTIDO_RECUSADO"}
+                    )
+                    assert any(
+                        e["erro_rede"] == "net::ERR_ABORTED" for e in sonda.eventos
+                    )
+                if caso == "iframe":
+                    exigir_recusa(
+                        ad, BASE + "/case/iframe", {"PEDIDO_ASSISTIDO_SEM_PROVA"}
+                    )
                 if caso in {"iframe", "iframe_xhr"}:
                     assert any(
                         e["metodo"] == "Network.requestWillBeSent"
@@ -328,6 +416,11 @@ def test_item3_escopo_e_quadros_reais(tmp_path, monkeypatch, caso):
                         and e["frame_id"] != e["raiz"]
                         and e["tipo"] == ("XHR" if caso == "iframe_xhr" else "Document")
                         for e in sonda.eventos
+                    )
+                if caso == "iframe_xhr":
+                    assert not ad.pedidos
+                    assert not any(
+                        m == "Network.streamResourceContent" for m, _ in sonda.comandos
                     )
 
 

@@ -1,11 +1,12 @@
 """Provas offline dos guardiões do harness; não abrem navegador nem sockets."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from tests.gerar_0089_wire import BODY, gerar
-from tests.harness_assistida_0089_cenarios import varrer_artefatos
+from tests.harness_assistida_0089_cenarios import exigir_recusa, varrer_artefatos
 
 
 def test_fixtures_wire_reproduziveis():
@@ -36,3 +37,10 @@ def test_varredura_detecta_segredo_inclusive_em_wal(tmp_path, codec):
 def test_varredura_nao_aceita_diretorio_vazio(tmp_path):
     with pytest.raises(AssertionError, match="varredura vazia"):
         varrer_artefatos(tmp_path, ["SEGREDO_SINTETICO"])
+
+
+@pytest.mark.parametrize("registros", [[], [("publico", "STREAMING_ASSISTIDO_TARDIO")]])
+def test_negativo_nao_passa_no_vazio_ou_por_causa_alheia(registros):
+    ad = SimpleNamespace(motivos_recusas=registros, pedidos={})
+    with pytest.raises(AssertionError):
+        exigir_recusa(ad, "publico", {"COOKIE_ASSISTIDO_RECUSADO"})

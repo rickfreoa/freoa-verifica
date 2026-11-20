@@ -93,7 +93,8 @@ def certificados(path):
 
 
 @contextmanager
-def origem_https(path, caso):
+def origem_https(path, caso, *, atraso_primeiro_byte=0.15):
+    """150 ms emulam latência de rede na origem, não comportamento do navegador."""
     import gzip
     import zlib
 
@@ -106,6 +107,7 @@ def origem_https(path, caso):
 
         def do_GET(self):
             vistos.append((self.path, list(self.headers.items())))
+            time.sleep(atraso_primeiro_byte)
             ctype, corpo = CORPOS.get(caso, CORPOS["utf8"])
             if caso == "sem_cabecalhos":
                 time.sleep(31)
@@ -133,6 +135,8 @@ def origem_https(path, caso):
                 if encoding == "deflate"
                 else corpo
             )
+            if caso == "redirect" and self.path == "/case/utf8":
+                status = 200
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header(
@@ -140,7 +144,7 @@ def origem_https(path, caso):
             )
             if encoding:
                 self.send_header("Content-Encoding", encoding)
-            if caso == "redirect":
+            if status == 302:
                 self.send_header("Location", "https://127.0.0.1/case/utf8")
             self.end_headers()
             meio = len(wire) // 2
@@ -285,11 +289,7 @@ def navegador_pipe(
                 raise a.RecusaSessao("NAVEGADOR_ENCERRADO_ANTES_DA_PRONTIDAO")
             if time.monotonic() >= vigia.limite_inventario + 10:
                 raise a.RecusaSessao("AMBIENTE_NAO_ASSENTADO")
-            ad.atualizar_prontidao()
-            msg = canal.receber()
-            if msg:
-                with msg as obj:
-                    ad.processar(obj)
+            ad.passo()
         # Só o HTML de teste simula a ação humana, após prontidão observada.
         sinal.write_text(
             script

@@ -55,8 +55,9 @@ EVENTOS_REDE = frozenset(
 class CanalPipe:
     """Fila de bytes limitada; reservas precedem leitura, cópia e interpretação JSON."""
 
-    def __init__(self, leitura, escrita, sessao):
+    def __init__(self, leitura, escrita, sessao, *, relogio=time.monotonic):
         self.leitura, self.escrita, self.sessao = leitura, escrita, sessao
+        self.relogio = relogio
         self.fila = queue.Queue(maxsize=10_000)
         self.bytes_fila = 0
         self.lock = threading.RLock()
@@ -68,6 +69,7 @@ class CanalPipe:
         self.thread.start()
 
     def _enfileirar(self, buffer):
+        recebida_em = self.relogio()
         tamanho = len(buffer) + 128
         with self.lock:
             if self.bytes_fila + tamanho > 32 * 1024**2 or self.fila.full():
@@ -76,7 +78,7 @@ class CanalPipe:
             self.sessao.reservar(tamanho)
             try:
                 mensagem = bytes(buffer)
-                self.fila.put_nowait((mensagem, tamanho))
+                self.fila.put_nowait((mensagem, tamanho, recebida_em))
                 self.bytes_fila += tamanho
             except BaseException:
                 self.sessao.liberar(tamanho)
@@ -130,7 +132,7 @@ class CanalPipe:
         if self.erro:
             raise RecusaSessao(self.erro)
         try:
-            raw, tamanho = self.fila.get(timeout=timeout)
+            raw, tamanho, recebida_em = self.fila.get(timeout=timeout)
         except queue.Empty:
             return None
         with self.lock:
@@ -143,7 +145,7 @@ class CanalPipe:
             obj = json.loads(raw)
             if not isinstance(obj, dict):
                 raise ValueError
-            return Mensagem(obj, self.sessao, reserva)
+            return Mensagem(obj, self.sessao, reserva, recebida_em)
         except (ValueError, UnicodeError, RecursionError):
             self.sessao.encerrar()
             self.sessao.liberar(reserva)
@@ -174,7 +176,7 @@ class CanalPipe:
         self.thread.join(2)
         while True:
             try:
-                _, n = self.fila.get_nowait()
+                _, n, _ = self.fila.get_nowait()
                 self.sessao.liberar(n)
             except queue.Empty:
                 break
@@ -185,6 +187,7 @@ class Mensagem:
     dados: dict
     sessao: t.SessaoPortaAssistida
     reserva: int
+    recebida_em: float
 
     def __enter__(self):
         return self.dados
@@ -228,8 +231,14 @@ class AdaptadorCDP:
         self.fechado = False
         self.aceitou_page = False
         self.inicio = relogio()
-        self.recusas = []
         self.retido = 0
+        self._reter(1024)  # novas métricas e listas de diagnóstico, antes de alocar
+        self.recusas = []
+        self.motivos_recusas = []
+        # Agregados limitados, somente em memória: nenhum ID, URL ou dado CDP.
+        self.latencia_stream = {"n": 0, "total_s": 0.0, "max_s": 0.0, "ultima_s": 0.0}
+        self._recebida_em = None
+        self._proxima_manutencao = self.inicio
         self.desanexados = {}
         self.historico = {}
         self.vigia.ao_invalidar = self.invalidar
@@ -304,13 +313,55 @@ class AdaptadorCDP:
             "Target.setDiscoverTargets", {"discover": True}, retorno=descoberta
         )
 
-    def atualizar_prontidao(self):
-        base = self.vigia.assentar()
+    def atualizar_prontidao(self, *, assentar=True):
+        base = self.vigia.linha_base
+        if base is None and assentar:
+            base = self.vigia.assentar()
         if base is not None:
             for sid, alvo in self.alvos.items():
                 if alvo.sequencia_concluida and sid not in self.desanexados:
                     alvo.pronto = True
         return base
+
+    def manutencao_periodica(self):
+        """Inventário/assentamento fora do caminho de cada mensagem (200 ms).
+
+        ReadDirectoryChangesW e sua invalidação continuam em thread própria;
+        conferir() é uma leitura do estado de erro, sem varredura de disco.
+        """
+        agora = self.relogio()
+        self.vigia.conferir()
+        self.conferir_canal()
+        if agora - self.inicio >= 1200:
+            raise RecusaSessao("SESSAO_ASSISTIDA_EXPIRADA")
+        if self.fase < 3 and agora - self.inicio > 10:
+            raise RecusaSessao("PIPE_ASSISTIDO_INDISPONIVEL")
+        if agora < self._proxima_manutencao:
+            return
+        self._proxima_manutencao = agora + 0.2
+        self.atualizar_prontidao()
+        self.fiscalizar_capturas()
+
+    def passo(self):
+        # A mensagem vem PRIMEIRO. Não se espera inventário ou ciclo de vigia
+        # entre receber requestWillBeSent e escrever streamResourceContent.
+        mensagem = self.canal.receber(timeout=0.05)
+        if mensagem is not None:
+            with mensagem as obj:
+                self._recebida_em = mensagem.recebida_em
+                try:
+                    self.processar(obj)
+                finally:
+                    self._recebida_em = None
+        self.manutencao_periodica()
+
+    def _recusar(self, url, codigo, motivo):
+        # Nunca expõe a mensagem livre de uma exceção (pode conter dados).
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", motivo):
+            motivo = codigo
+        self._reter(512)
+        self.recusas.append((url, codigo))
+        self.motivos_recusas.append((url, motivo))
 
     def _anexar(self, p):
         sid, info = p["sessionId"], p["targetInfo"]
@@ -354,7 +405,7 @@ class AdaptadorCDP:
 
         def retomada(_):
             alvo.sequencia_concluida = True
-            self.atualizar_prontidao()
+            self.atualizar_prontidao(assentar=False)
 
         self.comando("Network.enable", sid=sid, retorno=rede)
 
@@ -391,7 +442,13 @@ class AdaptadorCDP:
                 )
                 curso.porta.descartar()
                 curso.recusada = True
-                self.recusas.append((curso.url, codigo))
+                self._recusar(
+                    curso.url,
+                    codigo,
+                    "PRAZO_ASSISTIDO_INCOMPLETO"
+                    if codigo == "RespostaInvalida"
+                    else "PRAZO_ASSISTIDO_SEM_RESPOSTA",
+                )
 
     def _processar(self, obj):
         if self.fechado:
@@ -469,7 +526,9 @@ class AdaptadorCDP:
                 self._evento(sid, p.get("requestId"), metodo[8:], p)
 
     def _pedido(self, sid, alvo, p):
-        observado = self.relogio()
+        observado = (
+            self._recebida_em if self._recebida_em is not None else self.relogio()
+        )
         rid = p.get("requestId")
         chave = (sid, rid)
         anterior = self.pedidos.get(chave)
@@ -506,12 +565,15 @@ class AdaptadorCDP:
                 return  # salto anterior não observado: histórico incompleto
         if not self.perfil.recurso(url, tipo):
             return
+        # O filtro completo acabou de validar caminho/query e origem. Evita
+        # repetir a gramática antes da escrita urgente; só remove fragmento.
+        url_publica = url.split("#", 1)[0]
         # Não se retêm headers nem dados da solicitação.
         self._reter(2048 + len(url) * 4)
         if alvo.primeira_url and tipo == "Document":
             alvo.primeira_url = False
             return
-        base = self.atualizar_prontidao()
+        base = self.vigia.linha_base
         if self.fase != 3 or not alvo.pronto or base is None or observado <= base:
             return
         iniciador = p.get("initiator", {})
@@ -532,7 +594,7 @@ class AdaptadorCDP:
             tipo,
             p.get("timestamp"),
             p.get("wallTime"),
-            self.relogio(),
+            observado,
             p.get("frameId", ""),
             alvo.raiz,
             alvo.documento,
@@ -547,18 +609,20 @@ class AdaptadorCDP:
         try:
             porta = t.capturar_assistida(self.sessao, pedido)
         except t.TransportError as exc:
-            self.recusas.append((self.perfil.sanitizar(url), type(exc).__name__))
+            self._recusar(url_publica, type(exc).__name__, str(exc))
             return
-        curso = EmCurso(
-            pedido.chave, porta, self.perfil.sanitizar(url), inicio=self.relogio()
-        )
+        curso = EmCurso(pedido.chave, porta, url_publica, inicio=observado)
         self.pedidos[chave] = curso
 
         def streaming(resultado):
+            if curso.recusada:
+                return
             if resultado is None:
                 porta.descartar()
                 curso.recusada = True
-                self.recusas.append((curso.url, "RespostaInvalida"))
+                self._recusar(
+                    curso.url, "RespostaInvalida", "COMANDO_STREAMING_RECUSADO"
+                )
                 return
             self._observar(curso, "streamResourceContent", resultado)
 
@@ -568,6 +632,12 @@ class AdaptadorCDP:
             sid=sid,
             retorno=streaming,
         )
+        latencia = max(0.0, self.relogio() - observado)
+        medidas = self.latencia_stream
+        medidas["n"] += 1
+        medidas["total_s"] += latencia
+        medidas["max_s"] = max(medidas["max_s"], latencia)
+        medidas["ultima_s"] = latencia
 
     def _evento(self, sid, rid, metodo, dados):
         curso = self.pedidos.get((sid, rid))
@@ -619,29 +689,20 @@ class AdaptadorCDP:
             curso.porta.descartar()
             curso.admitida = None
             curso.recusada = True
-            self.recusas.append((curso.url, type(exc).__name__))
+            self._recusar(curso.url, type(exc).__name__, str(exc))
 
     def executar(self):
         self.canal.iniciar()
         self.iniciar()
         while not self.normal:
-            self.vigia.conferir()
-            self.conferir_canal()
-            self.fiscalizar_capturas()
-            if self.relogio() - self.inicio >= 1200:
-                raise RecusaSessao("SESSAO_ASSISTIDA_EXPIRADA")
-            if self.fase < 3 and self.relogio() - self.inicio > 10:
-                raise RecusaSessao("PIPE_ASSISTIDO_INDISPONIVEL")
-            self.atualizar_prontidao()
-            mensagem = self.canal.receber()
-            if mensagem is not None:
-                with mensagem as obj:
-                    self.processar(obj)
+            self.passo()
         for curso in self.pedidos.values():
             if curso.admitida is None and not curso.recusada:
                 curso.porta.descartar()
                 curso.recusada = True
-                self.recusas.append((curso.url, "RespostaInvalida"))
+                self._recusar(
+                    curso.url, "RespostaInvalida", "CAPTURA_ASSISTIDA_INCOMPLETA"
+                )
         return [c.admitida for c in self.pedidos.values() if c.admitida is not None]
 
     def descartar(self):

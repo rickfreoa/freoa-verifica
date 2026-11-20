@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 
 import io
+import json
+from dataclasses import replace
 
 import time
 
@@ -120,6 +122,10 @@ def test_pedido_que_estabelece_base_nao_e_candidato_com_relogio_avancando(
     )
     instante[0] += 30
     request(ad, rid="estabelece-base")
+    assert vigia.linha_base is None and not ad.pedidos
+    # O pedido já não dispara inventário. A cadência de manutenção estabelece
+    # a base separadamente e não recupera o pedido anterior.
+    ad.manutencao_periodica()
     assert vigia.linha_base is not None and ad.alvos["cdp"].pronto
     assert not ad.pedidos and not ad.canal.comandos
     request(ad, rid="posterior")
@@ -380,6 +386,132 @@ def test_pipe_excesso_e_perda_invalidam(sessao, tipo):
     with pytest.raises(a.RecusaSessao):
         canal.receber()
     assert sessao._encerrada
+
+
+def test_pipe_escreve_stream_antes_da_proxima_mensagem_e_da_vigia(sessao, monkeypatch):
+    instante = [time.monotonic() - 1]
+    mensagens = []
+
+    class Coletor:
+        def processar(self, obj):
+            mensagens.append(obj)
+
+    request(Coletor())
+    mensagens.append(
+        {
+            "method": "Network.dataReceived",
+            "sessionId": "cdp",
+            "params": {"requestId": "pedido", "dataLength": 1, "encodedDataLength": 1},
+        }
+    )
+    ordem = []
+
+    class Escrita(io.BytesIO):
+        def flush(self):
+            # Dois ms simulam o término da escrita/flush no pipe.
+            instante[0] += 0.002
+            ordem.append("comando_escrito")
+
+    canal = CanalPipe(
+        io.BytesIO(b"\0".join(json.dumps(m).encode() for m in mensagens) + b"\0"),
+        Escrita(),
+        sessao,
+        relogio=lambda: instante[0],
+    )
+    ad = adapter(sessao)
+    ad.canal = canal
+    ad.relogio = lambda: instante[0]
+    monkeypatch.setattr(
+        ad.vigia, "assentar", lambda: pytest.fail("assentamento no pedido")
+    )
+
+    def manutencao():
+        assert ordem[0] == "comando_escrito"
+        assert not ad.recusas  # dataReceived posterior ainda não processado
+        ordem.append("manutencao")
+
+    monkeypatch.setattr(ad, "manutencao_periodica", manutencao)
+    canal.iniciar()
+    canal.thread.join(2)
+    assert not canal.thread.is_alive()
+    try:
+        # O timestamp vem da leitora; inclui oito ms de espera na fila.
+        instante[0] += 0.008
+        ad.passo()
+        assert ordem == ["comando_escrito", "manutencao"]
+        comando = json.loads(canal.escrita.getvalue().rstrip(b"\0"))
+        assert comando["method"] == "Network.streamResourceContent"
+        assert comando["params"] == {"requestId": "pedido"}
+        assert ad.latencia_stream["n"] == 1
+        for k in ("ultima_s", "total_s", "max_s"):
+            assert ad.latencia_stream[k] == pytest.approx(0.010)
+        monkeypatch.setattr(ad, "manutencao_periodica", lambda: None)
+        ad.passo()
+        assert ad.motivos_recusas == [(URL, "STREAMING_ASSISTIDO_TARDIO")]
+        assert ad.pedidos["cdp", "pedido"].admitida is None
+        ad.processar({"id": ad.numero, "error": {"message": "comando tardio"}})
+        assert ad.motivos_recusas == [(URL, "STREAMING_ASSISTIDO_TARDIO")]
+    finally:
+        canal.fechar()
+        ad.descartar()
+    assert sessao._memoria == 0
+
+
+def test_cadencia_nao_adia_invalidez_e_nao_varre_ambiente_por_mensagem(sessao):
+    ad = adapter(sessao)
+    instante = [ad.inicio]
+    ad.relogio = lambda: instante[0]
+    ad.vigia.linha_base = None
+    chamadas = []
+    ad.vigia.assentar = lambda: chamadas.append(instante[0])
+    for delta in (0, 0.05, 0.1, 0.19, 0.201):
+        instante[0] = ad.inicio + delta
+        ad.processar({"method": "evento_ignorado"})
+        ad.manutencao_periodica()
+    assert len(chamadas) == 2
+    # Notificação na thread do SO continua invalidando sem esperar os 200 ms.
+    ad.vigia.erro = "EXTENSOES_ALTERADAS"
+    ad.vigia.ao_invalidar()
+    assert ad.fechado and sessao._encerrada
+    with pytest.raises(a.RecusaSessao, match="EXTENSOES_ALTERADAS"):
+        ad.manutencao_periodica()
+
+
+def test_chegada_anterior_a_base_na_fila_nunca_e_promovida(sessao):
+    ad = adapter(sessao)
+    ad._recebida_em = 0.5
+    request(ad)
+    assert not ad.pedidos and not ad.canal.comandos
+    assert ad.latencia_stream["n"] == 0
+
+
+def test_motivo_livre_de_excecao_nao_vaza_no_diagnostico(sessao):
+    ad = adapter(sessao)
+    ad._recusar(URL, "RespostaInvalida", "segredo=https://privado/?token=SEGREDO")
+    assert ad.motivos_recusas == [(URL, "RespostaInvalida")]
+    ad.descartar()
+
+
+def test_sanitizacao_multitipo_identifica_recusa_sem_query_ou_fragmento(sessao):
+    ad = adapter(sessao)
+    recurso = ad.perfil.porta.recursos[0]
+    ad.perfil = replace(
+        ad.perfil,
+        porta=replace(
+            ad.perfil.porta,
+            recursos=tuple(
+                replace(recurso, tipo=tipo) for tipo in ("Document", "XHR", "Fetch")
+            ),
+        ),
+    )
+    assert ad.perfil.recurso(URL) is None  # ambiguidade de tipo, não de URL
+    assert ad.perfil.sanitizar(URL + "#SEGREDO") == URL
+    assert ad.perfil.sanitizar(URL + "?token=SEGREDO") is None
+    assert ad.perfil.sanitizar("https://terceiro.invalid/SEGREDO") is None
+    request(ad, url=URL + "#SEGREDO", frameId="filho")
+    assert ad.recusas == [(URL, "RespostaInvalida")]
+    assert ad.motivos_recusas == [(URL, "PEDIDO_ASSISTIDO_SEM_PROVA")]
+    ad.descartar()
 
 
 @pytest.mark.parametrize(

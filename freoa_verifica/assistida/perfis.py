@@ -44,7 +44,14 @@ class PerfilSessaoAssistida:
             return None
 
     def sanitizar(self, url: str | None) -> str | None:
-        return url.split("#", 1)[0] if url and self.recurso(url) else None
+        # Um caminho pode admitir Document, XHR e Fetch. A ambiguidade entre
+        # tipos não torna sua URL pública inválida; cada tipo ainda deve casar
+        # uma única gramática completa, inclusive query.
+        return (
+            url.split("#", 1)[0]
+            if url and any(self.recurso(url, r.tipo) for r in self.porta.recursos)
+            else None
+        )
 
 
 PERFIS = {

@@ -88,7 +88,8 @@ def driver(caso):
 
 
 @contextmanager
-def cenarios_https(path, caso):
+def cenarios_https(path, caso, *, atraso_primeiro_byte=0.15):
+    """Atraso na origem até os headers: emulação de rede, sem alterar o cliente."""
     cert, key, spki = certificados(path)
     estado = {"pedidos": [], "marcas": [], "erros": []}
 
@@ -118,7 +119,9 @@ def cenarios_https(path, caso):
                 self.wfile.write(corpo[:meio])
                 self.wfile.flush()
                 if pausa:
-                    time.sleep(0.3)  # permite anexar streaming antes do término
+                    time.sleep(
+                        0.3
+                    )  # segmentação do corpo, não corrige streaming tardio
                 self.wfile.write(corpo[meio:])
                 self.wfile.flush()
             except OSError:
@@ -128,6 +131,7 @@ def cenarios_https(path, caso):
             estado["pedidos"].append(
                 (self.command, self.path, tuple(self.headers.items()))
             )
+            time.sleep(atraso_primeiro_byte)
 
         def do_POST(self):
             self.registrar()
@@ -310,6 +314,10 @@ class SondaEventos:
         return self._enviar(obj)
 
     def processar(self, obj):
+        alvo = self.ad.alvos.get(obj.get("sessionId"))
+        subtipo_alvo = alvo.subtipo if alvo else None
+        primeira_url = alvo.primeira_url if alvo else None
+        resultado = self._processar(obj)
         metodo, p = obj.get("method", ""), obj.get("params", {})
         chave = (obj.get("sessionId"), p.get("requestId"))
         if metodo == "Network.requestWillBeSent":
@@ -330,24 +338,28 @@ class SondaEventos:
                 "frame_id": p.get("frameId"),
                 "raiz": alvo.raiz if alvo else None,
                 "subtipo": p.get("targetInfo", {}).get("subtype", ""),
+                "status": r.get("status", p.get("statusCode")),
+                "erro_rede": p.get("errorText"),
+                "metodo_http": p.get("request", {}).get("method"),
+                "subtipo_alvo": subtipo_alvo,
+                "primeira_url": primeira_url,
             }
         )
-        return self._processar(obj)
+        return resultado
 
 
 def bombear(ad, vigia, *, ate, prazo=40):
     """Prazo da fase do cenário; os até 60 s de preferências vêm antes dele."""
     limite = time.monotonic() + prazo
     satisfeito = None
+    proxima_vigia = 0.0
     while time.monotonic() < limite:
-        vigia.assentar()
         if ad is not None:
-            mensagem = ad.canal.receber()
-            if mensagem:
-                with mensagem as obj:
-                    ad.processar(obj)
-            ad.fiscalizar_capturas()
+            ad.passo()
         else:
+            if time.monotonic() >= proxima_vigia:
+                vigia.assentar()
+                proxima_vigia = time.monotonic() + 0.2
             time.sleep(0.02)
         if ate():
             satisfeito = satisfeito or time.monotonic()
@@ -360,6 +372,14 @@ def bombear(ad, vigia, *, ate, prazo=40):
 
 def capturas(ad):
     return [c.admitida for c in ad.pedidos.values() if c.admitida is not None]
+
+
+def exigir_recusa(ad, url, motivos):
+    """Negativo não passa por zero capturas ou por falha alheia ao mecanismo."""
+    observados = [m for u, m in ad.motivos_recusas if u == url]
+    assert observados, (url, ad.motivos_recusas)
+    assert all(m in motivos for m in observados), observados
+    assert not any(c.resposta.url == url for c in capturas(ad))
 
 
 def varrer_artefatos(raiz, segredos):
