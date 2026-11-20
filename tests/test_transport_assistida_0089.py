@@ -143,6 +143,7 @@ def eventos(
             statusCode=bruto,
             headersText=raw,
             headers=campos,
+            blockedCookies=[],
         ),
         evento(
             p,
@@ -1147,9 +1148,9 @@ def test_sem_verified_ou_renovacao_frescor(sessao):
 
 
 def test_cauda_planalto_modelo_literal(sessao):
-    modelo = (
-        Path(__file__).parents[1] / "freoa_verifica/data/planalto_cauda_0089.bin"
-    ).read_bytes()
+    from importlib.resources import files
+
+    modelo = files("freoa_verifica").joinpath("data/planalto_cauda_0089.bin").read_bytes()
     assert len(modelo) == 1440
     assert hashlib.sha256(modelo).hexdigest() == t._CAUDA_PLANALTO_SHA256
     a = BODY + modelo.replace(b"<TOKEN>", b"A" * 128)
@@ -1169,9 +1170,9 @@ def test_cauda_planalto_modelo_literal(sessao):
     ["diferente", "duplicada", "deslocada", "ausente", "inserida", "malformada"],
 )
 def test_cauda_planalto_nao_afirma(sessao, mudanca):
-    modelo = (
-        Path(__file__).parents[1] / "freoa_verifica/data/planalto_cauda_0089.bin"
-    ).read_bytes()
+    from importlib.resources import files
+
+    modelo = files("freoa_verifica").joinpath("data/planalto_cauda_0089.bin").read_bytes()
     cauda = modelo.replace(b"<TOKEN>", b"A" * 128)
     orig = BODY + cauda
     corpos = {

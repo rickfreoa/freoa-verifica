@@ -627,6 +627,47 @@ _RECIBO_INTEGRAL = ("modalidade_acesso", "assistida_json", "final_url", "status"
 _FORA_DO_RECIBO = frozenset({"id", "procedencia", "edition_id"})
 
 
+def _conferir_vinculos_assistidos(conn, schema):
+    if schema not in {"main", "snap"}:
+        raise ValueError("schema_snapshot_invalido")
+    colunas = {r[1] for r in conn.execute(f"PRAGMA {schema}.table_info(capture)")}
+    if "assistida_json" not in colunas:
+        return
+    for row in conn.execute(f"SELECT assistida_json FROM {schema}.capture WHERE assistida_json IS NOT NULL"):  # noqa: S608 -- schema fechado acima
+        try:
+            recibo = json.loads(row[0])
+            if not isinstance(recibo, dict):
+                raise ValueError
+            if "vinculo" not in recibo:
+                continue
+            v = recibo["vinculo"]
+            if not isinstance(v, dict) or not isinstance(v["metadados_capture_id"], str):
+                raise ValueError
+            dep = conn.execute(
+                f"SELECT sha256, assistida_json FROM {schema}.capture WHERE id=?",  # noqa: S608 -- schema fechado acima; ID parametrizado
+                (v["metadados_capture_id"],),
+            ).fetchone()
+            if (
+                dep is None or dep[0] != v["metadados_sha256"]
+                or json.loads(dep[1])["obtencao_id"] != v["metadados_obtencao_id"]
+            ):
+                raise ValueError
+        except (ValueError, TypeError, KeyError):
+            raise ValueError("snapshot_vinculo_assistido_invalido") from None
+
+
+def _remapear_recibo_assistido(recibo, mapa):
+    if recibo is None:
+        return None
+    data = json.loads(recibo)
+    if "vinculo" in data:
+        v = data["vinculo"]
+        # Identidade original da obtenção permanece em metadados_obtencao_id;
+        # somente a referência ao registro local é remapeada.
+        v["metadados_capture_id"] = mapa[v["metadados_capture_id"]]
+    return json.dumps(data, ensure_ascii=False, sort_keys=True)
+
+
 def _merge_attach(live_db: Path, snap_db: Path) -> list:
     """Anexa dados publicos, remapeando identidades naturais ja existentes."""
     conn = sqlite3.connect(str(live_db))
@@ -645,6 +686,16 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
         # referência inválida no pacote (ex.: edition_id inexistente) não é encoberta pela mesclagem.
         if conn.execute("PRAGMA snap.foreign_key_check").fetchone():
             raise ValueError("snapshot_relacoes_invalidas")
+        _conferir_vinculos_assistidos(conn, "snap")
+        # Resolve todos os IDs de captura antes de ler recibos B; a ordem SQL
+        # não garante que A venha antes de B, inclusive nas colisões naturais.
+        mapa_capturas = mappings.setdefault("capture", {})
+        for row in conn.execute("SELECT id,sha256,url,fetched_at FROM snap.capture"):
+            existente = conn.execute(
+                "SELECT id FROM main.capture WHERE sha256=? AND url=? AND fetched_at=?",
+                tuple(row)[1:],
+            ).fetchone()
+            mapa_capturas[row["id"]] = existente[0] if existente else row["id"]
         local_dv = derivados.versao(conn)
         snap_dv = _versao_derivados(conn, "snap")
         # C6: snapshot de derivados mais novos substitui os modelos locais.
@@ -658,6 +709,8 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
             table_map = mappings.setdefault(table, {})
             for row in rows:
                 values = dict(row)
+                if table == "capture" and "assistida_json" in values:
+                    values["assistida_json"] = _remapear_recibo_assistido(values["assistida_json"], mapa_capturas)
                 for fk in fks:
                     values[fk[3]] = mappings.get(fk[2], {}).get(values[fk[3]], values[fk[3]])
                 old_id = row["id"] if "id" in columns else None
@@ -704,6 +757,7 @@ def _merge_attach(live_db: Path, snap_db: Path) -> list:
                     table_map[old_id] = values["id"]
         if conn.execute("PRAGMA foreign_key_check").fetchone():
             raise ValueError("snapshot_relacoes_invalidas")
+        _conferir_vinculos_assistidos(conn, "main")
         from freoa_verifica.rotulos import corrigir_rotulos
         corrigir_rotulos(conn)
         if substituir:

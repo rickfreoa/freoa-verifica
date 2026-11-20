@@ -1262,3 +1262,144 @@ ou não demonstrados nesta rodada**. A nota de execução descreve precisamente
 o limite causal. Os cinco pré-requisitos ausentes do ensaio anterior continuam
 pendentes. A entrega corrige as falhas offline reproduzidas, sem declarar o
 marco aprovado. O supervisor fará o commit.
+
+## Auditoria Codex r1
+
+Data: 20/11/2026. Papel: Desenvolvedor. Worktree `C:\dev\fv14-0089i`,
+ramo `feat/0089-sessao-assistida`, base `c32b4f1b03c2815ad930aec0715171a95b495a3e`
+(PR #53). Fontes: parecer independente bloqueador
+`C:\dev\tmp\v5\audit\parecer-codex.md` e log
+`C:\dev\tmp\v5\audit\ci-repo-job.log`. Esta seção registra correções e
+provas de desenvolvimento; não substitui novo parecer independente nem
+aprova o marco.
+
+### Achados, correções por classe e regressões
+
+| Achado | Correção | Prova |
+|---|---|---|
+| A1 — metadados de segurança ausentes convertidos em ausência de credenciais | O adaptador exige presença, tipo e estrutura antes de sanitizar headers, cookies associados e cookies bloqueados. Valida nomes de campos HTTP, nomes de cookies, listas e elementos de motivos. Metadado inválido encerra conservadoramente a sessão com `EVENTO_CDP_INVALIDO`; nenhuma captura é publicada. | `test_assistida_0089_r1.py`: ausência, null, tipo errado, elementos incompletos, nomes de headers ambíguos, TLS, IP/porta, status/protocolo/URL e flags de cache/SW/prefetch; controles positivos anteriores continuam admitindo listas comprovadamente vazias. |
+| A1 — demais projeções | Iniciador, quadro/documento e dados do alvo são conferidos antes de formar o pedido; a árvore inicial e a navegação usam a mesma validação de quadro. A porta conserva seus confrontos próprios. | Regressões r1 de iniciador, quadro e alvo; bateria anterior do adaptador e das fronteiras. |
+| A2 — B aponta para ID de A perdido na mesclagem | A mesclagem resolve previamente todos os IDs de captura por identidade natural, remapeia explicitamente `vinculo.metadados_capture_id` antes de comparar/inserir B e confere vínculos no snapshot de entrada e no banco mesclado. A identidade original permanece separada em `metadados_obtencao_id`; não se altera hash nem identidade da obtenção para acomodar colisões. | Instalador público com blobs, destino não vazio, IDs diferentes, colisão natural de A, de B e de ambos, instalação repetida. Recusa de ID inexistente, hash divergente ou identidade de obtenção divergente sem publicar capturas. |
+| A3 — zero incompleto após migração 018 | `cobertura` conta `modalidade_acesso IS NULL` em `modalidade_desconhecida.capturas` e sinaliza `contagem_parcial`. As contagens por modalidade representam somente as modalidades conhecidas. Nenhuma modalidade legada é inferida ou preenchida. | SQL real da migração 018 sobre captura legada, acervo misto e fonte sem capturas; antes da migração, contagem continua `None`. |
+| B4 — modelo literal ausente no ensaio isolado | Os testes leem o modelo por `importlib.resources`, como o produto. A cópia isolada representa a wheel instalada e deliberadamente não copia o pacote por caminho; alterar essa lista para levar o checkout mascararia a falha. | Modelo presente no sdist e na wheel construída a partir do sdist, bytes e SHA-256 iguais ao original. Configuração já inclui `data/*.bin`; não existe `MANIFEST.in` neste checkout. Testes da seleção/cópia isolada permanecem inalterados. |
+| B5 — produto importa `sondas` | O registro de fontes barradas foi extraído para `fontes_barradas.py`, compartilhado pelo produto e pela instrumentação. `sondas` conserva a exportação; indicação não importa o instrumento. Os motivos e bloqueios foram preservados. | Testes de arquitetura de `test_sondas.py` intactos: fecho de service/MCP/CLI e exclusividade da captura. |
+| CI — decodificação e parser fora da fronteira textual | A notificação de arquivos Windows lê os WCHARs da API nativa, com validação estrita de Unicode e de tamanho par; nenhum corpo HTTP percorre esse caminho. O JSON de metadados admitidos passa por `texto_do_response` antes do parser. | `test_garantias_estruturais.py` intacto, testes de grafo e regressões de notificação Windows com nome acentuado, caractere suplementar e surrogate inválido. |
+| Execução local Windows — caminhos temporários aninhados | A factory Windows dos testes gera componentes mais curtos, com sufixos aleatórios e repetição em colisão. Mantém isolamento, basetemp externo, ACL herdada e a semântica de `numbered=False`; nenhuma asserção ou timeout foi alterado. | Raiz longa reproduziu travamento em `store.db.apply_migrations` no subprocesso da Porta L; raiz curta passou. Após a correção, o wrapper inteiro passou também com basetemp longo: 2 passed em 3,38 s. O corpo isolado registrou 33 passed e o skip Windows de `sendmsg`, preservando as 34 provas e o isolamento do audit hook. |
+| C6 — temporários herdados fora do perfil | O lançamento fixa `TEMP`, `TMP`, `TMPDIR` e `TEMPDIR` no subdiretório `temporarios` do perfil descartável, sem alterar o ambiente do processo pai. O harness continua chamando o mesmo lançador do produto. | Teste offline executa o lançador real com processo simulado tanto diretamente quanto pelo harness e compara integralmente os ambientes entregues a `Popen`; confirma confinamento e limpeza. Isso não equivale a monitoramento global do SO. |
+| C7 — §3(16), instalação Windows | O instalador verifica `fv sessao --help` depois da versão e antes de declarar a instalação concluída. O teste de pacote instalado executa o launcher Windows real, a ajuda e o comando completo; simula indisponibilidade em `Popen`, mantendo `lancar_pipe` e o despachante reais. | 2 testes aprovados sobre a wheel final instalada em venv temporário separado, fora do checkout, com `FV_TEST_INSTALLED=1`. Saída 2 e `PIPE_ASSISTIDO_INDISPONIVEL_WINERROR_5`, sem navegador, rede, banco ou perfil remanescente. O teste integra o módulo já executado pela matriz Windows da CI; os testes existentes do instalador também verificam a nova etapa. |
+| C8 — pendência 24 | Prova do comando `fv --home <isolado> reabrir-normas-leg --decisao <sintética>`, passando pelo parser e despachante reais. | Confirmação positiva libera o bloqueio sintético e registra a decisão; negativa mantém o bloqueio sem reabertura. Transporte e sockets são proibidos; consulta ao home padrão é proibida, e outro `FV_HOME` permanece intocado. O home real não foi reaberto. |
+
+Campos opcionais com semântica definida pelo protocolo não viram valores
+inferidos de metadados obrigatórios: ausência de `Frame.parentId` identifica
+a raiz e ausência de `TargetInfo.subtype` identifica alvo sem subtipo,
+sempre condicionadas ao histórico de criação observado. Null/tipo errado
+nesses campos é recusado. `headersText` continua opcional para h2/h3;
+HTTP/1 exige o bloco bruto pela porta. Campos de cookies e headers dos
+eventos ExtraInfo não recebem defaults de coleção vazia.
+
+### Validação e ambiente
+
+* **181 passed**, exit 0, na bateria específica r1 após a última mudança de
+  produto. As provas são sintéticas e offline; não foram abertas fontes nem
+  navegador.
+* Bateria afetada final: **1612 passed, 1 skipped, 57 deselected**, exit 0,
+  **360,46 s**. O skip é a prova HTTP/2/Early Hints em memória sem `h2`.
+  Além dos quinze módulos da bateria anterior, inclui o arquivo r1,
+  sondas, garantias estruturais, pacote instalado, instaladores 1.2/1.3,
+  pacote Windows 0085, snapshot Câmara 0081 e wrapper da guarda de rede.
+  Seleção `not live and not navegador_assistido`, `.venv`,
+  `-p no:cacheprovider`, basetemp `%TEMP%\r1af`.
+* Conjunto `repositorio` final: **619 passed, 1 skipped, 14888 deselected**,
+  exit 0, **858,67 s**. Inclui a execução efetiva da cópia isolada e mantém
+  intactos os detectores de caminhos e os testes de arquitetura de sondas e
+  das garantias estruturais. O skip Windows é `symlink indisponível` em
+  `test_i2_symlink_que_sai_da_raiz_e_recusado`.
+* Comando obrigatório do repositório: `.venv\Scripts\python.exe -m
+  pytest tests -q -m "repositorio and not live and not navegador_assistido"
+  -p no:cacheprovider --basetemp "$env:TEMP\r1repof"
+  --tb=short`. Execução local Windows/Python 3.14.6; é a seleção equivalente
+  ao job Ubuntu/Python 3.12, não uma execução desses outros SO/interpretadores.
+  A execução final conserva o codec padrão no pai e nos filhos Windows.
+  Uma rodada diagnóstica acrescentou `-X utf8` apenas no pai; misturar os
+  codecs causou erro na leitura de stdout. Não se mudou teste ou produto
+  para ocultar esse erro de execução.
+* `TEMP`, `TMP` e os basetemps de teste ficam no temporário do sistema, fora
+  do checkout. O caminho `C:\dev\tmp` é somente leitura neste sandbox;
+  a tentativa inicial de basetemp ali falhou no setup e foi substituída
+  por `%TEMP%`, sem alteração de ACL ou elevação.
+* **AST contra `87b43f7`: 77 definições preexistentes, zero ausentes e zero
+  alteradas**, incluindo classes, métodos e definições internas, por nome
+  qualificado e `ast.dump(include_attributes=False)`. Todos os nós
+  preexistentes de nível de módulo e sua ordem estão preservados. `transport.py` não
+  foi editado nesta rodada.
+* Catraca: `C:\dev\tmp\venv-ruff\Scripts\python.exe
+  scripts\ruff_catraca.py`, **exit 0**, baseline intacta. As duas consultas
+  novas com schema variável têm allowlist local `main/snap`, ID parametrizado
+  e justificativa S608 em cada linha; nenhuma supressão global.
+* Empacotamento offline com ferramentas de build já existentes no cache
+  local, extraídas somente para ambiente temporário. Sem rede, alteração
+  de dependência do produto ou instalação de pacote novo em `.venv`.
+  O harness de build cria diretórios temporários com herança normal de ACL,
+  como a factory Windows dos testes; nenhuma permissão foi alterada.
+* Artefatos em `%TEMP%\0089-r1-build\final-dist`: sdist
+  `freoa_verifica-1.4.0a5.tar.gz`, SHA-256
+  `1c5ecfc560628249da4ca6cb167c09c365e39acdb730e5d528077daa10fc6bc2`;
+  wheel construída desse sdist, SHA-256
+  `2cc924d5721bc77f3b3b8c5afed747fdf424e67bc36ba60480dfd5c99a38df1b`.
+  Os **121 arquivos do produto** presentes na wheel foram confrontados byte
+  a byte com o checkout final, todos idênticos. Modelo literal em ambos:
+  `57e730d2a5f31c72f6d347d198d2e426eb7495188129242fe024c14961be4f3f`.
+* Logs de build e instalação isolada:
+  `%TEMP%\0089-r1-build\build-final.log` e
+  `%TEMP%\0089-r1-build\installed-final-causal.log`.
+  Prova adicional do modelo na wheel instalada: **9 passed, 245 deselected**,
+  exit 0, em `%TEMP%\0089-r1-build\installed-model-final.log` (2 avisos de
+  marcador ausente na cópia sem configuração pytest; nenhuma falha).
+  Essa prova foi repetida após ajustar a descoberta do launcher para
+  `sysconfig.get_path("scripts")`, cobrindo tanto o venv do instalador quanto
+  a instalação global usada pela matriz Windows da CI, em vez de presumir
+  que `fv.exe` fica ao lado de `python.exe`.
+  Rechecagem no checkout após esse ajuste: seletor estrutural da wheel e
+  módulo de instalação, **3 passed**, exit 0, em 14,19 s.
+* Logs finais dos testes em `%TEMP%\0089-r1-build\logs\afetados-r1-validado.log`
+  e `%TEMP%\0089-r1-build\logs\repositorio-r1-final-completo.log`.
+  As execuções diagnósticas com caminho longo/codec divergente foram
+  encerradas antes da rodada final; seus resultados não contam como aceite.
+* Sem método CDP novo, dependência nova, mudança de critério `verified`,
+  troca de ramo, stage, commit ou push. O supervisor commita. As notas de
+  decisão não rastreadas `0089-nota-escopo-1.4.0a6.md` e
+  `0090-notas-formais-0089.md`, observadas durante a execução, não foram
+  alteradas nem incorporadas à implementação por este desenvolvedor.
+
+### Itens dependentes de decisão ou ação do titular
+
+Permanecem **NOT RUN/não demonstrados**; não são convertidos em aprovação
+por este registro:
+
+1. Monitoramento real de arquivos por processo e descendentes, incluindo
+   leituras do perfil pessoal e escritas fora do perfil dedicado durante
+   execução e encerramento. Fixar temporários e varrer o perfil não prova
+   essa propriedade. Exige ambiente/instrumentação autorizado pelo titular;
+   não se buscou administrador nem se inspecionou o perfil pessoal.
+2. Acesso ao perfil por segunda conta Windows, para provar a negação real
+   por ACL. Não se criou conta nem se elevou privilégio.
+3. Matriz real em Chrome/Edge em ambiente sem a política que os impede
+   neste notebook, sem remover política ou contornar recusa.
+4. Gestos humanos de recarga forçada e de instalação/ativação de extensão;
+   extensão comum/externa com `location` 1/10 e suas permissões. A extensão
+   desempacotada `location` 4 não substitui essas provas.
+5. Prerender real e HTTP/2/Early Hints em ambiente de ensaio apropriado.
+   Não se alterou política do navegador nem se acrescentou `h2` ao produto.
+6. Novo ensaio real com o ambiente final de temporários, inclusive
+   encerramento/limpeza e monitoramento exigido nos itens 7 e 13 do §3;
+   a prova offline de igualdade de ambiente não o substitui.
+7. Sessão manual com fontes reais e eventual reabertura do home real de
+   normas_leg: dependem de ação expressa do titular; a pendência 24 aqui
+   foi exercitada somente em homes sintéticos isolados.
+8. Deliberações normativas propostas pelo auditor sobre manifesto de
+   componente e passividade/Accept-Language, na medida em que ainda
+   pendentes de formalização pelo titular. Esta rodada não muda a regra.
+
+Nova auditoria independente continua necessária para reconsiderar o
+veredito BLOQUEADOR. A bateria afetada e a seleção `repositorio` não são
+declaradas equivalentes à suíte offline global nem ao aceite real integral.

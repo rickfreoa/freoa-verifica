@@ -141,7 +141,9 @@ def _metadados(captura):
             obj[k] = v
         return obj
 
-    data = json.loads(captura.resposta.body, object_pairs_hook=pares)
+    from freoa_verifica.texto_resposta import texto_do_response
+
+    data = json.loads(texto_do_response(captura.resposta), object_pairs_hook=pares)
     if data.get("legislationIdentifier") != urn or not re.fullmatch(URN, urn):
         raise ValueError
     enc = data["encoding"]

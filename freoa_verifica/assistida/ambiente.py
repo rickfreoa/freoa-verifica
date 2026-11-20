@@ -542,9 +542,13 @@ class ObservadorWindows:
             try:
                 while True:
                     proximo, acao, tamanho = struct.unpack_from("III", buf, pos)
-                    if pos + 12 + tamanho > n.value:
+                    if tamanho % 2 or pos + 12 + tamanho > n.value:
                         raise ValueError
-                    nome = bytes(buf[pos + 12 : pos + 12 + tamanho]).decode("utf-16-le")
+                    # FILE_NOTIFY_INFORMATION contém WCHARs do Windows, não resposta HTTP.
+                    nome = ctypes.wstring_at(
+                        ctypes.addressof(buf) + pos + 12, tamanho // 2
+                    )
+                    nome.encode("utf-16-le", errors="strict")
                     self.vigia.notificar(nome, acao)
                     if not proximo:
                         break
@@ -580,6 +584,16 @@ def argumentos(navegador, perfil, inicio, *, extras=()):
     ]
 
 
+def ambiente_navegador(perfil):
+    """Temporários do processo e descendentes pertencem ao perfil descartável."""
+    temporarios = (Path(perfil) / "temporarios").resolve()
+    temporarios.mkdir(exist_ok=True)
+    return {
+        **os.environ,
+        **dict.fromkeys(("TEMP", "TMP", "TMPDIR", "TEMPDIR"), str(temporarios)),
+    }
+
+
 def lancar_pipe(navegador, perfil, inicio, *, extras=()):
     """Só dois handles herdados; stdout/stderr não são registros de navegação."""
     args = argumentos(navegador, perfil, inicio, extras=extras)
@@ -609,6 +623,7 @@ def lancar_pipe(navegador, perfil, inicio, *, extras=()):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=0x4,  # CREATE_SUSPENDED: contém descendentes antes de qualquer execução
+            env=ambiente_navegador(perfil),
         )
         job = _conter_processo(proc)
         proc._fv_job = job

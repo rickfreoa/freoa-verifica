@@ -52,6 +52,25 @@ EVENTOS_REDE = frozenset(
 )
 
 
+def _headers_seguros(headers):
+    if not isinstance(headers, dict) or any(
+        not isinstance(k, str)
+        or re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k) is None
+        or not isinstance(v, str)
+        for k, v in headers.items()
+    ):
+        raise ValueError
+    return headers
+
+
+def _motivos_seguros(motivos):
+    if not isinstance(motivos, list) or any(
+        not isinstance(m, str) or not m for m in motivos
+    ):
+        raise ValueError
+    return motivos
+
+
 class CanalPipe:
     """Fila de bytes limitada; reservas precedem leitura, cópia e interpretação JSON."""
 
@@ -394,6 +413,7 @@ class AdaptadorCDP:
 
         def arvore(r):
             f = r["frameTree"]["frame"]
+            self._conferir_frame(f)
             if f.get("parentId") or not f.get("id"):
                 raise RecusaSessao("ARVORE_CDP_SEM_RAIZ")
             alvo.raiz, alvo.documento = f["id"], f.get("url", "")
@@ -415,6 +435,15 @@ class AdaptadorCDP:
             isinstance(valor, str)
             and re.fullmatch(r"[A-Za-z0-9_.-]{1,192}", valor) is not None
         )
+
+    def _conferir_frame(self, f):
+        if (
+            not isinstance(f, dict)
+            or not self.id_valido(f["id"])
+            or not isinstance(f["url"], str)
+            or ("parentId" in f and not self.id_valido(f["parentId"]))
+        ):
+            raise ValueError
 
     def processar(self, obj):
         try:
@@ -482,6 +511,15 @@ class AdaptadorCDP:
             raise RecusaSessao("IDENTIFICADOR_CDP_INVALIDO")
         if "targetInfo" in p and not self.id_valido(p["targetInfo"]["targetId"]):
             raise RecusaSessao("IDENTIFICADOR_CDP_INVALIDO")
+        if "targetInfo" in p:
+            info = p["targetInfo"]
+            if (
+                not isinstance(info["type"], str)
+                or not info["type"]
+                or not isinstance(info["url"], str)
+                or ("subtype" in info and not isinstance(info["subtype"], str))
+            ):
+                raise ValueError
         if metodo == "Target.targetCreated":
             info = p["targetInfo"]
             self._reter()
@@ -516,6 +554,7 @@ class AdaptadorCDP:
             alvo = self.alvos[sid]
             if metodo == "Page.frameNavigated":
                 f = p["frame"]
+                self._conferir_frame(f)
                 if not f.get("parentId"):
                     alvo.raiz, alvo.documento = f["id"], f.get("url", "")
             elif metodo == "Page.frameAttached" and p.get("frameId") == alvo.raiz:
@@ -576,8 +615,16 @@ class AdaptadorCDP:
         base = self.vigia.linha_base
         if self.fase != 3 or not alvo.pronto or base is None or observado <= base:
             return
-        iniciador = p.get("initiator", {})
-        tipo_iniciador = iniciador.get("type", "")
+        iniciador = p["initiator"]
+        if (
+            not isinstance(iniciador, dict)
+            or not isinstance(iniciador["type"], str)
+            or not self.id_valido(p["frameId"])
+            or not isinstance(p["documentURL"], str)
+            or not p["documentURL"]
+        ):
+            raise ValueError
+        tipo_iniciador = iniciador["type"]
         inicio = {"tipo": tipo_iniciador}
         if tipo != "Document":
             # CDP prova o quadro do pedido e o documento corrente; não usa URL da stack como substituto.
@@ -644,22 +691,51 @@ class AdaptadorCDP:
         if curso is None:
             return
         if metodo == "requestWillBeSentExtraInfo":
-            headers = dados.get("headers", {})
+            headers = _headers_seguros(dados["headers"])
+            cookies = dados["associatedCookies"]
+            if not isinstance(cookies, list):
+                raise ValueError
+            projetados = []
+            for c in cookies:
+                if not isinstance(c, dict) or not isinstance(c["cookie"], dict):
+                    raise ValueError
+                nome = c["cookie"]["name"]
+                if not isinstance(nome, str) or not nome:
+                    raise ValueError
+                projetados.append(
+                    {
+                        "nome": nome,
+                        "blockedReasons": _motivos_seguros(c["blockedReasons"]),
+                    }
+                )
             dados = {
                 "authorization_presente": any(
                     k.lower() == "authorization" for k in headers
                 ),
-                "associatedCookies": [
-                    {
-                        "nome": c.get("cookie", {}).get("name"),
-                        "blockedReasons": c.get("blockedReasons"),
-                    }
-                    for c in dados.get("associatedCookies", [])
-                ],
+                "associatedCookies": projetados,
             }
         elif metodo == "responseReceivedExtraInfo":
-            headers = dados.get("headers", {})
+            headers = _headers_seguros(dados["headers"])
+            cookies = dados["blockedCookies"]
+            if not isinstance(cookies, list) or type(dados["statusCode"]) is not int:
+                raise ValueError
+            for c in cookies:
+                if (
+                    not isinstance(c, dict)
+                    or not isinstance(c["cookieLine"], str)
+                    or not c["cookieLine"]
+                ):
+                    raise ValueError
+                _motivos_seguros(c["blockedReasons"])
+                if "cookie" in c and (
+                    not isinstance(c["cookie"], dict)
+                    or not isinstance(c["cookie"]["name"], str)
+                    or not c["cookie"]["name"]
+                ):
+                    raise ValueError
             bruto = dados.get("headersText", "")
+            if not isinstance(bruto, str):
+                raise ValueError
             tamanho = len(bruto) + sum(len(k) + len(v) for k, v in headers.items())
             # A porta mantém esses campos até o confronto; a reserva da mensagem
             # JSON termina antes disso. Não projeta blockedCookies nem seus valores.
@@ -669,6 +745,21 @@ class AdaptadorCDP:
                 for k in ("statusCode", "headers", "headersText")
                 if k in dados
             }
+        elif metodo == "responseReceived":
+            resposta = dados["response"]
+            seguranca = resposta["securityDetails"]
+            if (
+                not isinstance(seguranca, dict)
+                or any(
+                    not isinstance(seguranca[k], str) or not seguranca[k]
+                    for k in ("protocol", "issuer")
+                )
+                or any(
+                    type(resposta[k]) is not bool
+                    for k in ("fromDiskCache", "fromServiceWorker", "fromPrefetchCache")
+                )
+            ):
+                raise ValueError
         self._observar(curso, metodo, dados)
 
     def _observar(self, curso, metodo, dados):

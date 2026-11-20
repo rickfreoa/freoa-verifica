@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from freoa_verifica.assistida.perfis import PERFIS
-from freoa_verifica.sondas import FONTES_BARRADAS
+from freoa_verifica.fontes_barradas import FONTES_BARRADAS
 
 TENTATIVAS = ContextVar("tentativas_automaticas_assistida", default=None)
 
@@ -134,8 +134,14 @@ def cobertura(conn, fonte):
         "SELECT COUNT(*) FROM capture WHERE source_id=? AND modalidade_acesso='automatico'",
         (fonte,),
     ).fetchone()[0]
+    desconhecidas = conn.execute(
+        "SELECT COUNT(*) FROM capture WHERE source_id=? AND modalidade_acesso IS NULL",
+        (fonte,),
+    ).fetchone()[0]
     return {
         "publico_humano": {"declarado": fonte in PERFIS},
         "automatico": {"capturas": automaticas},
         "assistido": {"habilitado": fonte in PERFIS, "capturas": n},
+        "modalidade_desconhecida": {"capturas": desconhecidas},
+        "contagem_parcial": desconhecidas > 0,
     }

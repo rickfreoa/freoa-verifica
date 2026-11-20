@@ -158,6 +158,9 @@ try {
     $etapa = "validar versao"
     $v = (Invoke-NativeChecked $etapa $fv @("--version")) -join "`n"
     if ($v -notmatch ('(?<![0-9.])' + [regex]::Escape($versao) + '(?![0-9.])')) { throw "versao inesperada: $v" }
+    $etapa = "validar comando sessao"
+    $ajudaSessao = (Invoke-NativeChecked $etapa $fv @("sessao", "--help")) -join "`n"
+    if ($ajudaSessao -notmatch "planalto" -or $ajudaSessao -notmatch "normas_leg") { throw "comando sessao ausente" }
     # Instalação de snapshot é anexação: acervo anterior sem vínculo comprovado (1.1, ou instalado com
     # --aceitar-nao-vinculado) contaminaria o novo. Ele é preservado ao lado e o snapshot vai para home limpo.
     $etapa = "preservar acervo anterior"

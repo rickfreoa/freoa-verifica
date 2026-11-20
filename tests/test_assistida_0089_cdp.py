@@ -427,7 +427,9 @@ def test_metodos_parametros_e_sequencia(sessao, ambiente_assentado):
     ad.processar(
         {
             "method": "Target.targetCreated",
-            "params": {"targetInfo": {"targetId": "aba", "type": "page"}},
+            "params": {
+                "targetInfo": {"targetId": "aba", "type": "page", "url": "about:blank"}
+            },
         }
     )
     ad.processar(
