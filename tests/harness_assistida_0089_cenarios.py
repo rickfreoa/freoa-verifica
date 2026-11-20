@@ -567,11 +567,13 @@ def conferir_condicao_item1(ad, sonda, caso, estado):
         assert (url, codigo) in ad.recusas, diagnostico
 
 
-def _agrupar_pedidos(pedidos):
+def _agrupar_pedidos(pedidos, *, ordenar=False):
     grupos = defaultdict(list)
     for metodo, caminho, headers in pedidos:
         grupos[metodo, caminho].append(tuple(headers))
-    return {k: sorted(v) for k, v in grupos.items()}
+    # O comparador conserva a ocorrência. Só o diagnóstico de multiconjunto
+    # ordena: ordenar aqui incondicionalmente esconderia reordenação inédita.
+    return {k: sorted(v) if ordenar else v for k, v in grupos.items()}
 
 
 def _campos(headers):
@@ -583,7 +585,7 @@ def _campos(headers):
 
 def diferenca_pedidos(esquerda, direita):
     """Diagnóstico completo, sem depender do diff truncado do pytest."""
-    a, b = _agrupar_pedidos(esquerda), _agrupar_pedidos(direita)
+    a, b = (_agrupar_pedidos(p, ordenar=True) for p in (esquerda, direita))
     cont_a = Counter({k: len(v) for k, v in a.items()})
     cont_b = Counter({k: len(v) for k, v in b.items()})
     detalhes = []
@@ -699,8 +701,9 @@ def comparar_passividade(sem1, sem2, com, *, controles_adicionais=()):
     """Só desconta variação provada nos controles, por método/caminho.
 
     Nem favicon nem cabeçalho têm exclusão fixa. Valor novo exclusivo do
-    adaptador continua falha, salvo posições q comprovadamente variáveis.
-    Ordem de chegada só é descontada se também variar nos controles.
+    adaptador continua falha, salvo posições q comprovadamente variáveis em
+    Accept-Language. Valores, ordem e multiplicidades devem reproduzir um
+    controle: não combinar variantes de campos ou permutações independentes.
     """
     controles = [sem1, sem2, *controles_adicionais]
     conjuntos = [*controles, com]
@@ -722,14 +725,25 @@ def comparar_passividade(sem1, sem2, com, *, controles_adicionais=()):
     ordens = [[(m, p) for m, p, _ in pedidos] for pedidos in conjuntos]
     ordem_variavel = any(o != ordens[0] for o in ordens[1:-1])
     diagnostico["ordem_chegada_variavel_no_controle"] = ordem_variavel
-    if not ordem_variavel and ordens[0] != ordens[-1]:
+    if ordens[-1] not in ordens[:-1]:
         diagnostico["passou"] = False
+    if ordem_variavel:
+        diagnostico["ruido_declarado"].append(
+            {
+                "tipo": "ordem_chegada",
+                "controles": ordens[:-1],
+                "adaptador": ordens[-1],
+                "justificativa": "ordem variável nos controles; exige uma ordem já observada",
+            }
+        )
     for chave in sorted(grupos[0]):
         normalizados = [[] for _ in conjuntos]
         for i, headers in enumerate(zip(*(g[chave] for g in grupos))):
             campos = list(map(_campos, headers))
             substituicoes = [{} for _ in conjuntos]
             for nome in campos[0]:
+                if nome.casefold() != "accept-language":
+                    continue
                 valores = [c.get(nome) for c in campos]
                 q = _normalizar_q_variavel(valores[:-1], valores[-1])
                 if q is None:
@@ -745,13 +759,17 @@ def comparar_passividade(sem1, sem2, com, *, controles_adicionais=()):
                         "controles": valores[:-1],
                         "adaptador": valores[-1],
                         "normalizados": q,
-                        "justificativa": "somente posições q variáveis entre controles normalizadas",
+                        "justificativa": "somente posições q variáveis de Accept-Language entre controles normalizadas; restante literal",
                     }
                 )
             for destino, hs, subs in zip(normalizados, headers, substituicoes):
                 destino.append(
                     tuple((k, next(subs[k]) if k in subs else v) for k, v in hs)
                 )
+        # A tupla inteira conserva valores, nomes, ordem e campos repetidos.
+        # A sequência impede combinar/reordenar variantes de controles diferentes.
+        if normalizados[-1] not in normalizados[:-1]:
+            diagnostico["passou"] = False
         colecoes = [[_campos(hs) for hs in g] for g in normalizados]
         nomes = {nome for campos in colecoes for c in campos for nome in c}
         for nome in nomes:
@@ -778,11 +796,11 @@ def comparar_passividade(sem1, sem2, com, *, controles_adicionais=()):
                         "metodo": chave[0],
                         "caminho": chave[1],
                         "ocorrencia": i,
-                        "cabecalhos_excluidos": {
+                        "cabecalhos_variaveis": {
                             k: [c.get(k) for c in cs[:-1]] for k in sorted(ruido)
                         },
                         "ordem_cabecalhos_variavel": ordem_variavel,
-                        "justificativa": "variação observada entre execuções SEM adaptador; só valores dos controles são admitidos",
+                        "justificativa": "variação SEM adaptador; exige tuplas literais e multiplicidades de um controle, sem combinação entre variantes",
                     }
                 )
             iguais = (

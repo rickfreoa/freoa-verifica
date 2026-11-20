@@ -863,6 +863,14 @@ class _CapturaAssistidaEmCurso:
             raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
 
     def _conferir_headers(self):
+        import codecs
+
+        from freoa_verifica.texto_resposta import (
+            _TABELA,
+            _encoding,
+            parametros_media_type,
+        )
+
         headers, tamanho = _headers_assistidos(self._resposta["protocol"], self._extra)
         if tamanho is not None and tamanho > self._perfil.max_bytes:
             raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
@@ -876,15 +884,33 @@ class _CapturaAssistidaEmCurso:
         tipos = headers.campos.get("content-type", [])
         if len(tipos) != 1:
             raise RespostaInvalida("CONTENT_TYPE_ASSISTIDO_INVALIDO")
-        from freoa_verifica.texto_resposta import parametros_media_type
-
         try:
             parametros = parametros_media_type(tipos[0])
-            if any(nome.lower() != "charset" for nome, _ in parametros):
+            if len(parametros) > 1 or any(nome != "charset" for nome, _ in parametros):
                 raise ValueError
-        except (ValueError, RespostaInvalida):
+            mime = tipos[0].split(";", 1)[0].strip().lower()
+            content_type = mime
+            if parametros:
+                # Nenhum quoted-pair, espaço interno ou aspas não HTTP. O BOM
+                # não dispensa esta validação daquilo que será persistido.
+                literal = tipos[0].split("=", 1)[1].strip(" \t")
+                if not re.fullmatch(r'[A-Za-z0-9_:.+-]+|"[A-Za-z0-9_:.+-]+"', literal):
+                    raise ValueError
+                achado = _encoding(parametros[0][1])
+                if achado is None or achado[1] == "-":
+                    raise ValueError
+                # Conjunto fechado da interpretação única, resolvido pelo codec
+                # canônico. Publica o nome WHATWG da mesma interpretação (latin1
+                # e ascii, por exemplo, continuam windows-1252).
+                canonicos = {
+                    codecs.lookup(codec).name: nome
+                    for nome, codec, _ in _TABELA
+                    if codec != "-"
+                }
+                charset = canonicos[codecs.lookup(achado[1]).name]
+                content_type += "; charset=" + charset
+        except (LookupError, ValueError, RespostaInvalida):
             raise RespostaInvalida("CONTENT_TYPE_ASSISTIDO_INVALIDO") from None
-        mime = tipos[0].split(";", 1)[0].strip().lower()
         if not _mime_allowed(mime, self._recurso.mimes):
             raise RespostaInvalida("MIME_ASSISTIDO_RECUSADO")
         for valor in headers.campos.get("cache-control", []):
@@ -899,11 +925,14 @@ class _CapturaAssistidaEmCurso:
                 for item in valor.split(",")
             ):
                 raise RespostaInvalida("PERSONALIZACAO_ASSISTIDA_RECUSADA")
+        # Mesmo o recibo HTTP só recebe a representação canônica; nenhum
+        # consumidor posterior precisa voltar ao valor bruto do Content-Type.
+        headers.campos["content-type"] = [content_type]
         return (
             headers,
             tamanho,
             encoding[0].strip().lower() if encoding else None,
-            tipos[0],
+            content_type,
             mime,
         )
 

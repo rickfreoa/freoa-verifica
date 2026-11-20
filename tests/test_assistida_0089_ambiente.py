@@ -533,6 +533,48 @@ def test_prazo_inclui_principal_e_enumeracao(tmp_path, monkeypatch):
         a.aguardar_saida_navegador(tmp_path)
 
 
+def test_saida_durante_cim_nao_repete_enumeracao_com_prazo_residual(
+    tmp_path, monkeypatch
+):
+    agora = _relogio_limpeza(monkeypatch)
+    chamadas = []
+
+    def enumerar(_, prazo):
+        chamadas.append(prazo)
+        assert len(chamadas) == 1, "segunda enumeração desnecessária com prazo residual"
+        agora[0] += 11.1
+        return set()
+
+    monkeypatch.setattr(a, "_processos_do_perfil", enumerar)
+    esperas = []
+    proc = SimpleNamespace(
+        poll=lambda: None if agora[0] == 0 else 0,
+        wait=lambda **kw: esperas.append(kw["timeout"]),
+    )
+    a.aguardar_saida_navegador(tmp_path, proc)
+    assert len(chamadas) == len(esperas) == 1
+    assert 0 < esperas[0] < 4
+
+
+def test_cim_so_apos_saida_do_principal_dentro_do_mesmo_prazo(tmp_path, monkeypatch):
+    agora = _relogio_limpeza(monkeypatch)
+    chamadas = []
+
+    def enumerar(_, prazo):
+        assert agora[0] >= 0.7
+        chamadas.append(prazo)
+        agora[0] += 11.1
+        return set()
+
+    monkeypatch.setattr(a, "_processos_do_perfil", enumerar)
+    proc = SimpleNamespace(
+        poll=lambda: None if agora[0] < 0.7 else 0, wait=lambda **_: None
+    )
+    a.aguardar_saida_navegador(tmp_path, proc)
+    assert len(chamadas) == 1
+    assert agora[0] <= a.PRAZO_SAIDA_NAVEGADOR_S
+
+
 def test_sessao_finaliza_todos_os_recursos_mesmo_com_falha(tmp_path, monkeypatch):
     from contextlib import nullcontext
     from freoa_verifica.assistida import sessao as s
@@ -605,3 +647,28 @@ def test_enumeracao_somente_leitura_confere_argumento_exato(tmp_path, monkeypatc
 
     monkeypatch.setattr(a.subprocess, "run", enumerar)
     assert a._processos_do_perfil(perfil, 1) == {1, 2}
+
+
+@pytest.mark.skipif(os.name != "nt", reason="enumeração Windows, processo simulado")
+@pytest.mark.parametrize("causa", ["prazo", "processo", "json"])
+def test_enumeracao_recusa_com_diagnostico_sem_segredos(tmp_path, monkeypatch, causa):
+    segredo = "SEGREDO_SINTETICO_ENUMERACAO"
+
+    def falhar(*_, **__):
+        if causa == "prazo":
+            raise a.subprocess.TimeoutExpired(
+                segredo, 3.8, output=segredo, stderr=segredo
+            )
+        if causa == "processo":
+            raise a.subprocess.CalledProcessError(
+                1, segredo, output=segredo, stderr=segredo
+            )
+        return SimpleNamespace(stdout=segredo)
+
+    monkeypatch.setattr(a.subprocess, "run", falhar)
+    with pytest.raises(a.RecusaSessao) as exc:
+        a._processos_do_perfil(tmp_path, 3.8)
+    sufixo = {"prazo": "_PRAZO", "processo": "_PROCESSO", "json": ""}[causa]
+    assert str(exc.value) == "ENUMERACAO_ASSISTIDA_INDISPONIVEL" + sufixo
+    assert segredo not in str(exc.value)
+    assert exc.value.__suppress_context__

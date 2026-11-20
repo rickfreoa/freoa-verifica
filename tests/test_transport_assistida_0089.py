@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import base64
+import codecs
 import gzip
 import hashlib
 import json
@@ -1070,6 +1071,62 @@ def test_segredos_erros_sanitizados(sessao):
         fluxo(sessao, p)
     assert "SEGREDO" not in str(exc.value)
     assert "SEGREDO" not in repr(p)
+
+
+@pytest.mark.parametrize(
+    "body", [codecs.BOM_UTF8 + BODY, BODY, b'<meta charset="utf-8">' + BODY]
+)
+@pytest.mark.parametrize(
+    "parametro",
+    [
+        "charset=TOKEN_SECRETO",
+        "charset=rot_13",
+        "charset=utf-8; charset=utf-8",
+        "charset=utf-8; charset=UTF8",
+        'charset=" utf-8 "',
+        'charset="utf\\-8"',
+        "charset='utf-8'",
+        "charset=utf-8; token=TOKEN_SECRETO",
+        "token=TOKEN_SECRETO",
+    ],
+)
+def test_content_type_assistido_recusa_antes_de_response(
+    sessao, monkeypatch, body, parametro
+):
+    def proibido(*_, **__):
+        pytest.fail("cabeçalho recusado não pode construir objeto persistível")
+
+    monkeypatch.setattr(t, "Response", proibido)
+    monkeypatch.setattr(t, "CapturaAssistida", proibido)
+    with pytest.raises(t.RespostaInvalida) as exc:
+        fluxo(sessao, body=body, headers={"Content-Type": "text/html; " + parametro})
+    assert str(exc.value) == "CONTENT_TYPE_ASSISTIDO_INVALIDO"
+    assert exc.value.http is None
+    assert sessao._memoria == 0
+
+
+@pytest.mark.parametrize(
+    "parametro,canonico",
+    [
+        ("CHARSET=UtF8", "utf-8"),
+        ('charset="UTF-8"', "utf-8"),
+        ("charset=LaTiN1", "windows-1252"),
+        ("charset=WINDOWS-1252", "windows-1252"),
+        ("charset=Shift_JIS", "shift_jis"),
+    ],
+)
+def test_content_type_assistido_canonico_independente_do_bom(
+    sessao, parametro, canonico
+):
+    c = fluxo(
+        sessao,
+        body=codecs.BOM_UTF8 + BODY,
+        headers={"Content-Type": "Text/HTML; " + parametro},
+    )
+    assert c.resposta.content_type == "text/html; charset=" + canonico
+    assert c.codificacao == "utf-8-sig"
+    assert c.origem_da_codificacao == "bom"
+    assert all(v != "Text/HTML; " + parametro for v in c.resposta.headers.values())
 
 
 def test_conteudo_publico_limite_declarado(sessao):

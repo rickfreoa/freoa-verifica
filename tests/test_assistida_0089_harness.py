@@ -313,7 +313,38 @@ def test_passividade_preserva_multiplicidade_de_campo_variavel():
     assert not comparar_passividade(um, dois, com)["passou"]
 
 
-@pytest.mark.parametrize("campo", ["Accept-Language", "Accept"])
+def test_passividade_nao_reordena_ocorrencias_repetidas_com_valores_diferentes():
+    def pedidos(valores):
+        return [_pedido_origem(("Priority", v)) for v in valores]
+
+    a, b, c, com = [pedidos(vs) for vs in ("abc", "bca", "cab", "acb")]
+    assert not comparar_passividade(a, b, com, controles_adicionais=[c])["passou"]
+
+
+def test_passividade_nao_combina_variantes_literais_de_controles_distintos():
+    um = [_pedido_origem(("Accept", "a"), ("Priority", "1"))]
+    dois = [_pedido_origem(("Accept", "b"), ("Priority", "2"))]
+    com = [_pedido_origem(("Accept", "a"), ("Priority", "2"))]
+    assert not comparar_passividade(um, dois, com)["passou"]
+
+
+@pytest.mark.parametrize("tipo", ["pedidos", "cabecalhos"])
+def test_passividade_nao_admite_permutacao_nova(tipo):
+    if tipo == "pedidos":
+        um = [_pedido_origem(caminho=p) for p in ("/a", "/b", "/c")]
+        dois = list(reversed(um))
+        com = [um[1], um[0], um[2]]
+    else:
+        headers = [("Accept", "a"), ("Priority", "1"), ("Host", "127.0.0.1")]
+        um = [_pedido_origem(*headers)]
+        dois = [_pedido_origem(*reversed(headers))]
+        com = [_pedido_origem(headers[1], headers[0], headers[2])]
+    assert not comparar_passividade(um, dois, com)["passou"]
+
+
+@pytest.mark.parametrize(
+    "campo", ["Accept-Language", "aCcEpT-LaNgUaGe", "Accept", "X-Test"]
+)
 @pytest.mark.parametrize(
     "valor,passa",
     [
@@ -332,6 +363,7 @@ def test_passividade_normaliza_apenas_q_variavel(campo, valor, passa):
     d = comparar_passividade(
         pedido("pt-BR,pt;q=0.5"), pedido("pt-BR,pt;q=0.6"), pedido(valor)
     )
+    passa = passa and campo.casefold() == "accept-language"
     assert d["passou"] is passa
     if passa:
         prova = d["ruido_declarado"][0]

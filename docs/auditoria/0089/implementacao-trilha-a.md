@@ -262,3 +262,48 @@ nota formal do titular. A redação da 0089 §2.5(2) e do §3 item 1 ("streaming
 precisa dessa nota; registro de execução em
 `docs/decisoes/0089-nota-execucao-defeito-49.md`. Aceite real e auditoria independente
 continuam pendentes; esta entrega não aprova o próprio marco.
+
+## Parecer Terra r1
+
+20/11/2026. Papel Desenvolvedor, base `4493d5f`, mesmo worktree e ramo.
+Alteração da porta autorizada expressamente pelo supervisor somente para o
+item 1 do parecer `C:\dev\tmp\v5\audit\parecer-terra.md`.
+
+**Achado:** BOM permitia admitir `charset=TOKEN_SECRETO` sem reconhecer a
+codificação, mantendo o Content-Type bruto no `Response`, banco e snapshot.
+
+**Correção por classe:** `_conferir_headers` valida zero ou um charset do
+conjunto fechado da interpretação única, resolve o codec por `codecs.lookup`
+e publica o nome canônico WHATWG, independentemente de BOM/meta. Recusa
+duplicata mesmo idêntica, parâmetro desconhecido, codec não admitido e aspas
+ou escapes estranhos. Só o media type e charset canônicos chegam à
+interpretação, ao recibo e a `Response.content_type`. A interpretação
+preexistente em `texto_resposta.py` não foi alterada.
+
+**Revisão de saídas:** Content-Encoding é reduzido ao valor de uma lista
+fechada; Date/Last-Modified/Retry-After têm gramática de data HTTP canônica
+ou inteiro limitado, e Content-Length tem gramática e limite numéricos.
+`observe_http_response` só publica campos da lista `HEADER_NAMES` que passam
+por essas validações. ETag, Set-Cookie, Content-Disposition, Server, campos
+desconhecidos, Cache-Control e Vary não são publicados; os dois últimos só
+decidem a recusa de personalização. O detector de desafio devolve tipo fixo.
+As mensagens de erro da porta são códigos fixos; o adaptador e terminal não
+recebem o cabeçalho recusado. Não foi necessário modificar store, evidências
+ou snapshot: todos consomem o objeto já canonizado pela porta.
+
+**Regressões:** BOM + charset arbitrário, também sem BOM e com meta; codec
+transformador; duplicata idêntica/por alias; aspas simples, espaços internos
+e quoted-pair; parâmetro desconhecido; caixa variada e aspas HTTP válidas;
+canonização preservando o significado de latin1; recusa antes da construção
+de `Response`/`CapturaAssistida`, com memória liberada. Integração passa pela
+porta e persistência reais, evidencia publicamente e exporta snapshot; confere
+a coluna e varre todos os arquivos, inclusive SQLite/WAL/blobs, contra o
+token recusado e o Content-Type bruto válido. Há também campos arbitrários
+nos demais cabeçalhos, ausentes de objeto, banco, evidência e exportação.
+
+**D5:** comparação final de AST com `87b43f7` por nomes qualificados de funções
+e classes, incluindo métodos e definições internas,
+`ast.dump(include_attributes=False)`: **77 preexistentes, zero ausentes e
+zero alteradas**. Só o método assistido `_conferir_headers` mudou na porta.
+Validação e limitações consolidadas na seção homônima da trilha (b).
+Leitura de execução: `docs/decisoes/0089-nota-execucao-parecer-terra-r1.md`.

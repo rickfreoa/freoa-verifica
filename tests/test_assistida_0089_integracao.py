@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import codecs
+from dataclasses import asdict
 
 import pytest
 
@@ -129,6 +131,67 @@ def test_snapshot_preserva_modalidade(tmp_path, sessao):
     with Verifica(home=origem) as svc:
         out = svc.obter_evidencia(ids[0])
         assert out["proveniencia"]["modalidade_acesso"] == "sessao_assistida"
+
+
+def test_cabecalhos_assistidos_seguros_ate_snapshot_exportado(tmp_path, sessao, capsys):
+    from freoa_verifica.service import Verifica
+    from freoa_verifica.snapshot import export_snapshot
+    from tests.harness_assistida_0089_cenarios import varrer_artefatos
+    from tests.test_transport_assistida_0089 import fluxo, pedido
+
+    segredo = "TOKEN_SECRETO_TERRA_R1"
+    bruto = 'Text/HTML; CHARSET="UtF8"'
+    body = codecs.BOM_UTF8 + BODY
+    with pytest.raises(t.RespostaInvalida) as exc:
+        fluxo(
+            sessao, body=body, headers={"Content-Type": "text/html; charset=" + segredo}
+        )
+    assert segredo not in str(exc.value)
+    c = fluxo(
+        sessao,
+        pedido(chave=t.ChaveAssistida("cdp", "aba", "seguro", 0)),
+        body=body,
+        encoding="GZip",
+        headers={
+            "Content-Type": bruto,
+            **dict.fromkeys(
+                ("Date", "Last-Modified", "Retry-After", "ETag", "X-Token", "Server"),
+                segredo,
+            ),
+            "Set-Cookie": "TSabcdef=" + segredo,
+            "Content-Disposition": "inline; filename=" + segredo,
+            "Cache-Control": "public, extra=" + segredo,
+            "Vary": "X-" + segredo,
+        },
+    )
+    assert c.content_encoding == "gzip"
+    assert c.resposta.headers["content-type"] == "text/html; charset=utf-8"
+    assert segredo not in repr(asdict(c)) and bruto not in repr(asdict(c))
+    home, snapshot = tmp_path / "home", tmp_path / "exportado"
+    home.mkdir()
+    conn = connect(home / "verifica.sqlite3")
+    docs = resolver_grafo(PERFIS["planalto"], [c], orcamento=sessao)
+    ids = persistir(
+        conn, home, PERFIS["planalto"], docs, {0}, VigiaSintetico(), orcamento=sessao
+    )
+    row = dict(conn.execute("SELECT * FROM capture WHERE id=?", (ids[0],)).fetchone())
+    assert row["content_type"] == "text/html; charset=utf-8"
+    assert segredo not in json.dumps(row)
+    resultado = export_snapshot(conn, home, snapshot, staging_dir=tmp_path / "staging")
+    assert resultado["status"] == "ok", resultado
+    conn.close()
+    with Verifica(home=home) as svc:
+        publico = svc.obter_evidencia(ids[0])
+        assert publico["status"] == "encontrada"
+        assert segredo not in json.dumps(publico)
+    exportado = connect(snapshot / "verifica.sqlite3")
+    assert (
+        exportado.execute("SELECT content_type FROM capture").fetchone()[0]
+        == "text/html; charset=utf-8"
+    )
+    exportado.close()
+    varrer_artefatos(tmp_path, [segredo, bruto])
+    assert segredo not in capsys.readouterr().out
 
 
 def test_frescor_sem_verified_por_captura(tmp_path, sessao, monkeypatch):

@@ -1113,3 +1113,152 @@ condição: aborto próprio demonstrado permanece não reproduzível, com cobert
 offline explícita. Os cinco pré-requisitos ausentes do ensaio original continuam
 pendentes. Nenhum método CDP novo, dependência, fixture ou alteração do produto.
 O marco não foi declarado aprovado; o supervisor fará o commit.
+
+## Parecer Terra r1
+
+20/11/2026. Desenvolvedor; worktree `C:\dev\fv14-0089i`, ramo
+`feat/0089-sessao-assistida`, base e HEAD preservado `4493d5f`.
+Parecer lido: `C:\dev\tmp\v5\audit\parecer-terra.md`.
+Traceback completo lido: `C:\dev\tmp\v5\impl-b\nav-8.log`, além do
+registro das repetições isoladas em `item9.log`.
+
+### Item 1 — valor arbitrário em charset e saídas
+
+O BOM permitia conservar um valor arbitrário de charset no Content-Type
+publicado. A correção está na porta, autorizada expressamente nesta rodada:
+valida o conjunto fechado de codecs da interpretação única por
+`codecs.lookup`, mesmo quando BOM/meta determinam a leitura, e substitui a
+entrada pelo media type e nome WHATWG canônicos antes de criar qualquer
+objeto persistível. Rejeita duplicata mesmo idêntica, parâmetro extra,
+codificação não admitida, aspas estranhas e escapes. Aspas HTTP simples e
+caixa variada em rótulo admitido convergem ao mesmo valor canônico.
+
+Foi revisado o caminho `Response -> CapturaAssistida -> persistir ->
+save_capture -> obter_evidencia -> export_snapshot`. O recibo HTTP recebe o
+mesmo Content-Type canônico. Demais campos publicados de cabeçalho passam
+pela lista e gramáticas fechadas já existentes; Content-Encoding usa lista
+fechada e minúsculas. Campos livres não são publicados. Detecção de desafio,
+mensagens de recusa, diagnóstico CDP e terminal usam códigos fixos. A revisão
+completa das saídas e as regressões da porta constam também da seção
+`Parecer Terra r1` na trilha (a). Não se mudou a interpretação automática nem
+se introduziu uma segunda sanitização concorrente no store/snapshot.
+
+Regressões provam recusa antes de `Response`/`CapturaAssistida`, liberação de
+memória, canonização sem alterar a semântica de latin1, e persistência real
+com evidência pública e snapshot **exportado**, incluindo consulta à coluna
+exportada e varredura recursiva de todos os artefatos contra token sintético
+e cabeçalho bruto. Os campos livres incluem ETag, Set-Cookie,
+Content-Disposition, Server, campo desconhecido e valores inválidos de
+Date/Last-Modified/Retry-After. Não se usaram segredos reais.
+
+### Item 2 — normalização indevida e descontos de passividade
+
+`comparar_passividade` normalizava q em qualquer campo. Agora o guardião
+explícito exige `nome.casefold() == 'accept-language'`. Accept e todos os
+demais campos conservam valor literal. Os novos testes antes da correção
+reproduziram o verde indevido de q novo em Accept e em X-Test. A bateria
+cobre nome em caixa variada, q novo permitido só na posição variável,
+idioma alterado, posição q estável e alteração em outro campo.
+
+A revisão adicional reproduziu permissões excessivas de combinar campos
+observados em controles distintos e de admitir permutações novas. Foram
+fechadas, incluindo a ordenação incondicional de ocorrências do mesmo
+método/caminho. Essa última ordenação ficou exclusivamente no diagnóstico
+de multiconjuntos; nunca decide o aceite. Não se retiraram comparações de
+campos/pedidos, multiplicidades, favicon ou sequência de comandos CDP.
+
+Descontos remanescentes, todos registrados no diagnóstico com justificativa:
+
+* q variável de Accept-Language: somente posições comprovadas em dois a
+  quatro controles; idioma, espaços, ordem, outros parâmetros, q estável e
+  multiplicidade ficam literais. Justificativa: variação independente já
+  autorizada na nota do sexto ensaio.
+* Ordem de chegada: exclusivamente uma sequência de método/caminho já
+  observada nos controles; nenhuma nova permutação. Justificativa: alternativa
+  concreta demonstrada SEM adaptador.
+* Valores e ordem de cabeçalhos variáveis: por método/caminho, a sequência
+  inteira de tuplas normalizadas precisa reproduzir um controle. Conserva
+  nomes, valores, ordem, campos repetidos e multiplicidades; não mistura
+  variantes de controles distintos. Justificativa: igualdade literal com
+  uma alternativa observada, sem exclusão fixa de cabeçalho.
+
+### Item 3 — falha de encerramento no ensaio completo
+
+O teste falhou ao **sair** do contexto de `sem1`, depois da navegação e das
+asserções do controle, no caminho `fechar_navegador ->
+aguardar_saida_navegador -> _processos_do_perfil`. A enumeração recusada
+recebeu apenas **3,793946700003289 s** do prazo de 15 s. Os resets de conexão
+do stderr não são a exceção propagada; não há prova de porta ocupada ou de
+falha ao abrir perfil nesse traceback.
+
+Defeito reproduzido offline: consultar `proc.poll()` antes de uma consulta
+CIM lenta conservava estado obsoleto do principal e forçava outra consulta
+no prazo residual, mesmo se a enumeração anterior já estivesse vazia e o
+principal tivesse saído. A correção espera o principal antes de iniciar a
+primeira consulta, e confere o estado após CIM, evitando consultas precoces
+e repetição por poll obsoleto. Mantém o prazo total de **15 s**, confirmação
+dos filhos, recusa se não houver prova e limpeza em toda saída. Timeout e
+erro do PowerShell têm diagnóstico fixo distinto, sem cmd/stdout/stderr.
+
+Regressões com relógio/processos sintéticos cobrem consulta de 11,1 s,
+ausência de segunda consulta inútil, espera do principal antes de consultar,
+limite único e exceções de timeout/processo/JSON sem segredos. As provas
+existentes de filhos remanescentes, falha de enumeração, diretório pendente
+e limpeza em fim normal, erro, skip, interrupção e falha de fechamento
+continuam na bateria afetada.
+
+**Limite causal:** o log antigo suprime a exceção original do enumerador.
+Não é possível afirmar se foi TimeoutExpired, erro de processo ou dados
+inválidos, nem demonstrar interferência de caso anterior a partir dele.
+A correção remove o defeito de ciclo de vida reproduzido, mas a atribuição
+operacional e a suficiência no ensaio completo requerem reensaio real.
+Não se isolou caso sem evidência de interferência e não se converteu falha
+de limpeza em skip ou ausência de processos.
+
+Leitura de execução e justificativas normativas:
+`docs/decisoes/0089-nota-execucao-parecer-terra-r1.md`.
+
+### Validação final e questões
+
+* **987 passed, 1 skipped**, exit 0, **186,59 s**, na bateria final de quinze
+  módulos após a última alteração de código e a formatação. O único skip é
+  HTTP/2 em memória sem o pacote `h2`; não se instalou dependência.
+* Executável `.venv\Scripts\python.exe`, opções `-X utf8 -m pytest -q
+  -p no:cacheprovider -m "not live and not navegador_assistido" --tb=short -ra`,
+  `--basetemp "$env:TEMP\fv0089-terra-r1-final"`, `TEMP`/`TMP` no temporário
+  do sistema, fora do checkout.
+* Módulos: `test_transport_assistida_0089.py`;
+  `test_assistida_0089_cdp.py`, `test_assistida_0089_harness.py`,
+  `test_assistida_0089_grafo.py`, `test_assistida_0089_ambiente.py`,
+  `test_assistida_0089_cortes.py`, `test_assistida_0089_indicacao.py`,
+  `test_assistida_0089_integracao.py`, `test_assistida_0089_fronteiras.py`;
+  `test_fix15_charset.py`, `test_fix16_charset_redirect.py`,
+  `test_fix17_charset_estrito.py`, `test_fix18_f19_validacao_primeiro.py`,
+  `test_fix18_f22_recibo_interpretacao.py`, `test_snapshot_versao_130.py`.
+  Todos sob `tests/`. As nove provas assistidas incluem os testes causais
+  e os cenários de limpeza anteriores; os seis módulos adicionais verificam
+  interpretação, recibo e snapshot preexistentes.
+* Coleta dos dois módulos de navegador com `.venv`, `-p no:cacheprovider` e
+  `--collect-only`: **57 testes**, exit 0, sem lançar navegador.
+* **AST contra `87b43f7`: 77 definições preexistentes, zero ausentes e zero
+  alteradas**, incluindo métodos e definições internas, por nome qualificado
+  e `ast.dump(include_attributes=False)`.
+* `C:\dev\tmp\venv-ruff\Scripts\python.exe scripts\ruff_catraca.py`:
+  **exit 0**, baseline sem alteração.
+* Os seis arquivos Python tocados fora de `transport.py` passam em
+  `ruff check --no-cache` e `ruff format --no-cache --check`, exit 0.
+  O trecho assistido tocado da porta passa em `ruff format --check
+  --range 863-943`, exit 0. O lint integral de `transport.py` conserva
+  **seis achados preexistentes** (S310, S112 e quatro BLE001) em funções
+  automáticas congeladas. Comparação por regra/mensagem com o HEAD:
+  **idênticos, zero novos**. Não se alteraram essas funções nem se ocultaram
+  achados para satisfazer limpeza global incompatível com a restrição de AST.
+* `git diff --check`: limpo. Sem novo método CDP, dependência ou fixture;
+  sem alteração de `verified`, stage, tentativa de commit, push ou troca de ramo.
+
+**Questões:** reensaio real integral, causa operacional específica da falha
+CIM antiga, suíte completa do repositório e auditoria independente: **NOT RUN
+ou não demonstrados nesta rodada**. A nota de execução descreve precisamente
+o limite causal. Os cinco pré-requisitos ausentes do ensaio anterior continuam
+pendentes. A entrega corrige as falhas offline reproduzidas, sem declarar o
+marco aprovado. O supervisor fará o commit.

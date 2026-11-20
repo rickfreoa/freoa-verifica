@@ -772,6 +772,11 @@ def _processos_do_perfil(perfil, prazo):
                 if os.path.normcase(str(Path(valor).resolve())) == esperado:
                     encontrados.add(int(registro["ProcessId"]))
         return encontrados
+    except subprocess.TimeoutExpired:
+        # Nunca publicar cmd, stdout/stderr ou linhas de comando de processos.
+        raise RecusaSessao("ENUMERACAO_ASSISTIDA_INDISPONIVEL_PRAZO") from None
+    except subprocess.CalledProcessError:
+        raise RecusaSessao("ENUMERACAO_ASSISTIDA_INDISPONIVEL_PROCESSO") from None
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
         raise RecusaSessao("ENUMERACAO_ASSISTIDA_INDISPONIVEL") from None
 
@@ -783,10 +788,17 @@ def aguardar_saida_navegador(perfil, proc=None):
         restante = limite - time.monotonic()
         if restante <= 0:
             raise RecusaSessao("SAIDA_ASSISTIDA_NAO_CONFIRMADA")
-        principal_saiu = proc is None or proc.poll() is not None
+        if proc is not None and proc.poll() is None:
+            # Uma consulta CIM é cara e só pode provar a saída dos filhos após
+            # a saída do principal. Não gastar esse prazo com consultas precoces.
+            time.sleep(min(INTERVALO_LIMPEZA_S, restante))
+            continue
         processos = _processos_do_perfil(perfil, restante)
         if time.monotonic() > limite:
             raise RecusaSessao("SAIDA_ASSISTIDA_NAO_CONFIRMADA")
+        # CIM pode consumir quase todo o prazo. O principal pode ter saído
+        # durante a consulta; não repetir a enumeração por um poll obsoleto.
+        principal_saiu = proc is None or proc.poll() is not None
         if principal_saiu and not processos:
             if proc is not None:
                 proc.wait(timeout=max(0, limite - time.monotonic()))
