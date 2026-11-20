@@ -6,7 +6,13 @@ import pytest
 from freoa_verifica.assistida import ambiente as a
 
 from tests.harness_assistida_0089 import CORPOS, navegador_pipe, origem_https
-from tests.harness_assistida_0089_cenarios import SondaEventos, bombear, capturas
+from tests.harness_assistida_0089_cenarios import (
+    SondaEventos,
+    bombear,
+    capturas,
+    conferir_recusa_streaming,
+    exigir_recusa,
+)
 
 pytestmark = pytest.mark.navegador_assistido
 
@@ -76,16 +82,68 @@ def test_item1_https_adaptador_real(tmp_path, monkeypatch, caso):
                 }.get(caso)
                 if caso == "304":
                     assert any(e["status"] == 304 for e in sonda.eventos)
-                    assert any(
-                        m
-                        in {
+                    url = "https://127.0.0.1/case/304"
+                    exigir_recusa(
+                        ad,
+                        url,
+                        {
                             "STATUS_ASSISTIDO_DIVERGENTE",
                             "CONTENT_LENGTH_ASSISTIDO_DIVERGENTE",
                             "CORPO_ASSISTIDO_VAZIO",
                             "HTTPStatusError",
-                        }
-                        for _, m in ad.motivos_recusas
+                            "STREAMING_ASSISTIDO_TARDIO",
+                            "COMANDO_STREAMING_RECUSADO",
+                            "EVENTO_ASSISTIDO_RECUSADO",
+                        },
                     )
+                    for u, motivo in ad.motivos_recusas:
+                        if u == url and motivo in {
+                            "STREAMING_ASSISTIDO_TARDIO",
+                            "COMANDO_STREAMING_RECUSADO",
+                        }:
+                            conferir_recusa_streaming(sonda, url, motivo)
+                        elif u == url and motivo == "EVENTO_ASSISTIDO_RECUSADO":
+                            assert any(
+                                e["url"] == url
+                                and e["erro_rede"] == "net::ERR_CACHE_MISS"
+                                for e in sonda.eventos
+                            ), sonda.eventos
+                elif caso in {"sem_cabecalhos", "parcial"}:
+                    url = "https://127.0.0.1/case/" + caso
+                    exigir_recusa(
+                        ad,
+                        url,
+                        {
+                            esperado,
+                            "COMANDO_STREAMING_RECUSADO",
+                            "EVENTO_ASSISTIDO_RECUSADO",
+                        },
+                    )
+                    for u, motivo in ad.motivos_recusas:
+                        if u == url and motivo == "COMANDO_STREAMING_RECUSADO":
+                            conferir_recusa_streaming(sonda, url, motivo)
+                        elif u == url and motivo == "EVENTO_ASSISTIDO_RECUSADO":
+                            assert any(
+                                e["url"] == url
+                                and e["metodo"] == "Network.loadingFailed"
+                                and e["erro_rede"]
+                                in {
+                                    "net::ERR_EMPTY_RESPONSE",
+                                    "net::ERR_INVALID_HTTP_RESPONSE",
+                                    "net::ERR_CONNECTION_CLOSED",
+                                    "net::ERR_CONNECTION_RESET",
+                                }
+                                for e in sonda.eventos
+                            ), sonda.eventos
+                    assert not any(
+                        e["url"] == url
+                        and e["metodo"]
+                        in {
+                            "Network.responseReceived",
+                            "Network.responseReceivedExtraInfo",
+                        }
+                        for e in sonda.eventos
+                    ), sonda.eventos
                 elif caso == "cl21":
                     assert any(
                         m in {esperado, "EVENTO_ASSISTIDO_RECUSADO"}

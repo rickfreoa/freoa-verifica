@@ -1,7 +1,7 @@
 """§3: cenários reais pendentes de execução externa pelo supervisor, com Brave.
 
 Cada fase começa após inventário/base/prontidão (até 60 s + assentamento).
-Prazos de cenário explícitos, sem pytest-timeout ou outra dependência nova.
+Prazos de cenário explícitos, sem pytest-timeout; HTTP/2 usa o extra test-navegador.
 """
 
 import json
@@ -30,6 +30,7 @@ from tests.harness_assistida_0089_cenarios import (
     bombear,
     capturas,
     cenarios_https,
+    conferir_recusa_streaming,
     exigir_recusa,
     varrer_artefatos,
 )
@@ -63,12 +64,23 @@ def test_item1_codificacoes_e_framing_reais(tmp_path, monkeypatch, caso):
                     "chunk_truncado": {"EVENTO_ASSISTIDO_RECUSADO"},
                     "cl_truncado": {"EVENTO_ASSISTIDO_RECUSADO"},
                     "cl_acima_limite": {"TAMANHO_ASSISTIDO_EXCEDIDO"},
-                    "vazio": {"CORPO_ASSISTIDO_VAZIO"},
+                    "vazio": {
+                        "CORPO_ASSISTIDO_VAZIO",
+                        "STREAMING_ASSISTIDO_TARDIO",
+                        "COMANDO_STREAMING_RECUSADO",
+                    },
                 }[caso]
                 # Chromium pode rejeitar os headers antes de responseReceived.
                 if caso in {"campo_malformado", "cl_conflitante", "cl_te"}:
                     motivos = motivos | {"EVENTO_ASSISTIDO_RECUSADO"}
                 exigir_recusa(ad, BASE + "/case/" + caso, motivos)
+                if caso == "vazio":
+                    for u, motivo in ad.motivos_recusas:
+                        if (
+                            u == BASE + "/case/vazio"
+                            and motivo != "CORPO_ASSISTIDO_VAZIO"
+                        ):
+                            conferir_recusa_streaming(sonda, u, motivo)
                 if any(m == "EVENTO_ASSISTIDO_RECUSADO" for _, m in ad.motivos_recusas):
                     erros = {
                         "campo_malformado": {"net::ERR_INVALID_HTTP_RESPONSE"},
@@ -168,7 +180,13 @@ def test_item1_hsts_interno_real_e_ausencia_de_prova(tmp_path, monkeypatch, sem_
             )
 
 
-def test_item1_item8_instalacao_manual_desempacotada_recusa(tmp_path, monkeypatch):
+@pytest.mark.skipif(
+    os.environ.get("FV_0089_GESTO_HUMANO") != "1",
+    reason="exige pessoa na janela dedicada para carregar extensão; habilite FV_0089_GESTO_HUMANO=1 e acompanhe as instruções (90 s)",
+)
+def test_item1_item8_instalacao_manual_desempacotada_recusa(
+    tmp_path, monkeypatch, capsys
+):
     # Mecanismo aceito pela UI do Brave, sem política, pacote externo, admin ou
     # flags --load-extension/unsafe. Não afirma provar location 1/10 assinada.
     extensao = tmp_path / "extensao-sintetica"
@@ -200,6 +218,14 @@ def test_item1_item8_instalacao_manual_desempacotada_recusa(tmp_path, monkeypatc
         ):
             bombear(ad, vigia, ate=lambda: bool(capturas(ad)), prazo=40)
             assert capturas(ad), "candidata anterior à instalação deve existir"
+            with capsys.disabled():
+                print(
+                    "OPERADOR 0089: na janela dedicada, abra brave://extensions, "
+                    "ative o modo de desenvolvedor e Carregar sem compactação. "
+                    f"Selecione {extensao}. Prazo a partir de agora: 90 s. "
+                    "Esta instalação é exclusivamente o ensaio negativo sintético.",
+                    flush=True,
+                )
             perfil = tmp_path / "sessao-0089-harness"
             limite = time.monotonic() + 90
             recusa = None
@@ -246,7 +272,13 @@ def test_item1_item8_instalacao_manual_desempacotada_recusa(tmp_path, monkeypatc
 def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, caso):
     with cenarios_https(tmp_path, caso) as (spki, estado):
         with navegador_pipe(
-            tmp_path, monkeypatch, spki=spki, script=f"location.href='{BASE}/driver';"
+            tmp_path,
+            monkeypatch,
+            spki=spki,
+            script=f"location.href='{BASE}/driver';",
+            nome=os.environ.get("FV_0089_NAVEGADOR_PRERENDER", "brave")
+            if caso == "prerender"
+            else "brave",
         ) as (ad, _, vigia):
             sonda = SondaEventos(ad)
             bombear(ad, vigia, ate=lambda: "/done" in estado["marcas"], prazo=55)
@@ -288,6 +320,15 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
                         if k.lower() in {"sec-purpose", "purpose"}
                     )
             elif caso == "prerender":
+                if not any(e["subtipo"] == "prerender" for e in sonda.eventos):
+                    assert "/indisponivel/prerender" in estado["marcas"]
+                    assert not any(p[1] == "/case/prerender" for p in estado["pedidos"])
+                    pytest.skip(
+                        "CENARIO_PRERENDER_NAO_PRODUZIDO: navegador não iniciou prerender; "
+                        "Brave desativa a funcionalidade. Use FV_0089_NAVEGADOR_PRERENDER "
+                        "com navegador instalado que a suporte e passe pelas políticas; "
+                        "não houve prova real do produto neste cenário"
+                    )
                 assert any(e["subtipo"] == "prerender" for e in sonda.eventos)
                 assert "/marca/prerender" in estado["marcas"]
                 observados = [
@@ -308,6 +349,11 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
                     sum(c.resposta.url.endswith("/bfcache") for c in capturas(ad)) == 1
                 )
             else:
+                assert estado["protocolos"] and set(estado["protocolos"]) == {"h2"}
+                assert any(
+                    e["url"] == BASE + "/case/early_hints" and e["protocolo"] == "h2"
+                    for e in sonda.eventos
+                ), sonda.eventos
                 assert any(
                     e["metodo"] == "Network.responseReceivedEarlyHints"
                     for e in sonda.eventos
@@ -335,7 +381,11 @@ def test_item2_proveniencia_real_sem_candidata_derivada(tmp_path, monkeypatch, c
                 ), "resposta final é avaliada por si"
 
 
-def test_item2_recarga_forcada_humana_vem_da_rede(tmp_path, monkeypatch):
+@pytest.mark.skipif(
+    os.environ.get("FV_0089_GESTO_HUMANO") != "1",
+    reason="exige pessoa na janela dedicada para Ctrl+Shift+R; habilite FV_0089_GESTO_HUMANO=1 e acompanhe as instruções (90 s)",
+)
+def test_item2_recarga_forcada_humana_vem_da_rede(tmp_path, monkeypatch, capsys):
     # O Chromium ignora o booleano de location.reload(true). Exige gesto humano
     # e prova pelos DOIS cabeçalhos, em vez de simular Network.setCacheDisabled.
     with cenarios_https(tmp_path, "reload") as (spki, estado):
@@ -344,6 +394,14 @@ def test_item2_recarga_forcada_humana_vem_da_rede(tmp_path, monkeypatch):
             _,
             vigia,
         ):
+            bombear(ad, vigia, ate=lambda: bool(capturas(ad)), prazo=40)
+            with capsys.disabled():
+                print(
+                    "OPERADOR 0089: na janela dedicada que mostra /case/reload, "
+                    "pressione Ctrl+Shift+R para recarga forçada. "
+                    "Prazo a partir de agora: 90 s. Não use outra janela/perfil.",
+                    flush=True,
+                )
             bombear(ad, vigia, ate=lambda: "/done" in estado["marcas"], prazo=90)
             reais = [
                 dict((k.lower(), v) for k, v in hs)
@@ -399,6 +457,12 @@ def test_item3_escopo_e_quadros_reais(tmp_path, monkeypatch, caso):
                         ad, BASE + "/case/cookie", {"COOKIE_ASSISTIDO_RECUSADO"}
                     )
                 if caso == "download":
+                    assert any(
+                        e["metodo"] == "Network.requestWillBeSent"
+                        and e["url"] == BASE + "/case/download"
+                        and e["tipo"] == "Document"
+                        for e in sonda.eventos
+                    ), sonda.eventos
                     exigir_recusa(
                         ad, BASE + "/case/download", {"EVENTO_ASSISTIDO_RECUSADO"}
                     )
@@ -434,7 +498,9 @@ def test_item6_varredura_todos_artefatos_publicados(tmp_path, monkeypatch, capsy
             bombear(ad, vigia, ate=lambda: "/done" in estado["marcas"], prazo=45)
             assert not estado["erros"]
             cs = capturas(ad)
-            assert len(cs) == 1 and cs[0].resposta.url.endswith("/" + PUBLICO_CAMINHO)
+            assert len(cs) == 1 and cs[0].resposta.url.endswith(
+                "/" + PUBLICO_CAMINHO
+            ), ad.motivos_recusas
             assert PUBLICO_CORPO.encode() in cs[0].resposta.body
             # Prova que os segredos realmente atravessaram a origem sintética.
             bruto_origem = json.dumps(estado["pedidos"])
@@ -553,7 +619,7 @@ def test_item9_pedidos_e_cabecalhos_iguais_com_sem_adaptador(tmp_path, monkeypat
                     assert not estado["erros"]
                     assert any(p[1] == "/case/passividade" for p in estado["pedidos"])
                     if sonda:
-                        assert capturas(ad)
+                        assert capturas(ad), ad.motivos_recusas
                         assert all(
                             m in METODOS and (METODOS[m] is None or p == METODOS[m])
                             for m, p in sonda.comandos

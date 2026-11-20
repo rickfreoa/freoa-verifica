@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import base64
+import gzip
 
 import io
 import json
@@ -22,7 +24,7 @@ from freoa_verifica.assistida.cdp import AdaptadorCDP, Alvo, CanalPipe, METODOS
 
 from freoa_verifica.assistida.perfis import PERFIS
 
-from tests.test_transport_assistida_0089 import eventos, pedido
+from tests.test_transport_assistida_0089 import evento, eventos, pedido, perfil
 
 from tests.assistida_0089_util import (
     sessao as sessao,
@@ -248,6 +250,57 @@ def test_ordem_real_streaming_document_adaptador(sessao):
     c = ad.pedidos["cdp", "pedido"].admitida
     assert c is not None and c.resposta.body == BODY
     assert not ad.recusas
+
+
+@pytest.mark.parametrize("tipo", ["Fetch", "XHR"])
+@pytest.mark.parametrize("encoding", [None, "gzip"])
+@pytest.mark.parametrize("comprimento_final", [0, 1])
+def test_contador_final_sem_data_adaptador(sessao, tipo, encoding, comprimento_final):
+    sessao.perfil = perfil()
+    ad = adapter(sessao)
+    ad.perfil = replace(ad.perfil, porta=sessao.perfil)
+    request(ad, tipo=tipo, initiator={"type": "script"})
+    numero = ad.numero
+    p = pedido()
+    body = b"<html>" + b"a" * 31 + b"</html>"
+    wire = len(gzip.compress(body)) if encoding else len(body)
+    evs = eventos(p, body=body, encoding=encoding, declarado=wire)
+    evs[-2:-1] = [
+        evento(
+            p,
+            "dataReceived",
+            data=base64.b64encode(bloco).decode(),
+            dataLength=22,
+            encodedDataLength=0,
+        )
+        for bloco in (body[:22], body[22:])
+    ] + [
+        evento(p, "dataReceived", dataLength=comprimento_final, encodedDataLength=wire)
+    ]
+    for ev in evs:
+        if ev.metodo == "streamResourceContent":
+            ad.processar({"id": numero, "result": ev.dados})
+        else:
+            dados = (
+                {"headers": {}, "associatedCookies": []}
+                if ev.metodo == "requestWillBeSentExtraInfo"
+                else ev.dados
+            )
+            ad.processar(
+                {
+                    "method": "Network." + ev.metodo,
+                    "sessionId": "cdp",
+                    "params": {"requestId": "pedido", **dados},
+                }
+            )
+    curso = ad.pedidos["cdp", "pedido"]
+    if comprimento_final:
+        assert curso.recusada and curso.admitida is None
+        assert ad.motivos_recusas == [(URL, "STREAMING_ASSISTIDO_INVALIDO")]
+    else:
+        assert not ad.recusas
+        assert curso.admitida.resposta.body == body
+        assert curso.admitida.encoded_data_length == wire
 
 
 @pytest.mark.parametrize(

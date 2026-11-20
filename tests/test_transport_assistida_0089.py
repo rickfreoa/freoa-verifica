@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import base64
+import gzip
 import hashlib
 import json
 import threading
@@ -743,6 +744,55 @@ def test_streaming_soma_varios_eventos_antes_da_resposta(sessao):
         evento(p, "dataReceived", dataLength=13, encodedDataLength=5),
     ]
     assert fluxo(sessao, p, evs).resposta.body == BODY
+
+
+@pytest.mark.parametrize("tipo", ["Fetch", "XHR"])
+@pytest.mark.parametrize("encoding", [None, "gzip"])
+@pytest.mark.parametrize("violacao", [None, "sem_data_positivo", "codificados"])
+def test_streaming_contador_final_sem_data(sessao, tipo, encoding, violacao):
+    # Sequência sintética do fetch_identity de diag_trace.txt (quarto ensaio):
+    # resposta vazia, dois blocos de 22 bytes, contador final sem data e término.
+    # No comprimido, o último evento responde por TODOS os bytes codificados.
+    body = b"<html>" + b"a" * 31 + b"</html>"
+    assert len(body) == 44
+    p = replace(xhr(), tipo=tipo)
+    wire = len(gzip.compress(body)) if encoding else len(body)
+    evs = eventos(p, body=body, encoding=encoding, declarado=wire)
+    evs[-2:-1] = [
+        evento(
+            p,
+            "dataReceived",
+            data=base64.b64encode(bloco).decode(),
+            dataLength=len(bloco),
+            encodedDataLength=0,
+        )
+        for bloco in (body[:22], body[22:])
+    ] + [
+        evento(
+            p,
+            "dataReceived",
+            dataLength=1 if violacao == "sem_data_positivo" else 0,
+            encodedDataLength=wire + (1 if violacao == "codificados" else 0),
+        )
+    ]
+    if violacao:
+        codigo = (
+            "STREAMING_ASSISTIDO_INVALIDO"
+            if violacao == "sem_data_positivo"
+            else "CONTENT_LENGTH_ASSISTIDO_DIVERGENTE"
+        )
+        if violacao == "codificados" and not encoding:
+            # Identity não confronta o contador codificado com Content-Length.
+            assert fluxo(sessao, p, evs).encoded_data_length == wire + 1
+            return
+        with pytest.raises(t.RespostaInvalida, match=f"^{codigo}$"):
+            fluxo(sessao, p, evs)
+        assert sessao._memoria == 0
+    else:
+        c = fluxo(sessao, p, evs)
+        assert c.resposta.body == body
+        assert c.resposta.sha256 == hashlib.sha256(body).hexdigest()
+        assert c.encoded_data_length == wire
 
 
 @pytest.mark.parametrize(

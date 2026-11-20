@@ -819,8 +819,11 @@ class _CapturaAssistidaEmCurso:
                 self._antes_stream = True
             else:
                 if "data" not in dados:
-                    raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
-                self._copiar(dados["data"], dados["dataLength"])
+                    # Chromium também emite contador codificado sem novos bytes.
+                    if dados["dataLength"] != 0:
+                        raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
+                else:
+                    self._copiar(dados["data"], dados["dataLength"])
         elif metodo == "loadingFinished":
             if not self._stream:
                 raise RespostaInvalida("STREAMING_ASSISTIDO_TARDIO")

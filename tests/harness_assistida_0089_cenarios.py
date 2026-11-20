@@ -43,7 +43,7 @@ def driver(caso):
         "sw": "await navigator.serviceWorker.register('/sw.js',{scope:'/'});await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(r=>navigator.serviceWorker.addEventListener('controllerchange',r,{once:true}));await fetch('/case/sw');"
         + fim,
         "prefetch": "let l=document.createElement('link');l.rel='prefetch';l.href='/case/prefetch';document.head.append(l);await new Promise(r=>setTimeout(r,2500));location.href='/case/prefetch';",
-        "prerender": "let s=document.createElement('script');s.type='speculationrules';s.textContent=JSON.stringify({prerender:[{source:'list',urls:['/case/prerender']}]});document.head.append(s);await new Promise(r=>setTimeout(r,4000));location.href='/case/prerender';",
+        "prerender": "let s=document.createElement('script');s.type='speculationrules';s.textContent=JSON.stringify({prerender:[{source:'list',urls:['/case/prerender']}]});document.head.append(s);let pronto=false;for(let i=0;i<40&&!pronto;i++){await new Promise(r=>setTimeout(r,200));pronto=await fetch('/sonda/prerender').then(r=>r.json())}if(pronto){location.href='/case/prerender'}else{await fetch('/indisponivel/prerender');await fetch('/done')}",
         "bfcache": "location.href='/case/bfcache'",
         "early_hints": "location.href='/case/early_hints'",
         "iframe": "let f=document.createElement('iframe');f.src='/case/iframe';document.body.append(f);await new Promise(r=>f.onload=r);"
@@ -54,7 +54,7 @@ def driver(caso):
         + fim,
         "data": "let f=document.createElement('iframe');f.src='data:text/html,<html>data sintetico</html>';document.body.append(f);await new Promise(r=>f.onload=r);"
         + fim,
-        "download": "let l=document.createElement('a');l.href='/case/download';l.download='sintetico.html';document.body.append(l);l.click();await new Promise(r=>setTimeout(r,2000));"
+        "download": "location.href='/case/download';await new Promise(r=>setTimeout(r,2000));"
         + fim,
         "websocket": "let w=new WebSocket('wss://127.0.0.1/ws');await new Promise(r=>{w.onopen=()=>{w.close();r()};w.onerror=r});"
         + fim,
@@ -90,6 +90,14 @@ def driver(caso):
 @contextmanager
 def cenarios_https(path, caso, *, atraso_primeiro_byte=0.15):
     """Atraso na origem até os headers: emulação de rede, sem alterar o cliente."""
+    if caso == "early_hints":
+        from tests.harness_assistida_0089_h2 import origem_early_hints_h2
+
+        with origem_early_hints_h2(
+            path, atraso_primeiro_byte=atraso_primeiro_byte
+        ) as resultado:
+            yield resultado
+        return
     cert, key, spki = certificados(path)
     estado = {"pedidos": [], "marcas": [], "erros": []}
 
@@ -147,6 +155,16 @@ def cenarios_https(path, caso, *, atraso_primeiro_byte=0.15):
             if caminho == "/erro_driver":
                 estado["erros"].append("driver")
                 return self.enviar(b"erro", tipo="text/plain", pausa=False)
+            if caminho == "/sonda/prerender":
+                return self.enviar(
+                    b"true" if "/marca/prerender" in estado["marcas"] else b"false",
+                    tipo="application/json",
+                    headers=[("Cache-Control", "no-store")],
+                    pausa=False,
+                )
+            if caminho == "/indisponivel/prerender":
+                estado["marcas"].append(caminho)
+                return self.enviar(b"indisponivel", tipo="text/plain", pausa=False)
             if caminho == "/driver":
                 return self.enviar(
                     driver(caso), headers=[("Cache-Control", "no-store")]
@@ -210,12 +228,6 @@ def cenarios_https(path, caso, *, atraso_primeiro_byte=0.15):
                     ),
                     headers=[("Cache-Control", "max-age=600")],
                 )
-            if caminho == "/case/early_hints":
-                self.connection.sendall(
-                    b"HTTP/1.1 103 Early Hints\r\nLink: </case/hinted>; rel=preload; as=fetch; crossorigin\r\n\r\n"
-                )
-                time.sleep(0.5)
-                return self.enviar(pagina("fetch('/done')"))
             if caminho == "/case/reload":
                 forcou = (
                     self.headers.get("Cache-Control") == "no-cache"
@@ -304,6 +316,7 @@ class SondaEventos:
         self.eventos = []
         self.pedidos = {}
         self.comandos = []
+        self._streams = {}
         self._processar = ad.processar
         self._enviar = ad.canal.enviar
         ad.processar = self.processar
@@ -311,6 +324,11 @@ class SondaEventos:
 
     def enviar(self, obj):
         self.comandos.append((obj["method"], obj.get("params", {})))
+        if obj["method"] == "Network.streamResourceContent":
+            self._streams[obj["id"]] = (
+                obj.get("sessionId"),
+                obj["params"]["requestId"],
+            )
         return self._enviar(obj)
 
     def processar(self, obj):
@@ -320,6 +338,9 @@ class SondaEventos:
         resultado = self._processar(obj)
         metodo, p = obj.get("method", ""), obj.get("params", {})
         chave = (obj.get("sessionId"), p.get("requestId"))
+        stream = obj.get("id") in self._streams
+        if stream:
+            chave = self._streams[obj["id"]]
         if metodo == "Network.requestWillBeSent":
             self.pedidos[chave] = p.get("request", {}).get("url", "")
         r = p.get("response", {})
@@ -339,10 +360,15 @@ class SondaEventos:
                 "raiz": alvo.raiz if alvo else None,
                 "subtipo": p.get("targetInfo", {}).get("subtype", ""),
                 "status": r.get("status", p.get("statusCode")),
+                "protocolo": r.get("protocol"),
                 "erro_rede": p.get("errorText"),
                 "metodo_http": p.get("request", {}).get("method"),
                 "subtipo_alvo": subtipo_alvo,
                 "primeira_url": primeira_url,
+                "stream_resposta": stream,
+                "stream_erro": stream and "error" in obj,
+                "data_presente": "data" in p,
+                "data_length": p.get("dataLength"),
             }
         )
         return resultado
@@ -378,8 +404,23 @@ def exigir_recusa(ad, url, motivos):
     """Negativo não passa por zero capturas ou por falha alheia ao mecanismo."""
     observados = [m for u, m in ad.motivos_recusas if u == url]
     assert observados, (url, ad.motivos_recusas)
-    assert all(m in motivos for m in observados), observados
+    assert all(m in motivos for m in observados), (url, observados)
     assert not any(c.resposta.url == url for c in capturas(ad))
+
+
+def conferir_recusa_streaming(sonda, url, motivo):
+    """Motivo alternativo exige a ordem/erro do comando do próprio pedido."""
+    eventos = [e for e in sonda.eventos if e["url"] == url]
+    respostas = [i for i, e in enumerate(eventos) if e["stream_resposta"]]
+    if motivo == "COMANDO_STREAMING_RECUSADO":
+        assert any(e["stream_erro"] for e in eventos), eventos
+    elif motivo == "STREAMING_ASSISTIDO_TARDIO":
+        fins = [
+            i for i, e in enumerate(eventos) if e["metodo"] == "Network.loadingFinished"
+        ]
+        assert fins and (not respostas or fins[0] < respostas[0]), eventos
+    else:
+        raise AssertionError("motivo não é recusa de streaming demonstrável")
 
 
 def varrer_artefatos(raiz, segredos):

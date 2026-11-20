@@ -618,3 +618,131 @@ mas **não executado no navegador** nesta rodada.
 * A redação da **0089 §2.5(2)** e do **§3 item 1 ("streaming iniciado tarde")**
   precisa de **nota formal do titular**. Este registro é a leitura de execução
   autorizada, não essa nota. Aceite real e auditoria independente seguem pendentes.
+
+## Quarto ensaio real
+
+20/11/2026. Papel: **Desenvolvedor**. Base conferida: `cbce9b60bf96bc8bd0ac006591f926bb9ea38043`,
+ramo `feat/0089-sessao-assistida`, worktree `C:\dev\fv14-0089i`, inicialmente sem
+alterações de arquivos. Não houve troca de ramo, stage, tentativa de commit ou push.
+A autorização para alterar a porta nesta rodada alcança exclusivamente o item 1.
+
+### Evidência e correção da porta
+
+Leitura integral dos blocos de falha de `C:\dev\tmp\v5\impl-b\nav-4.log`:
+**39 passed, 16 failed, 1 skipped** no ensaio externo com Brave 1.100.
+SHA-256 do log: `4b70ba8110be043a6e112d57fd1605d8b4a461f13973702d0c749fdc01e8cce8`.
+Rastreamento `C:\dev\tmp\v5\impl-b\diag_trace.txt`, SHA-256:
+`8492d7e433720cc89ca65d98ee651730bf8da43823a6fe00acbae2fd3b25823e`.
+
+Em `fetch_identity`, o comando foi enviado no mono 26760.9069, respondido no mono
+26760.9079 com buffer vazio; vieram blocos com `data` de 22 e 22 bytes, evento
+sem `data` com `dataLength=0` e, por último, `loadingFinished`. A porta recusava o
+evento contador. Agora, **depois da resposta**, a ausência da chave `data` só é
+admitida com `dataLength == 0`; não se copia byte algum. O incremento de
+`encodedDataLength` e sua validação de tipo, sinal, limite e confronto final
+continuam anteriores a essa ramificação. Comprimento positivo sem `data` ainda
+produz `STREAMING_ASSISTIDO_INVALIDO`. Nada muda antes da resposta ou no término.
+Registro complementar em `docs/decisoes/0089-nota-execucao-defeito-49.md`.
+
+### Classificação de cada falha
+
+**A**: produto; **B**: expectativa do teste; **C**: cenário do harness não produziu
+a condição pretendida. Os nomes abaixo são dos dois módulos
+`test_assistida_0089_navegador{,_cenarios}.py`. Classificações de causa comum
+indicadas como inferência não são confirmação por novo ensaio real.
+
+| Falha | Classe | Bloco do log, fundamento e alteração |
+|---|---|---|
+| `test_item1_confrontos_finais_fetch_xhr_reais[fetch_identity]` | A | Linhas 313–394: zero capturas. O rastreamento demonstra o evento final sem novos bytes. Corrigida somente a porta, conforme instrução expressa e §2.4 linha 7. |
+| `test_item1_confrontos_finais_fetch_xhr_reais[fetch_gzip]` | A, inferência | Linhas 395–476: mesmo ponto de falha, sem rastreamento próprio. Correção comum; confronto de comprimento codificado preservado e testado offline. Expectativa positiva mantida. |
+| `test_item1_confrontos_finais_fetch_xhr_reais[xhr_identity]` | A, inferência | Linhas 477–558: zero capturas, sem motivo nem sequência CDP no bloco. Nenhuma outra causa de XHR demonstrada no material. Correção comum, expectativa positiva mantida; requer reensaio. |
+| `test_item1_confrontos_finais_fetch_xhr_reais[xhr_gzip]` | A, inferência | Linhas 559–640: mesma limitação de diagnóstico. Coberto offline pelo adaptador/porta reais, com contador final codificado. Expectativa positiva mantida. |
+| `test_item1_https_adaptador_real[304]` | B | Linhas 4–78: status 304 observado, nenhuma captura; lista de motivos do teste falha, mas o motivo efetivo não foi impresso. §2.3(1): “304, 206 e os demais status nunca viram captura”; §2.5(2): “Se o streaming falhar [...] a candidata é recusada”. A norma não exige alcançar a admissão nem um único motivo. Teste admite recusa anterior de streaming apenas com prova da ordem ou do erro do comando; `loadingFailed` exige `net::ERR_CACHE_MISS` do mesmo pedido. |
+| `test_item1_https_adaptador_real[sem_cabecalhos]` | B | Linhas 79–168: recusa existente, motivo esperado não encontrado; motivo efetivo ausente do log. §2.4 linha 12 classifica **expiração do prazo**, não obriga esperar 30 s após falha já provada; §2.5(2) obriga recusar falha do streaming e §2.3(1) exige término bem-sucedido. Além do timeout, teste admite erro comprovado do comando ou `loadingFailed` correlacionado com erro de rede enumerado; exige ausência dos dois eventos de resposta completa. Causa efetiva desse ensaio permanece não apurada. |
+| `test_item1_https_adaptador_real[parcial]` | B | Linhas 169–258: mesma ausência do motivo no log. A linha 12 declara que cabeçalho parcial não é sinal de resposta completa. Mesmas alternativas condicionadas a prova, sem mudar prazo nem porta. Causa efetiva desse ensaio permanece não apurada. |
+| `test_item1_codificacoes_e_framing_reais[vazio]` | B | Linhas 259–312: motivo efetivo `STREAMING_ASSISTIDO_TARDIO`, e não `CORPO_ASSISTIDO_VAZIO`. §2.4 linha 7: “Corpo vazio, recusado”; §2.5(2) e leitura do defeito 49 também recusam término antes da resposta do streaming. Teste exige zero captura e aceita essas recusas anteriores só com prova da ordem/erro do comando. |
+| `test_item2_proveniencia_real_sem_candidata_derivada[cache]` | A, inferência | Linhas 712–831: dois motivos na mesma URL, `STREAMING_ASSISTIDO_INVALIDO` e `ORIGEM_ASSISTIDA_SEM_PROVA`. O primeiro Fetch de rede é compatível com o defeito do contador; o segundo já prova recusa de cache. Mantidas as expectativas e os motivos originais: nenhuma autorização adicional para aceitar cache. Reensaio deve confirmar a causa do primeiro pedido. |
+| `test_item2_proveniencia_real_sem_candidata_derivada[prerender]` | C | Linhas 832–920: nenhum alvo com subtipo prerender; a navegação comum após 4 s não demonstrava a condição. O driver agora consulta uma marca da página efetivamente pré-renderizada antes de ativá-la; sem marca não navega ao alvo. Ausência da condição vira skip explícito, sem prova positiva do produto. `FV_0089_NAVEGADOR_PRERENDER` permite escolher navegador instalado compatível; políticas continuam obrigatórias. |
+| `test_item2_proveniencia_real_sem_candidata_derivada[early_hints]` | C | Linhas 921–1061: nenhum `Network.responseReceivedEarlyHints`; a origem anterior só falava HTTP/1.1, que o Chromium ignora para 103. Criada origem de teste HTTP/2/ALPN h2 com 103 real, preload de script e resposta final 200. Teste exige negociação h2, evento de 103, pedido do recurso sugerido, ausência de sua captura e captura final. Dependência opcional de teste ausente causa skip explícito, nunca aprovação. |
+| `test_item3_escopo_e_quadros_reais[download]` | C | Linhas 1109–1233: origem viu pedido, mas não houve recusa de candidata. `<a download>` pode seguir o caminho interno de download sem pedido elegível em Network; esperar recusa da porta não provava o mecanismo. Driver agora navega a `attachment` sem atributo `download`; exige pedido CDP `Document`, `net::ERR_ABORTED`, recusa e nenhuma captura (§2.7(2)). |
+| `test_item6_varredura_todos_artefatos_publicados` | A, inferência | Linhas 1234–1342: falhou antes da persistência/varredura, por ausência da captura pública Fetch. Correção comum do item 1; a varredura integral, os segredos sintéticos e as asserções de persistência permanecem. Acrescentado motivo das recusas ao diagnóstico da asserção. |
+| `test_item9_pedidos_e_cabecalhos_iguais_com_sem_adaptador` | A, inferência | Linhas 1343–1490: a falha registrada é `assert capturas(ad)`, **não prazo próprio excedido**; duração 26,48 s. O Fetch observado é compatível com o mesmo defeito. Expectativa, comparação integral dos pedidos/cabeçalhos e prazo de 40 s mantidos; motivos impressos em eventual nova falha. O prazo excedido do log está no teste de recarga humana. |
+| `test_item2_recarga_forcada_humana_vem_da_rede` | C | Linhas 1062–1108: prazo de 90 s excedido sem gesto humano. Agora skip salvo `FV_0089_GESTO_HUMANO=1`; nesse modo, após primeira captura, instrução visível ao operador e novo prazo de 90 s para Ctrl+Shift+R. Mantidas prova de dois headers `no-cache` e capturas de rede (§2.2(4)). |
+| `test_item1_item8_instalacao_manual_desempacotada_recusa` | C | Linhas 641–711: instalação manual não demonstrada em 90 s. Mesmo opt-in e skip explícito; após primeira candidata, instrução fora da captura do pytest com caminho exato e 90 s para o operador. Inventário `location=4` e barreira de seleção continuam obrigatórios (§2.2(3)(b')). |
+
+As alternativas de B não aceitam recusa arbitrária ou só zero capturas:
+`exigir_recusa` continua exigindo motivo enumerado e nenhuma captura; a sonda
+correlaciona respostas do comando com o pedido e prova fim anterior à resposta
+ou erro efetivo do comando. As recusas de rede exigem `loadingFailed` e erro
+enumerado do mesmo pedido. A porta não foi afrouxada por nenhuma dessas falhas.
+O próximo ensaio ainda pode revelar motivo não contemplado; o teste deve falhar
+nesse caso. Para 304 e os dois cabeçalhos incompletos, o log fornecido **não**
+permite atribuir retrospectivamente qual dessas alternativas ocorreu.
+
+Fontes técnicas dos próprios projetos, consultadas em 20/11/2026:
+[Chromium, Early Hints](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/early-hints.md)
+declara que ignora 103 em HTTP/1.1 ou anterior;
+[Brave, issue 49190](https://github.com/brave/brave-browser/issues/49190)
+registra desativação de prerender. O skip do cenário depende da ausência observada
+da condição, não só do nome do navegador. Nenhuma política, flag de recurso ou
+CDP adicional foi usada para forçar funcionalidade.
+
+### Arquivos e provas
+
+* `freoa_verifica/transport.py`: única mudança de produto, na ramificação posterior
+  à resposta do streaming, exclusivamente item 1.
+* `tests/test_transport_assistida_0089.py`: regressão da sequência de 44 bytes em
+  dois blocos, hash, contador final sem data, comprimento positivo recusado e
+  confronto codificado, em Fetch/XHR e identity/gzip.
+* `tests/test_assistida_0089_cdp.py`: mesma ordem pelo adaptador e porta reais,
+  positivos e recusa exata, nos quatro tipos/codificações.
+* `tests/harness_assistida_0089_cenarios.py`: observações correlacionadas do comando,
+  guardião causal de motivos alternativos, prerender sem navegação substituta,
+  download por navegação e encaminhamento do 103 para origem HTTP/2.
+* `tests/harness_assistida_0089_h2.py` (novo): origem sintética exclusivamente
+  loopback com ALPN h2; headers 103, final 200 e corpo segmentado na origem.
+* `tests/test_assistida_0089_harness.py`: teste em memória do 103/final HTTP/2,
+  guardiões de ordem/erro e opt-in humano exato (`1`, não `true`/`0`/ausência).
+* `tests/test_assistida_0089_navegador.py` e
+  `tests/test_assistida_0089_navegador_cenarios.py`: expectativas, pré-requisitos,
+  instruções ao operador e diagnóstico descritos na tabela.
+* `pyproject.toml`: extra opcional **de teste** `test-navegador = ["h2>=4,<5"]`;
+  nenhuma dependência ou método CDP do produto novo. Nenhum marker novo foi necessário.
+* Este registro e `docs/decisoes/0089-nota-execucao-defeito-49.md`.
+
+### Validação e questões
+
+* Antes do patch de produto, a regressão focada da porta produziu **8 failed,
+  4 passed**: os comprimentos positivos já eram recusados. Depois: **24 passed**
+  no foco incluindo violações anteriores, e **8 passed** na nova prova do adaptador.
+* Validação final dos mesmos nove módulos offline da rodada anterior, com
+  `.venv\Scripts\python.exe -X utf8 -m pytest -q -p no:cacheprovider
+  -m "not live and not navegador_assistido"`, `--tb=short -ra` e
+  `--basetemp "%TEMP%\fv0089-nav4-final"`: **420 passed, 1 skipped em 8,99 s**,
+  exit 0. O único skip é a prova **em memória** de HTTP/2, por ausência de `h2`;
+  ela não foi validada. O temporário ficou fora do checkout.
+* Sem o opt-in, execução só dos dois testes humanos: **2 skipped, 36 deselected**,
+  com motivos explícitos, exit 0. Coleta dos dois módulos de navegador: **56 testes**.
+  Nenhuma janela foi aberta. Ensaio real corrigido e suíte completa: **NOT RUN**.
+* AST D5 por nomes qualificados, incluindo métodos e funções internas,
+  `ast.dump(include_attributes=False)` contra `87b43f7`: **77 definições
+  preexistentes; zero ausentes, zero alteradas**. `cdp.py` e seus dez métodos
+  permitidos não foram alterados; testes da lista fechada passaram.
+* `C:\dev\tmp\venv-ruff\Scripts\python.exe scripts\ruff_catraca.py`: **exit 0**.
+  Os sete arquivos Python de teste/harness tocados passam `ruff check --no-cache`
+  e `ruff format --no-cache --check`. Trecho assistido de `transport.py` formatado
+  (`--range 804-828`); seus **seis achados históricos** são idênticos ao HEAD por
+  regra/mensagem, zero novos. Fluxo automático e baseline não foram formatados
+  ou alterados. `git diff --check`: limpo.
+* `h2` ausente na `.venv`: tentativa de instalação offline via uv não pôde obter
+  lock no cache global (acesso negado); pip sem cache não encontrou distribuição
+  disponível. Nenhuma dependência foi instalada. O supervisor precisará do extra
+  `.[test,test-navegador]` no ambiente do ensaio para executar o HTTP/2, ou esse
+  cenário seguirá explicitamente pendente. A prova de negociação/103 em navegador
+  e a prova em memória com a biblioteca **não foram executadas nesta rodada**.
+* Prerender só pode ser provado num navegador instalado compatível e sem políticas
+  recusadas; ausência observada da condição é skip, nunca evidência de recusa do
+  produto. Não foram contornadas políticas do Chrome/Edge nem mudadas flags do Brave.
+* Gesto humano, segunda conta Windows (item 7), novo ensaio real e auditoria
+  independente continuam pendentes. A nota formal do titular sobre o defeito 49
+  continua necessária; esta alteração só registra a leitura expressamente autorizada.
