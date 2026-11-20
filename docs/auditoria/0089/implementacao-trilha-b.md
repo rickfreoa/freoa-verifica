@@ -101,6 +101,103 @@ de fixtures. O modelo binário preexistente continua coberto por `*.bin binary`.
   O Brave instalado foi localizado; nenhum handshake CDP nem servidor HTTPS foi alcançado.
   Não houve tentativa de contornar a recusa da ACL. Esse resultado não prova falta de pipe.
 
+## Correção após o primeiro ensaio real
+
+19/11/2026. Papel: Desenvolvedor. Base desta correção: `a027443`, no mesmo
+worktree e ramo. Sem commit, push, troca de ramo ou alteração de `transport.py`.
+
+**Fato observado e causa.** O supervisor executou o harness fora do sandbox com
+Brave 1.100 / Chromium 158: **16 failed, 1 passed**, todas as falhas por
+`INVENTARIO_ASSISTIDO_INDISPONIVEL` (log `C:\dev\tmp\v5\impl-b\nav-b.log`).
+O inventário tentado ao completar 10 s de silêncio de `Default\Extensions`
+tratava preferências ainda não gravadas como falha definitiva. O relato recebido
+informa ausência até 10 s e presença aos 30 s; o arquivo
+`C:\dev\tmp\v5\impl-b\diag_inv.txt`, lido nesta correção, registra presença já
+a partir de 11 s e enumera o conteúdo aos 30 s. Isso confirma que o prazo de
+assentamento do diretório não determina o instante de gravação das preferências.
+
+**Mudança e prazo.** `PRAZO_INVENTARIO_INICIAL_S = 60`, em `ambiente.py`, fixa
+o limite para concluir a primeira leitura válida, contado pelo relógio monotônico
+desde a criação da vigilância, antes do lançamento. É o dobro do limite superior
+de 30 s informado no diagnóstico; oferece folga sem espera indefinida. Não é
+um prazo novo para o handshake CDP nem para a barreira. O limite é exclusivo:
+primeira leitura concluída aos 60 s ou depois recusa com o código atual.
+
+* Somente `FileNotFoundError` ao ler `Secure Preferences` ou `Preferences`
+  produz o estado interno `InventarioPendente`. O ciclo existente relê o inventário
+  durante o assentamento; não bloqueia o processamento de eventos do navegador.
+  Ausência de um arquivo não oculta JSON inválido ou extensão vedada no outro.
+* JSON inválido, estrutura inesperada, erro de leitura diferente de ausência e
+  manifesto indisponível continuam recusando imediatamente. `Preferences` sem
+  `extensions.settings` continua válido. A exceção dos componentes exige
+  `location` 5 e caminho originalmente absoluto, resolvido dentro da instalação;
+  não dispensa a leitura válida do manifesto.
+* A linha de base exige inventário válido e 10 s sem mudança. Notificação de
+  instalação durante o assentamento adia a base; não reinicia o prazo da primeira
+  leitura. Se o inventário já foi lido validamente, o silêncio ainda pode completar
+  depois dos 60 s. A vigilância posterior e a sentinela de 5 s foram preservadas.
+* A conclusão da sequência CDP é registrada separadamente da prontidão do alvo;
+  `pronto` só é declarado depois da base. Pedidos anteriores não são recuperados
+  quando ela aparece. Também foi corrigida a comparação temporal do próprio pedido
+  que estabelece a base: usa o instante observado antes da leitura do inventário,
+  para não admitir esse pedido quando o relógio avança durante a leitura.
+
+**Harness e demais tempos.** A navegação fixa aos 14 s assumia preferências já
+gravadas, premissa desmentida pelo diagnóstico. O HTML exclusivo de teste agora
+consulta um script local e só recebe a instrução de navegar quando o harness
+observa inventário válido, base e alvo pronto; não há comando CDP de navegação.
+O teste de pipe também exige esses três fatos. Falhas de inventário após iniciar
+o protocolo não viram skip de pré-requisito, inclusive durante o handshake.
+O limite adicional do harness para ambiente/alvo pronto é o limite inicial mais
+10 s, sem interferir nos limites do produto.
+
+Foram conferidos os 17 casos reais: todos usam esse mesmo harness. O handshake
+de 10 s permanece separado, pois o diagnóstico não demonstra atraso do pipe;
+os 48 s para observar captura/recusa só começam após o sinal de prontidão.
+Os servidores dos casos `sem_cabecalhos` e `parcial` continuam esperando 31 s,
+acima dos 30 s da porta, contados do pedido posterior à prontidão. Nenhuma dessas
+esperas precisa absorver o tempo de criação das preferências. A execução real
+dessas mudanças, inclusive do sinal por script local, permanece **NOT RUN** nesta
+correção; cabe ao supervisor fora do sandbox.
+
+**Testes.** Regressões offline acrescentadas para ausência de cada arquivo e de
+ambos com aparecimento dentro do prazo; ausência ou primeira leitura no limite;
+leitura que termina no limite; JSON e estruturas inválidas mesmo com o outro
+arquivo ausente; instalação que adia a base; silêncio que só termina após 60 s;
+ausência na barreira sem nova espera; componentes embutidos com caminhos absolutos,
+permissões de rede e `Preferences` sem settings; manifestos ausentes/inválidos,
+inclusive de componentes; prontidão CDP com e sem base; pedidos anteriores, na base
+e posteriores; relógio que avança enquanto o próprio pedido estabelece a base.
+Os arquivos gerados são sintéticos em tmp_path, sem novas fixtures ou capturas.
+
+Validação final: **307 passed**, sem skip ou deselection, nos cinco módulos offline
+`test_assistida_0089_{ambiente,cdp,grafo,indicacao,integracao}.py`,
+`test_transport_assistida_0089.py` e `test_cli.py`, usando
+`.venv\Scripts\python.exe -X utf8 -m pytest -q -p no:cacheprovider
+-m "not live and not navegador_assistido" <sete arquivos>`.
+Temporários fora do checkout, em
+`C:\Users\rfreoa\AppData\Local\Temp\fv14-0089i-inventario-final3-20261119`.
+Uma rodada focada anterior teve 84 aprovados; contagens sobrepostas, não somar.
+A primeira execução focada teve 83 aprovados e uma falha do novo teste: seu relógio
+sintético não estava alinhado ao prazo monotônico real da porta; o teste foi
+corrigido sem mudar o transporte nem reduzir as asserções.
+Suíte inteira e navegador real não executados. Ruff check limpo e format --check
+aprovado nos seis arquivos Python tocados; catraca
+`C:\dev\tmp\venv-ruff\Scripts\python.exe scripts\ruff_catraca.py`: código 0,
+sem alteração da baseline.
+
+**Questão adicional comprovada na instalação.** A conferência somente de leitura
+dos caminhos de componentes do diagnóstico encontrou `resources\pdf` ausente;
+`resources\brave_extension` existe, mas seu `manifest.json` não. Nenhum dos dois
+manifestos existe nos caminhos declarados sob `Application\158.1.100.58`.
+Assim, a correção do prazo das preferências pode expor uma segunda recusa com o
+mesmo código. A §2.2(3)(c) exige o manifesto de cada extensão e estabelece
+"manifesto indisponível: nenhuma candidata". Não foi criada dispensa para componente,
+nem presumida a extração de recursos empacotados: essa solução depende do supervisor
+e, se mudar a regra, do respectivo registro de decisão. O teste positivo de
+componentes usa manifestos sintéticos disponíveis; não demonstra admissão dos
+componentes dessa instalação. As demais lacunas de aceite abaixo permanecem.
+
 ## Questões
 
 1. Esta trilha não está concluída para aceite: a prova Windows real, a cobertura integral

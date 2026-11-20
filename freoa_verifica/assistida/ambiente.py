@@ -18,6 +18,14 @@ class RecusaSessao(RuntimeError):
     """Só códigos fechados; exceções do sistema não transportam dados de navegação."""
 
 
+class InventarioPendente(RecusaSessao):
+    """Preferências ainda não gravadas; só o assentamento pode aguardar."""
+
+
+# Brave 1.100: gravação ausente nos primeiros 10 s e presente até 30 s.
+PRAZO_INVENTARIO_INICIAL_S = 60
+
+
 POLITICAS = {
     "chrome": r"Software\Policies\Google\Chrome",
     "edge": r"Software\Policies\Microsoft\Edge",
@@ -90,10 +98,14 @@ def conferir_politicas(nome, *, registro=None):
 
 def inventariar(perfil: Path, navegador: Path):
     try:
+        pendente = False
         for arquivo in ("Secure Preferences", "Preferences"):
-            data = json.loads(
-                (perfil / "Default" / arquivo).read_text(encoding="utf-8")
-            )
+            try:
+                bruto = (perfil / "Default" / arquivo).read_text(encoding="utf-8")
+            except FileNotFoundError:
+                pendente = True
+                continue
+            data = json.loads(bruto)
             settings = data.get("extensions", {}).get("settings", {})
             if not isinstance(settings, dict):
                 raise ValueError
@@ -102,19 +114,26 @@ def inventariar(perfil: Path, navegador: Path):
                 if location == 4:
                     raise RecusaSessao("EXTENSAO_DESEMPACOTADA")
                 caminho = Path(item["path"])
+                componente_absoluto = location == 5 and caminho.is_absolute()
                 if not caminho.is_absolute():
                     caminho = perfil / "Default" / "Extensions" / caminho
                 caminho = caminho.resolve(strict=True)
                 manifesto = json.loads(
                     (caminho / "manifest.json").read_text(encoding="utf-8")
                 )
-                if location == 5 and caminho.is_relative_to(navegador.parent.resolve()):
+                if not isinstance(manifesto, dict):
+                    raise ValueError
+                if componente_absoluto and caminho.is_relative_to(
+                    navegador.parent.resolve()
+                ):
                     continue
                 permissoes = set(manifesto.get("permissions", [])) | set(
                     manifesto.get("optional_permissions", [])
                 )
                 if permissoes & PERMISSOES or "declarative_net_request" in manifesto:
                     raise RecusaSessao("EXTENSAO_INTERCEPTADORA")
+        if pendente:
+            raise InventarioPendente("INVENTARIO_ASSISTIDO_INDISPONIVEL")
     except RecusaSessao:
         raise
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
@@ -295,6 +314,8 @@ class Vigilancia:
         self.perfil, self.navegador = Path(perfil), Path(navegador)
         self.relogio, self.inventario = relogio, inventario
         self.ultima = relogio()
+        self.limite_inventario = self.ultima + PRAZO_INVENTARIO_INICIAL_S
+        self.inventario_lido = False
         self.linha_base = None
         self.caminhos = None
         self.erro = None
@@ -329,8 +350,25 @@ class Vigilancia:
     def assentar(self):
         with self.cond:
             self.conferir()
-            if self.linha_base is None and self.relogio() - self.ultima >= 10:
-                self.inventario(self.perfil, self.navegador)
+            if self.linha_base is None:
+                pendente = False
+                try:
+                    self.inventario(self.perfil, self.navegador)
+                except InventarioPendente:
+                    pendente = True
+                except RecusaSessao as exc:
+                    self.falhar(str(exc))
+                    raise
+                if (
+                    pendente or not self.inventario_lido
+                ) and self.relogio() >= self.limite_inventario:
+                    self.falhar("INVENTARIO_ASSISTIDO_INDISPONIVEL")
+                    self.conferir()
+                if pendente:
+                    return None
+                self.inventario_lido = True
+                if self.relogio() - self.ultima < 10:
+                    return None
                 self.caminhos = tuple(
                     sorted(
                         (str(p.relative_to(self.perfil)), p.stat().st_size)

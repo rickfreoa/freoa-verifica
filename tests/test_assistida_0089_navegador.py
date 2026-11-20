@@ -14,6 +14,8 @@ def test_brave_pipe_e_acl_reais(tmp_path, monkeypatch):
     with navegador_pipe(tmp_path, monkeypatch) as (ad, proc, vigia):
         assert proc.poll() is None
         assert ad.fase == 3
+        assert vigia.inventario_lido and vigia.linha_base is not None
+        assert any(x.pronto for x in ad.alvos.values())
         assert vigia.erro is None
 
 

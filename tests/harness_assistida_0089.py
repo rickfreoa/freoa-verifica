@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import http.server
+import json
 import os
 import shutil
 import ssl
@@ -178,15 +179,21 @@ def navegador_pipe(path, monkeypatch, *, nome="brave", spki=None, caso="utf8"):
     perfil_dir.mkdir()
     proc = canal = observador = None
     sessao = None
-    pronto = False
+    protocolo_iniciado = False
     try:
         a.proteger_diretorio(perfil_dir)
         (perfil_dir / "Default" / "Extensions").mkdir(parents=True)
         inicio = path / "inicio-harness.html"
+        sinal = path / "pronto-harness.js"
+        sinal.write_text(
+            "/* aguardando inventário e linha de base */", encoding="utf-8"
+        )
         inicio.write_text(
-            '<!doctype html><title>Harness 0089 local</title><script>setTimeout(()=>{location.href="https://127.0.0.1/case/'
-            + caso
-            + '"},14000)</script>',
+            "<!doctype html><title>Harness 0089 local</title><script>"
+            'function aguardar(){const s=document.createElement("script");'
+            's.src="pronto-harness.js?"+Date.now();'
+            "s.onload=s.onerror=()=>{s.remove();setTimeout(aguardar,100)};"
+            "document.head.appendChild(s)}aguardar()</script>",
             encoding="utf-8",
         )
         if spki:
@@ -220,6 +227,7 @@ def navegador_pipe(path, monkeypatch, *, nome="brave", spki=None, caso="utf8"):
         canal = CanalPipe(leitura, escrita, sessao)
         ad = AdaptadorCDP(perfil, sessao, canal, vigia)
         canal.iniciar()
+        protocolo_iniciado = True
         ad.iniciar()
         limite = time.monotonic() + 10
         while ad.fase < 3:
@@ -231,10 +239,26 @@ def navegador_pipe(path, monkeypatch, *, nome="brave", spki=None, caso="utf8"):
             if msg:
                 with msg as obj:
                     ad.processar(obj)
-        pronto = True
+        # Fase 3 só conclui o handshake do navegador; o alvo ainda precisa do
+        # inventário, da linha de base e da sequência CDP completa.
+        while vigia.linha_base is None or not any(x.pronto for x in ad.alvos.values()):
+            if proc.poll() is not None:
+                raise a.RecusaSessao("NAVEGADOR_ENCERRADO_ANTES_DA_PRONTIDAO")
+            if time.monotonic() >= vigia.limite_inventario + 10:
+                raise a.RecusaSessao("AMBIENTE_NAO_ASSENTADO")
+            ad.atualizar_prontidao()
+            msg = canal.receber()
+            if msg:
+                with msg as obj:
+                    ad.processar(obj)
+        # Só o HTML de teste simula a ação humana, após prontidão observada.
+        sinal.write_text(
+            "location.href=" + json.dumps("https://127.0.0.1/case/" + caso) + ";",
+            encoding="utf-8",
+        )
         yield ad, proc, vigia
     except a.RecusaSessao as exc:
-        if pronto:
+        if protocolo_iniciado:
             raise
         pytest.skip("pré-requisito de navegador/pipe: " + str(exc))
     finally:

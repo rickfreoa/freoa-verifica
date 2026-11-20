@@ -6,6 +6,8 @@ import ast
 
 import io
 
+import time
+
 from pathlib import Path
 
 import pytest
@@ -48,6 +50,80 @@ def test_adaptador_real_conectado_porta_unica(sessao, monkeypatch):
     assert c.resposta.body == BODY and chamadas[0].pronto
     assert c.procedencia == c.modalidade_acesso == "sessao_assistida"
     assert "verified" not in repr(c)
+    ad.descartar()
+
+
+def test_inventario_tardio_nao_promove_pedidos_anteriores(tmp_path, sessao):
+    relogio = [0.0]
+    inicio = time.monotonic() - 31
+
+    def agora():
+        return inicio + relogio[0]
+
+    default = tmp_path / "Default"
+    (default / "Extensions").mkdir(parents=True)
+    vigia = a.Vigilancia(tmp_path, tmp_path / "brave.exe", relogio=agora)
+    ad = AdaptadorCDP(
+        PERFIS["planalto"], sessao, CanalSintetico(), vigia, relogio=agora
+    )
+    ad.fase = 3
+    ad.alvos["cdp"] = Alvo(
+        "aba", "page", "", raiz="raiz", documento=URL, sequencia_concluida=True
+    )
+    for instante in (1, 10, 29):
+        relogio[0] = instante
+        request(ad, rid=f"antes-{instante}")
+        assert not ad.alvos["cdp"].pronto
+        assert not ad.pedidos and not ad.canal.comandos
+    for nome in ("Secure Preferences", "Preferences"):
+        (default / nome).write_text("{}", encoding="utf-8")
+    relogio[0] = 30
+    assert ad.atualizar_prontidao() == inicio + 30
+    assert ad.alvos["cdp"].pronto
+    request(ad, rid="na-linha-base")
+    assert not ad.pedidos
+    relogio[0] = 31
+    ad.processar(
+        {
+            "method": "Network.responseReceived",
+            "sessionId": "cdp",
+            "params": {"requestId": "antes-29", "response": {}},
+        }
+    )
+    assert not ad.pedidos and not ad.canal.comandos
+    request(ad, rid="posterior")
+    entregar(ad, rid="posterior")
+    assert set(ad.pedidos) == {("cdp", "posterior")}
+    assert ad.pedidos["cdp", "posterior"].admitida.resposta.body == BODY
+    ad.descartar()
+
+
+def test_pedido_que_estabelece_base_nao_e_candidato_com_relogio_avancando(
+    tmp_path, sessao
+):
+    instante = [time.monotonic() - 31]
+
+    def relogio():
+        instante[0] += 0.001
+        return instante[0]
+
+    (tmp_path / "Default" / "Extensions").mkdir(parents=True)
+    vigia = a.Vigilancia(
+        tmp_path, tmp_path / "brave.exe", relogio=relogio, inventario=lambda *_: None
+    )
+    ad = AdaptadorCDP(
+        PERFIS["planalto"], sessao, CanalSintetico(), vigia, relogio=relogio
+    )
+    ad.fase = 3
+    ad.alvos["cdp"] = Alvo(
+        "aba", "page", "", raiz="raiz", documento=URL, sequencia_concluida=True
+    )
+    instante[0] += 30
+    request(ad, rid="estabelece-base")
+    assert vigia.linha_base is not None and ad.alvos["cdp"].pronto
+    assert not ad.pedidos and not ad.canal.comandos
+    request(ad, rid="posterior")
+    assert set(ad.pedidos) == {("cdp", "posterior")}
     ad.descartar()
 
 
@@ -211,8 +287,12 @@ def test_prazo_adaptador_sem_novo_evento(sessao, respondeu, esperado):
     assert ad.recusas == [(URL, esperado)]
 
 
-def test_metodos_parametros_e_sequencia(sessao):
-    ad = AdaptadorCDP(PERFIS["planalto"], sessao, CanalSintetico(), VigiaSintetico())
+@pytest.mark.parametrize("ambiente_assentado", [True, False])
+def test_metodos_parametros_e_sequencia(sessao, ambiente_assentado):
+    vigia = VigiaSintetico()
+    if not ambiente_assentado:
+        vigia.linha_base = None
+    ad = AdaptadorCDP(PERFIS["planalto"], sessao, CanalSintetico(), vigia)
     ad.iniciar()
 
     def responder(result=None):
@@ -241,6 +321,10 @@ def test_metodos_parametros_e_sequencia(sessao):
     responder()
     responder({"frameTree": {"frame": {"id": "raiz", "url": "about:blank"}}})
     responder()
+    assert ad.alvos["cdp"].sequencia_concluida
+    assert ad.alvos["cdp"].pronto is ambiente_assentado
+    vigia.linha_base = 1
+    ad.atualizar_prontidao()
     assert ad.alvos["cdp"].pronto
     assert [c["method"] for c in ad.canal.comandos] == [
         "Target.setDiscoverTargets",

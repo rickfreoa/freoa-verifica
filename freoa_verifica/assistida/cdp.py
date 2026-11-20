@@ -203,6 +203,7 @@ class Alvo:
     raiz: str = ""
     documento: str = ""
     primeira_url: bool = False
+    sequencia_concluida: bool = False
 
 
 @dataclass
@@ -303,6 +304,14 @@ class AdaptadorCDP:
             "Target.setDiscoverTargets", {"discover": True}, retorno=descoberta
         )
 
+    def atualizar_prontidao(self):
+        base = self.vigia.assentar()
+        if base is not None:
+            for sid, alvo in self.alvos.items():
+                if alvo.sequencia_concluida and sid not in self.desanexados:
+                    alvo.pronto = True
+        return base
+
     def _anexar(self, p):
         sid, info = p["sessionId"], p["targetInfo"]
         if sid in self.alvos:
@@ -340,8 +349,12 @@ class AdaptadorCDP:
             self.comando(
                 "Runtime.runIfWaitingForDebugger",
                 sid=sid,
-                retorno=lambda _: setattr(alvo, "pronto", True),
+                retorno=retomada,
             )
+
+        def retomada(_):
+            alvo.sequencia_concluida = True
+            self.atualizar_prontidao()
 
         self.comando("Network.enable", sid=sid, retorno=rede)
 
@@ -456,6 +469,7 @@ class AdaptadorCDP:
                 self._evento(sid, p.get("requestId"), metodo[8:], p)
 
     def _pedido(self, sid, alvo, p):
+        observado = self.relogio()
         rid = p.get("requestId")
         chave = (sid, rid)
         anterior = self.pedidos.get(chave)
@@ -497,8 +511,8 @@ class AdaptadorCDP:
         if alvo.primeira_url and tipo == "Document":
             alvo.primeira_url = False
             return
-        base = self.vigia.assentar()
-        if self.fase != 3 or not alvo.pronto or base is None or self.relogio() <= base:
+        base = self.atualizar_prontidao()
+        if self.fase != 3 or not alvo.pronto or base is None or observado <= base:
             return
         iniciador = p.get("initiator", {})
         tipo_iniciador = iniciador.get("type", "")
@@ -618,7 +632,7 @@ class AdaptadorCDP:
                 raise RecusaSessao("SESSAO_ASSISTIDA_EXPIRADA")
             if self.fase < 3 and self.relogio() - self.inicio > 10:
                 raise RecusaSessao("PIPE_ASSISTIDO_INDISPONIVEL")
-            self.vigia.assentar()
+            self.atualizar_prontidao()
             mensagem = self.canal.receber()
             if mensagem is not None:
                 with mensagem as obj:
