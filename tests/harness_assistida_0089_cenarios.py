@@ -10,6 +10,7 @@ import gzip
 import hashlib
 import http.server
 import json
+import re
 from pathlib import Path
 import ssl
 import threading
@@ -544,11 +545,52 @@ def diferenca_pedidos(esquerda, direita):
     }
 
 
+_PARAMETRO_Q = re.compile(
+    r"(;[ \t]*q[ \t]*=[ \t]*)(0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?)(?=[ \t]*(?:[,;]|$))",
+    re.IGNORECASE,
+)
+
+
+def _normalizar_q_variavel(controles, adaptador):
+    """Só mascara posições q que diferem; preserva todo o restante literalmente."""
+    um, dois = controles
+    if um is None or dois is None or um == dois or len(um) != len(dois):
+        return None
+    if adaptador is None or len(adaptador) != len(um):
+        return None
+    normalizados = [[], [], []]
+    variou = False
+    for valores in zip(um, dois, adaptador):
+        # Não interpretar como parâmetro um trecho dentro de string entre aspas.
+        if any('"' in valor for valor in valores):
+            return None
+        matches = [list(_PARAMETRO_Q.finditer(v)) for v in valores]
+        estruturas = [_PARAMETRO_Q.sub(r"\1<Q>", v) for v in valores]
+        if not estruturas[0] == estruturas[1] == estruturas[2] or not (
+            len(matches[0]) == len(matches[1]) == len(matches[2])
+        ):
+            return None
+        posicoes = {
+            i for i, (a, b) in enumerate(zip(matches[0], matches[1])) if a[2] != b[2]
+        }
+        variou |= bool(posicoes)
+        for destino, valor, encontrados in zip(normalizados, valores, matches):
+            partes = []
+            inicio = 0
+            for i, m in enumerate(encontrados):
+                if i in posicoes:
+                    partes.extend((valor[inicio : m.start(2)], "<Q>"))
+                    inicio = m.end(2)
+            partes.append(valor[inicio:])
+            destino.append("".join(partes))
+    return [tuple(v) for v in normalizados] if variou else None
+
+
 def comparar_passividade(sem1, sem2, com):
     """Só desconta variação provada nos dois controles, por método/caminho.
 
     Nem favicon nem cabeçalho têm exclusão fixa. Valor novo exclusivo do
-    adaptador continua falha, inclusive em campo variável nos controles.
+    adaptador continua falha, salvo posições q comprovadamente variáveis.
     Ordem de chegada só é descontada se também variar nos controles.
     """
     grupos = [_agrupar_pedidos(p) for p in (sem1, sem2, com)]
@@ -568,7 +610,34 @@ def comparar_passividade(sem1, sem2, com):
     if ordens[0] == ordens[1] and ordens[0] != ordens[2]:
         diagnostico["passou"] = False
     for chave in sorted(grupos[0]):
-        colecoes = [[_campos(hs) for hs in g[chave]] for g in grupos]
+        normalizados = [[], [], []]
+        for i, headers in enumerate(zip(*(g[chave] for g in grupos))):
+            campos = list(map(_campos, headers))
+            substituicoes = [{}, {}, {}]
+            for nome in campos[0].keys() & campos[1].keys():
+                valores = [c.get(nome) for c in campos]
+                q = _normalizar_q_variavel(valores[:2], valores[2])
+                if q is None:
+                    continue
+                for destino, valor in zip(substituicoes, q):
+                    destino[nome] = iter(valor)
+                diagnostico["ruido_declarado"].append(
+                    {
+                        "metodo": chave[0],
+                        "caminho": chave[1],
+                        "ocorrencia": i,
+                        "cabecalho": nome,
+                        "controles": valores[:2],
+                        "adaptador": valores[2],
+                        "normalizados": q,
+                        "justificativa": "somente posições q variáveis entre controles normalizadas",
+                    }
+                )
+            for destino, hs, subs in zip(normalizados, headers, substituicoes):
+                destino.append(
+                    tuple((k, next(subs[k]) if k in subs else v) for k, v in hs)
+                )
+        colecoes = [[_campos(hs) for hs in g] for g in normalizados]
         nomes = {nome for campos in colecoes for c in campos for nome in c}
         for nome in nomes:
             variantes = [Counter(c.get(nome) for c in campos) for campos in colecoes]
@@ -576,7 +645,7 @@ def comparar_passividade(sem1, sem2, com):
             # em uma multiplicidade que só exista com o adaptador.
             if variantes[2] not in variantes[:2]:
                 diagnostico["passou"] = False
-        for i, (h1, h2, hc) in enumerate(zip(*(g[chave] for g in grupos))):
+        for i, (h1, h2, hc) in enumerate(zip(*normalizados)):
             c1, c2, cc = map(_campos, (h1, h2, hc))
             ruido = {k for k in c1.keys() | c2.keys() if c1.get(k) != c2.get(k)}
             # A exclusão só vale neste pedido e para valores já demonstrados.

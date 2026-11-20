@@ -89,6 +89,56 @@ def test_passividade_preserva_multiplicidade_de_campo_variavel():
     assert not comparar_passividade(um, dois, com)["passou"]
 
 
+@pytest.mark.parametrize("campo", ["Accept-Language", "Accept"])
+@pytest.mark.parametrize(
+    "valor,passa",
+    [
+        ("pt-BR,pt;q=0.9", True),
+        ("en-US,pt;q=0.9", False),
+        ("pt;q=0.9,pt-BR", False),
+        ("pt-BR,pt;q=0.9,en", False),
+        ("pt-BR,pt;q=0.9;foo=novo", False),
+        ("pt-BR,pt;q=9", False),
+    ],
+)
+def test_passividade_normaliza_apenas_q_variavel(campo, valor, passa):
+    def pedido(v):
+        return [_pedido_origem((campo, v), ("Outro", "constante"))]
+
+    d = comparar_passividade(
+        pedido("pt-BR,pt;q=0.5"), pedido("pt-BR,pt;q=0.6"), pedido(valor)
+    )
+    assert d["passou"] is passa
+    if passa:
+        prova = d["ruido_declarado"][0]
+        assert prova["controles"] == [("pt-BR,pt;q=0.5",), ("pt-BR,pt;q=0.6",)]
+        assert prova["adaptador"] == (valor,)
+
+
+@pytest.mark.parametrize(
+    "um,dois,com",
+    [
+        ("pt;q=0.5", "pt;q=0.5", "pt;q=0.9"),
+        ("pt;q=0.5,en;q=0.8", "pt;q=0.6,en;q=0.8", "pt;q=0.9,en;q=0.7"),
+        ("pt;q=0.5", "en;q=0.6", "pt;q=0.7"),
+        ("pt;q=0.5;foo=a", "pt;q=0.6;foo=b", "pt;q=0.7;foo=b"),
+        ("pt;q=0.5", "pt;q=0.6", "pt;q=0.9;Q=0.7"),
+        ("pt;q=0.5", "pt;q=0.6", "pt;q=<Q>"),
+    ],
+)
+def test_passividade_nao_normaliza_q_estavel_nem_variacao_mista(um, dois, com):
+    pedidos = [[_pedido_origem(("Accept-Language", v))] for v in (um, dois, com)]
+    assert not comparar_passividade(*pedidos)["passou"]
+
+
+def test_passividade_q_nao_normaliza_outro_cabecalho():
+    pedidos = [
+        [_pedido_origem(("Accept-Language", f"pt;q={q}"), ("Outro", outro))]
+        for q, outro in [("0.5", "igual"), ("0.6", "igual"), ("0.9", "novo")]
+    ]
+    assert not comparar_passividade(*pedidos)["passou"]
+
+
 def test_diagnostico_passividade_detalha_campos_contagens_e_ordem():
     um = [_pedido_origem(("Host", "127.0.0.1"), ("Accept", "um"), ("So-A", "a"))]
     dois = [
@@ -250,12 +300,14 @@ def test_harness_limpa_perfil_em_toda_saida(tmp_path, monkeypatch, observar, fim
         ),
     )
 
-    def fechar(_):
+    def fechar(_, perfil):
+        assert perfil == tmp_path / "sessao-0089-harness"
         ordem.append("navegador")
         if fim == "falha_fechamento":
             raise OSError("falha sintética de fechamento")
 
     monkeypatch.setattr(a, "fechar_navegador", fechar)
+    monkeypatch.setattr(a, "_processos_do_perfil", lambda *_: set())
     limpar = a.limpar_diretorio
 
     def registrar_limpeza(perfil, raiz):
@@ -297,6 +349,7 @@ def test_limpeza_perfil_registra_motivo_da_sobra(tmp_path, monkeypatch, capsys):
 
     perfil = tmp_path / "sessao-0089-harness"
     perfil.mkdir()
+    monkeypatch.setattr(a, "_processos_do_perfil", lambda *_: set())
 
     def falhar(*_):
         raise PermissionError("arquivo sintético em uso")

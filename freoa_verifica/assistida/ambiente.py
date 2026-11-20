@@ -25,6 +25,11 @@ class InventarioPendente(RecusaSessao):
 # Brave 1.100: gravação ausente nos primeiros 10 s e presente até 30 s.
 PRAZO_INVENTARIO_INICIAL_S = 60
 
+# Inclui o principal e os filhos ainda visíveis após TerminateJobObject.
+PRAZO_SAIDA_NAVEGADOR_S = 15
+TENTATIVAS_LIMPEZA = 20
+INTERVALO_LIMPEZA_S = 0.1
+
 
 POLITICAS = {
     "chrome": r"Software\Policies\Google\Chrome",
@@ -259,7 +264,7 @@ def proteger_diretorio(path):
         kernel.CloseHandle(token)
 
 
-def limpar_diretorio(path, raiz):
+def _perfil_confinado(path, raiz):
     original = Path(path)
     if original.is_symlink() or (
         hasattr(original, "is_junction") and original.is_junction()
@@ -272,7 +277,43 @@ def limpar_diretorio(path, raiz):
         or path.is_symlink()
     ):
         raise RecusaSessao("LIMPEZA_ASSISTIDA_FORA_DO_STAGING")
-    shutil.rmtree(path)
+    return path
+
+
+def _marcar_limpeza_pendente(path, motivo):
+    try:
+        _perfil_confinado(path, path.parent)
+        # Não seguir link nem sobrescrever um arquivo já existente na sessão.
+        with (path / ".limpeza-pendente").open("x", encoding="utf-8") as marca:
+            marca.write(motivo + "\n")
+    except (OSError, RecusaSessao):
+        # O próprio nome sessao-0089-* também é a marca de recuperação (§3.7).
+        pass
+    print(f"LIMPEZA_ASSISTIDA_PENDENTE: {path} | {motivo}")
+
+
+def limpar_diretorio(path, raiz):
+    path = _perfil_confinado(path, raiz)
+    if not path.exists():
+        return
+    try:
+        aguardar_saida_navegador(path)
+        for tentativa in range(TENTATIVAS_LIMPEZA):
+            try:
+                shutil.rmtree(path)
+                return
+            except FileNotFoundError:
+                if not path.exists():
+                    return
+                raise
+            except OSError:
+                if tentativa == TENTATIVAS_LIMPEZA - 1:
+                    raise
+                time.sleep(INTERVALO_LIMPEZA_S)
+    except (OSError, RecusaSessao) as exc:
+        motivo = str(exc) if isinstance(exc, RecusaSessao) else type(exc).__name__
+        _marcar_limpeza_pendente(path, motivo)
+        raise RecusaSessao("LIMPEZA_ASSISTIDA_PENDENTE") from None
 
 
 def preparar_diretorio(home):
@@ -663,7 +704,97 @@ def _conter_processo(proc):
         raise
 
 
-def fechar_navegador(proc):
+def _argumentos_processo(linha):
+    """Lê argumentos Windows sem executar a linha nem consultar perfis."""
+    shell = ctypes.WinDLL("shell32", use_last_error=True)
+    kernel, _ = _dlls()
+    shell.CommandLineToArgvW.argtypes = (w.LPCWSTR, ctypes.POINTER(ctypes.c_int))
+    shell.CommandLineToArgvW.restype = ctypes.POINTER(w.LPWSTR)
+    kernel.LocalFree.argtypes = (ctypes.c_void_p,)
+    argc = ctypes.c_int()
+    argv = shell.CommandLineToArgvW(linha, ctypes.byref(argc))
+    if not argv:
+        raise RecusaSessao("ENUMERACAO_ASSISTIDA_INDISPONIVEL")
+    try:
+        return [argv[i] for i in range(argc.value)]
+    finally:
+        kernel.LocalFree(argv)
+
+
+def _processos_do_perfil(perfil, prazo):
+    """Enumeração local somente leitura; linhas de comando não são registradas."""
+    if os.name != "nt":
+        raise RecusaSessao("SESSAO_ASSISTIDA_EXIGE_WINDOWS")
+    comando = (
+        "$ErrorActionPreference='Stop'; "
+        "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); "
+        "Get-CimInstance Win32_Process | "
+        "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"
+    )
+    try:
+        resultado = subprocess.run(  # noqa: S603 -- PowerShell local, comando fixo somente leitura
+            [
+                str(
+                    Path(os.environ["SystemRoot"])
+                    / "System32/WindowsPowerShell/v1.0/powershell.exe"
+                ),
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                comando,
+            ],
+            capture_output=True,
+            encoding="utf-8-sig",
+            errors="strict",
+            timeout=prazo,
+            check=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        registros = json.loads(resultado.stdout)
+        if isinstance(registros, dict):
+            registros = [registros]
+        if not isinstance(registros, list):
+            raise ValueError
+        encontrados = set()
+        esperado = os.path.normcase(str(Path(perfil).resolve()))
+        for registro in registros:
+            linha = registro["CommandLine"]
+            if not linha or "--user-data-dir" not in linha:
+                continue
+            args = _argumentos_processo(linha)
+            for i, arg in enumerate(args):
+                if arg.startswith("--user-data-dir="):
+                    valor = arg.split("=", 1)[1]
+                elif arg == "--user-data-dir" and i + 1 < len(args):
+                    valor = args[i + 1]
+                else:
+                    continue
+                if os.path.normcase(str(Path(valor).resolve())) == esperado:
+                    encontrados.add(int(registro["ProcessId"]))
+        return encontrados
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        raise RecusaSessao("ENUMERACAO_ASSISTIDA_INDISPONIVEL") from None
+
+
+def aguardar_saida_navegador(perfil, proc=None):
+    """No máximo 15 s; ausência do principal não prova saída dos filhos."""
+    limite = time.monotonic() + PRAZO_SAIDA_NAVEGADOR_S
+    while True:
+        restante = limite - time.monotonic()
+        if restante <= 0:
+            raise RecusaSessao("SAIDA_ASSISTIDA_NAO_CONFIRMADA")
+        principal_saiu = proc is None or proc.poll() is not None
+        processos = _processos_do_perfil(perfil, restante)
+        if time.monotonic() > limite:
+            raise RecusaSessao("SAIDA_ASSISTIDA_NAO_CONFIRMADA")
+        if principal_saiu and not processos:
+            if proc is not None:
+                proc.wait(timeout=max(0, limite - time.monotonic()))
+            return
+        time.sleep(min(INTERVALO_LIMPEZA_S, max(0, limite - time.monotonic())))
+
+
+def fechar_navegador(proc, perfil):
     kernel, _ = _dlls()
     job = getattr(proc, "_fv_job", None)
     if job:
@@ -674,4 +805,4 @@ def fechar_navegador(proc):
         proc._fv_job = None
     elif proc.poll() is None:
         proc.kill()
-    proc.wait(5)
+    aguardar_saida_navegador(perfil, proc)

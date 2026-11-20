@@ -312,7 +312,7 @@ def navegador_pipe(
             if canal is not None:
                 limpeza.callback(canal.fechar)
             if proc is not None:
-                limpeza.callback(a.fechar_navegador, proc)
+                limpeza.callback(a.fechar_navegador, proc, perfil_dir)
 
 
 def limpar_perfil_harness(perfil, raiz):

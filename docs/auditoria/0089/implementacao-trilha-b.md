@@ -851,3 +851,140 @@ ou erro de rede não enumerado, o item 3 continuará falhando com diagnóstico,
 sem aprovação por mera ausência de captura. Limpeza real dos perfis do novo
 ensaio e os cenários sem pré-requisito (h2/prerender/gesto humano/segunda conta)
 continuam dependentes do ensaio externo. Não houve limpeza dos 24 GB históricos.
+
+## Sexto ensaio real
+
+### Escopo e evidência
+
+Papel Desenvolvedor, em `C:\dev\fv14-0089i`, ramo
+`feat/0089-sessao-assistida`, HEAD `8b8eb3e`, preservados. Leitura dos logs do
+sexto ensaio externo com Brave 1.100; nenhum navegador foi lançado nesta rodada.
+Não houve commit, push, troca de ramo ou limpeza dos perfis históricos.
+
+Fontes locais, lidas integralmente para separar os blocos de falha:
+
+* `C:\dev\tmp\v5\impl-b\nav-6.log`, SHA-256
+  `266e024280e26c64651100cd000a17766b23cf973cbc721e694c7650127620eb`.
+  Resultado original: **16 failed, 35 passed, 5 skipped**, 688,71 s.
+* `C:\dev\tmp\v5\impl-b\item9.log`, SHA-256
+  `72b2be8a4b3f960b326421f8b79ee3e5fed169ced88ade371f1a6561ff8a745d`.
+  Quatro rodadas; `ler9.py` foi lido e executado para conferir o resumo.
+
+Classes: **A**, produto; **B**, expectativa/insuficiência do harness;
+**C**, condição ou limitação do ambiente. A leitura autorizada do controle q
+e dos prazos de limpeza está registrada em
+`docs/decisoes/0089-nota-execucao-sexto-ensaio.md`.
+
+### Análise e classificação
+
+| Evidência | Classe e conclusão | Tratamento nesta rodada |
+|---|---|---|
+| 13 falhas `WinError 32` em `nav-6.log`; item 9 rodadas 3 e 4 | **A**. `fechar_navegador` terminava o Job e esperava só o principal; `limpar_diretorio` removia sem esperar filhos nem repetir. O produto compartilhava o defeito que o harness tornou visível. | Espera limitada do principal e dos processos do perfil, remoção com repetição e recuperação de sobra; mesmo caminho de produto no harness. |
+| zstd, iframe, blob, websocket, encoding, cl21, cl_duplicado | **A**, todos são exclusivamente `WinError 32` no bloco de falha: linhas 1111–1191, 1665–1745, 1805–1885, 2085–2165, 107–204, 450–547 e 1222–1302, respectivamente. | Não há outra exceção anterior encoberta nesses sete blocos. A rodada (h) tornou a limpeza obrigatória e expôs o defeito; não há evidência de regressão em bytes, escopo ou recusa nesses casos. O reensaio real ainda é necessário. |
+| Outras seis falhas de limpeza: pipe/ACL, consumidor tardio, cl_truncado, cache, bfcache, download | **A**, mesmo mecanismo e mesma exceção. Com as sete acima, totalizam exatamente 13. | Correção comum, sem alterar os cenários ou os motivos de recusa. |
+| 304, linhas 205–449 | **B**. O JSON correlaciona `responseReceivedExtraInfo` com status bruto 304 e depois `Network.loadingFailed`, `net::ERR_ABORTED`, no mesmo requestId. O produto recusa por `EVENTO_ASSISTIDO_RECUSADO`; o guardião esperava apenas `ERR_CACHE_MISS` nesse ramo. | Analisado; expectativa continua falhando até ajuste específico do harness. Não se alterou a recusa do produto nem se admitiu 304. |
+| sem_cabecalhos e parcial, linhas 548–790 e 791–1033 | **B**. Cada JSON mostra `requestWillBeSent`, `requestWillBeSentExtraInfo` e `loadingFailed` com `ERR_ABORTED`; nenhum dos dois eventos de cabeçalhos completos. O teste aceita recusa por evento, mas sua lista de erros não inclui esse valor. | Analisado; expectativa preservada. Não é expiração de prazo nem prova de cabeçalhos completos: não se exige retroativamente `Timeout` para uma candidata já recusada. A causa interna do `ERR_ABORTED` não foi estabelecida. |
+| JSON `cache_cargas`, linhas 1469–1488 | A primeira chave é rede/admitida; a segunda, distinta, é derivada/não admitida. A única falha desse teste é a limpeza posterior (**A**). | Preservada a prova por requestId, sem remover a captura de rede legítima nem afrouxar recusa de cache. |
+| Campos `prefetch`, `cache`, `sw`, `subtipo` nos JSONs dos três negativos | São campos da sonda, em grande parte nulos nesses eventos, não falhas autônomas de prefetch/SW/prerender. Não há blocos FAILED separados de SW ou prefetch. | Não inferir regressão de produto pela simples presença desses nomes. O log sem `-rP` não contém os diagnósticos dos testes aprovados. |
+| Cinco skips, linhas 2167–2171 | **C**: extensão com gesto humano, prerender não produzido pelo Brave, ausência de h2, recarga humana e inexistência de segunda conta Windows. | Permanecem sem prova real desses aceites, sem contorno nem dependência nova. |
+
+Os 13 blocos de limpeza não contêm outra falha de asserção nem encadeamento de
+exceção anterior. Descontados esses blocos, restam exatamente os três negativos
+com `ERR_ABORTED`, não falhas de captura aceita. O `WinError 10054` emitido pelo
+servidor HTTPS em thread é diagnóstico de conexão encerrada; não é um bloco de
+falha adicional nem explica por si a origem dos três cancelamentos.
+
+### Item 9: prova e regra limitada
+
+| Rodada em item9.log | SEM 1 | SEM 2 | COM | Diagnóstico original |
+|---|---|---|---|---|
+| 1, linhas 2–3889 | `pt-BR,pt;q=0.6` | `pt-BR,pt;q=0.7` | `pt-BR,pt;q=0.8` | Só q difere nos quatro pedidos. |
+| 2, linhas 3890–7777 | `pt-BR,pt;q=0.5` | `pt-BR,pt;q=0.6` | `pt-BR,pt;q=0.9` | Só q difere nos quatro pedidos. |
+| 3, linhas 7778–8051 | — | — | — | `WinError 32` ao limpar COM; sem JSON completo. |
+| 4, linhas 8052–8209 | — | — | — | `WinError 32` ao limpar SEM 1; sem JSON completo. |
+
+Classificação **B com prova** para as duas rodadas com JSON: a mesma variação
+surge sem adaptador em `/driver`, `/case/passividade`, `/favicon.ico` e `/done`.
+Método, ordem de chegada, idiomas e demais cabeçalhos permanecem iguais.
+O mecanismo de fingerprinting é informação do supervisor; a prova nos logs é
+a variação entre controles. As outras duas rodadas provam apenas a falha A.
+
+O comparador normaliza somente posições de qvalues válidos que variaram entre
+controles daquele campo/ocorrência. Mantém igualdade literal de idioma, ordem,
+demais parâmetros e posições q estáveis; campos estáveis não recebem exceção.
+Variação mista conserva a regra anterior de valores e multiplicidades vistos.
+O diagnóstico conserva os três conjuntos originais e registra controles,
+adaptador, normalização e justificativa. Não há lista fixa de cabeçalhos ignorados.
+
+Reaplicação offline aos pedidos reconstruídos dos **JSONs originais** das
+rodadas 1 e 2: ambas passaram, com quatro normalizações cada. Isto não é novo
+ensaio de navegador, nem inventa valores das rodadas interrompidas.
+
+### Implementação e arquivos
+
+* `freoa_verifica/assistida/ambiente.py`: confirmação limitada a 15 s por chamada
+  para principal e processos com argumento exato do perfil; PowerShell/CIM local
+  somente leitura, sem janela nem perfil pessoal; enumeração falha fecha o
+  caminho. Job e kill do principal são os já existentes. Limpeza confinada,
+  20 tentativas com intervalos de 100 ms; sobra marcada e informada, recuperada
+  pelo mesmo caminho antes de criar outra sessão. Nome prefixado é a marca
+  alternativa caso não se consiga gravar `.limpeza-pendente`.
+* `freoa_verifica/assistida/sessao.py`: mesmo encerramento antes da seleção;
+  finalização por `ExitStack` tenta todos os recursos e limpa por último, mesmo
+  se um fechamento falhar. Encerramento e limpeza possuem esperas distintas;
+  uma falha na primeira pode ser seguida de nova espera de até 15 s na segunda.
+* `tests/harness_assistida_0089.py`: passa o perfil ao encerramento do produto;
+  continua falhando explicitamente quando a limpeza deixa sobra.
+* `tests/harness_assistida_0089_cenarios.py`: regra q limitada e diagnóstico.
+* `tests/test_assistida_0089_ambiente.py`: processos/arquivos simulados, saída do
+  principal antes e depois dos filhos, prazo expirado, enumeração indisponível,
+  bloqueio que libera e persistente, recuperação, caminho externo intacto,
+  seleção exata do argumento e finalização integral mesmo com erro.
+* `tests/test_assistida_0089_harness.py`: q novo permitido, idioma/ordem/idioma
+  extra/parâmetro extra/q inválido/q estável/outro campo recusados; atualiza os
+  dublês do encerramento compartilhado, preservando provas anteriores.
+* Este registro e `docs/decisoes/0089-nota-execucao-sexto-ensaio.md`.
+
+Nenhuma alteração em `transport.py` ou `cdp.py`, método CDP novo, dependência,
+fixture, regra de admissão de candidata ou critério de `verified`.
+
+### Validação e questões
+
+Validação final sobre os seis arquivos Python já formatados:
+
+* `.venv\Scripts\python.exe -X utf8 -m pytest -q -p no:cacheprovider
+  -m "not live and not navegador_assistido"` nos nove módulos
+  `test_transport_assistida_0089.py` e
+  `test_assistida_0089_{cdp,harness,grafo,ambiente,cortes,indicacao,integracao,fronteiras}.py`,
+  com `--tb=short -ra`: **484 passed, 1 skipped em 9,21 s**, exit 0.
+  `TMP`, `TEMP` e `--basetemp` fora do checkout, sob
+  `%TEMP%\fv0089-nav6-final2` (TEMP original do processo).
+* Único skip: HTTP/2 em memória, falta de `h2` no ambiente. Não foi acrescentada
+  dependência nem alegada prova desse teste.
+* Coleta dos dois módulos reais com `.venv`, `-p no:cacheprovider` e
+  `--collect-only`: **56 testes**, exit 0; nenhuma janela aberta.
+* `C:\dev\tmp\venv-ruff\Scripts\python.exe scripts\ruff_catraca.py`:
+  **exit 0**, executado separadamente para observar seu código de saída.
+* Os seis arquivos Python: `ruff check --no-cache` e
+  `ruff format --no-cache --check`, ambos **exit 0**; seis arquivos formatados.
+  `git diff --check`: sem erro. As advertências de CRLF do Git e os diretórios
+  históricos `pytest-cache-files-*` sem acesso não foram tratados como falha
+  de código nem apagados.
+* `git diff --exit-code -- freoa_verifica/transport.py
+  freoa_verifica/assistida/cdp.py`: sem diferenças. Ramo e HEAD reconferidos.
+
+Questões pendentes:
+
+1. Reensaio real externo da limpeza e do item 9: **NOT RUN**. Processos e
+   arquivos simulados provam o fluxo, não o prazo observado no Brave 1.100.
+   Nova rodada deve guardar diagnósticos completos, inclusive aprovados (`-rP`).
+2. Três expectativas B de `ERR_ABORTED` foram analisadas, sem alteração nesta
+   rodada, cujo pedido para as demais falhas era de análise/classificação.
+   Se corrigidas, devem continuar exigindo o evento impeditivo do mesmo
+   requestId, status bruto 304 no caso 304, ausência de cabeçalhos completos
+   nos outros dois e ausência de captura. Não se autoriza êxito por mero zero.
+3. Cinco condições C do ensaio original continuam pendentes dos respectivos
+   pré-requisitos. Não se inferem provas reais de logs que não as contêm.
+4. Suíte completa do repositório e auditoria independente: **NOT RUN**.
+   A implementação não declara o marco aprovado. O supervisor fará o commit;
+   não houve tentativa de commit nem alteração de outro checkout.

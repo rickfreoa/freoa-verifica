@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+from types import SimpleNamespace
 
 import threading
 
@@ -380,6 +382,7 @@ def test_reabertura_sem_rede(tmp_path, monkeypatch):
 
 def test_limpeza_e_recuperacao_confinadas(tmp_path, monkeypatch):
     monkeypatch.setattr(a, "proteger_diretorio", lambda _: None)
+    monkeypatch.setattr(a, "_processos_do_perfil", lambda *_: set())
     path = a.preparar_diretorio(tmp_path)
     (path / "arquivo").write_bytes(b"segredo-sintetico")
     novo = a.preparar_diretorio(tmp_path)
@@ -388,3 +391,217 @@ def test_limpeza_e_recuperacao_confinadas(tmp_path, monkeypatch):
         a.limpar_diretorio(tmp_path, novo.parent)
     a.limpar_diretorio(novo, novo.parent)
     assert not novo.exists()
+
+
+def _relogio_limpeza(monkeypatch):
+    agora = [0.0]
+    monkeypatch.setattr(
+        a,
+        "time",
+        SimpleNamespace(
+            monotonic=lambda: agora[0],
+            sleep=lambda s: agora.__setitem__(0, agora[0] + s),
+        ),
+    )
+    return agora
+
+
+@pytest.mark.parametrize("sai", [True, False])
+def test_limpeza_aguarda_filhos_apos_saida_do_principal(tmp_path, monkeypatch, sai):
+    agora = _relogio_limpeza(monkeypatch)
+    perfil = tmp_path / "sessao-0089-filha"
+    perfil.mkdir()
+    (perfil / "bloqueado").write_bytes(b"cache sintetico")
+    monkeypatch.setattr(
+        a,
+        "_processos_do_perfil",
+        lambda *_: {42} if not sai or agora[0] < 0.3 else set(),
+    )
+    real = a.shutil.rmtree
+    remocoes = []
+
+    def apagar(path):
+        assert agora[0] >= 0.3
+        remocoes.append(path)
+        real(path)
+
+    monkeypatch.setattr(a.shutil, "rmtree", apagar)
+    if sai:
+        a.limpar_diretorio(perfil, tmp_path)
+        assert remocoes == [perfil] and not perfil.exists()
+    else:
+        with pytest.raises(a.RecusaSessao, match="LIMPEZA_ASSISTIDA_PENDENTE"):
+            a.limpar_diretorio(perfil, tmp_path)
+        assert not remocoes
+        assert (perfil / ".limpeza-pendente").is_file()
+        assert agora[0] == pytest.approx(a.PRAZO_SAIDA_NAVEGADOR_S)
+
+
+@pytest.mark.parametrize("libera", [True, False])
+def test_limpeza_arquivo_bloqueado_e_recuperacao(tmp_path, monkeypatch, capsys, libera):
+    agora = _relogio_limpeza(monkeypatch)
+    monkeypatch.setattr(a, "_processos_do_perfil", lambda *_: set())
+    monkeypatch.setattr(a, "proteger_diretorio", lambda *_: None)
+    perfil = a.preparar_diretorio(tmp_path)
+    fora = tmp_path / "fora"
+    fora.write_bytes(b"intocado")
+    real = a.shutil.rmtree
+    tentativas = []
+
+    def bloqueado(path):
+        tentativas.append(path)
+        if not libera or len(tentativas) < 3:
+            erro = PermissionError("bloqueio sintetico")
+            erro.winerror = 32
+            raise erro
+        real(path)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(a.shutil, "rmtree", bloqueado)
+        if libera:
+            a.limpar_diretorio(perfil, perfil.parent)
+            assert len(tentativas) == 3 and not perfil.exists()
+        else:
+            with pytest.raises(a.RecusaSessao, match="LIMPEZA_ASSISTIDA_PENDENTE"):
+                a.limpar_diretorio(perfil, perfil.parent)
+            assert len(tentativas) == a.TENTATIVAS_LIMPEZA
+            assert (perfil / ".limpeza-pendente").is_file()
+            assert str(perfil) in capsys.readouterr().out
+    assert agora[0] < 2
+    novo = a.preparar_diretorio(tmp_path)
+    assert not perfil.exists() and novo.exists() and fora.read_bytes() == b"intocado"
+
+
+def test_limpeza_falha_de_enumeracao_preserva_perfil(tmp_path, monkeypatch, capsys):
+    perfil = tmp_path / "sessao-0089-enumeracao"
+    perfil.mkdir()
+
+    def indisponivel(*_):
+        raise a.RecusaSessao("ENUMERACAO_ASSISTIDA_INDISPONIVEL")
+
+    monkeypatch.setattr(a, "_processos_do_perfil", indisponivel)
+    with pytest.raises(a.RecusaSessao, match="LIMPEZA_ASSISTIDA_PENDENTE"):
+        a.limpar_diretorio(perfil, tmp_path)
+    assert perfil.exists() and (perfil / ".limpeza-pendente").is_file()
+    assert "LIMPEZA_ASSISTIDA_PENDENTE" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("job", [True, False])
+@pytest.mark.parametrize("saida_principal", [0.2, 0.6])
+def test_encerramento_espera_principal_e_filhos(
+    tmp_path, monkeypatch, job, saida_principal
+):
+    agora = _relogio_limpeza(monkeypatch)
+    acoes = []
+
+    def terminar(*_):
+        acoes.append("job")
+
+    def fechar(*_):
+        acoes.append("handle")
+
+    kernel = SimpleNamespace(TerminateJobObject=terminar, CloseHandle=fechar)
+    monkeypatch.setattr(a, "_dlls", lambda: (kernel, None))
+    proc = SimpleNamespace(
+        _fv_job=123 if job else None,
+        poll=lambda: 0 if agora[0] >= saida_principal else None,
+        wait=lambda **_: acoes.append("wait"),
+        kill=lambda: acoes.append("kill"),
+    )
+    monkeypatch.setattr(
+        a, "_processos_do_perfil", lambda *_: {42} if agora[0] < 0.4 else set()
+    )
+    a.fechar_navegador(proc, tmp_path)
+    assert agora[0] >= max(0.4, saida_principal)
+    assert acoes == (["job", "handle"] if job else ["kill"]) + ["wait"]
+
+
+def test_prazo_inclui_principal_e_enumeracao(tmp_path, monkeypatch):
+    agora = _relogio_limpeza(monkeypatch)
+    monkeypatch.setattr(a, "_processos_do_perfil", lambda *_: set())
+    proc = SimpleNamespace(poll=lambda: None)
+    with pytest.raises(a.RecusaSessao, match="SAIDA_ASSISTIDA_NAO_CONFIRMADA"):
+        a.aguardar_saida_navegador(tmp_path, proc)
+    assert agora[0] == pytest.approx(a.PRAZO_SAIDA_NAVEGADOR_S)
+
+    def demorar(*_):
+        agora[0] += a.PRAZO_SAIDA_NAVEGADOR_S + 1
+        return set()
+
+    monkeypatch.setattr(a, "_processos_do_perfil", demorar)
+    with pytest.raises(a.RecusaSessao, match="SAIDA_ASSISTIDA_NAO_CONFIRMADA"):
+        a.aguardar_saida_navegador(tmp_path)
+
+
+def test_sessao_finaliza_todos_os_recursos_mesmo_com_falha(tmp_path, monkeypatch):
+    from contextlib import nullcontext
+    from freoa_verifica.assistida import sessao as s
+
+    acoes = []
+    monkeypatch.setattr(s, "conferir_terminal", lambda: None)
+    monkeypatch.setattr("builtins.input", lambda _: "INICIAR")
+    monkeypatch.setattr(
+        a, "navegador_instalado", lambda _: ("brave", tmp_path / "brave.exe")
+    )
+    monkeypatch.setattr(a, "conferir_politicas", lambda _: None)
+    monkeypatch.setattr(a, "proteger_diretorio", lambda _: None)
+    monkeypatch.setattr(a, "lock_sessao", lambda _: nullcontext())
+    monkeypatch.setattr(a, "Vigilancia", lambda *_: None)
+    monkeypatch.setattr(a, "_processos_do_perfil", lambda *_: set())
+    monkeypatch.setattr(
+        a,
+        "ObservadorWindows",
+        lambda _: SimpleNamespace(fechar=lambda: acoes.append("observador")),
+    )
+    monkeypatch.setattr(
+        a, "lancar_pipe", lambda *_: (SimpleNamespace(poll=lambda: None), None, None)
+    )
+    monkeypatch.setattr(
+        s, "CanalPipe", lambda *_: SimpleNamespace(fechar=lambda: acoes.append("canal"))
+    )
+
+    def falhar(*_):
+        raise a.RecusaSessao("FALHA_SINTETICA")
+
+    monkeypatch.setattr(a, "fechar_navegador", falhar)
+    monkeypatch.setattr(
+        s,
+        "AdaptadorCDP",
+        lambda *_: SimpleNamespace(
+            executar=falhar,
+            comando=lambda *_: None,
+            descartar=lambda: acoes.append("adaptador"),
+        ),
+    )
+    args = SimpleNamespace(
+        fonte="planalto", alvo=None, home=str(tmp_path), navegador="brave"
+    )
+    assert s.executar(args) == 2
+    assert acoes == ["canal", "adaptador", "observador"]
+    assert not list((tmp_path / "staging/sessoes-assistidas").glob("sessao-0089-*"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="enumeração Windows, processo simulado")
+def test_enumeracao_somente_leitura_confere_argumento_exato(tmp_path, monkeypatch):
+    perfil = tmp_path / "sessao-0089-com espacos"
+    linhas = [
+        {"ProcessId": 1, "CommandLine": f'brave.exe --user-data-dir="{perfil}"'},
+        {
+            "ProcessId": 2,
+            "CommandLine": f'brave.exe --type=gpu --user-data-dir "{perfil}"',
+        },
+        {"ProcessId": 3, "CommandLine": f'brave.exe --user-data-dir="{perfil}-outra"'},
+        {"ProcessId": 4, "CommandLine": f'outro.exe --titulo="{perfil}"'},
+        {"ProcessId": 5, "CommandLine": None},
+    ]
+
+    def enumerar(args, **kw):
+        assert "-NoProfile" in args and "Get-CimInstance Win32_Process" in args[-1]
+        assert str(perfil) not in args[-1]
+        assert (
+            kw["timeout"] == 1 and kw["creationflags"] == a.subprocess.CREATE_NO_WINDOW
+        )
+        return SimpleNamespace(stdout=json.dumps(linhas))
+
+    monkeypatch.setattr(a.subprocess, "run", enumerar)
+    assert a._processos_do_perfil(perfil, 1) == {1, 2}

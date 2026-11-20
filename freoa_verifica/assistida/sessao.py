@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 import subprocess
-import time
+from contextlib import ExitStack
 from pathlib import Path
 
 from freoa_verifica import transport as t
@@ -100,7 +100,7 @@ def executar(args):
                         raise a.RecusaSessao(
                             "FECHAMENTO_ASSISTIDO_NAO_CONFIRMADO"
                         ) from None
-                a.fechar_navegador(proc)
+                a.fechar_navegador(proc, path)
                 vigia.barreira()
                 documentos = resolver_grafo(perfil, capturas, orcamento=sessao)
                 for url, codigo in adaptador.recusas:
@@ -122,41 +122,28 @@ def executar(args):
                     print("Nenhuma captura gravada.")
                 return 0
             finally:
-                if documentos is not None:
-                    documentos.fechar()
-                if proc is not None:
-                    if proc.poll() is None and adaptador is not None:
-                        try:
-                            adaptador.comando("Browser.close")
-                            proc.wait(3)
-                        except (
-                            OSError,
-                            subprocess.TimeoutExpired,
-                            t.TransportError,
-                            a.RecusaSessao,
-                        ):
-                            pass
-                    a.fechar_navegador(proc)
-                if canal is not None:
-                    canal.fechar()
-                if adaptador is not None:
-                    adaptador.descartar()
-                elif sessao is not None:
-                    sessao.encerrar()
-                if observador is not None:
-                    observador.fechar()
-                if path is not None:
-                    # Windows pode concluir fechamento de handles logo após o processo.
-                    for tentativa in range(10):
-                        try:
-                            a.limpar_diretorio(path, raiz)
-                            break
-                        except PermissionError:
-                            if tentativa == 9:
-                                raise a.RecusaSessao(
-                                    "LIMPEZA_ASSISTIDA_PENDENTE"
-                                ) from None
-                            time.sleep(0.1)
+                # Tenta cada fechamento mesmo que outro falhe; limpeza por último.
+                with ExitStack() as limpeza:
+                    if path is not None:
+                        limpeza.callback(a.limpar_diretorio, path, raiz)
+                    if observador is not None:
+                        limpeza.callback(observador.fechar)
+                    if adaptador is not None:
+                        limpeza.callback(adaptador.descartar)
+                    elif sessao is not None:
+                        limpeza.callback(sessao.encerrar)
+                    if canal is not None:
+                        limpeza.callback(canal.fechar)
+                    if proc is not None:
+                        limpeza.callback(a.fechar_navegador, proc, path)
+                    if documentos is not None:
+                        limpeza.callback(documentos.fechar)
+                    if proc is not None:
+                        if proc.poll() is None and adaptador is not None:
+                            try:
+                                adaptador.comando("Browser.close")
+                            except (OSError, t.TransportError, a.RecusaSessao):
+                                pass
     except (a.RecusaSessao, t.TransportError) as exc:
         print(f"Sessão recusada: {exc}")
         return 2
