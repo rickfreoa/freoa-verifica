@@ -1,0 +1,58 @@
+[
+  {
+    "nome": "utf8",
+    "base64": "PGh0bWw+QcOnw6NvPC9odG1sPg==",
+    "content_type": "text/html; charset=utf-8",
+    "texto": "Ação",
+    "aceito": true
+  },
+  {
+    "nome": "meta",
+    "base64": "PGh0bWw+PG1ldGEgY2hhcnNldD0idXRmLTgiPkHDp8OjbzwvaHRtbD4=",
+    "content_type": "text/html",
+    "texto": "Ação",
+    "aceito": true
+  },
+  {
+    "nome": "invalido",
+    "base64": "PGh0bWw+8J+S/zwvaHRtbD4=",
+    "content_type": "text/html",
+    "texto": "",
+    "aceito": false
+  },
+  {
+    "nome": "incompleto",
+    "base64": "PGh0bWw+8J+S",
+    "content_type": "text/html",
+    "texto": "",
+    "aceito": false
+  },
+  {
+    "nome": "ufffd",
+    "base64": "PGh0bWw+77+9PC9odG1sPg==",
+    "content_type": "text/html",
+    "texto": "�",
+    "aceito": true
+  },
+  {
+    "nome": "bom",
+    "base64": "//48AGgAdABtAGwAPgBBAOcA4wBvADwALwBoAHQAbQBsAD4A",
+    "content_type": "text/html; charset=utf-8",
+    "texto": "Ação",
+    "aceito": true
+  },
+  {
+    "nome": "latin1",
+    "base64": "PGh0bWw+QefjbzwvaHRtbD4=",
+    "content_type": "text/html; charset=iso-8859-1",
+    "texto": "Ação",
+    "aceito": true
+  },
+  {
+    "nome": "cp1252",
+    "base64": "PGh0bWw+QefjbyCAPC9odG1sPg==",
+    "content_type": "text/html; charset=windows-1252",
+    "texto": "Ação €",
+    "aceito": true
+  }
+]

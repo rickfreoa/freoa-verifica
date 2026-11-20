@@ -81,6 +81,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    p = sub.add_parser("sessao", help="sessão assistida no terminal do titular (0089)")
+    p.add_argument("fonte", choices=("planalto", "normas_leg"))
+    p.add_argument("--alvo")
+    p.add_argument("--navegador", choices=("brave", "chrome", "edge"))
+
+    p = sub.add_parser("reabrir-normas-leg", help="reabrir somente o portão automático local (0087, pendência 24)")
+    p.add_argument("--decisao", required=True)
+
     p = sub.add_parser("busca", help="buscar legislação")
     p.add_argument("q")
     p.add_argument("--fonte")
@@ -270,6 +278,29 @@ def main(argv: list[str] | None = None) -> None:
     if args.sem_registro and args.registro_completo:
         parser.error("--sem-registro e --registro-completo são excludentes")
     registro = "completo" if args.registro_completo else ("sem_conteudo" if args.sem_registro else None)
+
+    if args.cmd == "sessao":
+        from freoa_verifica.assistida.sessao import executar
+
+        raise SystemExit(executar(args))
+
+    if args.cmd == "reabrir-normas-leg":
+        from freoa_verifica.assistida.terminal import conferir_terminal
+        from freoa_verifica.assistida.ambiente import RecusaSessao
+        from freoa_verifica.connectors.normas_leg import NormasPortao
+        from freoa_verifica.store.db import data_home
+
+        try:
+            conferir_terminal()
+            if input("Digite REABRIR para reabrir normas_leg no home indicado: ").strip() != "REABRIR":
+                raise RecusaSessao("REABERTURA_NAO_CONFIRMADA")
+            portao = NormasPortao(None, home=Path(args.home).resolve() if args.home else data_home())
+            portao.reabrir(args.decisao)
+            _safe_print("Portão normas_leg reaberto; nenhuma requisição emitida.")
+            return
+        except RecusaSessao as exc:
+            _safe_print(str(exc))
+            raise SystemExit(2) from None
 
     if args.cmd == "camara":
         from freoa_verifica.camara_instrumento import executar

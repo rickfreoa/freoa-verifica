@@ -6,9 +6,12 @@ Portado e adaptado de freoa-verifica (core.py, http_receipts.py).
 from __future__ import annotations
 
 import hashlib
+import base64
+import binascii
 import http.client
 import io
 import ipaddress
+import math
 import os
 import random
 import re
@@ -26,6 +29,8 @@ from http.cookiejar import CookieJar
 from queue import Empty, Queue
 from urllib.parse import unquote, urljoin, urlsplit
 from urllib.request import Request as _UrlLibRequest
+from uuid import uuid4
+from importlib.resources import files
 
 from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
 
@@ -64,6 +69,7 @@ _HOP_CREDENTIAL_HEADERS = frozenset(
 _DNS_SLOTS = threading.BoundedSemaphore(4)
 _MAX_CONCURRENCY = max(1, int(os.environ.get("FV_MAX_CONCURRENCY", "4")))
 _CAPTURE_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENCY)
+_ASSISTED_CAPTURE_SLOTS = threading.BoundedSemaphore(4)  # 0089; separado do fluxo automático
 
 
 class TransportError(Exception):
@@ -158,6 +164,899 @@ class Response:
     content_type: str = ""  # Content-Type cru recebido, com charset; `headers` só retém o que cabe no recibo
     # Só em captura legada relida pelo padrão da fonte, sob conferência (0065, emenda); nunca é Content-Type.
     interpretacao_legada: object = None
+
+
+@dataclass(frozen=True)
+class RecursoAssistido:
+    """Gramáticas públicas de um recurso; preenchidas pelo perfil, nunca pela página."""
+
+    tipo: str
+    caminho: str
+    query: str
+    mimes: frozenset[str]
+    metodo: str = "GET"
+
+
+@dataclass(frozen=True)
+class PerfilPortaAssistida:
+    """Contrato da porta; os perfis concretos e vínculos pertencem à trilha (b)."""
+
+    origens: frozenset[str]
+    recursos: tuple[RecursoAssistido, ...]
+    cookies_admitidos: tuple[str, ...]
+    fundamento_publico: str
+    max_bytes: int = MAX_BYTES
+    max_capturas: int = 50
+
+    def __post_init__(self):
+        try:
+            if (
+                type(self.max_bytes) is not int
+                or not 1 <= self.max_bytes <= MAX_BYTES
+                or type(self.max_capturas) is not int
+                or not 1 <= self.max_capturas <= 50
+                or not self.fundamento_publico.strip()
+                or not self.origens
+                or type(self.origens) is not frozenset
+                or type(self.recursos) is not tuple
+                or not self.recursos
+                or type(self.cookies_admitidos) is not tuple
+            ):
+                raise ValueError
+            for host in self.origens:
+                if not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*", host):
+                    raise ValueError
+                validate_reference("https://" + host + "/", self.origens)
+            for recurso in self.recursos:
+                if (
+                    recurso.metodo != "GET"
+                    or recurso.tipo not in {"Document", "XHR", "Fetch"}
+                    or type(recurso.mimes) is not frozenset
+                    or not recurso.mimes
+                    or not recurso.mimes <= DEFAULT_ALLOWED_MIMES | {"application/json"}
+                    or not recurso.caminho.startswith("^/")
+                    or not recurso.caminho.endswith("$")
+                    or not recurso.query.startswith("^")
+                    or not recurso.query.endswith("$")
+                ):
+                    raise ValueError
+                re.compile(recurso.caminho)
+                re.compile(recurso.query)
+            for nome in self.cookies_admitidos:
+                if not nome.startswith("^") or not nome.endswith("$"):
+                    raise ValueError
+                re.compile(nome)
+        except (ValueError, TypeError, AttributeError, re.error):
+            raise ValueError("PERFIL_ASSISTIDO_INVALIDO") from None
+
+
+@dataclass(frozen=True)
+class ChaveAssistida:
+    sessao_cdp: str
+    alvo: str
+    request_id: str
+    salto: int
+
+
+@dataclass(frozen=True, repr=False)
+class PedidoAssistido:
+    """Observação no requestWillBeSent, após prontidão e linha de base.
+
+    observado_em é time.monotonic() na recepção, não timestamp do CDP. A raiz e
+    seu documento são os vigentes nesse instante (getFrameTree + eventos Page).
+    O adaptador comprova prontidão/ambiente; ausência de prova recusa.
+    Não entregar cabeçalhos nem valores de cookies: só nomes e motivos de bloqueio.
+    """
+
+    chave: ChaveAssistida
+    url: str
+    metodo: str
+    tipo: str
+    timestamp: float
+    wall_time: float
+    observado_em: float
+    frame_id: str
+    raiz_id: str
+    documento_raiz: str
+    iniciador: dict = field(repr=False)
+    pronto: bool = False
+    ambiente_conferido: bool = False
+    posterior_linha_base: bool = False
+    alvo_tipo: str = ""
+    subtipo_desde_criacao: str | None = None
+    redirecionamentos: tuple[dict, ...] = field(default=(), repr=False)
+
+
+@dataclass(frozen=True, repr=False)
+class EventoAssistido:
+    """Evento/resultado do streaming, correlacionado sem inferência pelo adaptador.
+
+    Métodos sem prefixo Network: responseReceived, responseReceivedExtraInfo,
+    requestWillBeSentExtraInfo, requestServedFromCache, dataReceived,
+    loadingFinished, loadingFailed e streamResourceContent (resultado bufferedData).
+    dados são params brutos; request ExtraInfo só contém authorization_presente e
+    associatedCookies [{nome, blockedReasons}], sem valores. Evento sem chave
+    inequívoca invalida a sessão. Reservar JSON/base64 ANTES da alocação.
+    """
+
+    chave: ChaveAssistida
+    metodo: str
+    dados: dict = field(repr=False)
+
+
+@dataclass(frozen=True)
+class CapturaAssistida:
+    """Exemplar em memória; não prova identidade, âncora nem estado verified.
+
+    A trilha (b) grava só após vínculos/seleção. Exportação e instalação devem
+    copiar modalidade_acesso separadamente de procedencia.
+    """
+
+    resposta: Response
+    sessao_id: str
+    obtencao_id: str
+    navegador: str
+    protocolo: str
+    ip_remoto: str
+    emissor_certificado: str
+    content_encoding: str | None
+    encoded_data_length: int | None
+    codificacao: str | None
+    origem_da_codificacao: str
+    procedencia: str = field(default="sessao_assistida", init=False)
+    modalidade_acesso: str = field(default="sessao_assistida", init=False)
+
+
+_CAUDA_PLANALTO_SHA256 = (
+    "57e730d2a5f31c72f6d347d198d2e426eb7495188129242fe024c14961be4f3f"
+)
+_TOKEN_PLANALTO = re.compile(rb"f5_p:'[A-P]{128}'")
+
+
+def texto_comparavel_assistido(
+    captura: CapturaAssistida, *, fonte: str, extrair: Callable[[str], str]
+) -> str | None:
+    """Texto do parser; None exige exame humano. O exemplar permanece íntegro."""
+    from freoa_verifica.texto_resposta import interpretar
+
+    resposta = captura.resposta
+    corpo = resposta.body
+    if fonte == "planalto":
+        if urlsplit(resposta.final_url).hostname != "www.planalto.gov.br":
+            return None
+        fim = corpo.lower().rfind(b"</html>")
+        if fim < 0:
+            return None
+        fim += len(b"</html>")
+        cauda = corpo[fim:]
+        if (
+            len(_TOKEN_PLANALTO.findall(cauda)) != 1
+            or b"f5_cspm" in corpo[:fim]
+            or b"f5_p:" in corpo[:fim]
+        ):
+            return None
+        normalizada = _TOKEN_PLANALTO.sub(b"f5_p:'<TOKEN>'", cauda)
+        modelo = (
+            files("freoa_verifica")
+            .joinpath("data/planalto_cauda_0089.bin")
+            .read_bytes()
+        )
+        if (
+            len(modelo) != 1440
+            or hashlib.sha256(modelo).hexdigest() != _CAUDA_PLANALTO_SHA256
+            or normalizada != modelo
+        ):
+            return None
+        corpo = corpo[:fim]
+    elif fonte != "normas_leg":
+        return None
+    return extrair(interpretar(corpo, resposta.content_type).texto)
+
+
+def comparar_capturas_assistidas(
+    primeira: CapturaAssistida,
+    segunda: CapturaAssistida,
+    *,
+    fonte: str,
+    extrair: Callable[[str], str],
+) -> bool | None:
+    """True/False só para equivalência textual examinada; None é pendência humana."""
+    textos = [
+        texto_comparavel_assistido(c, fonte=fonte, extrair=extrair)
+        for c in (primeira, segunda)
+    ]
+    return None if any(t is None for t in textos) else textos[0] == textos[1]
+
+
+class SessaoPortaAssistida:
+    """Orçamento compartilhado com o adaptador; não abre navegador nem grava bytes.
+
+    O adaptador usa reservar/liberar para TODAS as representações próprias: leitura
+    do pipe (blocos <= 1 MiB), JSON, base64 e fila. A porta cobra seus bytes/cópias.
+    Excesso global invalida as pendentes. Fila (10.000/32 MiB), reserva ANTES de ler
+    pipe e fiscalização das alocações do adaptador são da trilha (b).
+    """
+
+    def __init__(self, perfil: PerfilPortaAssistida, *, navegador: str):
+        if not isinstance(perfil, PerfilPortaAssistida):
+            raise ValueError("PERFIL_ASSISTIDO_INVALIDO")
+        if not re.fullmatch(r"[A-Za-z0-9 ./()-]{1,192}", navegador):
+            raise ValueError("NAVEGADOR_ASSISTIDO_INVALIDO")
+        self.perfil = perfil
+        self.navegador = navegador
+        self.sessao_id = uuid4().hex
+        self._lock = threading.RLock()
+        self._chaves: set[ChaveAssistida] = set()
+        self._pendentes: set[_CapturaAssistidaEmCurso] = set()
+        self._ativas = 0
+        self._admitidas = 0
+        self._memoria = 0
+        self._encerrada = False
+
+    def reservar(self, quantidade: int) -> None:
+        with self._lock:
+            if type(quantidade) is not int or quantidade < 0:
+                raise ValueError("RESERVA_ASSISTIDA_INVALIDA")
+            if self._encerrada:
+                raise RespostaInvalida("SESSAO_ASSISTIDA_ENCERRADA")
+            if self._memoria + quantidade > 64 * 1024**2:
+                self.encerrar()
+                raise RespostaInvalida("MEMORIA_ASSISTIDA_EXCEDIDA")
+            self._memoria += quantidade
+
+    def liberar(self, quantidade: int) -> None:
+        with self._lock:
+            if type(quantidade) is not int or not 0 <= quantidade <= self._memoria:
+                raise ValueError("RESERVA_ASSISTIDA_INVALIDA")
+            self._memoria -= quantidade
+
+    def encerrar(self) -> None:
+        """Perda de canal, fila/memória excedida ou fim: invalida/libera pendentes."""
+        with self._lock:
+            self._encerrada = True
+            for candidata in tuple(self._pendentes):
+                candidata.descartar()
+
+
+def _numero_assistido(valor) -> bool:
+    return type(valor) in (int, float) and math.isfinite(valor) and valor >= 0
+
+
+def _url_assistida(url: str, perfil: PerfilPortaAssistida) -> str:
+    try:
+        url = url.split("#", 1)[0]
+        validate_reference(url, perfil.origens)
+        return url
+    except (ValueError, TypeError, AttributeError, BlockedHost):
+        raise BlockedHost("URL_ASSISTIDA_RECUSADA") from None
+
+
+def _hsts_assistido(
+    saltos: tuple[dict, ...], final: str, perfil: PerfilPortaAssistida
+) -> None:
+    if not saltos:
+        return
+    try:
+        if len(saltos) != 1:
+            raise ValueError
+        salto = saltos[0]
+        antes, depois = urlsplit(salto["url"]), urlsplit(final)
+        razoes = [
+            v
+            for k, v in salto["headers"].items()
+            if k.lower() == "non-authoritative-reason"
+        ]
+        if (
+            salto["status"] != 307
+            or salto.get("remoteIPAddress")
+            or razoes != ["HSTS"]
+            or antes.scheme != "http"
+            or antes.port not in (None, 80)
+            or antes.username
+            or antes.password
+            or antes.fragment
+            or antes.netloc.lower() not in {depois.hostname, depois.hostname + ":80"}
+            or (antes.path, antes.query) != (depois.path, depois.query)
+            or salto["url"].replace("http://", "https://", 1).replace(":80/", "/", 1)
+            != final
+        ):
+            raise ValueError
+        _url_assistida(final, perfil)
+    except (KeyError, ValueError, TypeError, AttributeError):
+        raise BlockedHost("REDIRECIONAMENTO_ASSISTIDO_RECUSADO") from None
+
+
+class _CabecalhosAssistidos:
+    def __init__(self, status: int, campos: dict[str, list[str]]):
+        self.status, self.campos = status, campos
+
+    def getheaders(self):
+        return [
+            (nome, valor) for nome, valores in self.campos.items() for valor in valores
+        ]
+
+    def getheader(self, nome, default=None):
+        valores = self.campos.get(nome.lower(), [])
+        return ", ".join(valores) if valores else default
+
+
+def _headers_assistidos(
+    protocolo: str, dados: dict
+) -> tuple[_CabecalhosAssistidos, int | None]:
+    """Reutiliza gramática e framing; não escolhe uma duplicata do CDP."""
+    try:
+        status = dados["statusCode"]
+        if type(status) is not int or not 100 <= status <= 599:
+            raise ValueError
+        if protocolo in {"http/1.0", "http/1.1"}:
+            cru = dados["headersText"].encode("latin-1")
+            campos = _campos_estritos(cru)
+            if cru[:8].lower() != protocolo.encode("ascii") or int(cru[9:12]) != status:
+                raise ValueError
+        elif protocolo in {"h2", "h3"}:
+            linhas = []
+            for nome, valor in dados["headers"].items():
+                if not isinstance(nome, str) or not isinstance(valor, str):
+                    raise ValueError
+                for item in valor.split("\n"):
+                    linhas.append((nome + ": " + item).encode("latin-1"))
+            cru = (
+                b"HTTP/1.1 "
+                + str(status).encode("ascii")
+                + b" OK\r\n"
+                + b"\r\n".join(linhas)
+                + b"\r\n\r\n"
+            )
+            campos = _campos_estritos(cru)
+            if "transfer-encoding" in campos:
+                raise ValueError
+        else:
+            raise ValueError
+        resposta = _CabecalhosAssistidos(status, campos)
+        tamanho = _validar_framing(resposta, cru)
+        if len(resposta.getheaders()) > 100:
+            raise ValueError
+        return resposta, tamanho
+    except (KeyError, TypeError, ValueError, AttributeError, RespostaInvalida):
+        raise RespostaInvalida("CABECALHOS_ASSISTIDOS_INVALIDOS") from None
+
+
+def capturar_assistida(
+    sessao: SessaoPortaAssistida, pedido: PedidoAssistido
+) -> _CapturaAssistidaEmCurso:
+    """Única entrada de bytes observados pelo adaptador (0089 §2.1).
+
+    Chamar no requestWillBeSent; entregar eventos a observar(); só admitir() devolve
+    exemplar. Não emite rede, comando CDP, repetição nem gravação. Timer fiscaliza
+    o prazo desde a observação do pedido, inclusive sem eventos.
+    """
+    if (
+        not isinstance(sessao, SessaoPortaAssistida)
+        or not isinstance(pedido, PedidoAssistido)
+        or not isinstance(pedido.chave, ChaveAssistida)
+    ):
+        raise RespostaInvalida("PEDIDO_ASSISTIDO_SEM_PROVA")
+    with sessao._lock:
+        if sessao._encerrada:
+            raise RespostaInvalida("SESSAO_ASSISTIDA_ENCERRADA")
+        if pedido.chave in sessao._chaves:
+            sessao.encerrar()
+            raise RespostaInvalida("CHAVE_ASSISTIDA_REPETIDA")
+        if (
+            sessao._ativas >= 4
+            or len(sessao._pendentes) >= 32
+            or sessao._admitidas >= sessao.perfil.max_capturas
+        ):
+            raise RespostaInvalida("LIMITE_CANDIDATAS_ASSISTIDAS")
+        if not _ASSISTED_CAPTURE_SLOTS.acquire(blocking=False):
+            raise RespostaInvalida("LIMITE_CANDIDATAS_ASSISTIDAS")
+        try:
+            candidata = _CapturaAssistidaEmCurso(sessao, pedido)
+        except TransportError:
+            _ASSISTED_CAPTURE_SLOTS.release()
+            raise
+        except (KeyError, ValueError, TypeError, AttributeError):
+            _ASSISTED_CAPTURE_SLOTS.release()
+            raise RespostaInvalida("PEDIDO_ASSISTIDO_SEM_PROVA") from None
+        sessao._chaves.add(pedido.chave)
+        sessao._pendentes.add(candidata)
+        sessao._ativas += 1
+        try:
+            candidata._timer.start()
+        except RuntimeError:
+            candidata.descartar()
+            raise RespostaInvalida("RELOGIO_ASSISTIDO_INDISPONIVEL") from None
+        return candidata
+
+
+class _CapturaAssistidaEmCurso:
+    def __init__(self, sessao: SessaoPortaAssistida, pedido: PedidoAssistido):
+        self._sessao = sessao
+        self._erro: type[TransportError] | None = None
+        self._erro_status: int | None = None
+        self._erro_desafio: str | None = None
+        self._finalizada = self._liberada = False
+        self._ativa_global = True
+        self._resultado = None
+        self._bytes = self._recebidos = self._codificados = self._retido = 0
+        self._blocos: list[bytes] = []
+        self._stream = self._request_extra = False
+        self._antes_stream = False
+        self._reserva_antes_stream = 0
+        self._resposta = self._extra = self._termino = None
+        self._vistos: set[str] = set()
+        self._perfil, self._chave = sessao.perfil, pedido.chave
+        self._inicio, self._wall_time = pedido.timestamp, pedido.wall_time
+        self._prazo = pedido.observado_em + 30.0
+        if (
+            not all(
+                _numero_assistido(v)
+                for v in (self._inicio, self._wall_time, pedido.observado_em)
+            )
+            or pedido.observado_em > time.monotonic()
+            or not all(
+                type(v) is str and v
+                for v in (
+                    pedido.chave.sessao_cdp,
+                    pedido.chave.alvo,
+                    pedido.chave.request_id,
+                )
+            )
+            or type(pedido.chave.salto) is not int
+            or pedido.chave.salto < 0
+            or pedido.chave.salto != len(pedido.redirecionamentos)
+            or pedido.pronto is not True
+            or pedido.ambiente_conferido is not True
+            or pedido.posterior_linha_base is not True
+            or pedido.alvo_tipo != "page"
+            or pedido.subtipo_desde_criacao != ""
+            or pedido.metodo != "GET"
+            or not pedido.raiz_id
+            or pedido.frame_id != pedido.raiz_id
+        ):
+            raise RespostaInvalida("PEDIDO_ASSISTIDO_SEM_PROVA")
+        self._url = _url_assistida(pedido.url, self._perfil)
+        _hsts_assistido(pedido.redirecionamentos, self._url, self._perfil)
+        parsed = urlsplit(self._url)
+        if "//" in parsed.path:
+            raise BlockedHost("CAMINHO_ASSISTIDO_AMBIGUO")
+        recursos = [
+            r
+            for r in self._perfil.recursos
+            if r.tipo == pedido.tipo
+            and re.fullmatch(r.caminho, parsed.path)
+            and re.fullmatch(r.query, parsed.query)
+        ]
+        if len(recursos) != 1:
+            raise BlockedHost("RECURSO_ASSISTIDO_RECUSADO")
+        self._recurso = recursos[0]
+        if pedido.tipo != "Document":
+            try:
+                documento = _url_assistida(pedido.documento_raiz, self._perfil)
+                iniciador = pedido.iniciador
+                if (
+                    _origin(documento) != _origin(self._url)
+                    or iniciador["tipo"] not in {"parser", "script"}
+                    or iniciador["frame_id"] != pedido.raiz_id
+                    or iniciador["documento"] != documento
+                    or iniciador["alvo"] != pedido.chave.alvo
+                ):
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                raise RespostaInvalida("INICIADOR_ASSISTIDO_SEM_PROVA") from None
+        elif pedido.iniciador.get("tipo") not in {"parser", "script", "other"}:
+            raise RespostaInvalida("INICIADOR_ASSISTIDO_SEM_PROVA")
+        self._timer = threading.Timer(
+            max(0, self._prazo - time.monotonic()), self._expirar
+        )
+        self._timer.daemon = True
+
+    def _expirar(self):
+        with self._sessao._lock:
+            if not self._finalizada and self._erro is None:
+                self._erro = (
+                    RespostaInvalida
+                    if self._resposta is not None or self._extra is not None
+                    else Timeout
+                )
+                self.descartar()
+
+    def _conferir_prazo(self):
+        if time.monotonic() >= self._prazo:
+            self._expirar()
+            if self._erro is None:
+                self._erro = RespostaInvalida
+        if self._erro is not None:
+            if self._erro is HTTPStatusError:
+                raise HTTPStatusError(self._erro_status, desafio=self._erro_desafio)
+            raise self._erro("CAPTURA_ASSISTIDA_RECUSADA")
+        if self._sessao._encerrada or self._liberada:
+            raise RespostaInvalida("CAPTURA_ASSISTIDA_DESCARTADA")
+
+    def descartar(self):
+        with self._sessao._lock:
+            if self._liberada:
+                return
+            self._liberada = True
+            self._timer.cancel()
+            self._sessao.liberar(self._retido)
+            self._retido = 0
+            self._bytes = 0
+            self._blocos.clear()
+            self._resultado = self._resposta = self._extra = None
+            self._sessao._pendentes.discard(self)
+            if not self._finalizada:
+                self._sessao._ativas -= 1
+            self._liberar_slot()
+
+    def _liberar_slot(self):
+        if self._ativa_global:
+            self._ativa_global = False
+            _ASSISTED_CAPTURE_SLOTS.release()
+
+    def observar(self, evento: EventoAssistido) -> None:
+        """O adaptador descarta eventos brutos após esta chamada."""
+        with self._sessao._lock:
+            self._conferir_prazo()
+            try:
+                if evento.chave != self._chave:
+                    self._sessao.encerrar()
+                    raise RespostaInvalida("CORRELACAO_ASSISTIDA_INVALIDA")
+                if self._finalizada or (
+                    self._termino is not None
+                    and evento.metodo
+                    not in {"responseReceivedExtraInfo", "requestWillBeSentExtraInfo"}
+                ):
+                    raise RespostaInvalida("EVENTO_ASSISTIDO_APOS_TERMINO")
+                self._observar(evento.metodo, evento.dados)
+                self._conferir_prazo()
+            except TransportError as exc:
+                self._erro = type(exc)
+                self.descartar()
+                raise
+            except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+                self._erro = RespostaInvalida
+                self.descartar()
+                raise RespostaInvalida("EVENTO_ASSISTIDO_INVALIDO") from None
+
+    def _observar(self, metodo: str, dados: dict):
+        if metodo not in {"dataReceived", "responseReceivedEarlyHints"}:
+            if metodo in self._vistos:
+                raise RespostaInvalida("EVENTO_ASSISTIDO_REPETIDO")
+            self._vistos.add(metodo)
+        if metodo == "responseReceivedEarlyHints":
+            # 103 não é a resposta final e não torna elegível recurso iniciado por ele.
+            if not isinstance(dados["headers"], dict):
+                raise ValueError
+        elif metodo == "streamResourceContent":
+            if dados.get("erro") or "bufferedData" not in dados:
+                raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
+            self._copiar(dados["bufferedData"], self._recebidos)
+            self._sessao.liberar(self._reserva_antes_stream)
+            self._retido -= self._reserva_antes_stream
+            self._reserva_antes_stream = 0
+            self._stream = True
+        elif metodo == "requestWillBeSentExtraInfo":
+            if dados["authorization_presente"] is not False:
+                raise RespostaInvalida("AUTORIZACAO_ASSISTIDA_RECUSADA")
+            for cookie in dados["associatedCookies"]:
+                if not isinstance(cookie["blockedReasons"], list):
+                    raise ValueError
+                if not cookie["blockedReasons"] and not any(
+                    re.fullmatch(p, cookie["nome"])
+                    for p in self._perfil.cookies_admitidos
+                ):
+                    raise RespostaInvalida("COOKIE_ASSISTIDO_RECUSADO")
+            self._request_extra = True
+        elif metodo == "responseReceived":
+            resposta = dados["response"]
+            if any(
+                resposta.get(n) is not False
+                for n in ("fromDiskCache", "fromServiceWorker", "fromPrefetchCache")
+            ):
+                raise RespostaInvalida("ORIGEM_ASSISTIDA_SEM_PROVA")
+            if _url_assistida(resposta["url"], self._perfil) != self._url:
+                raise BlockedHost("URL_ASSISTIDA_DIVERGENTE")
+            try:
+                if (
+                    not _public_unicast(resposta["remoteIPAddress"])
+                    or type(resposta["remotePort"]) is not int
+                    or resposta["remotePort"] != 443
+                ):
+                    raise ValueError
+            except (KeyError, ValueError, TypeError):
+                raise BlockedHost("IP_ASSISTIDO_RECUSADO") from None
+            seguranca = resposta["securityDetails"]
+            if (
+                resposta["securityState"] != "secure"
+                or seguranca["protocol"] not in {"TLS 1.2", "TLS 1.3"}
+                or not isinstance(seguranca["issuer"], str)
+                or not 1 <= len(seguranca["issuer"]) <= 192
+                or any(ord(c) < 32 or ord(c) > 126 for c in seguranca["issuer"])
+                or type(resposta["status"]) not in (int, float)
+                or not 100 <= resposta["status"] <= 599
+            ):
+                raise RespostaInvalida("TLS_OU_STATUS_ASSISTIDO_INVALIDO")
+            self._resposta = {
+                k: resposta[k] for k in ("status", "protocol", "remoteIPAddress")
+            }
+            self._resposta["issuer"] = seguranca["issuer"]
+            if self._extra is not None:
+                self._conferir_headers()
+        elif metodo == "responseReceivedExtraInfo":
+            self._extra = dados
+            if self._resposta is not None:
+                self._conferir_headers()
+            else:
+                valores = [
+                    v
+                    for n, v in dados.get("headers", {}).items()
+                    if n.lower() == "content-length"
+                ]
+                if (
+                    len(valores) == 1
+                    and re.fullmatch(r"[0-9]{1,20}", valores[0])
+                    and int(valores[0]) > self._perfil.max_bytes
+                ):
+                    raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
+        elif metodo == "dataReceived":
+            for nome in ("dataLength", "encodedDataLength"):
+                if type(dados[nome]) is not int or dados[nome] < 0:
+                    raise ValueError
+            self._recebidos += dados["dataLength"]
+            self._codificados += dados["encodedDataLength"]
+            if max(self._recebidos, self._codificados) > self._perfil.max_bytes:
+                raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
+            if not self._stream:
+                if "data" in dados:
+                    raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
+                # Bytes declarados já comprometem o orçamento, antes do bufferedData.
+                self._sessao.reservar(dados["dataLength"])
+                self._reserva_antes_stream += dados["dataLength"]
+                self._retido += dados["dataLength"]
+                self._antes_stream = True
+            else:
+                if "data" not in dados:
+                    # Chromium também emite contador codificado sem novos bytes.
+                    if dados["dataLength"] != 0:
+                        raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
+                else:
+                    self._copiar(dados["data"], dados["dataLength"])
+        elif metodo == "loadingFinished":
+            if not self._stream:
+                raise RespostaInvalida("STREAMING_ASSISTIDO_TARDIO")
+            fim = dados["timestamp"]
+            if not _numero_assistido(fim) or fim < self._inicio:
+                raise ValueError
+            self._termino = fim
+        else:
+            raise RespostaInvalida("EVENTO_ASSISTIDO_RECUSADO")
+
+    def _copiar(self, valor: str, esperado: int):
+        if not isinstance(valor, str) or not valor.isascii():
+            raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
+        limite = (len(valor) // 4) * 3
+        if self._bytes + limite - 2 > self._perfil.max_bytes:
+            raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
+        sessao = self._sessao
+        # Inclui sobrecarga dos objetos bytes e das referências na lista. Sem isso,
+        # milhões de blocos de um byte excederiam memória apesar do contador do corpo.
+        reserva = len(valor) + limite + 128
+        sessao.reservar(reserva)
+        try:
+            bloco = base64.b64decode(valor, validate=True)
+        except (ValueError, binascii.Error):
+            sessao.liberar(reserva)
+            raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO") from None
+        if len(bloco) != esperado:
+            sessao.liberar(reserva)
+            raise RespostaInvalida("STREAMING_ASSISTIDO_DIVERGENTE")
+        retido = len(bloco) + 64 if bloco else 0
+        sessao.liberar(reserva - retido)
+        self._retido += retido
+        self._bytes += len(bloco)
+        if bloco:
+            self._blocos.append(bloco)
+        if self._bytes > self._perfil.max_bytes:
+            raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
+
+    def _conferir_headers(self):
+        import codecs
+
+        from freoa_verifica.texto_resposta import (
+            _TABELA,
+            _encoding,
+            parametros_media_type,
+        )
+
+        headers, tamanho = _headers_assistidos(self._resposta["protocol"], self._extra)
+        if tamanho is not None and tamanho > self._perfil.max_bytes:
+            raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
+        encoding = headers.campos.get("content-encoding", [])
+        if len(encoding) > 1 or (
+            encoding
+            and encoding[0].strip().lower()
+            not in {"identity", "gzip", "deflate", "br", "zstd"}
+        ):
+            raise RespostaInvalida("CONTENT_ENCODING_ASSISTIDO_INVALIDO")
+        tipos = headers.campos.get("content-type", [])
+        if len(tipos) != 1:
+            raise RespostaInvalida("CONTENT_TYPE_ASSISTIDO_INVALIDO")
+        try:
+            parametros = parametros_media_type(tipos[0])
+            if len(parametros) > 1 or any(nome != "charset" for nome, _ in parametros):
+                raise ValueError
+            mime = tipos[0].split(";", 1)[0].strip().lower()
+            content_type = mime
+            if parametros:
+                # Nenhum quoted-pair, espaço interno ou aspas não HTTP. O BOM
+                # não dispensa esta validação daquilo que será persistido.
+                literal = tipos[0].split("=", 1)[1].strip(" \t")
+                if not re.fullmatch(r'[A-Za-z0-9_:.+-]+|"[A-Za-z0-9_:.+-]+"', literal):
+                    raise ValueError
+                achado = _encoding(parametros[0][1])
+                if achado is None or achado[1] == "-":
+                    raise ValueError
+                # Conjunto fechado da interpretação única, resolvido pelo codec
+                # canônico. Publica o nome WHATWG da mesma interpretação (latin1
+                # e ascii, por exemplo, continuam windows-1252).
+                canonicos = {
+                    codecs.lookup(codec).name: nome
+                    for nome, codec, _ in _TABELA
+                    if codec != "-"
+                }
+                charset = canonicos[codecs.lookup(achado[1]).name]
+                content_type += "; charset=" + charset
+        except (LookupError, ValueError, RespostaInvalida):
+            raise RespostaInvalida("CONTENT_TYPE_ASSISTIDO_INVALIDO") from None
+        if not _mime_allowed(mime, self._recurso.mimes):
+            raise RespostaInvalida("MIME_ASSISTIDO_RECUSADO")
+        for valor in headers.campos.get("cache-control", []):
+            if any(
+                item.strip().split("=", 1)[0].lower() == "private"
+                for item in valor.split(",")
+            ):
+                raise RespostaInvalida("PERSONALIZACAO_ASSISTIDA_RECUSADA")
+        for valor in headers.campos.get("vary", []):
+            if any(
+                item.strip().lower() in {"cookie", "authorization", "*"}
+                for item in valor.split(",")
+            ):
+                raise RespostaInvalida("PERSONALIZACAO_ASSISTIDA_RECUSADA")
+        # Mesmo o recibo HTTP só recebe a representação canônica; nenhum
+        # consumidor posterior precisa voltar ao valor bruto do Content-Type.
+        headers.campos["content-type"] = [content_type]
+        return (
+            headers,
+            tamanho,
+            encoding[0].strip().lower() if encoding else None,
+            content_type,
+            mime,
+        )
+
+    def admitir(self) -> CapturaAssistida:
+        with self._sessao._lock:
+            self._conferir_prazo()
+            try:
+                resultado = self._admitir()
+                self._conferir_prazo()
+            except TransportError as exc:
+                self._erro = type(exc)
+                if isinstance(exc, HTTPStatusError):
+                    self._erro_status = exc.status
+                    self._erro_desafio = exc.desafio
+                self.descartar()
+                raise
+            except (ValueError, TypeError, OverflowError, OSError):
+                self._erro = RespostaInvalida
+                self.descartar()
+                raise RespostaInvalida("ADMISSAO_ASSISTIDA_INVALIDA") from None
+            self._finalizada = True
+            self._sessao._ativas -= 1
+            self._liberar_slot()
+            self._sessao._admitidas += 1
+            self._timer.cancel()
+            self._resultado = resultado
+            self._extra = None
+            return resultado
+
+    def _admitir(self):
+        if self._sessao._admitidas >= self._perfil.max_capturas:
+            raise RespostaInvalida("LIMITE_CANDIDATAS_ASSISTIDAS")
+        if (
+            self._finalizada
+            or not self._request_extra
+            or self._resposta is None
+            or self._extra is None
+            or self._termino is None
+            or not self._stream
+        ):
+            raise RespostaInvalida("CAPTURA_ASSISTIDA_INCOMPLETA")
+        headers, tamanho, encoding, content_type, mime = self._conferir_headers()
+        if headers.status != self._resposta["status"]:
+            raise RespostaInvalida("STATUS_ASSISTIDO_DIVERGENTE")
+        if self._bytes != self._recebidos:
+            raise RespostaInvalida("STREAMING_ASSISTIDO_DIVERGENTE")
+        comprimido = encoding not in (None, "identity")
+        if tamanho is not None and (
+            (not comprimido and tamanho != self._bytes)
+            or (
+                comprimido
+                and self._recurso.tipo in {"XHR", "Fetch"}
+                and tamanho != self._codificados
+            )
+        ):
+            raise RespostaInvalida("CONTENT_LENGTH_ASSISTIDO_DIVERGENTE")
+        if not self._bytes:
+            raise EmptyBody("CORPO_ASSISTIDO_VAZIO")
+        sessao = self._sessao
+        # Join + interpretação completa + amostra/normalizações do detector.
+        reserva = self._bytes * 5 + _AMOSTRA_DESAFIO * 32
+        sessao.reservar(reserva)
+        try:
+            corpo = b"".join(self._blocos)
+            amostra = corpo[:_AMOSTRA_DESAFIO]
+            from freoa_verifica.connectors.challenge import detect_challenge
+            from freoa_verifica.texto_resposta import interpretar
+
+            try:
+                desafio = detect_challenge(
+                    status=headers.status,
+                    headers=dict(headers.getheaders()),
+                    body=amostra,
+                    parcial=len(corpo) > len(amostra),
+                    content_type=content_type,
+                )
+                if desafio is not None:
+                    raise HTTPStatusError(headers.status, desafio=str(desafio.args[0]))
+                decisao = interpretar(corpo, content_type)
+            except RespostaInvalida:
+                raise RespostaInvalida("INTERPRETACAO_ASSISTIDA_INVALIDA") from None
+            if headers.status != 200:
+                raise HTTPStatusError(headers.status)
+            try:
+                http_meta = observe_http_response(headers)
+            except ValueError:
+                raise RespostaInvalida("RECIBO_ASSISTIDO_INVALIDO") from None
+            fetched_at = datetime.fromtimestamp(
+                self._wall_time + self._termino - self._inicio, timezone.utc
+            ).isoformat()
+            resposta = Response(
+                url=self._url,
+                final_url=self._url,
+                status=200,
+                headers=dict(http_meta.headers),
+                body=corpo,
+                sha256=hashlib.sha256(corpo).hexdigest(),
+                fetched_at=fetched_at,
+                redirects=[],
+                mime=mime,
+                http=http_meta,
+                size=len(corpo),
+                content_type=content_type,
+            )
+            resultado = CapturaAssistida(
+                resposta=resposta,
+                sessao_id=sessao.sessao_id,
+                obtencao_id=uuid4().hex,
+                navegador=sessao.navegador,
+                protocolo=self._resposta["protocol"],
+                ip_remoto=self._resposta["remoteIPAddress"],
+                emissor_certificado=self._resposta["issuer"],
+                content_encoding=encoding,
+                encoded_data_length=self._codificados
+                if self._recurso.tipo in {"XHR", "Fetch"} or self._codificados
+                else None,
+                codificacao=decisao.codificacao,
+                origem_da_codificacao=decisao.origem,
+            )
+            # O orçamento antes dos blocos passa ao exemplar devolvido.
+            self._sessao.liberar(self._retido - (len(corpo) + 64))
+            self._retido = len(corpo) + 64
+            self._blocos.clear()
+            return resultado
+        finally:
+            sessao.liberar(reserva)
 
 
 # portado de freoa-verifica/http_receipts.py:_valid_header
