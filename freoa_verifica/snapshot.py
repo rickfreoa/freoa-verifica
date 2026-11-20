@@ -75,6 +75,7 @@ SNAPSHOT_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "size", "outcome",
         # FIX18/F-22 (0064): a releitura reproduz a interpretação original; snapshot anterior à 014 não as tem.
         "content_type", "codificacao", "origem_da_codificacao",
+        "modalidade_acesso", "assistida_json",
     ),
     "extract": (
         "id", "capture_id", "parser_version", "text_sha256", "quality",
@@ -144,6 +145,8 @@ def _sha256_file(path: Path) -> str:
 
 
 def _cobertura(conn: sqlite3.Connection) -> dict[str, Any]:
+    from freoa_verifica.assistida.indicacao import cobertura
+
     out: dict[str, Any] = {}
     rows = conn.execute(
         "SELECT source_id, MIN(fetched_at), MAX(fetched_at), COUNT(*) "
@@ -152,6 +155,7 @@ def _cobertura(conn: sqlite3.Connection) -> dict[str, Any]:
     for sid, mn, mx, n in rows:
         out[sid] = {
             "capturas": n,
+            "acesso": cobertura(conn, sid),
             "fetched_at_min": mn,
             "fetched_at_max": mx,
         }
@@ -617,7 +621,7 @@ def _reconstruir_derivados_substituidos(conn: sqlite3.Connection, capturas: list
                               extract_id=ext["id"] if ext else None)
 
 
-_RECIBO_INTEGRAL = ("final_url", "status", "headers_json", "redirects_json", "mime", "size",
+_RECIBO_INTEGRAL = ("modalidade_acesso", "assistida_json", "final_url", "status", "headers_json", "redirects_json", "mime", "size",
                     "content_type")
 # Câmara (conferência 6): todas as colunas do recibo, exceto identidade e procedência da cópia.
 _FORA_DO_RECIBO = frozenset({"id", "procedencia", "edition_id"})

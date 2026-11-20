@@ -71,6 +71,8 @@ def save_capture(
     edition_id: str | None = None,
     outcome: str | None = None,
     procedencia: str = "captura_direta",
+    assistida: dict | None = None,
+    commit: bool = True,
 ) -> str:
     """Persiste blob e linha de capture; mesma tripla (sha256, url, fetched_at) não duplica.
 
@@ -79,6 +81,8 @@ def save_capture(
     """
     if procedencia not in PROCEDENCIAS_DE_GRAVACAO:
         raise ValueError(f"procedencia inválida: {procedencia!r}")
+    if assistida is not None and procedencia != "sessao_assistida":
+        raise ValueError("recibo assistido exclusivo da sessão")
     digest = hashlib.sha256(resp.body).hexdigest()
     if digest != resp.sha256:
         raise ValueError("sha256 da resposta diverge do corpo")
@@ -90,8 +94,8 @@ def save_capture(
         "INSERT INTO capture("
         "id, source_id, edition_id, url, final_url, fetched_at, status, "
         "headers_json, redirects_json, sha256, mime, size, outcome, "
-        "content_type, codificacao, origem_da_codificacao, procedencia"
-        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "content_type, codificacao, origem_da_codificacao, procedencia, modalidade_acesso, assistida_json"
+        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(sha256, url, fetched_at) DO NOTHING",
         (
             capture_id,
@@ -111,6 +115,8 @@ def save_capture(
             codificacao,
             origem,
             procedencia,
+            "sessao_assistida" if procedencia == "sessao_assistida" else "automatico",
+            json.dumps(assistida, ensure_ascii=False, sort_keys=True) if assistida is not None else None,
         ),
     )
     row = conn.execute(
@@ -124,6 +130,9 @@ def save_capture(
         raise IdentityConflict(
             f"captura {digest} já registrada sob fonte {row['source_id']}"
         )
+    if assistida is not None:
+        if row["id"] != capture_id:
+            raise IdentityConflict("obtenção assistida não pode reutilizar captura")
     if source_id == "camara_legin" and row["id"] != capture_id:
         # IL.3-c (conferência 4): a obtenção já registrada com a mesma tripla não é
         # reaproveitada se o recibo diverge; recibo legado inválido não absorve o novo.
@@ -136,7 +145,8 @@ def save_capture(
         if any(row[c] != v for c, v in recebido.items()):
             conn.rollback()
             raise IdentityConflict(f"captura {digest} já registrada com recibo divergente")
-    conn.commit()
+    if commit:
+        conn.commit()
     return row["id"]
 
 
@@ -576,6 +586,7 @@ def persist_parsed_document(
     amending_act_texts: dict[str, str] | None = None,
     candidato_ao_vivo: bool | None = None,
     interpretacao: tuple[str | None, str, str | None] | None = None,
+    commit: bool = True,
 ) -> str:
     """Persiste parsed_document, extract e occurrences (redaction → extract/capture).
 
@@ -657,7 +668,8 @@ def persist_parsed_document(
         conn.execute("UPDATE parsed_document SET candidato_ao_vivo=? WHERE capture_id=?",
                      (1 if candidato_ao_vivo else 0, capture_id))
     sincronizar_derivados(conn, capture_id=capture_id, work_id=work_id, document=document, extract_id=extract_id)
-    conn.commit()
+    if commit:
+        conn.commit()
     return extract_id
 
 

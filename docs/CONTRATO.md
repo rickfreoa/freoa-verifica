@@ -22,6 +22,29 @@ Regras:
 
 ## Convenções
 
+### Sessão assistida (0089, experimental)
+
+Somente `fv sessao planalto|normas_leg [--alvo URL]` no terminal interativo e confirmado
+inicia o adaptador. MCP e REST devolvem indicação, nunca iniciam sessão.
+`sessoes_assistidas` é mapa por fonte com `{indicacao: "requer_sessao_assistida", fonte,
+comando, alvo}`; o mesmo objeto é acrescentado em `fontes[fonte].sessao_assistida` e em
+`falhas[].sessao_assistida` quando a fonte é identificada. `fontes_indisponiveis` continua
+mapa para string; motivos, categorias, estados fechados e CONTRATO_VERSAO não mudam.
+
+A indicação exige perfil/operação habilitados, fonte não barrada e última tentativa
+automática com prova pública específica da 0089 §2.11, válida por 30 dias. Categoria
+isolada, 401, tentativa posterior sem barreira ou prova expirada não indicam sessão.
+Envelhecimento de captura não dispensa esses requisitos. Alvo fora da gramática é nulo.
+
+`listar_fontes.fontes[].sessao_assistida` informa `disponivel|nao_aplicavel`.
+`cobertura.acesso` separa `publico_humano` (declaração do perfil), `automatico` e `assistido`
+(contagem por modalidade registrada, nula quando não mensurável no esquema antigo).
+Contagem assistida não entra na automática nem representa capacidade qualificada.
+`obter_evidencia.proveniencia` publica modalidade, procedência e recibo assistido;
+snapshot instalado muda procedência para `snapshot` e preserva modalidade.
+
+Implementação desta trilha ainda sem aceite integral: [registro e lacunas](auditoria/0089/implementacao-trilha-b.md).
+
 - Texto JSON UTF-8. Datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC (`2026-10-18T00:00:00Z`).
 - **Nulidade**: campo documentado como "nulo: sim" aparece sempre, com `null` quando não se aplica. Campo marcado "condicional" só aparece em certos estados (a ausência é parte do contrato; a presença com outro tipo reprova).
 - `itens` e `resultados` são **sinônimos** (mesma lista) nas buscas; `itens` é o nome preferido.

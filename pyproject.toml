@@ -35,6 +35,7 @@ freoa_verifica = ["store/migrations/*.sql", "store/migrations/*.py", "connectors
 
 [tool.pytest.ini_options]
 markers = [
+    "navegador_assistido: harness HTTPS local com navegador instalado e pipe CDP (0089); sem fontes externas",
     "live: testes que acessam fontes oficiais reais",
     "repositorio: testes que precisam do checkout (workflows, AST, manifesto de fixtures); fora do job da wheel instalada",
 ]

@@ -160,7 +160,10 @@ def _proveniencia(cap: dict | None, derivado: dict | None = None) -> dict | None
     """`{interpretacao: "legado_sem_cabecalho" | "legado_padrao_da_fonte_conferido"}` (experimental, 0065 e emenda)
     se o texto vem de captura lida sem Content-Type: prova degradada, declarada em toda resposta pública que o entrega."""
     origem = (cap or {}).get("origem_da_codificacao") or (derivado or {}).get("interpretacao_origem")
-    return {"interpretacao": origem} if origem in (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO) else None
+    out = {"interpretacao": origem} if origem in (ORIGEM_LEGADO, ORIGEM_LEGADO_CONFERIDO) else {}
+    if (cap or {}).get("modalidade_acesso") == "sessao_assistida":
+        out.update(modalidade_acesso="sessao_assistida", procedencia=cap.get("procedencia"))
+    return out or None
 
 
 def _hash_modelo(modelo: dict | None) -> str | None:
@@ -3895,6 +3898,10 @@ class Verifica:
                 "size": cap.get("size"),
             },
             "texto": envolto,
+            **({"proveniencia": {"procedencia": cap.get("procedencia"),
+                                   "modalidade_acesso": cap["modalidade_acesso"],
+                                   "recibo": json.loads(cap.get("assistida_json") or "{}")}}
+               if cap.get("modalidade_acesso") == "sessao_assistida" else {}),
             "truncado": truncado,
             "offset": offset,
             "max_chars": max_chars,
@@ -4066,9 +4073,13 @@ class Verifica:
         }
 
     def listar_fontes(self) -> dict[str, Any]:
+        from freoa_verifica.assistida.indicacao import cobertura
+        from freoa_verifica.assistida.perfis import PERFIS
+
         fontes = []
         for cid, cls in registry().items():
             coverage = dict(getattr(cls, "coverage", {}) or {})
+            coverage["acesso"] = cobertura(self.conn, cid)
             last = self._last_health.get(cid)
             circuit = []
             for host in getattr(cls, "hosts", frozenset()):
@@ -4092,6 +4103,7 @@ class Verifica:
                     "capacidade": capacidade,
                     "recorte_acervo": recorte,
                     "tipos_documento": _tipos_documento(coverage),
+                    "sessao_assistida": "disponivel" if cid in PERFIS else "nao_aplicavel",
                     "cobertura": coverage,
                     "ultimo_health": last,
                     "circuito": circuit,
@@ -4499,6 +4511,8 @@ def _guardar(fn):
 
     @wraps(fn)
     def guardado(self, *args, **kwargs):
+        from freoa_verifica.assistida import indicacao
+
         try:
             bound = sig.bind(self, *args, **kwargs)
         except TypeError:
@@ -4508,6 +4522,8 @@ def _guardar(fn):
         _validar(entrada)
         externa = not getattr(self._local, "prof", 0)
         token = _politica_atual.set(self.registro)
+        tentativas = {} if externa else indicacao.TENTATIVAS.get()
+        token_tentativas = indicacao.TENTATIVAS.set(tentativas)
         try:
             # Guarda da chamada (FIX17/F-23): toda operação pública, inclusive as que a CLI, o MCP e o REST expõem,
             # tem identidade efetiva e bloqueio por host; aninhadas compartilham a da chamada externa.
@@ -4537,8 +4553,13 @@ def _guardar(fn):
                         out["acervo_incompleto"] = aviso
                 if fn.__name__ == "obter_dispositivo" and isinstance(out, dict):
                     _recibo_da_obtencao(self, out, entrada)
+                if externa and not self._read_only:
+                    indicacao.atualizar(self.conn, fn.__name__, tentativas)
+                if fn.__name__ in set().union(*(p.operacoes for p in indicacao.PERFIS.values())):
+                    indicacao.anexar(self.conn, fn.__name__, out)
                 return out
         finally:
+            indicacao.TENTATIVAS.reset(token_tentativas)
             _politica_atual.reset(token)
 
     return guardado
