@@ -149,8 +149,12 @@ equivalência normativa e não se modifica o exemplar.
    ausência de compressão no confronto com Content-Length. O automático não muda.
 4. HSTS repetido/cadeia ambígua: só um salto interno provado é admitido. Origem, subtipo histórico,
    prontidão e quadro principal ausentes nunca são inferidos.
-5. Streaming: bufferedData precisa chegar à porta antes do primeiro dataReceived; falha/atraso ou
-   rajada sem bytes/metadados recusa, sem fallback. A causa do caso Brave (§5.9) permanece para (b).
+5. Streaming (leitura de execução autorizada pelo supervisor em 20/11/2026, defeito 49):
+   eventos sem `data` podem preceder a resposta do comando; o `bufferedData` deve ter exatamente
+   a soma dos `dataLength` anteriores. Depois da resposta, cada evento deve trazer `data` de
+   tamanho igual ao seu `dataLength`. Término anterior à resposta ou erro do comando recusa,
+   sem fallback. Ver o terceiro ensaio abaixo. A redação da 0089 §2.5(2) e do §3 item 1
+   ("streaming iniciado tarde") precisa de nota formal do titular.
 6. Reservas conservadoras podem recusar antes do limite nominal de bytes quando as representações
    pendentes consomem o orçamento. (b) ainda deve provar reserva antes de leitura/alocação própria.
    A porta não promete medir memória do navegador.
@@ -191,3 +195,70 @@ equivalência normativa e não se modifica o exemplar.
   preservados. Permanecem cinco arquivos rastreados modificados e cinco novos; status não limpo.
 * Ponto de parada: implementação e provas offline focadas entregues; faltam suíte integral verde,
   Ruff global verde, commits e status limpo. Não é encerramento do marco nem aprovação D5.
+
+## Terceiro ensaio real: ordem resposta do streaming x dataReceived
+
+20/11/2026. Papel: Desenvolvedor. Base desta correção: `a0a7a3e`, ramo
+`feat/0089-sessao-assistida`, worktree `C:\dev\fv14-0089i`.
+
+**Fatos informados pelo supervisor**, verificados por ele fora do sandbox com Brave 1.100 /
+Chromium 158 e harness HTTPS local com 150 ms até o primeiro byte:
+`C:\dev\tmp\v5\impl-b\diag_trace.txt` e `diag_trace_plugin.py`. No Document principal, o
+comando `Network.streamResourceContent` foi escrito no pipe no mono 22736.0056, cerca de
+190 ms antes dos dados. O primeiro `dataReceived` chegou sem `data`, com `dataLength=20`;
+só depois veio a resposta do comando, com 28 caracteres base64 de `bufferedData`, exatamente
+os mesmos 20 bytes. Os eventos seguintes trouxeram `data`, seguidos de `loadingFinished`.
+Não houve novo ensaio de navegador nesta rodada. O laboratório de 19/11 provou a chamada
+no pedido, sem provar a ordem entre a resposta ao comando e o primeiro evento.
+
+O supervisor adotou a seguinte **leitura de execução**, implementada na porta:
+
+* O comando continua obrigatório no `requestWillBeSent`, única fonte de bytes. Nenhum método
+  CDP foi acrescentado; `getResponseBody` continua excluído.
+* Antes da resposta, só são aceitos eventos sem a chave `data`. Seus `dataLength` e
+  `encodedDataLength` entram nos contadores existentes e no limite `max_bytes`; os bytes
+  declarados por `dataLength` reservam orçamento imediatamente, até a cópia do buffer.
+* O tamanho decodificado de `bufferedData` deve ser igual à soma dos `dataLength` anteriores.
+  Buffer vazio só é admitido sem evento anterior. Após a resposta, cada evento exige `data`
+  e tamanho decodificado igual ao próprio `dataLength`, sem compensação entre eventos.
+* `loadingFinished` anterior à resposta recusa com `STREAMING_ASSISTIDO_TARDIO`. Presença de
+  `data` antes da resposta, falta de `data` depois ou erro do comando entregue à porta:
+  `STREAMING_ASSISTIDO_INVALIDO`; divergência de tamanhos: `STREAMING_ASSISTIDO_DIVERGENTE`.
+  Todos são `RespostaInvalida`. O adaptador conserva `COMANDO_STREAMING_RECUSADO` para erro
+  CDP. Prazo e confrontos finais da §2.4 linha 7 permanecem iguais.
+
+Os geradores e testes existentes foram ajustados por exigência expressa desta correção:
+o gerador antigo punha três bytes em `bufferedData` sem evento que os declarasse, e contava
+o corpo inteiro em um evento que só trazia o restante. Agora o padrão é buffer vazio e
+evento com o corpo inteiro; a variante com prefixo reproduz a ordem observada. A regressão
+antiga que recusava o primeiro evento sem `data` agora o aceita e exige recusa no término
+anterior à resposta. Não se retiraram as provas de comando emitido no pedido e de latência.
+
+Validação final desta rodada: **390 passed**, nos nove módulos offline afetados da porta e
+da trilha assistida, com `.venv`, `-p no:cacheprovider`, exclusão de `live` e
+`navegador_assistido` e `--basetemp` em `%TEMP%\fv0089-def49-final`, fora do checkout
+(repetição final: 390 passed em 9,00 s).
+Cobertura nova: sequência real com prefixo de 20 bytes, hash/corpo idênticos, soma de vários
+eventos, prefixo vazio ou corpo inteiro, cada violação de ordem/tamanho, divergências que
+se compensariam no total, reserva anterior ao buffer, excesso de orçamento e limites
+antes/depois da resposta. Integração usa o adaptador e a porta reais, sem rede.
+
+D5: AST de todas as **77 funções/classes preexistentes**, incluindo métodos e definições
+internas, comparada com `git show 87b43f7:freoa_verifica/transport.py` por
+`ast.dump(include_attributes=False)`: **zero ausentes, zero alteradas**. `cdp.py` não
+precisou mudar: já entrega os eventos e a resposta na ordem recebida.
+
+`C:\dev\tmp\venv-ruff\Scripts\python.exe scripts\ruff_catraca.py`: **exit 0**, baseline
+inalterada. Os três arquivos de teste tocados estão limpos no lint e formatados; o trecho
+assistido de `transport.py` passa em `ruff format --check --range 580-1020`. O arquivo
+completo conserva seis achados de lint e formatação preexistentes no fluxo automático;
+não se altera esse fluxo para limpar a base. Os seis achados foram comparados com o HEAD
+por regra/mensagem: idênticos, zero novos. Coleta dos dois módulos reais: **56 testes**.
+Suíte completa e navegador: **NOT RUN**.
+Sem stage, tentativa de commit, push ou troca de ramo.
+
+Questão remanescente: esta leitura substitui a resposta antiga da questão 5, mas não é a
+nota formal do titular. A redação da 0089 §2.5(2) e do §3 item 1 ("streaming iniciado tarde")
+precisa dessa nota; registro de execução em
+`docs/decisoes/0089-nota-execucao-defeito-49.md`. Aceite real e auditoria independente
+continuam pendentes; esta entrega não aprova o próprio marco.

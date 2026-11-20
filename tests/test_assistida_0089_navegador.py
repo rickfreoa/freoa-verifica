@@ -118,18 +118,51 @@ def test_redirect_de_rede_recusa_cadeia_cdp_ambigua(tmp_path, monkeypatch):
             assert any(p == "/case/redirect" for p, _ in vistos)
 
 
-def test_atraso_zero_consumidor_tardio_recusa_streaming_tardio(tmp_path, monkeypatch):
-    # LAB, nota final: uma origem rápida pode vencer o cliente. Faz a condição
-    # reproduzível atrasando só o consumidor do teste, sem alterar eventos/CDP.
-    with origem_https(tmp_path, "utf8", atraso_primeiro_byte=0) as (spki, vistos):
+def test_consumidor_tardio_fim_antes_da_resposta_streaming(tmp_path, monkeypatch):
+    # Defeito 49: só fim anterior à resposta (ou erro do comando) prova atraso.
+    # Mantém os 150 ms da origem e atrasa exclusivamente o consumidor do teste.
+    with origem_https(tmp_path, "utf8") as (spki, vistos):
         with navegador_pipe(tmp_path, monkeypatch, spki=spki) as (ad, _, vigia):
+            ordem = []
+            comandos = {}
+            processar = ad.processar
+            enviar = ad.canal.enviar
+
+            def observar_comando(obj):
+                if obj["method"] == "Network.streamResourceContent":
+                    comandos[obj["id"]] = (
+                        obj.get("sessionId"),
+                        obj["params"]["requestId"],
+                    )
+                return enviar(obj)
+
+            def observar(obj):
+                if obj.get("method") == "Network.loadingFinished":
+                    chave = (obj.get("sessionId"), obj["params"]["requestId"])
+                    ordem.append((chave, "fim"))
+                chave = comandos.get(obj.get("id"))
+                if chave:
+                    ordem.append((chave, "erro" if "error" in obj else "resposta"))
+                return processar(obj)
+
+            monkeypatch.setattr(ad, "processar", observar)
+            monkeypatch.setattr(ad.canal, "enviar", observar_comando)
             limite = time.monotonic() + 5
             while not vistos and time.monotonic() < limite:
                 time.sleep(0.01)
             assert vistos
-            time.sleep(0.5)  # primeiro dataReceived já deve estar na fila do pipe
+            time.sleep(0.5)  # inclui os 150 ms da origem e 300 ms entre partes
             bombear(ad, vigia, ate=lambda: bool(ad.recusas), prazo=10)
             assert not capturas(ad)
-            assert ad.motivos_recusas == [
-                ("https://127.0.0.1/case/utf8", "STREAMING_ASSISTIDO_TARDIO")
-            ]
+            assert len(ad.motivos_recusas) == 1
+            url, motivo = ad.motivos_recusas[0]
+            assert url == "https://127.0.0.1/case/utf8"
+            chaves = [chave for chave, curso in ad.pedidos.items() if curso.url == url]
+            assert len(chaves) == 1
+            eventos = [evento for chave, evento in ordem if chave == chaves[0]]
+            if motivo == "STREAMING_ASSISTIDO_TARDIO":
+                assert eventos[0] == "fim"
+                assert any(evento in {"resposta", "erro"} for evento in eventos)
+            else:
+                assert motivo == "COMANDO_STREAMING_RECUSADO"
+                assert "erro" in eventos

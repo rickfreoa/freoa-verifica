@@ -240,6 +240,69 @@ def test_recusas_na_integracao(sessao, mudanca):
     assert ad.pedidos["cdp", "pedido"].admitida is None
 
 
+def test_ordem_real_streaming_document_adaptador(sessao):
+    ad = adapter(sessao)
+    request(ad)
+    assert ad.canal.comandos[-1]["method"] == "Network.streamResourceContent"
+    entregar(ad, antes_stream=20)
+    c = ad.pedidos["cdp", "pedido"].admitida
+    assert c is not None and c.resposta.body == BODY
+    assert not ad.recusas
+
+
+@pytest.mark.parametrize(
+    "caso,codigo",
+    [
+        ("data_antes", "STREAMING_ASSISTIDO_INVALIDO"),
+        ("buffer_menor", "STREAMING_ASSISTIDO_DIVERGENTE"),
+        ("buffer_maior", "STREAMING_ASSISTIDO_DIVERGENTE"),
+        ("sem_data_depois", "STREAMING_ASSISTIDO_INVALIDO"),
+        ("tamanho_depois", "STREAMING_ASSISTIDO_DIVERGENTE"),
+        ("fim_antes", "STREAMING_ASSISTIDO_TARDIO"),
+        ("erro_comando", "COMANDO_STREAMING_RECUSADO"),
+    ],
+)
+def test_violacoes_streaming_adaptador_codigo_exato(sessao, caso, codigo):
+    ad = adapter(sessao)
+    request(ad)
+    numero = ad.numero
+    evs = eventos(pedido(), body=BODY, antes_stream=20)
+    if caso == "data_antes":
+        evs[0].dados["data"] = "YQ=="
+    elif caso in {"buffer_menor", "buffer_maior"}:
+        evs[0].dados["dataLength"] += 1 if caso == "buffer_menor" else -1
+    elif caso == "sem_data_depois":
+        del evs[-2].dados["data"]
+    elif caso == "tamanho_depois":
+        evs[-2].dados["dataLength"] += 1
+    elif caso == "fim_antes":
+        evs.insert(1, evs.pop())
+    for ev in evs:
+        if ev.metodo == "streamResourceContent":
+            resposta = (
+                {"error": {"message": "comando recusado"}}
+                if caso == "erro_comando"
+                else {"result": ev.dados}
+            )
+            ad.processar({"id": numero, **resposta})
+        else:
+            dados = (
+                {"headers": {}, "associatedCookies": []}
+                if ev.metodo == "requestWillBeSentExtraInfo"
+                else ev.dados
+            )
+            ad.processar(
+                {
+                    "method": "Network." + ev.metodo,
+                    "sessionId": "cdp",
+                    "params": {"requestId": "pedido", **dados},
+                }
+            )
+    assert ad.motivos_recusas == [(URL, codigo)]
+    curso = ad.pedidos["cdp", "pedido"]
+    assert curso.recusada and curso.admitida is None and curso.porta._liberada
+
+
 def test_ids_iguais_em_alvos_distintos(sessao):
     ad = adapter(sessao)
     ad.alvos["cdp2"] = Alvo("aba2", "page", "", True, "raiz", URL)
@@ -447,6 +510,16 @@ def test_pipe_escreve_stream_antes_da_proxima_mensagem_e_da_vigia(sessao, monkey
             assert ad.latencia_stream[k] == pytest.approx(0.010)
         monkeypatch.setattr(ad, "manutencao_periodica", lambda: None)
         ad.passo()
+        # Defeito 49: evento sem data pode preceder a resposta do comando.
+        assert not ad.recusas
+        assert sessao._memoria >= 1
+        ad.processar(
+            {
+                "method": "Network.loadingFinished",
+                "sessionId": "cdp",
+                "params": {"requestId": "pedido", "timestamp": 102.25},
+            }
+        )
         assert ad.motivos_recusas == [(URL, "STREAMING_ASSISTIDO_TARDIO")]
         assert ad.pedidos["cdp", "pedido"].admitida is None
         ad.processar({"id": ad.numero, "error": {"message": "comando tardio"}})

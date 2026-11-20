@@ -581,6 +581,8 @@ class _CapturaAssistidaEmCurso:
         self._bytes = self._recebidos = self._codificados = self._retido = 0
         self._blocos: list[bytes] = []
         self._stream = self._request_extra = False
+        self._antes_stream = False
+        self._reserva_antes_stream = 0
         self._resposta = self._extra = self._termino = None
         self._vistos: set[str] = set()
         self._perfil, self._chave = sessao.perfil, pedido.chave
@@ -727,10 +729,15 @@ class _CapturaAssistidaEmCurso:
             if not isinstance(dados["headers"], dict):
                 raise ValueError
         elif metodo == "streamResourceContent":
-            if self._recebidos or dados.get("erro") or "bufferedData" not in dados:
+            if dados.get("erro") or "bufferedData" not in dados:
                 raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
+            if self._antes_stream and not self._recebidos:
+                raise RespostaInvalida("STREAMING_ASSISTIDO_DIVERGENTE")
+            self._copiar(dados["bufferedData"], self._recebidos)
+            self._sessao.liberar(self._reserva_antes_stream)
+            self._retido -= self._reserva_antes_stream
+            self._reserva_antes_stream = 0
             self._stream = True
-            self._copiar(dados["bufferedData"])
         elif metodo == "requestWillBeSentExtraInfo":
             if dados["authorization_presente"] is not False:
                 raise RespostaInvalida("AUTORIZACAO_ASSISTIDA_RECUSADA")
@@ -795,8 +802,6 @@ class _CapturaAssistidaEmCurso:
                 ):
                     raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
         elif metodo == "dataReceived":
-            if not self._stream:
-                raise RespostaInvalida("STREAMING_ASSISTIDO_TARDIO")
             for nome in ("dataLength", "encodedDataLength"):
                 if type(dados[nome]) is not int or dados[nome] < 0:
                     raise ValueError
@@ -804,8 +809,21 @@ class _CapturaAssistidaEmCurso:
             self._codificados += dados["encodedDataLength"]
             if max(self._recebidos, self._codificados) > self._perfil.max_bytes:
                 raise TooLarge("TAMANHO_ASSISTIDO_EXCEDIDO")
-            self._copiar(dados["data"])
+            if not self._stream:
+                if "data" in dados:
+                    raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
+                # Bytes declarados já comprometem o orçamento, antes do bufferedData.
+                self._sessao.reservar(dados["dataLength"])
+                self._reserva_antes_stream += dados["dataLength"]
+                self._retido += dados["dataLength"]
+                self._antes_stream = True
+            else:
+                if "data" not in dados:
+                    raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
+                self._copiar(dados["data"], dados["dataLength"])
         elif metodo == "loadingFinished":
+            if not self._stream:
+                raise RespostaInvalida("STREAMING_ASSISTIDO_TARDIO")
             fim = dados["timestamp"]
             if not _numero_assistido(fim) or fim < self._inicio:
                 raise ValueError
@@ -813,7 +831,7 @@ class _CapturaAssistidaEmCurso:
         else:
             raise RespostaInvalida("EVENTO_ASSISTIDO_RECUSADO")
 
-    def _copiar(self, valor: str):
+    def _copiar(self, valor: str, esperado: int):
         if not isinstance(valor, str) or not valor.isascii():
             raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO")
         limite = (len(valor) // 4) * 3
@@ -829,6 +847,9 @@ class _CapturaAssistidaEmCurso:
         except (ValueError, binascii.Error):
             sessao.liberar(reserva)
             raise RespostaInvalida("STREAMING_ASSISTIDO_INVALIDO") from None
+        if len(bloco) != esperado:
+            sessao.liberar(reserva)
+            raise RespostaInvalida("STREAMING_ASSISTIDO_DIVERGENTE")
         retido = len(bloco) + 64 if bloco else 0
         sessao.liberar(reserva - retido)
         self._retido += retido

@@ -89,8 +89,9 @@ def eventos(
     data_length=None,
     encoded_length=None,
     declarado=None,
+    antes_stream=0,
 ):
-    """Gerador sintético: bufferedData + dados, metadados brutos e término."""
+    """Gerador sintético: cada byte do bufferedData foi declarado antes da resposta."""
     campos = {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Length": str(len(body)),
@@ -121,8 +122,11 @@ def eventos(
         securityDetails={"protocol": "TLS 1.3", "issuer": "AC publica sintetica"},
     )
     r.update(response or {})
-    a, b = body[:3], body[3:]
-    return [
+    a, b = body[:antes_stream], body[antes_stream:]
+    anteriores = (
+        [evento(p, "dataReceived", dataLength=len(a), encodedDataLength=0)] if a else []
+    )
+    return anteriores + [
         evento(p, "streamResourceContent", bufferedData=base64.b64encode(a).decode()),
         evento(
             p,
@@ -142,7 +146,7 @@ def eventos(
             p,
             "dataReceived",
             data=base64.b64encode(b).decode(),
-            dataLength=len(body) if data_length is None else data_length,
+            dataLength=len(b) if data_length is None else data_length,
             encodedDataLength=(len(body) if p.tipo != "Document" else 0)
             if encoded_length is None
             else encoded_length,
@@ -717,11 +721,149 @@ def test_personalizacao(sessao, headers):
         fluxo(sessao, headers=headers)
 
 
-def test_streaming_tardio_falho_ausente(sessao):
+def test_streaming_com_data_antes_da_resposta_recusado(sessao):
     p = pedido()
     evs = eventos(p)
-    with pytest.raises(t.RespostaInvalida, match="STREAMING"):
+    with pytest.raises(t.RespostaInvalida, match="^STREAMING_ASSISTIDO_INVALIDO$"):
         fluxo(sessao, p, evs[1:])
+
+
+@pytest.mark.parametrize("prefixo", [0, 20, len(BODY)])
+def test_streaming_ordem_real_bytes_identicos(sessao, prefixo):
+    c = fluxo(sessao, antes_stream=prefixo)
+    assert c.resposta.body == BODY
+    assert c.resposta.sha256 == hashlib.sha256(BODY).hexdigest()
+
+
+def test_streaming_soma_varios_eventos_antes_da_resposta(sessao):
+    p = pedido()
+    evs = eventos(p, antes_stream=20)
+    evs[:1] = [
+        evento(p, "dataReceived", dataLength=7, encodedDataLength=3),
+        evento(p, "dataReceived", dataLength=13, encodedDataLength=5),
+    ]
+    assert fluxo(sessao, p, evs).resposta.body == BODY
+
+
+@pytest.mark.parametrize(
+    "caso,codigo",
+    [
+        ("data_antes", "INVALIDO"),
+        ("data_vazio_antes", "INVALIDO"),
+        ("buffer_menor", "DIVERGENTE"),
+        ("buffer_maior", "DIVERGENTE"),
+        ("buffer_vazio_antes", "DIVERGENTE"),
+        ("buffer_sem_evento", "DIVERGENTE"),
+        ("evento_zero_buffer_vazio", "DIVERGENTE"),
+        ("sem_data_depois", "INVALIDO"),
+        ("data_menor_depois", "DIVERGENTE"),
+        ("data_maior_depois", "DIVERGENTE"),
+        ("fim_antes", "TARDIO"),
+        ("erro_comando", "INVALIDO"),
+    ],
+)
+def test_streaming_violacoes_ordem_e_tamanho(sessao, caso, codigo):
+    p = pedido()
+    evs = eventos(p, antes_stream=20)
+    if caso in {"data_antes", "data_vazio_antes"}:
+        evs[0].dados["data"] = "YQ==" if caso == "data_antes" else ""
+    elif caso.startswith("buffer_"):
+        evs[1].dados["bufferedData"] = base64.b64encode(
+            BODY[:19] if caso == "buffer_menor" else BODY[:21]
+        ).decode()
+        if caso == "buffer_vazio_antes":
+            evs[1].dados["bufferedData"] = ""
+        elif caso == "buffer_sem_evento":
+            evs.pop(0)
+    elif caso == "evento_zero_buffer_vazio":
+        evs[0].dados["dataLength"] = 0
+        evs[1].dados["bufferedData"] = ""
+    elif caso == "sem_data_depois":
+        del evs[-2].dados["data"]
+    elif caso in {"data_menor_depois", "data_maior_depois"}:
+        evs[-2].dados["dataLength"] += 1 if caso == "data_menor_depois" else -1
+    elif caso == "fim_antes":
+        evs.insert(1, evs.pop())
+    else:
+        evs[1].dados["erro"] = True
+    with pytest.raises(t.RespostaInvalida, match=f"^STREAMING_ASSISTIDO_{codigo}$"):
+        fluxo(sessao, p, evs)
+    assert sessao._memoria == 0
+
+
+def test_streaming_divergencias_compensadas_nao_passam(sessao):
+    p = pedido()
+    evs = eventos(p, antes_stream=20)
+    # A soma final seria igual, mas cada trecho tem de conferir isoladamente.
+    evs[0].dados["dataLength"] += 1
+    evs[-2].dados["dataLength"] -= 1
+    with pytest.raises(t.RespostaInvalida, match="^STREAMING_ASSISTIDO_DIVERGENTE$"):
+        fluxo(sessao, p, evs)
+
+
+def test_streaming_reserva_declarada_antes_da_resposta(sessao):
+    p = pedido()
+    c = t.capturar_assistida(sessao, p)
+    evs = eventos(p, antes_stream=20)
+    c.observar(evs[0])
+    assert sessao._memoria == c._retido == 20
+    c.observar(evs[1])
+    assert sessao._memoria == c._retido == 20 + 64
+    for ev in evs[2:]:
+        c.observar(ev)
+    assert c.admitir().resposta.body == BODY
+    c.descartar()
+    assert sessao._memoria == 0
+
+
+@pytest.mark.parametrize("contador", ["dataLength", "encodedDataLength"])
+def test_streaming_limite_conta_eventos_antes_da_resposta(sessao, contador):
+    p = pedido()
+    c = t.capturar_assistida(sessao, p)
+    evs = eventos(p, antes_stream=20)
+    evs[0].dados[contador] = sessao.perfil.max_bytes
+    c.observar(evs[0])
+    excedente = evento(p, "dataReceived", dataLength=0, encodedDataLength=0)
+    excedente.dados[contador] = 1
+    with pytest.raises(t.TooLarge, match="^TAMANHO_ASSISTIDO_EXCEDIDO$"):
+        c.observar(excedente)
+    assert sessao._memoria == 0
+
+
+@pytest.mark.parametrize("contador", ["dataLength", "encodedDataLength"])
+def test_streaming_limite_soma_antes_e_depois_da_resposta(contador):
+    s = t.SessaoPortaAssistida(perfil(max_bytes=25), navegador="Brave 158")
+    try:
+        p = pedido()
+        c = t.capturar_assistida(s, p)
+        dados = {"dataLength": 20, "encodedDataLength": 0}
+        dados[contador] = 25
+        c.observar(evento(p, "dataReceived", **dados))
+        c.observar(
+            evento(
+                p,
+                "streamResourceContent",
+                bufferedData=base64.b64encode(BODY[: dados["dataLength"]]).decode(),
+            )
+        )
+        with pytest.raises(t.TooLarge, match="^TAMANHO_ASSISTIDO_EXCEDIDO$"):
+            c.observar(
+                evento(
+                    p, "dataReceived", data="YQ==", dataLength=1, encodedDataLength=1
+                )
+            )
+        assert s._memoria == 0
+    finally:
+        s.encerrar()
+
+
+def test_streaming_reserva_declarada_excede_orcamento(sessao):
+    p = pedido()
+    c = t.capturar_assistida(sessao, p)
+    sessao.reservar(64 * 1024**2 - 19)
+    with pytest.raises(t.RespostaInvalida, match="MEMORIA"):
+        c.observar(eventos(p, antes_stream=20)[0])
+    assert sessao._encerrada and c._liberada
 
 
 def test_correlacao_chave_repetida_invalida(sessao):

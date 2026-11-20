@@ -520,3 +520,101 @@ substituto. Seus valores reais ainda exigem o próximo ensaio do supervisor.
   correção. **Ensaio Brave atualizado: NOT RUN. Aceite da §3 e auditoria
   independente: pendentes.** Os números do supervisor sobre `ee9e338` continuam
   sendo evidência histórica, não resultado desta árvore.
+
+## Terceiro ensaio real: ordem resposta do streaming x dataReceived
+
+20/11/2026. Papel: **Desenvolvedor**. Base conferida: `a0a7a3e`, ramo
+`feat/0089-sessao-assistida`, worktree `C:\dev\fv14-0089i`.
+Nesta rodada a alteração da porta foi expressamente autorizada pelo supervisor.
+Sem stage, tentativa de commit, push ou troca de ramo.
+
+### Fatos e leitura de execução
+
+O supervisor informou a verificação fora do sandbox com Brave 1.100 / Chromium 158,
+harness HTTPS local e **150 ms até o primeiro byte**; rastreamento em
+`C:\dev\tmp\v5\impl-b\diag_trace.txt` e `diag_trace_plugin.py`. No Document principal:
+
+1. `Network.streamResourceContent` foi escrito no pipe no mono 22736.0056,
+   cerca de 190 ms antes dos dados.
+2. O primeiro `Network.dataReceived` veio **sem `data`**, com `dataLength=20`.
+3. Só depois veio a resposta ao comando: 28 caracteres base64 em `bufferedData`,
+   exatamente os mesmos 20 bytes do evento anterior.
+4. Os eventos seguintes continham `data`; depois veio `loadingFinished`.
+
+Esses fatos são do ensaio do supervisor; nenhum navegador foi executado nesta rodada.
+O laboratório de 19/11 provou o início no pedido, sem provar a ordem resposta-evento.
+A interpretação anterior desta documentação de que a recusa do primeiro evento
+sem `data` era correta fica **superada pelo defeito 49**.
+
+Leitura de execução adotada pelo supervisor, registrada também em
+`docs/decisoes/0089-nota-execucao-defeito-49.md`:
+
+* A chamada no `requestWillBeSent` continua obrigatória e o streaming continua a
+  única fonte de bytes; sem `getResponseBody` ou método CDP novo.
+* Antes da resposta do comando, só são admitidos eventos **sem a chave `data`**.
+  A porta soma todos os `dataLength`/`encodedDataLength`, aplica `max_bytes` e
+  reserva orçamento para os bytes declarados por `dataLength` imediatamente.
+* A resposta exige `bufferedData` decodificado de tamanho exatamente igual à soma
+  dos `dataLength` anteriores. Buffer vazio só sem evento anterior. A reserva
+  declarada só é liberada após a cópia validada, sem intervalo sem cobertura.
+* Depois da resposta, cada evento exige `data` decodificado de tamanho igual ao
+  próprio `dataLength`. Os confrontos finais da §2.4 linha 7 permanecem iguais;
+  divergências entre trechos não podem compensar-se no total.
+* `loadingFinished` anterior à resposta: `STREAMING_ASSISTIDO_TARDIO`. `data` antes
+  da resposta, ausência de `data` depois ou erro do comando na porta:
+  `STREAMING_ASSISTIDO_INVALIDO`. Tamanho divergente: `STREAMING_ASSISTIDO_DIVERGENTE`.
+  São recusas `RespostaInvalida`. O adaptador mantém `COMANDO_STREAMING_RECUSADO`
+  para resposta CDP de erro e não substitui uma recusa já decidida. Prazo inalterado.
+
+`freoa_verifica/assistida/cdp.py` não precisou mudar: já chama o comando no pedido e
+entrega eventos/resposta em ordem, sem exigir resposta anterior ao primeiro evento.
+Os parâmetros fechados e os dez métodos permanecem iguais.
+
+### Testes e harness
+
+O gerador sintético antigo atribuía três bytes a `bufferedData` sem evento anterior
+e contava o corpo inteiro no evento com o restante dos bytes. Esse pressuposto foi
+corrigido, conforme autorização expressa para ajustar os testes existentes. O padrão
+agora usa buffer vazio e corpo inteiro no evento posterior; `antes_stream=20` reproduz
+a sequência observada. Nenhuma captura real ou fixture foi editada.
+
+`test_pipe_escreve_stream_antes_da_proxima_mensagem_e_da_vigia` preserva a prova de
+escrita no pedido, os 10 ms do relógio injetado e a precedência sobre manutenção;
+agora aceita o evento anterior sem `data`, recusa o `loadingFinished` anterior à
+resposta e exige que o erro posterior do comando não mude o motivo.
+
+Novas regressões da porta cobrem corpo/hash idênticos com prefixo de 20 bytes,
+buffer vazio sem evento, corpo inteiro no buffer, soma de vários eventos anteriores,
+cada violação de (b)–(e), divergências compensatórias, reserva e excesso de orçamento,
+limites antes e depois da resposta. As do adaptador exercitam a porta real, exigem
+aceite da sequência observada e códigos exatos das violações, inclusive erro CDP.
+
+As duas origens do harness **mantêm 150 ms** até o primeiro byte, sem ajuste de tempo.
+O cenário antigo `test_atraso_zero_consumidor_tardio_recusa_streaming_tardio` foi
+revisto como `test_consumidor_tardio_fim_antes_da_resposta_streaming`: usa o atraso
+padrão da origem e conserva a pausa de 0,5 s do consumidor. A asserção exige término
+antes da resposta do streaming, ou resposta de erro do comando, e nenhuma captura.
+Primeiro evento sem `data` já não prova streaming tardio. Esse cenário foi coletado,
+mas **não executado no navegador** nesta rodada.
+
+### Validação e questões
+
+* `.venv\Scripts\python.exe -X utf8 -m pytest -q -p no:cacheprovider
+  -m "not live and not navegador_assistido"` nos nove módulos
+  `test_transport_assistida_0089.py` e
+  `test_assistida_0089_{cdp,harness,grafo,ambiente,cortes,indicacao,integracao,fronteiras}.py`:
+  **390 passed em 9,00 s** na repetição final. `--basetemp` em
+  `%TEMP%\fv0089-def49-final`, fora do checkout. Coleta dos dois módulos reais:
+  **56 testes**. Suíte completa e ensaio de navegador: **NOT RUN**.
+* D5: `ast.dump(include_attributes=False)` de **todas as 77 funções/classes**
+  preexistentes de `transport.py`, incluindo métodos e definições internas,
+  contra `87b43f7`: **zero ausentes, zero alteradas**.
+* `C:\dev\tmp\venv-ruff\Scripts\python.exe scripts\ruff_catraca.py`: **exit 0**,
+  baseline inalterada. Três arquivos de teste tocados com lint/formatação limpos;
+  trecho assistido de `transport.py` formatado (`--range 580-1020`). O arquivo
+  completo conserva seis achados de lint (comparados por regra/mensagem com o HEAD:
+  idênticos, zero novos) e formatação antiga no fluxo automático;
+  não foram feitas alterações fora da correção autorizada para limpar a base.
+* A redação da **0089 §2.5(2)** e do **§3 item 1 ("streaming iniciado tarde")**
+  precisa de **nota formal do titular**. Este registro é a leitura de execução
+  autorizada, não essa nota. Aceite real e auditoria independente seguem pendentes.
