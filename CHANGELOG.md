@@ -29,6 +29,10 @@
   servido como `unknown` / `dispositivo_sem_redacao_normativa` e marcado em `texto_integral`; metadados do
   normas.leg.br com qualquer identificador de outra obra são recusados; Constituição estadual só pelo complemento
   sintático da ocorrência; `manter` com guardas independentes.
+- **Regra conservadora do titular (rodadas r5 e r6).** Artigo inteiro em fonte órfã só entra se continua a
+  numeração do ato; remissão com preposição e determinante vira fronteira. "Constituição" sem Federal, da República,
+  do Brasil, ano ou CF/CRFB/CR, ou com qualificador territorial na mesma frase, sai `provavel`
+  (`requer_conferencia`), nunca exata.
 
 ## 1.4.0a5 - 15/11/2026
 

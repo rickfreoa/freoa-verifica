@@ -233,3 +233,7 @@ apelido). Medidas de classe, sem lista de palavras:
 - **Guarda territorial.** Vale também para Constituição por apelido (`CF, a do Estado de São Paulo`); a frase não
   termina no ponto de abreviatura (`art. 5`); "do Estado" só qualifica seguido de nome próprio ("do Estado de São
   Paulo"), não "do Estado Democrático de Direito".
+- **Constituição sem qualificação federal (titular, 24/11).** "Constituição" sem "Federal", "da República", "do
+  Brasil", ano ou sigla (CF, CRFB, CR) sai `provavel`, com a marca `constituicao_sem_qualificacao_federal`, e a
+  verificação pede conferência. Fecha a classe da Constituição estadual referida fora da frase; custa a confirmação
+  direta de "art. 5º da Constituição", que passa a exigir conferência.

@@ -818,6 +818,11 @@ def _parse_work_match(
     if kind == "constituicao":
         declarado = ano_constituicao(m)
         year = 1988 if declarado is None else declarado
+        if declarado is None and not re.search(r"Federal|Rep[uú]blica|Brasil|^(?:CF|CRFB|CR)\b", raw, re.I):
+            # "Constituição" sem ano nem qualificação federal pode ser a estadual referida antes ou depois na
+            # mesma peça; identidade exata exige o texto nomear a Federal (0091, conferência r6, titular).
+            flags = ["apelido", "constituicao_sem_qualificacao_federal"]
+            conf = "provavel"
         if year not in CONSTITUICOES_FEDERAIS:
             # Ano que não corresponde a Constituição federal (ex.: estadual de 1989): nunca a de 1988.
             flags = ["constituicao_nao_federal"]

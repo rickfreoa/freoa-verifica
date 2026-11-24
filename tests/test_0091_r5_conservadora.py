@@ -84,3 +84,24 @@ def test_r6_guarda_territorial_vale_para_apelido_e_forma_qualificada(texto):
 def test_r6_estado_democratico_nao_e_qualificador_territorial():
     c = parse_one("art. 5 da Constituição de 1988, fundamento do Estado Democrático de Direito")
     assert c.confidence == "exata"
+
+
+@pytest.mark.parametrize("texto", [
+    "art. 5 da Constituição",
+    "art. 5 da Constituição bandeirante",
+    "art. 5 da Constituição e Emendas Constitucionais; ambas do Estado de São Paulo",
+    "Da Constituição do Estado de São Paulo: consulte o art. 5 da Constituição",
+    "art. 5 da Constituição. Trata-se da do Estado de São Paulo.",
+])
+def test_r6_constituicao_sem_qualificacao_federal_requer_conferencia(texto):
+    """Titular, após a r6: exata só quando o texto nomeia a Federal (Federal, da República, do Brasil, ano, CF/CRFB/CR)."""
+    c = parse_one(texto)
+    assert c is None or c.confidence == "provavel"
+
+
+@pytest.mark.parametrize("texto", ["art. 5 da Constituição Federal", "art. 5 da Constituição da República",
+                                   "art. 5 da Constituição de 1988", "art. 5 da CF/88", "art. 5 da CRFB/88",
+                                   "Constituição Federal de 1988, art. 5º"])
+def test_r6_constituicao_qualificada_continua_exata(texto):
+    c = parse_one(texto)
+    assert c is not None and c.work.number == "1988" and c.confidence == "exata"
