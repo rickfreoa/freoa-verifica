@@ -666,7 +666,9 @@ def _fonte_orfa_parece_dispositivo(el) -> bool:
     resto = re.sub(r"\([^()]*\)", " ", kind[1].get("rest") or kind[1].get("text") or "")
     if len(re.findall(r"[^\W\d_]", resto)) < 3:
         return False
-    return kind[0] in {"art", "par", "inc", "ali", "item"}
+    if kind[0] == "art" and not re.match(r"\s*Art\.?\s*\d", plain):
+        return False  # "art. 45 da Lei ..." em minúscula é remissão (resto de nota), não fronteira de artigo
+    return kind[0] in {"art", "par", "parunico", "inc", "ali", "item"}
 
 
 def _fonte_orfa_admissivel(el) -> bool:
