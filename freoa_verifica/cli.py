@@ -234,6 +234,7 @@ def build_parser() -> argparse.ArgumentParser:
     acao.add_argument("--remover", action="store_true")
     acao.add_argument("--mostrar", action="store_true")
     pag.add_argument("--hora", default="05:43", metavar="HH:MM", help="horário diário (padrão: 05:43)")
+    pag.add_argument("--intervalo-horas", type=int, default=2, help="repetição a cada N horas (padrão: 2)")
     _add_json_flag(pag)
 
     pc = ac.add_parser("conferir", help="bateria do snapshot: confere o acervo (somente leitura; decisão 0057)")
@@ -496,7 +497,7 @@ def main(argv: list[str] | None = None) -> None:
                 from freoa_verifica import acervo_manutencao as agenda
 
                 if args.instalar:
-                    data = agenda.agendar_instalar(svc.home, args.hora)
+                    data = agenda.agendar_instalar(svc.home, args.hora, intervalo_horas=args.intervalo_horas)
                 elif args.remover:
                     data = agenda.agendar_remover()
                 else:

@@ -132,3 +132,16 @@ recaptura, nunca como prova. Implementação pendente de auditoria Codex.
    a execução diária no agendador do usuário, sem privilégio de administrador: Agendador de Tarefas no Windows
    (`schtasks`, tarefa do usuário corrente), unidade e timer de usuário do systemd no Linux. `doctor` alerta se a
    última manutenção concluída tem mais de 48 horas ou falhou.
+
+### 5.3 Correções da auditoria r1
+
+1. **Parser:** fronteira documental separada da admissão como bloco; `DISPOSITIVO_FORA_DA_ARVORE` na ordem do documento com `blocking_scope=provision`; compostas detectadas por quebra de linha.
+2. **Citação:** anos curtos, qualificadores encadeados, territorial e ADCT com ano divergente; identidade e Planalto por ano.
+3. **Reconfirmação:** redação vigente estrita e bloqueadores de leitura na candidata.
+4. **Escopo:** `_rota_admitida` em captura, busca e indexação.
+5. **Manutenção:** cursor `manutencao_cursor`, revalidar e renovar com orçamentos separados, agendamento a cada 2 horas.
+6. **Metadados:** estrutura validada; sinal ausente após leitura válida não substitui nem desmarca.
+7. **MCP:** envelopamento integral de textos documentais em `obter_dispositivo`.
+8. **Evidência:** conferência de `interpretacao_codificacao` em `obter_evidencia`.
+9. **Derivados:** `snapshot_derived_version` preservada no manifesto local.
+10. **Isolamento:** regex corrigida; bateria exclui fontes de manutenção das pendências.

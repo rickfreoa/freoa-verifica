@@ -90,7 +90,12 @@ def _atualizar_manifesto_local(home: Path) -> None:
         return
     if not isinstance(ref, dict) or ref.get("derived_version") in (None, DERIVED_VERSION):
         return
-    ref = {**ref, "derived_version_do_snapshot": ref.get("derived_version_do_snapshot", ref["derived_version"]),
+    snap = ref.get("snapshot_derived_version", ref.get("derived_version_do_snapshot", ref["derived_version"]))
+    try:
+        snap_int = int(snap)
+    except (TypeError, ValueError):
+        snap_int = ref.get("derived_version_do_snapshot") or ref["derived_version"]
+    ref = {**ref, "derived_version_do_snapshot": snap_int, "snapshot_derived_version": snap_int,
            "derived_version": DERIVED_VERSION}
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(ref, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")

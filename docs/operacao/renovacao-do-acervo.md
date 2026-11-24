@@ -17,7 +17,8 @@ escopo `metadados_e_renovacao`, consultas sob demanda declaram `fora_do_escopo_d
 rota.
 
 `fv acervo manter` executa revalidar e depois renovar, gravando `manutencao.json` no home. `fv acervo agendar` instala
-tarefa diária no agendador do usuário (Windows: `schtasks`; Linux: systemd user) para `fv acervo manter --json`.
+tarefa diária no agendador do usuário (Windows: `schtasks`; Linux: systemd user) para `fv acervo manter --json`,
+com repetição a cada 2 horas (`--intervalo-horas`, padrão 2) para percorrer o acervo em lotes dentro do teto do portão.
 
 ```bash
 fv acervo revalidar --json

@@ -412,18 +412,28 @@ CONSTITUICOES_FEDERAIS: frozenset[int] = frozenset({1824, 1891, 1934, 1937, 1946
 _CONSTITUICAO_ANO_CURTO = {24: 1824, 91: 1891, 34: 1934, 37: 1937, 46: 1946, 67: 1967, 69: 1969, 88: 1988}
 _CONSTITUICAO = (
     r"\b(?:Constitui[cç][aã]o"
-    r"(?:\s+(?:Federal|Pol[ií]tica\s+do\s+Imp[eé]rio\s+do\s+Brasil"
-    r"|da\s+Rep[uú]blica(?:\s+Federativa)?(?:\s+dos\s+Estados\s+Unidos)?\s+do\s+Brasil"
-    r"|dos\s+Estados\s+Unidos\s+do\s+Brasil|do\s+Brasil|da\s+Rep[uú]blica|(?:Federal\s+)?Brasileira))?"
-    r"(?:\s*,?\s*\(?\s*de\s+(?:\d{1,2}[ºo°]?\s+de\s+[A-Za-zçÇ]+\s+de\s+)?(\d{4})\)?)?"
-    r"|(?:CF|CRFB|CR)\s*/\s*(\d{4}|\d{2}))(?!\w)"
+    r"(?:\s+(?:Federal(?:\s+Brasileira)?|Pol[ií]tica\s+do\s+Imp[eé]rio\s+do\s+Brasil"
+    r"|da\s+Rep[uú]blica(?:\s+Federativa(?:\s+do\s+Brasil)?)?(?:\s+dos\s+Estados\s+Unidos\s+do\s+Brasil)?"
+    r"|dos\s+Estados\s+Unidos\s+do\s+Brasil|do\s+Brasil|da\s+Rep[uú]blica|Brasileira))?"
+    r"(?:\s*,?\s*\(?\s*de\s+(?:\d{1,2}[ºo°]?\s+de\s+[A-Za-zçÇ]+\s+de\s+)?(\d{4}|\d{2})\)?)?"
+    r"|(?:CF|CRFB|CR)\s*/\s*(\d{4}|\d{2})"
+    r"|(?:CF|CRFB|CR)\s+de\s+(\d{4}|\d{2}))(?!\w)"
+)
+_CONSTITUICAO_NAO_FEDERAL = re.compile(
+    r"(?:\s+(?:do\s+Estado\b|dos?\s+Estados?\s+(?!Unidos)|Estadual\b|Municipal\b|Distrital\b|do\s+Distrito\s+Federal\b)"
+    r"|\s+(?:Paulista|Mineira|Fluminense|Ga[uú]cha|Baiana|Catarinense|Paranaense|Pernambucana|Cearense|Goiana|Capixaba"
+    r"|Paraibana|Potiguar|Alagoana|Sergipana|Maranhense|Piauiense|Paraense|Amazonense|Acreana|Rondoniense|Roraimense"
+    r"|Amapaense|Tocantinense|Sul-Mato-Grossense|Mato-Grossense)\b"
+    r"|(?:[A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)*ense)\b)",
+    re.I,
+)
+_CONSTITUICAO_GENTILICO = re.compile(
+    r"\bConstitui[cç][aã]o\s+(?:sul-rio-grandense|mato-grossense|[A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)*ense)\b",
+    re.I,
 )
 # Constituição estadual: não é a Federal nem cai no apelido "Constituição" (identidade errada).
-_CONSTITUICAO_ESTADUAL = re.compile(
-    r"\s+(?:do\s+Estado\b|dos?\s+Estados?\s+(?!Unidos)|Estadual\b|(?:Paulista|Mineira|Fluminense|Ga[uú]cha|Baiana"
-    r"|Catarinense|Paranaense|Pernambucana|Cearense|Goiana|Capixaba|Paraibana|Potiguar|Alagoana|Sergipana"
-    r"|Maranhense|Piauiense|Paraense|Amazonense|Acreana|Rondoniense|Roraimense|Amapaense|Tocantinense"
-    r"|Sul-Mato-Grossense|Mato-Grossense|Distrital)\b|do\s+Distrito\s+Federal\b)", re.I)
+_CONSTITUICAO_ESTADUAL = _CONSTITUICAO_NAO_FEDERAL
+
 
 
 def ano_constituicao(m: re.Match[str]) -> int | None:
@@ -1160,6 +1170,11 @@ def extract(texto: str) -> list[Citation]:
         )
         _mark(m.start(), m.end())
 
+    for m in _CONSTITUICAO_GENTILICO.finditer(text):
+        if not _free(m.start(), m.end()):
+            continue
+        _mark(m.start(), m.end())
+
     # 7) Obras formais
     work_cites: list[Citation] = []
     for pat, auth, kind in _WORK_PATTERNS:
@@ -1171,8 +1186,8 @@ def extract(texto: str) -> list[Citation]:
                 "decreto-lei"
             ):
                 continue
-            if kind == "constituicao" and ano_constituicao(m) is None and _CONSTITUICAO_ESTADUAL.match(text, m.end()):
-                _mark(m.start(), m.end())  # Constituição estadual: fora de cobertura, nunca a Federal
+            if kind == "constituicao" and _CONSTITUICAO_NAO_FEDERAL.search(text, m.end()):
+                _mark(m.start(), m.end())
                 continue
             c = _parse_work_match(m, auth, kind, text)
             if c is None:
@@ -1267,6 +1282,18 @@ def extract(texto: str) -> list[Citation]:
         if "adct" in cite.flags:
             cite.flags.remove("adct")
             if cite.path:
+                trecho = text[max(0, cite.span[0] - 40): min(len(text), cite.span[1] + 120)]
+                am = re.search(
+                    r"(?:Constitui[cç][aã]o|(?:CF|CRFB|CR)\b).*?(?:de\s+)?(\d{4}|\d{2})\b",
+                    trecho,
+                    re.I,
+                )
+                if am:
+                    raw = am.group(1)
+                    ano = int(raw) if len(raw) == 4 else _CONSTITUICAO_ANO_CURTO.get(int(raw), -1)
+                    if ano != 1988:
+                        cite.confidence = "provavel"
+                        cite.flags.append("adct_ano_divergente")
                 cite.path = f"adct/{cite.path}"
         if cite.path is None and _unattached_device_nearby(text, cite, work_cites):
             cite.confidence = "provavel"

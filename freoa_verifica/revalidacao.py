@@ -16,6 +16,7 @@ from freoa_verifica.texto_resposta import texto_do_response
 
 FONTE_META = "normas_leg_meta"
 FONTE_PENDENTE = "renovacao_pendente"
+FONTE_CURSOR = "manutencao_cursor"
 VERSAO_CURRENT = re.compile(r"@(\d{4}-\d{2}-\d{2})~")
 _ESCOPO_NOME = "metadados_e_renovacao"
 
@@ -115,7 +116,7 @@ def _obras_elegiveis(conn) -> list[Any]:
         "SELECT w.id, w.authority, w.kind, w.number, w.year FROM work w "
         "JOIN parsed_document p ON p.work_id=w.id JOIN capture c ON c.id=p.capture_id "
         "WHERE w.authority='federal' AND w.year>0 AND p.candidato_ao_vivo=0 AND p.model_json IS NOT NULL "
-        "GROUP BY w.id ORDER BY w.id"
+        "GROUP BY w.id",
     ).fetchall()
     out = []
     for row in rows:
@@ -125,7 +126,61 @@ def _obras_elegiveis(conn) -> list[Any]:
         except Unavailable:
             continue
         out.append(row)
-    return out
+
+    def _chave(r):
+        ant = conn.execute(
+            "SELECT payload_json FROM sync_state WHERE fonte=? AND chave=?",
+            (FONTE_META, r["id"]),
+        ).fetchone()
+        prev = _sinal_armazenado(ant[0] if ant else None)
+        lido = ""
+        if ant and ant[0]:
+            try:
+                lido = json.loads(ant[0]).get("lido_em") or ""
+            except (ValueError, TypeError):
+                lido = ""
+        return (0 if prev is None else 1, lido, r["id"])
+
+    return sorted(out, key=_chave)
+
+
+def _cursor_ultimo(conn) -> str | None:
+    row = conn.execute(
+        "SELECT payload_json FROM sync_state WHERE fonte=? AND chave=?",
+        (FONTE_CURSOR, "revalidar"),
+    ).fetchone()
+    if not row or not row[0]:
+        return None
+    try:
+        payload = json.loads(row[0])
+    except (ValueError, TypeError):
+        return None
+    return payload.get("ultimo_work_id") if isinstance(payload, dict) else None
+
+
+def _gravar_cursor(conn, work_id: str | None) -> None:
+    _gravar_sync(conn, FONTE_CURSOR, "revalidar", "registrado", payload={"ultimo_work_id": work_id})
+
+
+def _validar_metadados_obra(meta: dict, work: WorkKey) -> str | None:
+    if not isinstance(meta, dict):
+        return "metadados_invalidos"
+    try:
+        identidade(work)
+    except Unavailable as exc:
+        return exc.reason
+    enc = meta.get("encoding")
+    if enc is not None and not isinstance(enc, list):
+        return "metadados_invalidos"
+    if isinstance(enc, list):
+        for item in enc:
+            if item is not None and not isinstance(item, dict):
+                return "metadados_invalidos"
+    dm = meta.get("dateModified")
+    if dm is not None and not isinstance(dm, str):
+        return "metadados_invalidos"
+    return None
+
 
 
 def _host_barrado(con: NormasLegConnector) -> bool:
@@ -152,33 +207,52 @@ def revalidar(svc, limite: int | None = None) -> dict[str, Any]:
     if svc._offline():
         return {"status": "indisponivel", "motivo": "offline", "obras": []}
     rows = _obras_elegiveis(svc.conn)
+    ultimo = _cursor_ultimo(svc.conn)
+    if ultimo and rows:
+        ids = [r["id"] for r in rows]
+        if ultimo in ids:
+            off = ids.index(ultimo) + 1
+            rows = rows[off:] + rows[:off]
     if limite is not None:
         rows = rows[:max(0, int(limite))]
     con: NormasLegConnector = svc._get("normas_leg")
     resultados: list[dict[str, Any]] = []
     host_parado = False
+    ultimo_processado: str | None = ultimo
     for row in rows:
         work_id = row["id"]
+        work = WorkKey(row["authority"], row["kind"], row["number"], int(row["year"]))
         obra = f"{row['kind']} {row['number']}/{row['year']}"
         if host_parado:
             resultados.append({"work_id": work_id, "obra": obra, "resultado": "indisponivel", "motivo": "host_barrado"})
             continue
         try:
-            payload, sha256, lido_em = _ler_metadados(con, WorkKey(row["authority"], row["kind"], row["number"], int(row["year"])))
+            payload, sha256, lido_em = _ler_metadados(con, work)
         except Unavailable as exc:
             if _host_barrado(con):
                 host_parado = True
             resultados.append({"work_id": work_id, "obra": obra, "resultado": "indisponivel",
                                "motivo": exc.reason[:200], "categoria": exc.categoria})
             continue
-        sinal = sinal_de_metadados(payload)
+        try:
+            if motivo := _validar_metadados_obra(payload, work):
+                raise Unavailable(motivo)
+            sinal = sinal_de_metadados(payload)
+        except (Unavailable, TypeError, ValueError) as exc:
+            motivo = exc.reason if isinstance(exc, Unavailable) else "metadados_invalidos"
+            resultados.append({"work_id": work_id, "obra": obra, "resultado": "indisponivel", "motivo": motivo[:200]})
+            continue
         anterior = svc.conn.execute(
             "SELECT payload_json FROM sync_state WHERE fonte=? AND chave=?",
             (FONTE_META, work_id),
         ).fetchone()
         prev = _sinal_armazenado(anterior[0] if anterior else None)
+        if prev is not None and sinal is None:
+            resultados.append({"work_id": work_id, "obra": obra, "resultado": "indisponivel", "motivo": "sinal_ausente"})
+            continue
         registro = {"sinal": sinal, "sha256": sha256, "lido_em": lido_em}
         _gravar_sync(svc.conn, FONTE_META, work_id, "registrado", payload=registro)
+        ultimo_processado = work_id
         if prev is None:
             resultados.append({"work_id": work_id, "obra": obra, "resultado": "primeira_leitura", "sinal": sinal})
             continue
@@ -188,6 +262,8 @@ def revalidar(svc, limite: int | None = None) -> dict[str, Any]:
         _gravar_sync(svc.conn, FONTE_PENDENTE, work_id, "pendente", motivo="metadados_alterados",
                      payload={"sinal_anterior": prev, "sinal_novo": sinal, "em": lido_em})
         resultados.append({"work_id": work_id, "obra": obra, "resultado": "alterado", "sinal": sinal})
+    if rows and ultimo_processado:
+        _gravar_cursor(svc.conn, ultimo_processado)
     contagem = {k: sum(1 for r in resultados if r["resultado"] == k)
                 for k in ("inalterado", "alterado", "primeira_leitura", "indisponivel")}
     if not resultados:

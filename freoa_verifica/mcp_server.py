@@ -133,6 +133,34 @@ def _wrap_result_text(data: dict[str, Any], keys: tuple[str, ...] = ("texto",)) 
     return out
 
 
+
+
+def _wrap_dispositivo_resposta(data: dict[str, Any]) -> dict[str, Any]:
+    """Envolve todos os campos documentais de obter_dispositivo (incl. aninhados)."""
+    out = _wrap_result_text(dict(data), ("texto", "texto_integral"))
+    ta = out.get("texto_atual")
+    if isinstance(ta, dict) and isinstance(ta.get("texto"), str):
+        out["texto_atual"] = {**ta, "texto": _wrap_oficial(ta["texto"])}
+    if isinstance(out.get("redacoes_anteriores"), list):
+        out["redacoes_anteriores"] = [
+            {**r, "trecho": _wrap_oficial(r["trecho"])} if isinstance(r, dict) and isinstance(r.get("trecho"), str) else r
+            for r in out["redacoes_anteriores"]
+        ]
+    if isinstance(out.get("anotacoes"), list):
+        out["anotacoes"] = [
+            {**a, "raw": _wrap_oficial(a["raw"])} if isinstance(a, dict) and isinstance(a.get("raw"), str) else a
+            for a in out["anotacoes"]
+        ]
+    if isinstance(out.get("subdispositivos"), list):
+        out["subdispositivos"] = [
+            _wrap_dispositivo_resposta(i) if isinstance(i, dict) else i for i in out["subdispositivos"]
+        ]
+    if isinstance(out.get("remissoes"), list):
+        out["remissoes"] = [
+            {**r, "texto": _wrap_oficial(r["texto"])} if isinstance(r, dict) and isinstance(r.get("texto"), str) else r
+            for r in out["remissoes"]
+        ]
+    return out
 def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
     """Cria o servidor MCP com ferramentas espelhando a fachada (exceto sincronizar)."""
     mcp = FastMCP(
@@ -213,13 +241,8 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
             citacao=citacao, work_id=work_id, caminho=caminho, data=data, versao=versao, fonte=fonte,
             abrangencia=abrangencia,
         )
-        out = _wrap_result_text(data_out, ("texto", "texto_integral"))
-        if isinstance(out.get("subdispositivos"), list):  # texto de cada subdispositivo também é dado do documento
-            out["subdispositivos"] = [{**i, "texto": _wrap_oficial(i["texto"])} if isinstance(i, dict)
-                                      and isinstance(i.get("texto"), str) else i for i in out["subdispositivos"]]
-        if isinstance(out.get("remissoes"), list):  # A2: o trecho da remissão é texto do documento (dado, não instrução)
-            out["remissoes"] = [{**r, "texto": _wrap_oficial(r["texto"])} if isinstance(r, dict)
-                                and isinstance(r.get("texto"), str) else r for r in out["remissoes"]]
+        out = _wrap_dispositivo_resposta(data_out)
+
         return out
 
     @mcp.tool()

@@ -87,10 +87,17 @@ def _recursos_ckan(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return out
 
 
+_MANUTENCAO_SYNC = frozenset({"normas_leg_meta", "renovacao_pendente", "manutencao_cursor"})
+
+
 def _pendencias(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     marcas = ",".join("?" * len(_CONCLUIDOS))
-    rows = conn.execute(f"SELECT fonte, chave, status, motivo FROM sync_state WHERE status NOT IN ({marcas}) "  # noqa: S608 - só placeholders
-                        "ORDER BY fonte, chave", _CONCLUIDOS).fetchall()
+    exc = ",".join("?" * len(_MANUTENCAO_SYNC))
+    rows = conn.execute(
+        f"SELECT fonte, chave, status, motivo FROM sync_state WHERE status NOT IN ({marcas}) "  # noqa: S608
+        f"AND fonte NOT IN ({exc}) ORDER BY fonte, chave",
+        (*_CONCLUIDOS, *_MANUTENCAO_SYNC),
+    ).fetchall()
     return [dict(r) for r in rows]
 
 

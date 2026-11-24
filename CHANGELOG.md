@@ -2,6 +2,7 @@
 
 ## Não publicado (branch `fix/cf-entrega-mcp`) - decisão 0091, pendente de aprovação e auditoria
 
+- **Auditoria r1 (emenda A).** Dez achados do parecer Codex: fronteira no parser, Constituição por ano, reconfirmação estrita, rota normas_leg, cursor de manutenção, metadados, MCP, evidência, manifesto, bateria.
 - **Parser do Planalto 1.2.4 (confirmação indevida corrigida).** Dispositivo em fonte órfã fora de `<p>` era
   descartado; artigos inteiros (CF arts. 57, 62, 126, 222; ADCT art. 52) ficavam fora do modelo e seus parágrafos
   sob o artigo anterior. `art. 61, § 3º, da CF` com o texto do art. 62, § 3º saía `verified`; `art. 5º, LXXVIII`

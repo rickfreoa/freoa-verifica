@@ -56,10 +56,19 @@ KNOWN_URLS = _load_known_urls()
 
 
 def work_key(tipo: str, numero: int | str, ano: int | str | None = None) -> str:
+    from freoa_verifica.citation import CONSTITUICOES_FEDERAIS
+
     tipo_u = tipo.strip().upper()
     if tipo_u in {"CF", "CONSTITUICAO", "CONSTITUIÇÃO"}:
-        # Cada Constituição pelo seu ano; só a de 1988 tem rota conhecida (as anteriores ficam sem URL).
-        return f"CF:{int(ano) if ano else 1988}"
+        if ano is not None:
+            return f"CF:{int(ano)}"
+        try:
+            n = int(str(numero).strip())
+        except ValueError:
+            n = None
+        if n in CONSTITUICOES_FEDERAIS:
+            return f"CF:{n}"
+        return "CF:1988"
     num = str(numero).replace(".", "").lstrip("0") or "0"
     if ano is None:
         return f"{tipo_u}:{num}"

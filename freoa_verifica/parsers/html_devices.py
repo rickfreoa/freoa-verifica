@@ -242,6 +242,8 @@ def paragraph_plain_text(el) -> str:
     return _normalize_ws("".join(t for _, t in walk_text_parts(el)))
 
 
+
+
 def extract_annotations_from_element(
     el,
     *,
@@ -625,31 +627,76 @@ _SEGUNDO_DISPOSITIVO = re.compile(
     r"[.;:]\s+(?:Art\.?\s*\d|§\s*\d|Par[aá]grafo\s+[úu]nico|[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)")
 
 
+def paragraph_plain_text_preserve_breaks(el) -> str:
+    """Texto da fonte/paragrafo preservando quebras como newline."""
+    buf: list[str] = []
+    for node in el.iter():
+        tag = getattr(node, "tag", None)
+        if tag == "br":
+            buf.append("\n")
+        if node.text:
+            buf.append(node.text)
+        if node.tail:
+            buf.append(node.tail)
+    raw = "".join(buf)
+    lines = [re.sub(r"\s+", " ", ln).strip() for ln in raw.split("\n")]
+    return "\n".join(ln for ln in lines if ln)
+
+
+_LABEL_LINE_START = re.compile(
+    r"(?m)^\s*(?:Art\.?\s*\d|§\s*\d|Par[aá]grafo\s+[úu]nico|"
+    r"[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)",
+    re.I,
+)
+
+
+def _fonte_orfa_composta(plain_breaks: str, plain: str) -> bool:
+    if _SEGUNDO_DISPOSITIVO.search(plain):
+        return True
+    return len(_LABEL_LINE_START.findall(plain_breaks or plain)) > 1
+
+
+def _fonte_orfa_parece_dispositivo(el) -> bool:
+    if el.xpath(".//p"):
+        return False
+    plain = paragraph_plain_text(el)
+    kind = _classify_line(plain)
+    if not kind or kind[0] == "art" and not (kind[1].get("rest") or "").strip():
+        return False
+    resto = re.sub(r"\([^()]*\)", " ", kind[1].get("rest") or kind[1].get("text") or "")
+    if len(re.findall(r"[^\W\d_]", resto)) < 3:
+        return False
+    return kind[0] in {"art", "par", "inc", "ali", "item"}
+
+
+def _fonte_orfa_admissivel(el) -> bool:
+    plain = paragraph_plain_text(el)
+    plain_breaks = paragraph_plain_text_preserve_breaks(el)
+    kind = _classify_line(plain)
+    if not kind:
+        return False
+    if kind[0] == "art" and not (kind[1].get("rest") or "").strip():
+        return False
+    resto = re.sub(r"\([^()]*\)", " ", kind[1].get("rest") or kind[1].get("text") or "")
+    if len(re.findall(r"[^\W\d_]", resto)) < 3:
+        return False
+    if kind[0] == "art" and not re.match(r"\s*Art\.?\s*\d+\S*\s+[A-ZÀ-Ý(]", plain):
+        return False
+    return not _fonte_orfa_composta(plain_breaks, plain)
+
+
+
 def fontes_orfas_de_dispositivo(root, *, todas: bool = False) -> list:
-    """Fontes sob o body, fora de qualquer <p>, cujo texto abre dispositivo (art., §, inciso, alínea).
+    """Fontes sob o body, fora de qualquer <p>, com rótulo de dispositivo.
 
-    `todas=False`: só as que contêm um único dispositivo e nenhum <p> (podem entrar como bloco).
-    `todas=True`: também as compostas, que o parser não decompõe (a sentinela as acusa)."""
-    out = []
-    for el in root.xpath("//body/font"):
-        if el.xpath(".//p"):
-            continue  # o conteúdo em <p> descendente já é bloco próprio
-        plain = paragraph_plain_text(el)
-        kind = _classify_line(plain)
-        if not kind or kind[0] == "art" and not (kind[1].get("rest") or "").strip():
-            continue  # rótulo de artigo sem corpo: tratado pela mescla com a fonte seguinte
-        resto = re.sub(r"\([^()]*\)", " ", kind[1].get("rest") or kind[1].get("text") or "")
-        if len(re.findall(r"[^\W\d_]", resto)) < 3:
-            continue  # só rótulo ou nota ("h) (Revogado ...)"): não vira bloco nem continuação do anterior
-        if kind[0] == "art" and not re.match(r"\s*Art\.?\s*\d+\S*\s+[A-ZÀ-Ý(]", plain):
-            continue  # "art. 45 da Lei ..." é remissão (fragmento de nota), não abre artigo
-        if not todas and _SEGUNDO_DISPOSITIVO.search(plain):
-            continue
-        out.append(el)
-    return out
+    `todas=False`: só as admitidas como bloco único.
+    `todas=True`: todas as fronteiras não admitidas (sentinela legada)."""
+    if todas:
+        return [el for el in root.xpath("//body/font") if _fonte_orfa_parece_dispositivo(el) and not _fonte_orfa_admissivel(el)]
+    return [el for el in root.xpath("//body/font") if _fonte_orfa_admissivel(el)]
 
 
-def _iter_device_blocks(root) -> tuple[list, dict[int, str]]:
+def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
     """Parágrafos + fontes órfãs 'Art N' sob body (markup quebrado do Planalto).
 
     Só inclui //body/font cujo texto é rótulo de artigo sem corpo (ex.: "Art 9º"),
@@ -694,21 +741,29 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str]]:
     # Referências vivas: o lxml mantém um único proxy por nó enquanto houver referência (id() estável).
     consumidas = [el.getnext() for el in orphan_fonts if el.getnext() is not None]
     ids_consumidas = {id(el) for el in consumidas}
-    for el in fontes_orfas_de_dispositivo(root):
+    fronteira_ids: set[int] = set()
+    fronteira_fonts: list = []
+    for el in root.xpath("//body/font"):
         if id(el) in ids_consumidas or id(el) in merged_by_id:
             continue
-        orphan_fonts.append(el)
+        if not _fonte_orfa_parece_dispositivo(el):
+            continue
+        if _fonte_orfa_admissivel(el):
+            orphan_fonts.append(el)
+        else:
+            fronteira_ids.add(id(el))
+            fronteira_fonts.append(el)
 
-    if not orphan_fonts:
-        return blocks, merged_by_id
+    if not orphan_fonts and not fronteira_fonts:
+        return blocks, merged_by_id, fronteira_ids
 
     # Reconstroi na ordem do documento
-    wanted = {id(el) for el in blocks + orphan_fonts}
+    wanted = {id(el) for el in blocks + orphan_fonts + fronteira_fonts}
     ordered: list = []
     for el in root.iter():
         if id(el) in wanted:
             ordered.append(el)
-    return (ordered if ordered else blocks), merged_by_id
+    return (ordered if ordered else blocks), merged_by_id, fronteira_ids
 
 
 def extract_title_ementa(paragraphs: list) -> tuple[str, str | None]:
@@ -919,19 +974,31 @@ def parse_html_devices(
     title, ementa = extract_title_ementa(paragraphs)
     # Planalto às vezes quebra <p> com </font> órfão: "Art 9º" fica em
     # //body/font fora de qualquer <p>. Inclui esses blocos na ordem do documento.
-    blocks, merged_by_id = _iter_device_blocks(root)
+    blocks, merged_by_id, fronteira_ids = _iter_device_blocks(root)
     ctx = _Ctx()
     ctx.issues.extend(early_issues)
-    # Sentinela (decisão 0091): dispositivo fora de <p> que não entrou como bloco impede negar ausência.
-    arvore = root.getroottree()
-    incluidos = {arvore.getpath(b) for b in blocks}
-    for el in fontes_orfas_de_dispositivo(root, todas=True):
-        if arvore.getpath(el) not in incluidos:
-            ctx.issues.append(Issue("DISPOSITIVO_FORA_DA_ARVORE", None,
-                                    _normalize_ws(paragraph_plain_text(el))[:160], blocking_scope=None))
     prev_in_bq = False
 
+    def _reset_paths_fronteira() -> None:
+        ctx.art_path = None
+        ctx.par_path = None
+        ctx.inc_path = None
+        ctx.ali_path = None
+        ctx.last_device_path = None
+
     for el in blocks:
+        if id(el) in fronteira_ids:
+            trecho = _normalize_ws(paragraph_plain_text(el))[:160]
+            ctx.issues.append(
+                Issue(
+                    "DISPOSITIVO_FORA_DA_ARVORE",
+                    ctx.art_path,
+                    trecho,
+                    blocking_scope="provision" if ctx.art_path else None,
+                )
+            )
+            _reset_paths_fronteira()
+            continue
         merged = merged_by_id.get(id(el))
         full_plain = merged or paragraph_plain_text(el)
         if not full_plain:

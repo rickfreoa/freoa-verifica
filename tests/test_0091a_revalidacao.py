@@ -84,13 +84,13 @@ def test_sinal_none_sem_current_pt():
 
 def test_gatilho_nao_entra_em_outros_modulos():
     raiz = Path(__file__).resolve().parents[1] / "freoa_verifica"
-    permitidos = {raiz / "revalidacao.py", raiz / "service.py", raiz / "cli.py"}
+    permitidos = {raiz / "revalidacao.py", raiz / "service.py", raiz / "cli.py", raiz / "bateria.py"}
     for path in raiz.rglob("*.py"):
         if path in permitidos:
             continue
         texto = path.read_text(encoding="utf-8")
         for tok in (rev.FONTE_META, rev.FONTE_PENDENTE):
-            assert not re.search(rf"\\b{re.escape(tok)}\\b", texto), f"{path} referencia {tok}"
+            assert not re.search(rf"\b{re.escape(tok)}\b", texto), f"{path} referencia {tok}"
 
 
 def test_primeira_leitura_e_inalterado_e_alterado(tmp_path, monkeypatch):

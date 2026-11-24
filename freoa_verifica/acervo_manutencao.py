@@ -27,7 +27,7 @@ def linha_comando(home: Path | None) -> str:
     return " ".join([f'"{caminho_fv()}"'] + [f'"{a}"' if " " in a else a for a in argumentos(home)])
 
 
-def xml_tarefa(home: Path | None, hora: str) -> str:
+def xml_tarefa(home: Path | None, hora: str, *, intervalo_horas: int = 2) -> str:
     from xml.sax.saxutils import escape
 
     args = " ".join(f'"{a}"' if " " in a else a for a in argumentos(home))
@@ -38,6 +38,10 @@ def xml_tarefa(home: Path | None, hora: str) -> str:
     <CalendarTrigger>
       <StartBoundary>2026-01-01T{hora}:00</StartBoundary>
       <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+      <Repetition>
+        <Interval>PT{intervalo_horas}H</Interval>
+        <Duration>PT24H</Duration>
+      </Repetition>
     </CalendarTrigger>
   </Triggers>
   <Principals><Principal id="Autor"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
@@ -70,13 +74,14 @@ ExecStart={linha_comando(home)}
 """
 
 
-def conteudo_systemd_timer(hora: str) -> str:
+def conteudo_systemd_timer(hora: str, *, intervalo_horas: int = 2) -> str:
     hh, mm = hora.split(":", 1)
     return f"""[Unit]
 Description=FREOA Verifica - manutenção diária do acervo
 
 [Timer]
 OnCalendar=*-*-* {hh}:{mm}:00
+OnUnitActiveSec={intervalo_horas}h
 Persistent=true
 
 [Install]
@@ -110,11 +115,12 @@ def _rodar(cmd: list[str]) -> tuple[int, str, str]:
     return r.returncode, r.stdout, r.stderr
 
 
-def agendar_instalar(home: Path, hora: str = HORA_PADRAO) -> dict:
+def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: int = 2) -> dict:
     hora = validar_hora(hora)
+    intervalo_horas = max(1, int(intervalo_horas))
     if sys.platform == "win32":
         arquivo = Path(home) / "agendamento-manter.xml"
-        arquivo.write_text(xml_tarefa(home, hora), encoding="utf-16")
+        arquivo.write_text(xml_tarefa(home, hora, intervalo_horas=intervalo_horas), encoding="utf-16")
         cmd = comando_schtasks(home, hora, arquivo)
         codigo, saida, erro = _rodar(cmd)
         return {"status": "ok" if codigo == 0 else "erro", "plataforma": "windows", "comando": cmd,
@@ -124,7 +130,9 @@ def agendar_instalar(home: Path, hora: str = HORA_PADRAO) -> dict:
         base = Path.home() / ".config" / "systemd" / "user"
         base.mkdir(parents=True, exist_ok=True)
         (base / f"{UNIDADE_LINUX}.service").write_text(conteudo_systemd_service(home), encoding="utf-8")
-        (base / f"{UNIDADE_LINUX}.timer").write_text(conteudo_systemd_timer(hora), encoding="utf-8")
+        (base / f"{UNIDADE_LINUX}.timer").write_text(
+            conteudo_systemd_timer(hora, intervalo_horas=intervalo_horas), encoding="utf-8"
+        )
         codigo, saida, erro = _rodar(["systemctl", "--user", "daemon-reload"])
         if codigo == 0:
             codigo, saida, erro = _rodar(["systemctl", "--user", "enable", "--now", f"{UNIDADE_LINUX}.timer"])
