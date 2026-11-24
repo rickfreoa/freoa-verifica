@@ -31,6 +31,8 @@ def _meta_url(urn: str = URN) -> str:
 def _meta_base() -> dict:
     # Derivação sintética a partir da captura real LC 118 (sem editar o fixture).
     base = json.loads(load_fixture("normas_leg_meta_mp2158"))
+    base["urn"] = URN
+    base["legislationIdentifier"] = URN
     base["dateModified"] = "2026-10-16"
     for item in base["encoding"]:
         if item.get("version") == "Current" and item.get("inLanguage") == "pt":

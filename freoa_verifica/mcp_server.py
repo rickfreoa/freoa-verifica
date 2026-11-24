@@ -148,7 +148,15 @@ def _wrap_dispositivo_resposta(data: dict[str, Any]) -> dict[str, Any]:
         ]
     if isinstance(out.get("anotacoes"), list):
         out["anotacoes"] = [
-            {**a, "raw": _wrap_oficial(a["raw"])} if isinstance(a, dict) and isinstance(a.get("raw"), str) else a
+            (
+                {
+                    **a,
+                    **({"raw": _wrap_oficial(a["raw"])} if isinstance(a.get("raw"), str) else {}),
+                    **({"act_ref": _wrap_oficial(a["act_ref"])} if isinstance(a.get("act_ref"), str) else {}),
+                }
+                if isinstance(a, dict)
+                else a
+            )
             for a in out["anotacoes"]
         ]
     if isinstance(out.get("subdispositivos"), list):
@@ -160,6 +168,9 @@ def _wrap_dispositivo_resposta(data: dict[str, Any]) -> dict[str, Any]:
             {**r, "texto": _wrap_oficial(r["texto"])} if isinstance(r, dict) and isinstance(r.get("texto"), str) else r
             for r in out["remissoes"]
         ]
+    sit = out.get("situacao_obra")
+    if isinstance(sit, dict) and isinstance(sit.get("texto_oficial"), str):
+        out["situacao_obra"] = {**sit, "texto_oficial": _wrap_oficial(sit["texto_oficial"])}
     return out
 def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
     """Cria o servidor MCP com ferramentas espelhando a fachada (exceto sincronizar)."""
@@ -234,7 +245,7 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         `fonte` seleciona a origem quando há capturas coexistentes; omissão preserva ambiguidades.
         `abrangencia`: dispositivo (só a cabeça; padrão) ou integral (o artigo inteiro numa chamada: `subdispositivos`
         com incisos, parágrafos e alíneas, cada um com vigência própria, e `texto_integral`). Prefira integral a pedir
-        inciso por inciso. `reconfirmacao` indica captura mais recente com a mesma redação; `capturas_recentes_nao_canonicas`,
+        inciso por inciso. `capturas_recentes_nao_canonicas`
         por que a captura servida é anterior.
         """
         data_out = svc_().obter_dispositivo(

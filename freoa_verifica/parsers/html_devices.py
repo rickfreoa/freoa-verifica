@@ -624,7 +624,7 @@ def _classify_line(text: str) -> tuple[str, dict] | None:
 
 
 _SEGUNDO_DISPOSITIVO = re.compile(
-    r"[.;:]\s+(?:Art\.?\s*\d|§\s*\d|Par[aá]grafo\s+[úu]nico|[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)")
+    r"[.;:]\s+(?:Art\.?\s*(?:\d{1,3}(?:\.\d{3})+|\d+)(?![0-9])|§\s*\d|Par[aá]grafo\s+[úu]nico|[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)")
 
 
 def paragraph_plain_text_preserve_breaks(el) -> str:
@@ -644,8 +644,8 @@ def paragraph_plain_text_preserve_breaks(el) -> str:
 
 
 _LABEL_LINE_START = re.compile(
-    r"(?m)^\s*(?:Art\.?\s*\d|§\s*\d|Par[aá]grafo\s+[úu]nico|"
-    r"[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)",
+    r"(?m)^\s*(?:Art\.?\s*(?:\d{1,3}(?:\.\d{3})+|\d+)(?![0-9])|§\s*\d|Par[aá]grafo\s+[úu]nico|"
+    r"[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s|\d+[.)]\s)",
     re.I,
 )
 
@@ -657,18 +657,18 @@ def _fonte_orfa_composta(plain_breaks: str, plain: str) -> bool:
 
 
 def _fonte_orfa_parece_dispositivo(el) -> bool:
+    """Fronteira documental: rótulo reconhecido por `_classify_line`, sem critério de conteúdo mínimo."""
     if el.xpath(".//p"):
         return False
     plain = paragraph_plain_text(el)
     kind = _classify_line(plain)
-    if not kind or kind[0] == "art" and not (kind[1].get("rest") or "").strip():
+    if not kind:
         return False
-    resto = re.sub(r"\([^()]*\)", " ", kind[1].get("rest") or kind[1].get("text") or "")
-    if len(re.findall(r"[^\W\d_]", resto)) < 3:
-        return False
-    if kind[0] == "art" and not re.match(r"\s*Art\.?\s*\d", plain):
-        return False  # "art. 45 da Lei ..." em minúscula é remissão (resto de nota), não fronteira de artigo
-    return kind[0] in {"art", "par", "parunico", "inc", "ali", "item"}
+    if kind[0] == "art":
+        if not re.match(r"\s*Art\.?\s*\d", plain):
+            return False  # "art. 45 da Lei ..." em minúscula é remissão (resto de nota), não fronteira de artigo
+        return True
+    return kind[0] in {"par", "parunico", "inc", "ali", "item"}
 
 
 def _fonte_orfa_admissivel(el) -> bool:

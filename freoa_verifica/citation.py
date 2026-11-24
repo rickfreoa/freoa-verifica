@@ -410,12 +410,15 @@ _WORK_PATTERNS: list[tuple[re.Pattern[str], str, str]] = []
 # "Constituição de 1969" no uso forense; fica como obra própria, nunca como a de 1988.
 CONSTITUICOES_FEDERAIS: frozenset[int] = frozenset({1824, 1891, 1934, 1937, 1946, 1967, 1969, 1988})
 _CONSTITUICAO_ANO_CURTO = {24: 1824, 91: 1891, 34: 1934, 37: 1937, 46: 1946, 67: 1967, 69: 1969, 88: 1988}
+_QUALIFICADOR_CONSTITUICAO = (
+    r"(?:\s+(?:Federal(?:\s+Brasileira)?|Pol[ií]tica\s+do\s+Imp[eé]rio\s+do\s+Brasil"
+    r"|da\s+Rep[uú]blica(?:\s+Federativa)?(?:\s+do\s+Brasil)?"
+    r"|dos\s+Estados\s+Unidos\s+do\s+Brasil|do\s+Brasil|Brasileira))*"
+)
 _CONSTITUICAO = (
     r"\b(?:Constitui[cç][aã]o"
-    r"(?:\s+(?:Federal(?:\s+Brasileira)?|Pol[ií]tica\s+do\s+Imp[eé]rio\s+do\s+Brasil"
-    r"|da\s+Rep[uú]blica(?:\s+Federativa(?:\s+do\s+Brasil)?)?(?:\s+dos\s+Estados\s+Unidos\s+do\s+Brasil)?"
-    r"|dos\s+Estados\s+Unidos\s+do\s+Brasil|do\s+Brasil|da\s+Rep[uú]blica|Brasileira))?"
-    r"(?:\s*,?\s*\(?\s*de\s+(?:\d{1,2}[ºo°]?\s+de\s+[A-Za-zçÇ]+\s+de\s+)?(\d{4}|\d{2})\)?)?"
+    + _QUALIFICADOR_CONSTITUICAO
+    + r"(?:\s*,?\s*\(?\s*de\s+(?:\d{1,2}[ºo°]?\s+de\s+[A-Za-zçÇ]+\s+de\s+)?(\d{4}|\d{2})\)?)?"
     r"|(?:CF|CRFB|CR)\s*/\s*(\d{4}|\d{2})"
     r"|(?:CF|CRFB|CR)\s+de\s+(\d{4}|\d{2}))(?!\w)"
 )
@@ -433,6 +436,27 @@ _CONSTITUICAO_GENTILICO = re.compile(
 )
 # Constituição estadual: não é a Federal nem cai no apelido "Constituição" (identidade errada).
 _CONSTITUICAO_ESTADUAL = _CONSTITUICAO_NAO_FEDERAL
+_LIMITE_PALAVRAS_COMPLEMENTO_CONST = 8
+
+
+def _complemento_constituicao_federal(text: str, pos: int) -> str:
+    """Trecho imediato após o casamento da Constituição, sem atravessar fim de oração ou nova citação."""
+    if pos >= len(text):
+        return ""
+    fim = pos
+    while fim < len(text) and text[fim] in " \t,":
+        fim += 1
+    trecho = text[fim:]
+    m_fim = re.search(r"[.!?;\n]", trecho)
+    if m_fim:
+        trecho = trecho[: m_fim.start()]
+    m_cit = re.search(r"\b(?:art(?:igo)?s?\.?|incisos?|par[aá]grafos?|§)\s", trecho, re.I)
+    if m_cit:
+        trecho = trecho[: m_cit.start()]
+    palavras = trecho.split()
+    if len(palavras) > _LIMITE_PALAVRAS_COMPLEMENTO_CONST:
+        trecho = " ".join(palavras[:_LIMITE_PALAVRAS_COMPLEMENTO_CONST])
+    return trecho
 
 
 
@@ -1186,7 +1210,9 @@ def extract(texto: str) -> list[Citation]:
                 "decreto-lei"
             ):
                 continue
-            if kind == "constituicao" and _CONSTITUICAO_NAO_FEDERAL.search(text, m.end()):
+            if kind == "constituicao" and _CONSTITUICAO_NAO_FEDERAL.search(
+                " " + _complemento_constituicao_federal(text, m.end())
+            ):
                 _mark(m.start(), m.end())
                 continue
             c = _parse_work_match(m, auth, kind, text)

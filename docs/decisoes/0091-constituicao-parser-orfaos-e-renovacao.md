@@ -48,12 +48,10 @@ Codex.** Altera parser (1.2.4), derivados (versão 6), a conferência legada da 
    mesmo codec, é relida sem exigir modelo idêntico quando a versão do parser mudou. A conferência por igualdade de
    modelo provava o codec; feita uma vez e registrada, não deve impedir correção do parser. O registro guarda
    `parser_anterior`, `parser_novo` e `decisao_ja_conferida`.
-4. **Reconfirmação (emenda à 0034, sem alterar a monotonia).** Em `obter_dispositivo`, captura mais nova da mesma
-   obra e da mesma fonte, rebaixada ou candidata, reconfirma o dispositivo pedido se tiver o mesmo caminho, a mesma
-   redação vigente (espaços normalizados), sem ambiguidade e com recibo autenticado. A data de frescor passa a ser a
-   dela (`reconfirmacao`); o texto continua o da captura canônica. Sem reconfirmação, a resposta declara
-   `capturas_recentes_nao_canonicas` (motivo e caminhos perdidos). Fonte distinta não reconfirma (0085: rota
-   `normas_leg` não qualificada; NPL derivado). `verificar_citacao` fica inalterado nesta proposta.
+4. **Declaração de capturas recentes não canônicas (reconfirmação retirada na auditoria r2).** Em
+   `obter_dispositivo`, a vigência continua a usar o `fetched_at` da captura canônica servida; a resposta pode declarar
+   `capturas_recentes_nao_canonicas` (`capture_id`, `fetched_at`, `source_id`, `motivo` e, quando houver, `perdidos`),
+   sem efeito em vigência, texto ou status. Fonte distinta não entra nessa declaração (0085).
 5. **`abrangencia="integral"`** em `obter_dispositivo` (serviço, MCP, REST, CLI `fv lei --integral`): `texto`
    continua a cabeça; acrescem `subdispositivos` (caminho, rótulo, status, texto e vigência próprios, na ordem do
    documento, cada um pela mesma construção do dispositivo), `subdispositivos_total`, `subdispositivos_truncado`
@@ -145,3 +143,17 @@ recaptura, nunca como prova. Implementação pendente de auditoria Codex.
 8. **Evidência:** conferência de `interpretacao_codificacao` em `obter_evidencia`.
 9. **Derivados:** `snapshot_derived_version` preservada no manifesto local.
 10. **Isolamento:** regex corrigida; bateria exclui fontes de manutenção das pendências.
+
+### 5.4 Correções da auditoria r2
+
+1. **Parser:** fronteira documental sem conteúdo mínimo; itens numéricos em fontes compostas; paridade órfã e `<p>`.
+2. **Citação:** qualificadores constitucionais completos antes do ano; complemento territorial limitado à ocorrência.
+3. **Escopo reduzido:** reconfirmação removida; mantida só `capturas_recentes_nao_canonicas`.
+4. **Escopo `normas_leg`:** admissão central em `_get`, `sincronizar` e `doctor`.
+5. **Manutenção:** `manter_acervo` com duas fachadas `da_chamada`; renovação com `renovacao_cursor`.
+6. **Metadados:** identidade recebida e unicidade do sinal `Current`/`pt`.
+7. **MCP:** `situacao_obra.texto_oficial` e `anotacoes[].act_ref` envolvidos.
+8. **Evidência legada:** codec registrado ausente não é conferido.
+9. **Bateria:** contagem de `sync_state` exclui fontes de manutenção.
+10. **Concorrência:** `abrangencia` em `ContextVar` por requisição.
+

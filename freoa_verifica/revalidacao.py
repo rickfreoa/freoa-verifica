@@ -17,6 +17,7 @@ from freoa_verifica.texto_resposta import texto_do_response
 FONTE_META = "normas_leg_meta"
 FONTE_PENDENTE = "renovacao_pendente"
 FONTE_CURSOR = "manutencao_cursor"
+FONTE_RENOVACAO = "renovacao_cursor"
 VERSAO_CURRENT = re.compile(r"@(\d{4}-\d{2}-\d{2})~")
 _ESCOPO_NOME = "metadados_e_renovacao"
 
@@ -166,7 +167,7 @@ def _validar_metadados_obra(meta: dict, work: WorkKey) -> str | None:
     if not isinstance(meta, dict):
         return "metadados_invalidos"
     try:
-        identidade(work)
+        esperada = identidade(work)
     except Unavailable as exc:
         return exc.reason
     enc = meta.get("encoding")
@@ -179,6 +180,38 @@ def _validar_metadados_obra(meta: dict, work: WorkKey) -> str | None:
     dm = meta.get("dateModified")
     if dm is not None and not isinstance(dm, str):
         return "metadados_invalidos"
+    if not isinstance(meta.get("encoding"), list):
+        return "metadados_invalidos"
+    from freoa_verifica.connectors.normas_leg import TIPOS, URN
+
+    esperada_urn = urn_da_chave(esperada)
+    urn = meta.get("urn")
+    alvo = (TIPOS[esperada.kind], esperada.year, esperada.number)
+    if isinstance(urn, str):
+        if urn != esperada_urn:
+            return "identidade_divergente"
+    else:
+        lid = meta.get("legislationIdentifier")
+        if isinstance(lid, str):
+            match = URN.fullmatch(lid)
+            if not match or (match[1], int(match[2][:4]), match[3]) != alvo:
+                return "identidade_divergente"
+    uid = meta.get("@id")
+    if isinstance(uid, str) and URN.fullmatch(uid) and uid not in {urn, meta.get("legislationIdentifier")}:
+        match = URN.fullmatch(uid)
+        if match and (match[1], int(match[2][:4]), match[3]) != alvo:
+            return "identidade_divergente"
+    currents: list[str] = []
+    for item in enc or []:
+        if not isinstance(item, dict) or item.get("version") != "Current" or item.get("inLanguage") != "pt":
+            continue
+        ecw = item.get("encodesCreativeWork")
+        cid = ecw.get("@id") if isinstance(ecw, dict) else (ecw if isinstance(ecw, str) else None)
+        if isinstance(cid, str):
+            m = VERSAO_CURRENT.search(cid)
+            currents.append(m.group(1) if m else cid)
+    if len({c for c in currents if c}) > 1:
+        return "sinal_ambiguo"
     return None
 
 
@@ -275,6 +308,53 @@ def revalidar(svc, limite: int | None = None) -> dict[str, Any]:
     else:
         status = "ok"
     return {"status": status, "obras": len(rows), "contagens": contagem, "resultados": resultados}
+
+
+
+
+def cursor_renovacao(conn) -> str | None:
+    row = conn.execute(
+        "SELECT payload_json FROM sync_state WHERE fonte=? AND chave=?",
+        (FONTE_RENOVACAO, "renovar"),
+    ).fetchone()
+    if not row or not row[0]:
+        return None
+    try:
+        payload = json.loads(row[0])
+    except (ValueError, TypeError):
+        return None
+    return payload.get("ultimo_work_id") if isinstance(payload, dict) else None
+
+
+def gravar_cursor_renovacao(conn, work_id: str | None) -> None:
+    _gravar_sync(conn, FONTE_RENOVACAO, "renovar", "registrado", payload={"ultimo_work_id": work_id})
+
+
+def registrar_falha_renovacao(conn, work_id: str) -> None:
+    agora = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    _gravar_sync(conn, FONTE_RENOVACAO, work_id, "registrado", payload={"tentado_em": agora})
+
+
+def ordenar_renovacao(conn, rows: list) -> list:
+    falhas: dict[str, str] = {}
+    for r in conn.execute("SELECT chave, payload_json FROM sync_state WHERE fonte=?", (FONTE_RENOVACAO,)):
+        if r[0] == "renovar":
+            continue
+        try:
+            payload = json.loads(r[1] or "{}")
+        except (ValueError, TypeError):
+            payload = {}
+        if isinstance(payload, dict) and payload.get("tentado_em"):
+            falhas[r[0]] = payload["tentado_em"]
+
+    def _chave(row):
+        wid = row["id"]
+        ultima = row["ultima"] if "ultima" in row.keys() else ""
+        if wid in falhas:
+            return (1, falhas[wid], ultima or "", wid)
+        return (0, ultima or "", wid)
+
+    return sorted(rows, key=_chave)
 
 
 def desmarcar_renovacao_pendente(conn, work_id: str) -> None:

@@ -167,19 +167,19 @@ def test_marcadores_de_leitura():
 
 # --------------------------------------------------------------------------- ponto 1: captura recente rebaixada
 
-def test_captura_mais_nova_rebaixada_reconfirma_o_dispositivo_ou_se_declara(tmp_path):
+def test_captura_mais_nova_rebaixada_declara_capturas_recentes(tmp_path):
     with Verifica(tmp_path) as s:
         _idx(s, '<p>Art. 1º Um.</p><p>Art. 2º Dois.</p><p>Art. 3º Três.</p>', T0, "A")
         _idx(s, '<p>Art. 1º Um.</p><p>Art. 2º Dois alterado.</p>', T1, "B")  # perde o art. 3º: rebaixada (0034)
         r1 = s.obter_dispositivo(citacao="art. 1º da Lei 9.999/2000")
-        assert r1["evidencia"]["fetched_at"] == T0  # o texto continua o da captura canônica
-        assert r1["reconfirmacao"]["fetched_at"] == T1
-        assert r1["reconfirmacao"]["motivo"] == "MESMA_REDACAO_EM_CAPTURA_MAIS_RECENTE"
-        r2 = s.obter_dispositivo(citacao="art. 2º da Lei 9.999/2000")  # redação divergente: nunca reconfirma
+        assert r1["evidencia"]["fetched_at"] == T0  # vigência da captura canônica servida
+        assert "reconfirmacao" not in r1
+        assert r1.get("capturas_recentes_nao_canonicas")
+        r2 = s.obter_dispositivo(citacao="art. 2º da Lei 9.999/2000")
         assert "reconfirmacao" not in r2 and r2["texto"] == "Dois."
         recente = r2["capturas_recentes_nao_canonicas"][0]
         assert recente["fetched_at"] == T1 and recente["motivo"] == "PERDA_ESTRUTURAL"
-        assert recente["dispositivo"] == "redacao_divergente_ou_ambigua" and "art3" in recente["perdidos"]
+        assert recente.get("dispositivo") and "art3" in recente["perdidos"]
 
 
 # --------------------------------------------------------------------------- ponto 5: envelhecimento e renovação

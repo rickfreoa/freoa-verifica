@@ -29,6 +29,5 @@ EXPERIMENTAL: frozenset[str] = frozenset({
     "obter_dispositivo:subdispositivos_total",
     "obter_dispositivo:subdispositivos_truncado",
     "obter_dispositivo:texto_integral",
-    "obter_dispositivo:reconfirmacao",
     "obter_dispositivo:capturas_recentes_nao_canonicas",
 })

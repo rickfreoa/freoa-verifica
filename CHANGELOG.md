@@ -12,7 +12,7 @@
   decisão legada já conferida não exige modelo idêntico quando muda a versão do parser.
 - **`obter_dispositivo(abrangencia="integral")`** (MCP, REST, `fv lei --integral`): artigo com incisos, parágrafos e
   alíneas, cada um com vigência própria, e `texto_integral`.
-- **Reconfirmação** por captura mais nova da mesma fonte rebaixada pela 0034 (`reconfirmacao`); sem ela,
+- **Capturas recentes não canônicas** (`capturas_recentes_nao_canonicas`) declaradas em `obter_dispositivo`; reconfirmação retirada na auditoria r2.
   `capturas_recentes_nao_canonicas` explica por que a captura servida é antiga.
 - **Citação:** "Constituição Federal de 1988, art. 5º", "CF/88", "CRFB/88" e "CR/88"; Constituições de 1824 a 1969
   como obras próprias (nunca a de 1988); Constituição estadual não vira Federal. Semente e `planalto.work_key`

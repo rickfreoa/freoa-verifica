@@ -87,7 +87,15 @@ def _recursos_ckan(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return out
 
 
-_MANUTENCAO_SYNC = frozenset({"normas_leg_meta", "renovacao_pendente", "manutencao_cursor"})
+_MANUTENCAO_SYNC = frozenset({"normas_leg_meta", "renovacao_pendente", "manutencao_cursor", "renovacao_cursor"})
+
+
+def _sync_state_linhas(conn: sqlite3.Connection) -> int:
+    marcas = ",".join("?" * len(_MANUTENCAO_SYNC))
+    return conn.execute(
+        f"SELECT COUNT(*) FROM sync_state WHERE fonte NOT IN ({marcas})",  # noqa: S608
+        tuple(_MANUTENCAO_SYNC),
+    ).fetchone()[0]
 
 
 def _pendencias(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -171,7 +179,7 @@ def coletar(conn: sqlite3.Connection, recorte: dict[str, str | None] | None = No
             "derived_version": versao,
         },
         "pendencias": _pendencias(conn),
-        "sync_state": {"linhas": conn.execute("SELECT COUNT(*) FROM sync_state").fetchone()[0],
+        "sync_state": {"linhas": _sync_state_linhas(conn),
                        "stj_resource": conn.execute("SELECT COUNT(*) FROM sync_state WHERE fonte='stj_resource'").fetchone()[0]},
         "defeitos": {
             "duplicatas": duplicatas,

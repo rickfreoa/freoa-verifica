@@ -17,6 +17,7 @@ import time
 import threading
 from dataclasses import asdict, replace
 from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,9 @@ from freoa_verifica.contrato import CONTRATO_VERSAO
 from freoa_verifica.courts import normalize_court
 from freoa_verifica.search import buscar_and_or, consulta_fts, normalize_fts_query
 from freoa_verifica.connectors.guarda import BLOQUEIAM_A_FONTE, GuardaExecucao, da_chamada
+
+_ctx_abrangencia: ContextVar[str] = ContextVar("abrangencia_obter_dispositivo", default="dispositivo")
+_ctx_cache_capturas: ContextVar[dict | None] = ContextVar("cache_capturas_recentes", default=None)
 from freoa_verifica.connectors.base import (
     AmbiguousCandidates,
     Candidate,
@@ -708,6 +712,8 @@ class Verifica:
     # ------------------------------------------------------------------
 
     def _get(self, connector_id: str):
+        if connector_id == "normas_leg" and not self._rota_admitida(connector_id):
+            raise Unavailable("fora_do_escopo_do_home")
         if connector_id not in self._connectors:
             self._connectors[connector_id] = get_connector(connector_id)
             if connector_id == "stj":
@@ -1782,13 +1788,13 @@ class Verifica:
         if abrangencia not in {"dispositivo", "integral"}:
             return _remissoes_no_texto_emitido({"status": "formato_invalido", "motivo": "abrangencia_invalida",
                                                 "abrangencia": abrangencia})
-        self._cache_reconfirmacao = {}
-        self._abrangencia = abrangencia
+        token_a = _ctx_abrangencia.set(abrangencia)
+        token_c = _ctx_cache_capturas.set({})
         try:
             out = self._obter_dispositivo_autenticado(citacao, work_id, caminho, data, versao, fonte)
         finally:
-            self._cache_reconfirmacao = None
-            self._abrangencia = "dispositivo"
+            _ctx_abrangencia.reset(token_a)
+            _ctx_cache_capturas.reset(token_c)
         return _remissoes_no_texto_emitido(out)
 
     @_authenticated_output
@@ -1865,7 +1871,7 @@ class Verifica:
             return {"status": "indisponivel", "motivo": "fonte_selecionada_nao_capturada"}
         if rw.source_id == "camara_legin":
             out = self._obter_camara(rw, path, data, versao)
-            if getattr(self, "_abrangencia", "dispositivo") == "integral":
+            if _ctx_abrangencia.get() == "integral":
                 out = {**out, "abrangencia": "dispositivo", "aviso_abrangencia": "integral_indisponivel_na_rota_camara"}
             return out
         if versao == "publicacao_original":
@@ -1876,7 +1882,7 @@ class Verifica:
             # Auditoria 0085, I3: o texto `Original` de normas.leg.br reproduz a publicação no DOU,
             # declarada nos metadados da captura (sem valor oficial; atribuição na resposta).
         out = self._resposta_dispositivo(rw, path, data)
-        if getattr(self, "_abrangencia", "dispositivo") == "integral":
+        if _ctx_abrangencia.get() == "integral":
             self._anexar_subdispositivos(out, rw, path, data)
         return out
 
@@ -1944,9 +1950,9 @@ class Verifica:
                     "vigencia": {"status": "unknown", "reason_code": codes[0], "regras": [],
                                  "flags": codes, "intervalo": None}}
 
-        reconf, recentes = self._reconfirmacao(rw, prov)
+        recentes = self._capturas_recentes_nao_canonicas(rw, prov.path)
         tr = _temporal_select(rw, prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts,
-                              fetched_at=reconf["fetched_at"] if reconf else rw.fetched_at, quarantined=rw.quarantined)
+                              fetched_at=rw.fetched_at, quarantined=rw.quarantined)
         tr = situacao.aplicar_situacao_tr(tr, sit, data)  # C2
         red = _redaction_by_id(prov, tr.redaction_id) if tr.redaction_id else None
         # C3: com data pedida e sem redação selecionada, a atual não substitui a resposta.
@@ -2012,42 +2018,22 @@ class Verifica:
             "correspondencia_textual": None,
             "evidencia": self._evidencia_dispositivo(rw),
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
-            **({"reconfirmacao": reconf} if reconf else {}),
             **({"capturas_recentes_nao_canonicas": recentes} if recentes else {}),
         }
 
-    def _reconfirmacao(self, rw, prov) -> tuple[dict | None, list[dict]]:
-        """0091: captura mais nova da mesma obra e da mesma fonte, rebaixada pela monotonia (0034), não substitui o
-        modelo canônico, mas pode reconfirmar o dispositivo pedido: mesmo caminho, mesma redação vigente (espaços
-        normalizados), sem ambiguidade nela e com recibo autenticado. A data da reconfirmação passa a ser a do frescor
-        da captura; o texto devolvido continua o da captura canônica. Sem reconfirmação, as capturas mais novas não
-        canônicas são declaradas na resposta, para que o cliente saiba por que a captura servida é antiga."""
+    def _capturas_recentes_nao_canonicas(self, rw, path: str | None) -> list[dict]:
+        """0091: declara capturas mais novas não canônicas da mesma obra e fonte; sem efeito em vigência ou texto."""
         if not rw.work_id or not rw.capture_id or not rw.source_id or not rw.fetched_at:
-            return None, []
-        from freoa_verifica.parsers.model import veto_stub
-        from freoa_verifica.verify import _reading_blockers
+            return []
+        from freoa_verifica.parsers.model import document_from_dict
 
-        def _redacao_vigente_estrita(p):
-            if p is None or p.ambiguous or not p.redactions:
-                return None
-            for r in reversed(sorted(p.redactions, key=lambda x: x.order)):
-                if r.struck or r.superseded_without_strike:
-                    continue
-                if any(getattr(a, "kind", "") == "revogado" for a in r.annotations):
-                    return None
-                if veto_stub(r.text, r.annotations):
-                    return None
-                return r
-            return None
-
-        vigente = None if prov.ambiguous else _redacao_vigente_estrita(prov)
-        cache = getattr(self, "_cache_reconfirmacao", None)
+        cache = _ctx_cache_capturas.get()
         chave = (rw.work_id, rw.capture_id)
         if cache is not None and chave in cache:
             perdas, caps, docs = cache[chave]
         else:
             perdas = {d["capture_id"]: d for d in repo.avaliar_monotonia(self.conn, rw.work_id)[1]}
-            caps = repo.captures_for_work(self.conn, rw.work_id)  # mais nova primeiro
+            caps = repo.captures_for_work(self.conn, rw.work_id)
             docs = {}
             if cache is not None:
                 cache[chave] = (perdas, caps, docs)
@@ -2061,41 +2047,36 @@ class Verifica:
                 try:
                     self._authenticate_capture(cap["id"])
                     saved = repo.get_parsed_document(self.conn, cap["id"])
-                    docs[cap["id"]] = (document_from_dict(json.loads(saved["model_json"]))
-                                       if saved and saved["model_json"] else None)
+                    docs[cap["id"]] = (
+                        document_from_dict(json.loads(saved["model_json"])) if saved and saved["model_json"] else None
+                    )
                 except (SourceUnavailable, ValueError, TypeError, KeyError):
                     docs[cap["id"]] = None
             doc = docs[cap["id"]]
             if cap["id"] in perdas:
                 perdidos = perdas[cap["id"]]["perdidos"]
-            else:  # rebaixada na indexação (staging): a perda se apura contra o modelo canônico servido
+            else:
                 canon = {(p.scope or "", p.path) for p in rw.document.provisions}
-                perdidos = sorted(c[1] for c in canon - {(p.scope or "", p.path) for p in doc.provisions})[:20] \
-                    if doc is not None else []
-            item = {"capture_id": cap["id"], "fetched_at": cap["fetched_at"], "source_id": cap["source_id"],
-                    "motivo": "PERDA_ESTRUTURAL" if perdidos else "CANDIDATA_NAO_CANONICA",
-                    **({"perdidos": perdidos} if perdidos else {})}
-            if vigente is not None and not vigente.struck:
-                outro = doc.provision(prov.path) if doc is not None else None
-                red = _redacao_vigente_estrita(outro) if outro is not None else None
-                if (red is not None and not red.struck and not red.superseded_without_strike
-                        and " ".join(red.text.split()) == " ".join(vigente.text.split())):
-                    from types import SimpleNamespace as _SNS
-                    rw_cand = _SNS(document=doc, capture_id=cap["id"], source_id=cap.get("source_id"),
-                                   fetched_at=cap.get("fetched_at"), quarantined=False, persisted_incomplete=False)
-                    if _reading_blockers(rw_cand, prov.path):
-                        pass
-                    elif any(getattr(a, "kind", "") == "revogado" for a in red.annotations) or veto_stub(red.text, red.annotations):
-                        pass
-                    else:
-                        return {"capture_id": cap["id"], "sha256": cap.get("sha256"),
-                                "url": cap.get("final_url") or cap.get("url"),
-                                "fetched_at": cap["fetched_at"], "source_id": cap["source_id"],
-                                "motivo": "MESMA_REDACAO_EM_CAPTURA_MAIS_RECENTE",
-                                "rebaixada_por": item["motivo"]}, []
-                item["dispositivo"] = "ausente" if outro is None else "redacao_divergente_ou_ambigua"
+                perdidos = (
+                    sorted(c[1] for c in canon - {(p.scope or "", p.path) for p in doc.provisions})[:20]
+                    if doc is not None
+                    else []
+                )
+            item = {
+                "capture_id": cap["id"],
+                "fetched_at": cap["fetched_at"],
+                "source_id": cap["source_id"],
+                "motivo": "PERDA_ESTRUTURAL" if perdidos else "CANDIDATA_NAO_CANONICA",
+                **({"perdidos": perdidos} if perdidos else {}),
+            }
+            if path and doc is not None:
+                outro = doc.provision(path)
+                item["dispositivo"] = "ausente" if outro is None else (
+                    "presente" if outro is not None and not outro.ambiguous else "redacao_divergente_ou_ambigua"
+                )
             recentes.append(item)
-        return None, recentes[:5]
+        return recentes[:5]
+
 
     def _remissoes_dispositivo(self, rw, path, texto, *, truncado: bool = False,
                                integral: str | None = None) -> list[dict[str, Any]]:
@@ -4058,8 +4039,24 @@ class Verifica:
                 (capture_id,),
             ).fetchone()
             if der is not None and der[0] == ORIGEM_LEGADO_CONFERIDO:
+                if der[1] is None:
+                    return {
+                        "status": "indisponivel",
+                        "capture_id": capture_id,
+                        "motivo": "interpretacao_divergente",
+                        "metadados": {
+                            "url": cap.get("url"),
+                            "final_url": cap.get("final_url"),
+                            "fetched_at": cap.get("fetched_at"),
+                            "sha256": cap.get("sha256"),
+                            "mime": cap.get("mime"),
+                            "status_http": cap.get("status"),
+                            "source_id": cap.get("source_id"),
+                            "size": cap.get("size"),
+                        },
+                    }
                 padrao = interpretar_legado_padrao(body, cap.get("source_id"))
-                if padrao is None or (der[1] is not None and padrao.codificacao != der[1]):
+                if padrao is None or padrao.codificacao != der[1]:
                     return {
                         "status": "indisponivel",
                         "capture_id": capture_id,
@@ -4403,6 +4400,9 @@ class Verifica:
             if cid not in registry():
                 relatorio.append({"fonte": cid, "status": "desconhecida"})
                 continue
+            if cid == "normas_leg" and not self._rota_admitida(cid):
+                relatorio.append({"fonte": cid, "status": "fora_do_escopo_do_home"})
+                continue
             try:
                 exigir_nova_captura(cid)
                 conn_obj = self._get(cid)
@@ -4480,6 +4480,15 @@ class Verifica:
                     }
                 )
                 continue
+            if cid == "normas_leg" and not self._rota_admitida(cid):
+                checks.append(
+                    {
+                        "nome": f"fonte:{cid}",
+                        "status": "ok",
+                        "detalhe": "fora_do_escopo_do_home — health não executado",
+                    }
+                )
+                continue
             try:
                 # Uma guarda por fonte: as sondas dela compartilham o bloqueio após desafio/recusa (FIX16/F-17).
                 with GuardaExecucao().ativar():
@@ -4554,8 +4563,11 @@ class Verifica:
         from datetime import datetime, timezone
 
         inicio = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-        reval = self.revalidar_acervo(limite=limite)
-        renov = self.renovar_acervo(dias=dias, limite=limite)
+        with da_chamada():
+            with _revalidacao.manutencao_normas_leg():
+                reval = _revalidacao.revalidar(self, limite=limite)
+        with da_chamada():
+            renov = self.renovar_acervo(dias=dias, limite=limite)
         fim = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         status = "ok" if reval.get("status") == "ok" and renov.get("status") == "ok" else (
             "indisponivel" if reval.get("status") == renov.get("status") == "indisponivel" else "parcial"
@@ -4578,7 +4590,8 @@ class Verifica:
         from freoa_verifica.connectors.normas_leg import HOST
 
         escopo = _revalidacao.gravar_escopo(self.home, decisao)
-        con = self._get("normas_leg")
+        with _revalidacao.manutencao_normas_leg():
+            con = self._get("normas_leg")
         liberado = con.portao().reabrir(decisao)
         estado = con.portao().estado.bloqueio_do_host(HOST, con.portao().relogio.agora())
         return {"status": "ok", "escopo": escopo, "host_liberado": liberado,
@@ -4609,10 +4622,17 @@ class Verifica:
             ).fetchone()
             if row:
                 por_id[wid] = row
-        rows = sorted(por_id.values(), key=lambda r: (r["ultima"] or "", r["id"]))
+        rows = _revalidacao.ordenar_renovacao(self.conn, list(por_id.values()))
+        ultimo = _revalidacao.cursor_renovacao(self.conn)
+        if ultimo and rows:
+            ids = [r["id"] for r in rows]
+            if ultimo in ids:
+                off = ids.index(ultimo) + 1
+                rows = rows[off:] + rows[:off]
         if limite is not None:
             rows = rows[:max(0, int(limite))]
         renovadas, falhas = [], []
+        ultimo_processado: str | None = _revalidacao.cursor_renovacao(self.conn)
         with _revalidacao.manutencao_normas_leg():
             for r in rows:
                 work = WorkKey(r["authority"], r["kind"], r["number"], int(r["year"]))
@@ -4624,12 +4644,18 @@ class Verifica:
                         _revalidacao.desmarcar_renovacao_pendente(self.conn, r["id"])
                         renovadas.append({**obra, "fonte": novo.source_id, "fetched_at": novo.fetched_at,
                                           "capture_id": novo.capture_id})
+                        ultimo_processado = r["id"]
                     else:
                         falhas.append({**obra, "motivo": "sem_rota" if novo is None else "ambigua"})
+                        _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
                 except SourceUnavailable as exc:
                     falhas.append({**obra, "motivo": exc.reason[:200]})
+                    _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
                 except IdentityMismatch:
                     falhas.append({**obra, "motivo": "IDENTIDADE_DIVERGENTE"})
+                    _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
+        if rows and ultimo_processado:
+            _revalidacao.gravar_cursor_renovacao(self.conn, ultimo_processado)
         self._resolver = MemoryResolver()
         self._acervo_cache = None
         status = "ok" if not falhas else ("parcial" if renovadas else "indisponivel")

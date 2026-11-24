@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from types import SimpleNamespace
-
 import pytest
 
 from freoa_verifica.aliases import WorkKey
@@ -15,7 +13,7 @@ from freoa_verifica.citation import extract, parse_one
 from freoa_verifica.connectors import planalto
 from freoa_verifica.identity import declared_identity
 from freoa_verifica.mcp_server import _wrap_dispositivo_resposta, _wrap_oficial
-from freoa_verifica.parsers.model import Annotation, ParsedDocument, Provision, Redaction
+from freoa_verifica.parsers.model import ParsedDocument
 from freoa_verifica.parsers.planalto import parse_planalto
 from freoa_verifica.service import Verifica
 from freoa_verifica.verify import pode_negar
@@ -107,37 +105,15 @@ def test_r1_declared_identity_e_planalto_respeitam_ano_constituicao():
     assert planalto.urls_for_work("CF", "1967", 1967) == []
 
 
-# ------------------------------------------------------------------ achado 4: reconfirmação exige redação vigente estrita
+# ------------------------------------------------------------------ achado 4: reconfirmação retirada na r2 (só declaração)
 
-def _prov(text: str, *, annotations=None) -> Provision:
-    red = Redaction(
-        text=text, order=1, struck=False, superseded_without_strike=False,
-        annotations=annotations or [],
-    )
-    return Provision(path="art1", label="Art. 1", scope="", redactions=[red], ambiguous=False)
+def test_r1_sem_campo_reconfirmacao_na_resposta(tmp_path):
+    from tests.test_0091_cf_entrega import _idx
 
-
-def test_r1_reconfirmacao_recusa_redacao_revogada_ou_bloqueada(tmp_path, monkeypatch):
-    from freoa_verifica.store import repo
-    from dataclasses import asdict
-
-    svc = Verifica(home=tmp_path)
-    vigente = _prov("texto canônico")
-    cand = _prov("texto canônico", annotations=[Annotation(kind="revogado", raw="(Revogado)")])
-    canon_doc = ParsedDocument("planalto", "1.2.4", "Lei", None, "", provisions=[vigente], issues=[])
-    cand_doc = ParsedDocument("planalto", "1.2.4", "Lei", None, "", provisions=[cand], issues=[])
-    rw = SimpleNamespace(
-        work_id="w1", capture_id="c1", source_id="planalto", fetched_at="2020-01-01T00:00:00+00:00",
-        document=canon_doc, quarantined=False, persisted_incomplete=False,
-    )
-    monkeypatch.setattr(repo, "captures_for_work", lambda *a, **k: [
-        {"id": "c2", "fetched_at": "2021-01-01T00:00:00+00:00", "source_id": "planalto", "candidato_ao_vivo": 1},
-    ])
-    monkeypatch.setattr(repo, "avaliar_monotonia", lambda *a, **k: ([], []))
-    monkeypatch.setattr(repo, "get_parsed_document", lambda *a, **k: {"model_json": json.dumps(asdict(cand_doc))})
-    monkeypatch.setattr(svc, "_authenticate_capture", lambda *a, **k: None)
-    reconf, _ = svc._reconfirmacao(rw, vigente)
-    assert reconf is None
+    with Verifica(tmp_path) as s:
+        _idx(s, "<p>Art. 1º Um.</p>", T0, "A")
+        r = s.obter_dispositivo(citacao="art. 1º da Lei 9.999/2000")
+        assert "reconfirmacao" not in r
 
 
 # ------------------------------------------------------------------ achado 5: busca ao vivo respeita escopo
@@ -187,13 +163,13 @@ def test_r1_revalidar_cursor_avanca_entre_lotes(tmp_path, monkeypatch):
 
 def test_r1_meta_vazio_nao_substitui_sinal_valido(tmp_path, monkeypatch):
     monkeypatch.delenv("FV_OFFLINE", raising=False)
-    from tests.test_0091a_revalidacao import _meta_base, _meta_url, _obra, _portao
+    from tests.test_0091a_revalidacao import KEY as KEY_NL, _meta_base, _meta_url, _obra, _portao
     from tests.test_0091a_revalidacao import resposta
 
     from freoa_verifica.connectors import normas_leg as nl
 
     meta = _meta_base()
-    meta["urn"] = nl.urn_da_chave(KEY)
+    meta["urn"] = nl.urn_da_chave(KEY_NL)
     url = _meta_url()
     con, tr = _portao(tmp_path, {url: resposta(url, json.dumps(meta).encode(), mime="application/json")})
     with Verifica(tmp_path) as svc:
