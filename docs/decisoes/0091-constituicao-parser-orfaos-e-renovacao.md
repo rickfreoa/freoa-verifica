@@ -207,3 +207,18 @@ Estado de São Paulo") volta a qualificar a ocorrência; (13) "e" que coordena o
 início do complemento. Risco declarado (achado 19 da r4): números no corpo de fonte órfã ("1. 2. 2000") podem bloquear
 o artigo; não ocorre no corpus medido. Medição repetida: 122 ganhos, 52 eliminados, 21 redações, 60 órfãs admitidas,
 nenhuma fronteira.
+
+**Regra conservadora (titular, 24/11, após a conferência r5).** A r5 fechou 13 e 17 e mostrou que as regras pontuais
+não convergiam: resíduos em 14 (`Da referida Lei`), 18 (`Constituição, a do Estado de São Paulo`) e regressão 20
+(`Constituição e Emendas Constitucionais do Estado de São Paulo`), todos com `verified` errado. O titular escolheu
+regra de classe:
+- **Parser.** Artigo em fonte órfã cujo corpo começa por preposição seguida de determinante referencial (referido,
+  citado, mencionado, presente, mesmo, respectivo...), de palavra com inicial maiúscula ou de nome de ato ou
+  dispositivo vira fronteira. Preposição seguida de substantivo comum ("Em caso de", "Da decisão", "No prazo") é
+  caput e continua admitida; sem essa distinção, a CF perderia os arts. 61 e 62.
+- **Citação.** Constituição com qualificador territorial em qualquer ponto da mesma frase (aposto, coordenação,
+  oração invertida) sai `provavel`, com a marca `constituicao_qualificador_territorial_na_frase`; a verificação vira
+  `requer_conferencia` e nunca conclui `verified`. O complemento imediato não federal continua recusado.
+- Risco declarado: "art. 5 da Constituição de 1988, do Estado de São Paulo exige-se..." (achado 21 da r5) não é
+  reconhecida; não há `verified` errado. Medição repetida sem alteração: 122 ganhos, 52 eliminados, 21 redações,
+  60 órfãs admitidas, nenhuma fronteira.

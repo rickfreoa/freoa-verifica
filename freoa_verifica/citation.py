@@ -436,6 +436,24 @@ _CONSTITUICAO_GENTILICO = re.compile(
 )
 # Constituição estadual: não é a Federal nem cai no apelido "Constituição" (identidade errada).
 _CONSTITUICAO_ESTADUAL = _CONSTITUICAO_NAO_FEDERAL
+# Qualificador territorial em qualquer ponto da mesma frase (aposto, coordenação, oração invertida): a Constituição
+# citada pode ser a estadual; a extração continua, mas como provável, nunca exata (0091, r5, regra conservadora).
+_TERRITORIAL_NA_FRASE = re.compile(
+    r"\b(?:do\s+Estado\b|dos?\s+Estados?\s+(?!Unidos)|Estadua(?:l|is)\b|Municipa(?:l|is)\b|Distrital\b"
+    r"|do\s+Distrito\s+Federal\b|d[oe]\s+Munic[ií]pio\b|Paulista|Mineira|Fluminense|Ga[uú]cha|Baiana|Catarinense"
+    r"|Paranaense|Pernambucana|Cearense|Goiana|Capixaba|Paraibana|Potiguar|Alagoana|Sergipana|Maranhense|Piauiense"
+    r"|Paraense|Amazonense|Acreana|Rondoniense|Roraimense|Amapaense|Tocantinense|Sul-Mato-Grossense|Mato-Grossense)",
+    re.I,
+)
+_FIM_FRASE = re.compile(r"[.;!?\n](?:\s|$)")
+
+
+def _territorial_na_frase(text: str, pos: int) -> bool:
+    resto = text[pos:]
+    m = _FIM_FRASE.search(resto)
+    return bool(_TERRITORIAL_NA_FRASE.search(resto[: m.start()] if m else resto))
+
+
 _FIM_COMPLEMENTO_CONST = re.compile(r"[,;.\n!?]")
 _COORDENACAO_ORACAO = re.compile(r"(?:^|\s+)e\s+", re.I)
 
@@ -1229,6 +1247,9 @@ def extract(texto: str) -> list[Citation]:
             c = _parse_work_match(m, auth, kind, text)
             if c is None:
                 continue
+            if kind == "constituicao" and _territorial_na_frase(text, m.end()):
+                c.confidence = "provavel"
+                c.flags = [*c.flags, "constituicao_qualificador_territorial_na_frase"]
             work_cites.append(c)
             _mark(m.start(), m.end())
 

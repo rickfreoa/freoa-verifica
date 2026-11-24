@@ -1,0 +1,53 @@
+"""0091, regra conservadora (titular, após a conferência r5): classes 14, 18 e 20 fechadas por regra de classe."""
+from __future__ import annotations
+
+import pytest
+
+from freoa_verifica.citation import parse_one
+from tests.test_0091_r4_parser import _doc, _fronteiras, _nao_confirma, _svc
+from tests.test_0091_cf_entrega import _ORFA
+
+
+@pytest.mark.parametrize("orfa", ["Art. 45 Da referida Lei no 2.004", "Art. 45 Da citada Lei", "Art. 45 Da mencionada Lei",
+                                  "Art. 45 Da presente Lei", "Art. 45 Do art. 3", "Art. 45 DESSE DECRETO"])
+def test_r5_remissao_com_determinante_bloqueia(tmp_path, orfa):
+    html, doc = _doc("<p>Art. 1 Fica previsto no</p>" + _ORFA.format(orfa) + "<p>§ 1 Outro.</p><p>Art. 2 Fim.</p>")
+    assert "art45" not in {p.path for p in doc.provisions} and _fronteiras(doc) == ["art1"]
+    svc = _svc(tmp_path, html, doc)
+    assert _nao_confirma(svc.verificar_citacao("art. 45, § 1 da Lei 9.999/2000", trecho="Outro."))
+    assert _nao_confirma(svc.verificar_citacao("art. 1, § 1 da Lei 9.999/2000", trecho="Outro."))
+
+
+@pytest.mark.parametrize("caput", ["Art. 62. Em caso de relevância, cabe medida.", "Art. 62 A propriedade é livre.",
+                                   "Art. 62 Ao Presidente compete decidir.", "Art. 62 Nos casos previstos, decide."])
+def test_r5_caput_com_preposicao_e_substantivo_comum_continua_admitido(caput):
+    _, doc = _doc("<p>Art. 61 Antes.</p>" + _ORFA.format(caput) + "<p>§ 1 Outro.</p><p>Art. 63 Depois.</p>")
+    assert {p.path: p.redactions[-1].text for p in doc.provisions}.get("art62.par1") == "Outro." and not _fronteiras(doc)
+
+
+@pytest.mark.parametrize("texto", [
+    "art. 5 da Constituição, a do Estado de São Paulo",
+    "art. 5 da Constituição, isto é, a do Estado de Minas Gerais",
+    "art. 5 da Constituição e Emendas Constitucionais do Estado de São Paulo",
+    "art. 5 da Constituição e respectivas emendas do Estado de Minas Gerais",
+    "art. 5 da Constituição de 1988 e o contrato do Estado de São Paulo segue outra regra",
+    "art. 5 da Constituição Federal e a Lei Orgânica Municipal",
+])
+def test_r5_qualificador_territorial_na_frase_nunca_e_exata(texto):
+    c = parse_one(texto)
+    assert c is None or (c.confidence == "provavel" and "constituicao_qualificador_territorial_na_frase" in c.flags)
+
+
+@pytest.mark.parametrize("texto", ["art. 5 da Constituição Federal", "art. 5 da Constituição de 1988.",
+                                   "art. 5 da Constituição de 1988. O Estado de São Paulo segue outra regra."])
+def test_r5_federal_sem_qualificador_na_frase_continua_exata(texto):
+    c = parse_one(texto)
+    assert c is not None and c.work.number == "1988" and c.confidence == "exata"
+
+
+def test_r5_verificacao_com_qualificador_na_frase_requer_conferencia(tmp_path):
+    """Com qualificador territorial na frase, a verificação não conclui: requer conferência."""
+    from freoa_verifica.service import Verifica
+    svc = Verifica(home=tmp_path)
+    res = svc.verificar_citacao("art. 5 da Constituição e Emendas Constitucionais do Estado de São Paulo", trecho="x")
+    assert _nao_confirma(res)

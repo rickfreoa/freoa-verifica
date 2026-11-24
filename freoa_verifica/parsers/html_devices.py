@@ -655,10 +655,16 @@ _LABEL_LINE_START = re.compile(
 
 # Abertura citada ("“Art. 2 Novo texto:") também é artigo: entra como bloco para a máquina de citação controlar o
 # contexto, como no <p> equivalente (0091, r3 achado 15).
+# Preposição seguida de determinante referencial ("Da referida Lei", "Desse mesmo artigo"), de palavra com inicial
+# maiúscula ("Da Lei", "DO DECRETO") ou de nome de ato: classe da remissão partida pelo markup. Caput começa por
+# preposição + substantivo comum ("Em caso de", "Da decisão", "No prazo") e continua admitido (0091, r5, titular).
 _INICIO_REMISSIVO = re.compile(
-    r"(?:d[aoe]s?|dest[ae]s?|dess[ae]s?|n[ao]s?|nest[ae]s?|pel[ao]s?)\s+(?:Lei|Decreto|Constitui[cç][aã]o|C[oó]digo"
-    r"|Medida\s+Provis[oó]ria|Emenda|Resolu[cç][aã]o|Portaria|Instru[cç][aã]o|Ato|ADCT|Regulamento|Estatuto)\b",
-    re.I,
+    r"(?i:d[aoe]s?|dest[ae]s?|dess[ae]s?|daquel[ae]s?|n[ao]s?|nest[ae]s?|ness[ae]s?|pel[ao]s?)\s+"
+    r"(?:(?i:(?:referid|citad|mencionad|aludid|supracitad|retrocitad|suprarreferid|mesm|pr[oó]pri|respectiv|indicad"
+    r"|transcrit)[oa]s?|presentes?|precedentes?|anteriore?s?|seguintes?)\b"
+    r"|[A-ZÁÉÍÓÚÂÊÔÃÕÇ]"
+    r"|(?i:Lei|Decreto|Constitui[cç][aã]o|C[oó]digo|Medida|Emenda|Resolu[cç][aã]o|Portaria|Instru[cç][aã]o|Ato|ADCT"
+    r"|Regulamento|Estatuto|art(?:igo)?s?|inciso|par[aá]grafo|al[ií]nea|§)\b)"
 )
 _ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
 
