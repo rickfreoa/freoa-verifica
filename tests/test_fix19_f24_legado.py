@@ -165,7 +165,7 @@ def test_compativel_exige_versao_atual_e_decisao_registrada(legado):
     svc.conn.execute("DELETE FROM parsed_document WHERE capture_id=?", (caps["invalido"],))
     svc.conn.execute("UPDATE work SET authority='invalidated:federal' WHERE label='Lei 2/2000'")
     svc.conn.commit()
-    assert derivados.versao(svc.conn) == derivados.DERIVED_VERSION == 5
+    assert derivados.versao(svc.conn) == derivados.DERIVED_VERSION == 6
     assert not derivados.compativel(svc.conn)  # v5 sem decisão registrada
     svc.reprocessar_capturas()
     assert derivados.compativel(svc.conn)

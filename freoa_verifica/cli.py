@@ -94,6 +94,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--work-id")
     p.add_argument("--caminho")
     p.add_argument("--data")
+    p.add_argument("--integral", action="store_true",
+                   help="dispositivo com incisos, parágrafos e alíneas (abrangencia=integral; decisão 0091)")
     _add_json_flag(p)
 
     p = sub.add_parser("resolve", help="resolver citação (work_id e caminho)")
@@ -206,6 +208,12 @@ def build_parser() -> argparse.ArgumentParser:
     pr = ac.add_parser("reconstruir", help="reconstrói os derivados do home numa cópia e troca o banco (C6)")
     pr.add_argument("--com-situacao", action="store_true", help="relê também a situação das obras (exige rede)")
     _add_json_flag(pr)
+
+    pn = ac.add_parser("renovar", help="recaptura as obras legislativas com captura mais antiga que --dias (0091; "
+                                       "agende para não chegar à captura desatualizada de 30 dias)")
+    pn.add_argument("--dias", type=int, default=21, help="idade mínima da captura canônica (padrão: 21)")
+    pn.add_argument("--limite", type=int, default=None, help="máximo de obras por execução")
+    _add_json_flag(pn)
 
     pc = ac.add_parser("conferir", help="bateria do snapshot: confere o acervo (somente leitura; decisão 0057)")
     pc.add_argument("--home", dest="home_conferir", default=None, metavar="DIR", help="diretório de dados a conferir")
@@ -323,6 +331,7 @@ def main(argv: list[str] | None = None) -> None:
                 work_id=args.work_id,
                 caminho=args.caminho,
                 data=args.data,
+                abrangencia="integral" if getattr(args, "integral", False) else "dispositivo",
             )
             raise SystemExit(_print_result(data, as_json=as_json, titulo="Dispositivo"))
 
@@ -446,6 +455,10 @@ def main(argv: list[str] | None = None) -> None:
                 data = svc.ressincronizar_situacao()
                 codigo = _print_result(data, as_json=as_json, titulo="Situação das obras")
                 raise SystemExit(codigo or (0 if data.get("status") == "ok" else 1))  # parcial/indisponível (F-23)
+            if args.acervo_cmd == "renovar":
+                data = svc.renovar_acervo(dias=args.dias, limite=args.limite)
+                _print_result(data, as_json=as_json, titulo="Renovação do acervo")
+                raise SystemExit(0 if data.get("status") == "ok" else 1)  # parcial/indisponível: o agendador acusa
             if args.acervo_cmd == "reconstruir":
                 data = svc.reconstruir_acervo(com_situacao=args.com_situacao)
                 _print_result(data, as_json=as_json, titulo="Reconstrução do acervo")

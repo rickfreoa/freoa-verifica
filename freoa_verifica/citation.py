@@ -406,6 +406,36 @@ _YEAR = r"(\d{2,4})"
 
 _WORK_PATTERNS: list[tuple[re.Pattern[str], str, str]] = []
 
+# Constituições brasileiras, identificadas pelo ano. A Emenda Constitucional n. 1/1969 é tratada como a
+# "Constituição de 1969" no uso forense; fica como obra própria, nunca como a de 1988.
+CONSTITUICOES_FEDERAIS: frozenset[int] = frozenset({1824, 1891, 1934, 1937, 1946, 1967, 1969, 1988})
+_CONSTITUICAO_ANO_CURTO = {24: 1824, 91: 1891, 34: 1934, 37: 1937, 46: 1946, 67: 1967, 69: 1969, 88: 1988}
+_CONSTITUICAO = (
+    r"\b(?:Constitui[cç][aã]o"
+    r"(?:\s+(?:Federal|Pol[ií]tica\s+do\s+Imp[eé]rio\s+do\s+Brasil"
+    r"|da\s+Rep[uú]blica(?:\s+Federativa)?(?:\s+dos\s+Estados\s+Unidos)?\s+do\s+Brasil"
+    r"|dos\s+Estados\s+Unidos\s+do\s+Brasil|do\s+Brasil|da\s+Rep[uú]blica|(?:Federal\s+)?Brasileira))?"
+    r"(?:\s*,?\s*\(?\s*de\s+(?:\d{1,2}[ºo°]?\s+de\s+[A-Za-zçÇ]+\s+de\s+)?(\d{4})\)?)?"
+    r"|(?:CF|CRFB|CR)\s*/\s*(\d{4}|\d{2}))(?!\w)"
+)
+# Constituição estadual: não é a Federal nem cai no apelido "Constituição" (identidade errada).
+_CONSTITUICAO_ESTADUAL = re.compile(
+    r"\s+(?:do\s+Estado\b|dos?\s+Estados?\s+(?!Unidos)|Estadual\b|(?:Paulista|Mineira|Fluminense|Ga[uú]cha|Baiana"
+    r"|Catarinense|Paranaense|Pernambucana|Cearense|Goiana|Capixaba|Paraibana|Potiguar|Alagoana|Sergipana"
+    r"|Maranhense|Piauiense|Paraense|Amazonense|Acreana|Rondoniense|Roraimense|Amapaense|Tocantinense"
+    r"|Sul-Mato-Grossense|Mato-Grossense|Distrital)\b|do\s+Distrito\s+Federal\b)", re.I)
+
+
+def ano_constituicao(m: re.Match[str]) -> int | None:
+    """Ano declarado da Constituição citada (None: sem ano, isto é, a vigente)."""
+    raw = next((g for g in m.groups() if g), None)
+    if raw is None:
+        return None
+    ano = int(raw)
+    if len(raw) == 2:
+        return _CONSTITUICAO_ANO_CURTO.get(ano, -1)
+    return ano
+
 
 def _compile_work_patterns() -> None:
     global _WORK_PATTERNS
@@ -447,8 +477,8 @@ def _compile_work_patterns() -> None:
             "federal",
             "lei",
         ),
-        # Constituição / CF/88
-        (r"\bConstitui[cç][aã]o(?:\s+Federal)?\b", "federal", "constituicao"),
+        # Constituição / CF/88: o ano declarado identifica a Constituição (1824 a 1988); sem ano, a vigente.
+        (_CONSTITUICAO, "federal", "constituicao"),
         # CVM
         (
             rf"\b(?:Resolu[cç][aã]o\s+CVM|RCVM|Res\.?\s*CVM)\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
@@ -703,7 +733,7 @@ def _parse_work_match(
     if not _reference_boundary(text, m.start(), m.end()):
         return None
     # Abreviações exigem caixa original e separação do número da norma.
-    for token in re.finditer(r"\b(?:LC|MP|RCVM|ICVM|CF|CVM|CMN|BCB)\b", raw, re.I):
+    for token in re.finditer(r"\b(?:LC|MP|RCVM|ICVM|CF|CRFB|CR|CVM|CMN|BCB)\b", raw, re.I):
         if token[0] != token[0].upper():
             return None
     if re.search(r"[A-Za-zÀ-ÿ]\d", raw) or (m.end() < len(text) and text[m.end()].isalnum()):
@@ -720,11 +750,17 @@ def _parse_work_match(
     # Circular genérica sem contexto BCB — ainda authority=bcb conforme spec
     number = _number_from_match(m, kind)
     year = _year_from_match(m)
-    if kind == "constituicao":
-        year = 1988
-        number = "1988"
     conf = "exata"
     flags = ["apelido"] if kind == "constituicao" else []
+    if kind == "constituicao":
+        declarado = ano_constituicao(m)
+        year = 1988 if declarado is None else declarado
+        if year not in CONSTITUICOES_FEDERAIS:
+            # Ano que não corresponde a Constituição federal (ex.: estadual de 1989): nunca a de 1988.
+            flags = ["constituicao_nao_federal"]
+            conf = "provavel"
+            year = max(year, 0)
+        number = str(year)
     if year is None:
         year = 0
         # Nasce exata com a marca; no fim de extract() vira provável, com `so_sem_ano` se o ano
@@ -1134,6 +1170,9 @@ def extract(texto: str) -> list[Citation]:
             if kind == "decreto" and text[m.start() : m.start() + 12].lower().startswith(
                 "decreto-lei"
             ):
+                continue
+            if kind == "constituicao" and ano_constituicao(m) is None and _CONSTITUICAO_ESTADUAL.match(text, m.end()):
+                _mark(m.start(), m.end())  # Constituição estadual: fora de cobertura, nunca a Federal
                 continue
             c = _parse_work_match(m, auth, kind, text)
             if c is None:

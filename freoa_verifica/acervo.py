@@ -159,3 +159,25 @@ def installed_provenance(home: Path) -> dict[str, Any]:
         return {k: data.get(k) for k in ("vinculado", "snapshot_sha256", "snapshot_derived_version", "vinculo_motivo")}
     except (OSError, ValueError, AttributeError):
         return {"vinculado": False}
+
+
+IDADE_RENOVACAO_DIAS = 21  # antes da janela de 30 dias de CAPTURA_DESATUALIZADA (temporal._CAPTURE_MAX_AGE)
+
+
+def envelhecimento(conn: sqlite3.Connection, dias: int = IDADE_RENOVACAO_DIAS, hoje=None) -> dict[str, Any] | None:
+    """0091: obras legislativas cuja captura canônica mais recente tem mais de `dias` dias. A partir de 30, a
+    vigência sai `unknown`/CAPTURA_DESATUALIZADA; o aviso antecipa a renovação (`fv acervo renovar`)."""
+    from datetime import date, timedelta
+
+    hoje = hoje or date.today()
+    corte = (hoje - timedelta(days=dias)).isoformat()
+    rows = conn.execute(
+        "SELECT w.id, MAX(c.fetched_at) AS ultima FROM work w JOIN parsed_document p ON p.work_id=w.id "
+        "JOIN capture c ON c.id=p.capture_id WHERE w.authority='federal' AND p.candidato_ao_vivo=0 "
+        "AND p.model_json IS NOT NULL GROUP BY w.id").fetchall()
+    velhas = [r for r in rows if r[1] and str(r[1])[:10] < corte]
+    if not velhas:
+        return None
+    return {"codigo": "acervo_envelhecendo", "dias": dias, "obras": len(velhas), "de": len(rows),
+            "captura_mais_antiga": min(str(r[1])[:10] for r in velhas),
+            "acao": "fv acervo renovar (agende; ver docs/operacao/renovacao-do-acervo.md)"}

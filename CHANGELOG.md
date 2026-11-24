@@ -1,5 +1,24 @@
 # Histórico de versões
 
+## Não publicado (branch `fix/cf-entrega-mcp`) - decisão 0091, pendente de aprovação e auditoria
+
+- **Parser do Planalto 1.2.4 (confirmação indevida corrigida).** Dispositivo em fonte órfã fora de `<p>` era
+  descartado; artigos inteiros (CF arts. 57, 62, 126, 222; ADCT art. 52) ficavam fora do modelo e seus parágrafos
+  sob o artigo anterior. `art. 61, § 3º, da CF` com o texto do art. 62, § 3º saía `verified`; `art. 5º, LXXVIII`
+  saía `inexistente`. Também LINDB art. 6º, § 1º, Lei 6.385 art. 21 e DL 1.978/1982. Fonte com mais de um
+  dispositivo gera `DISPOSITIVO_FORA_DA_ARVORE` e impede negativa.
+- **Derivados 6.** Homes anteriores respondem `ACERVO_DESATUALIZADO` até `fv acervo reconstruir`. Emenda à 0065:
+  decisão legada já conferida não exige modelo idêntico quando muda a versão do parser.
+- **`obter_dispositivo(abrangencia="integral")`** (MCP, REST, `fv lei --integral`): artigo com incisos, parágrafos e
+  alíneas, cada um com vigência própria, e `texto_integral`.
+- **Reconfirmação** por captura mais nova da mesma fonte rebaixada pela 0034 (`reconfirmacao`); sem ela,
+  `capturas_recentes_nao_canonicas` explica por que a captura servida é antiga.
+- **Citação:** "Constituição Federal de 1988, art. 5º", "CF/88", "CRFB/88" e "CR/88"; Constituições de 1824 a 1969
+  como obras próprias (nunca a de 1988); Constituição estadual não vira Federal. Semente e `planalto.work_key`
+  deixam de registrar toda `CF` como 1988.
+- **`fv acervo renovar`** e aviso `acervo_envelhecendo` (`doctor`, início do MCP); agendamento em
+  `docs/operacao/renovacao-do-acervo.md`.
+
 ## 1.4.0a5 - 15/11/2026
 
 Mesmo conteúdo funcional da 1.4.0a4, que foi construída (tag `v1.4.0a4`, rascunho no GitHub) e não

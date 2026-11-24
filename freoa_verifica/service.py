@@ -222,6 +222,22 @@ def _authenticated_output(method):
     return checked
 
 
+def _marcador(rotulo: str) -> str:
+    """Rótulo do modelo na forma de leitura do texto legal ("Inciso IV" → "IV –", "§ 2" → "§ 2º", "Alínea a" → "a)")."""
+    rotulo = (rotulo or "").strip()
+    if m := re.fullmatch(r"Inciso\s+(\S+)", rotulo):
+        return f"{m[1]} –"
+    if m := re.fullmatch(r"Al[ií]nea\s+(\S+)", rotulo):
+        return f"{m[1]})"
+    if m := re.fullmatch(r"§\s*(\d+)(-[A-Z])?", rotulo):
+        return f"§ {m[1]}{'º' if int(m[1]) < 10 else '.'}{m[2] or ''}"
+    if m := re.fullmatch(r"Art\.?\s*(\d+)(-[A-Z])?", rotulo):
+        return f"Art. {m[1]}{'º' if int(m[1]) < 10 else ''}{m[2] or ''}{'.' if int(m[1]) >= 10 or m[2] else ''}"
+    if m := re.fullmatch(r"Item\s+(\S+)", rotulo):
+        return f"{m[1]}."
+    return f"{rotulo}." if rotulo and not rotulo.endswith((".", ")", "–")) else rotulo
+
+
 def _remissoes_no_texto_emitido(out: dict[str, Any]) -> dict[str, Any]:
     """Invariante de emissão de `obter_dispositivo` (IL.3-a, B8): `remissoes[]` cobre só o texto EMITIDO (o `texto`
     devolvido, truncado ou não) e existe em toda saída. Sem texto devolvido ou fora de `encontrada`, lista vazia; remissão
@@ -1092,9 +1108,21 @@ class Verifica:
                     except ValueError:
                         anterior = None
                     novo = _hash_modelo(asdict(doc))
-                    if anterior is None or anterior != novo:
+                    try:
+                        modelo_anterior = json.loads(row['model_json'])
+                    except ValueError:
+                        modelo_anterior = None
+                    parser_anterior = modelo_anterior.get('parser_version') if isinstance(modelo_anterior, dict) else None
+                    # 0091 (emenda à 0065): a decisão legada já conferida e registrada no derivado, com o mesmo
+                    # codec, não precisa ser reconferida pelo modelo quando a diferença vem de nova versão do parser.
+                    ja_conferida = (row['interpretacao_origem'] == ORIGEM_LEGADO_CONFERIDO
+                                    and row['interpretacao_codificacao'] == decisao[1]
+                                    and parser_anterior is not None and parser_anterior != doc.parser_version)
+                    if (anterior is None or anterior != novo) and not ja_conferida:
                         raise _InterpretacaoIndisponivel('interpretacao_indisponivel')
-                    conferencia = json.dumps({'modelo_anterior_sha256': anterior, 'modelo_novo_sha256': novo})
+                    conferencia = json.dumps({'modelo_anterior_sha256': anterior, 'modelo_novo_sha256': novo,
+                                              **({'parser_anterior': parser_anterior, 'parser_novo': doc.parser_version,
+                                                  'decisao_ja_conferida': True} if anterior != novo else {})})
                 key = WorkKey(work['authority'],work['kind'],work['number'],work['year'])
                 validate_identity(key,doc,row['work_date'])
                 # Recibo (imutável) sem decisão: o derivado registra a desta releitura, com o modelo (0065, 0066).
@@ -1734,10 +1762,23 @@ class Verifica:
         data: str | None = None,
         versao: str = "vigente",
         fonte: str | None = None,
+        abrangencia: str = "dispositivo",
     ) -> dict[str, Any]:
         """Ponto final de emissão: `remissoes` (aditivo, IL.3-a) acompanha o texto EMITIDO e está presente em toda saída,
-        inclusive nas recusas (versão ou fonte inválida, falha de autenticação da evidência)."""
-        out = self._obter_dispositivo_autenticado(citacao, work_id, caminho, data, versao, fonte)
+        inclusive nas recusas (versão ou fonte inválida, falha de autenticação da evidência).
+
+        `abrangencia="integral"` (0091) acrescenta `subdispositivos` (incisos, parágrafos e alíneas do dispositivo, na
+        ordem do documento, cada um com texto e vigência próprios) e `texto_integral`; `texto` continua só a cabeça."""
+        if abrangencia not in {"dispositivo", "integral"}:
+            return _remissoes_no_texto_emitido({"status": "formato_invalido", "motivo": "abrangencia_invalida",
+                                                "abrangencia": abrangencia})
+        self._cache_reconfirmacao = {}
+        self._abrangencia = abrangencia
+        try:
+            out = self._obter_dispositivo_autenticado(citacao, work_id, caminho, data, versao, fonte)
+        finally:
+            self._cache_reconfirmacao = None
+            self._abrangencia = "dispositivo"
         return _remissoes_no_texto_emitido(out)
 
     @_authenticated_output
@@ -1813,7 +1854,10 @@ class Verifica:
         if fonte is not None and rw.source_id != fonte:
             return {"status": "indisponivel", "motivo": "fonte_selecionada_nao_capturada"}
         if rw.source_id == "camara_legin":
-            return self._obter_camara(rw, path, data, versao)
+            out = self._obter_camara(rw, path, data, versao)
+            if getattr(self, "_abrangencia", "dispositivo") == "integral":
+                out = {**out, "abrangencia": "dispositivo", "aviso_abrangencia": "integral_indisponivel_na_rota_camara"}
+            return out
         if versao == "publicacao_original":
             meta = next((json.loads(b.text) for b in rw.document.editorial_blocks
                          if b.kind == "normas_leg_metadados"), {}) if rw.source_id == "normas_leg" else {}
@@ -1821,7 +1865,44 @@ class Verifica:
                 return {"status": "unknown", "reason_code": "primeira_publicacao_nao_identificada", "texto": None}
             # Auditoria 0085, I3: o texto `Original` de normas.leg.br reproduz a publicação no DOU,
             # declarada nos metadados da captura (sem valor oficial; atribuição na resposta).
-        return self._resposta_dispositivo(rw, path, data)
+        out = self._resposta_dispositivo(rw, path, data)
+        if getattr(self, "_abrangencia", "dispositivo") == "integral":
+            self._anexar_subdispositivos(out, rw, path, data)
+        return out
+
+    _INTEGRAL_MAX_CARACTERES = 60_000
+    _INTEGRAL_MAX_ITENS = 400
+
+    def _anexar_subdispositivos(self, out: dict[str, Any], rw, path, data) -> None:
+        """0091: o artigo inteiro numa chamada. Cada subdispositivo passa pela mesma construção do dispositivo (bloqueio
+        de leitura, vigência, reconfirmação); nada é inferido do texto da cabeça. Limite de tamanho declarado."""
+        out["abrangencia"] = "integral"
+        if not path or out.get("status") not in {"encontrada", "unknown"}:
+            out["subdispositivos"] = []
+            return
+        filhos = [p for p in rw.document.provisions if p.path.startswith(path + ".")]
+        itens: list[dict[str, Any]] = []
+        total, truncado = 0, False
+        for filho in filhos:
+            r = self._resposta_dispositivo(rw, filho.path, data)
+            texto = r.get("texto")
+            if len(itens) >= self._INTEGRAL_MAX_ITENS or total + len(texto or "") > self._INTEGRAL_MAX_CARACTERES:
+                truncado = True
+                break
+            total += len(texto or "")
+            vig = r.get("vigencia") or {}
+            itens.append({"caminho": filho.path, "rotulo": filho.label, "status": r.get("status"), "texto": texto,
+                          "truncado": bool(r.get("truncado")),
+                          **({"reason_code": r.get("reason_code")} if r.get("reason_code") else {}),
+                          "vigencia": {"status": vig.get("status"), "reason_code": vig.get("reason_code")}})
+        out["subdispositivos"] = itens
+        out["subdispositivos_total"] = len(filhos)
+        out["subdispositivos_truncado"] = truncado
+        cabeca = _find_provision(rw.document, path)
+        linhas = [f"{_marcador(cabeca.label)} {out['texto']}" if cabeca is not None and re.match(r"Art", cabeca.label or "")
+                  else out["texto"]] if out.get("texto") else []
+        linhas += [f"{_marcador(i['rotulo'])} {i['texto']}" for i in itens if i.get("texto")]
+        out["texto_integral"] = "\n".join(linhas) if linhas else None
 
     def _resposta_dispositivo(self, rw, path, data):
         """Construção comum do contrato de obtenção, inclusive nulidade dos campos."""
@@ -1853,7 +1934,9 @@ class Verifica:
                     "vigencia": {"status": "unknown", "reason_code": codes[0], "regras": [],
                                  "flags": codes, "intervalo": None}}
 
-        tr = _temporal_select(rw, prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts, fetched_at=rw.fetched_at, quarantined=rw.quarantined)
+        reconf, recentes = self._reconfirmacao(rw, prov)
+        tr = _temporal_select(rw, prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts,
+                              fetched_at=reconf["fetched_at"] if reconf else rw.fetched_at, quarantined=rw.quarantined)
         tr = situacao.aplicar_situacao_tr(tr, sit, data)  # C2
         red = _redaction_by_id(prov, tr.redaction_id) if tr.redaction_id else None
         # C3: com data pedida e sem redação selecionada, a atual não substitui a resposta.
@@ -1919,7 +2002,66 @@ class Verifica:
             "correspondencia_textual": None,
             "evidencia": self._evidencia_dispositivo(rw),
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
+            **({"reconfirmacao": reconf} if reconf else {}),
+            **({"capturas_recentes_nao_canonicas": recentes} if recentes else {}),
         }
+
+    def _reconfirmacao(self, rw, prov) -> tuple[dict | None, list[dict]]:
+        """0091: captura mais nova da mesma obra e da mesma fonte, rebaixada pela monotonia (0034), não substitui o
+        modelo canônico, mas pode reconfirmar o dispositivo pedido: mesmo caminho, mesma redação vigente (espaços
+        normalizados), sem ambiguidade nela e com recibo autenticado. A data da reconfirmação passa a ser a do frescor
+        da captura; o texto devolvido continua o da captura canônica. Sem reconfirmação, as capturas mais novas não
+        canônicas são declaradas na resposta, para que o cliente saiba por que a captura servida é antiga."""
+        if not rw.work_id or not rw.capture_id or not rw.source_id or not rw.fetched_at:
+            return None, []
+        vigente = None if prov.ambiguous else _current_redaction(prov)
+        cache = getattr(self, "_cache_reconfirmacao", None)
+        chave = (rw.work_id, rw.capture_id)
+        if cache is not None and chave in cache:
+            perdas, caps, docs = cache[chave]
+        else:
+            perdas = {d["capture_id"]: d for d in repo.avaliar_monotonia(self.conn, rw.work_id)[1]}
+            caps = repo.captures_for_work(self.conn, rw.work_id)  # mais nova primeiro
+            docs = {}
+            if cache is not None:
+                cache[chave] = (perdas, caps, docs)
+        recentes: list[dict] = []
+        for cap in caps:
+            if cap["id"] == rw.capture_id or not cap.get("fetched_at") or cap["fetched_at"] <= rw.fetched_at:
+                continue
+            if cap.get("source_id") != rw.source_id or not (cap.get("candidato_ao_vivo") or cap["id"] in perdas):
+                continue
+            if cap["id"] not in docs:
+                try:
+                    self._authenticate_capture(cap["id"])
+                    saved = repo.get_parsed_document(self.conn, cap["id"])
+                    docs[cap["id"]] = (document_from_dict(json.loads(saved["model_json"]))
+                                       if saved and saved["model_json"] else None)
+                except (SourceUnavailable, ValueError, TypeError, KeyError):
+                    docs[cap["id"]] = None
+            doc = docs[cap["id"]]
+            if cap["id"] in perdas:
+                perdidos = perdas[cap["id"]]["perdidos"]
+            else:  # rebaixada na indexação (staging): a perda se apura contra o modelo canônico servido
+                canon = {(p.scope or "", p.path) for p in rw.document.provisions}
+                perdidos = sorted(c[1] for c in canon - {(p.scope or "", p.path) for p in doc.provisions})[:20] \
+                    if doc is not None else []
+            item = {"capture_id": cap["id"], "fetched_at": cap["fetched_at"], "source_id": cap["source_id"],
+                    "motivo": "PERDA_ESTRUTURAL" if perdidos else "CANDIDATA_NAO_CANONICA",
+                    **({"perdidos": perdidos} if perdidos else {})}
+            if vigente is not None and not vigente.struck:
+                outro = doc.provision(prov.path) if doc is not None else None
+                red = _current_redaction(outro) if outro is not None and not outro.ambiguous else None
+                if (red is not None and not red.struck
+                        and " ".join(red.text.split()) == " ".join(vigente.text.split())):
+                    return {"capture_id": cap["id"], "sha256": cap.get("sha256"),
+                            "url": cap.get("final_url") or cap.get("url"),
+                            "fetched_at": cap["fetched_at"], "source_id": cap["source_id"],
+                            "motivo": "MESMA_REDACAO_EM_CAPTURA_MAIS_RECENTE",
+                            "rebaixada_por": item["motivo"]}, []
+                item["dispositivo"] = "ausente" if outro is None else "redacao_divergente_ou_ambigua"
+            recentes.append(item)
+        return None, recentes[:5]
 
     def _remissoes_dispositivo(self, rw, path, texto, *, truncado: bool = False,
                                integral: str | None = None) -> list[dict[str, Any]]:
@@ -4256,6 +4398,12 @@ class Verifica:
             },
         ]
         try:
+            velho = _acervo.envelhecimento(self.conn)
+            checks.append({"nome": "acervo_idade", "status": "alerta" if velho else "ok",
+                           "detalhe": velho or f"capturas legislativas com até {_acervo.IDADE_RENOVACAO_DIAS} dias"})
+        except sqlite3.Error as exc:
+            checks.append({"nome": "acervo_idade", "status": "falha", "detalhe": str(exc)[:200]})
+        try:
             n = self.conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
             checks.append({"nome": "migracoes", "status": "ok", "detalhe": f"{n} versões"})
         except Exception as exc:  # noqa: BLE001
@@ -4336,6 +4484,42 @@ class Verifica:
         if self._acervo_cache is None:
             self._acervo_cache = (True, _acervo.status(self.conn, self.home))
         return self._acervo_cache[1]
+
+    def renovar_acervo(self, dias: int = _acervo.IDADE_RENOVACAO_DIAS, limite: int | None = None) -> dict[str, Any]:
+        """0091: recaptura, pelas rotas de nova captura admitidas (0048, 0085), as obras legislativas federais cuja
+        captura canônica mais recente passou de `dias` dias. Cada obra tem resultado próprio; falha nunca é silêncio."""
+        if self._offline():
+            return {"status": "indisponivel", "motivo": "offline", "renovadas": [], "falhas": []}
+        from datetime import date, timedelta
+
+        corte = (date.today() - timedelta(days=dias)).isoformat()
+        rows = self.conn.execute(
+            "SELECT w.id, w.authority, w.kind, w.number, w.year, MAX(c.fetched_at) AS ultima FROM work w "
+            "JOIN parsed_document p ON p.work_id=w.id JOIN capture c ON c.id=p.capture_id "
+            "WHERE w.authority='federal' AND w.year>0 AND p.candidato_ao_vivo=0 AND p.model_json IS NOT NULL "
+            "GROUP BY w.id HAVING ultima < ? ORDER BY ultima", (corte,)).fetchall()
+        if limite is not None:
+            rows = rows[:max(0, int(limite))]
+        renovadas, falhas = [], []
+        for r in rows:
+            work = WorkKey(r["authority"], r["kind"], r["number"], int(r["year"]))
+            obra = {"work_id": r["id"], "obra": f"{work.kind} {work.number}/{work.year}", "captura_anterior": r["ultima"]}
+            try:
+                novo = self._capture_work(work)
+                if isinstance(novo, ResolvedWork):
+                    renovadas.append({**obra, "fonte": novo.source_id, "fetched_at": novo.fetched_at,
+                                      "capture_id": novo.capture_id})
+                else:
+                    falhas.append({**obra, "motivo": "sem_rota" if novo is None else "ambigua"})
+            except SourceUnavailable as exc:
+                falhas.append({**obra, "motivo": exc.reason[:200]})
+            except IdentityMismatch:
+                falhas.append({**obra, "motivo": "IDENTIDADE_DIVERGENTE"})
+        self._resolver = MemoryResolver()
+        self._acervo_cache = None
+        status = "ok" if not falhas else ("parcial" if renovadas else "indisponivel")
+        return {"status": status, "dias": dias, "candidatas": len(rows), "renovadas": renovadas, "falhas": falhas,
+                "envelhecimento_restante": _acervo.envelhecimento(self.conn, dias)}
 
     def reconstruir_acervo(self, com_situacao: bool = False) -> dict[str, Any]:
         """Reconstrói os derivados do home numa cópia e troca o banco só se tudo validar (C6)."""
@@ -4554,5 +4738,5 @@ for _nome in _CONTADAS:
     setattr(Verifica, _nome, _guardar(getattr(Verifica, _nome)))
 
 # Fora da fachada contada, mas podem chegar à rede: só a guarda da chamada (FIX17/F-23).
-for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install"):
+for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install", "renovar_acervo"):
     setattr(Verifica, _nome, sob_guarda(getattr(Verifica, _nome)))

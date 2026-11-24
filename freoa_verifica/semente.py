@@ -306,7 +306,8 @@ class SementeSync:
                 "year": work_key.year or None,
             }
             if work_key.kind.lower() in {"cf", "constituicao"}:
-                key = {"tipo": "CF", "numero": "1988", "ano": 1988}
+                ano_cf = int(work_key.year or 1988)
+                key = {"tipo": "CF", "numero": str(ano_cf), "ano": ano_cf}
             cand = conn_obj.resolve(key)
             if cand is None:
                 self._mark_indisponivel(fonte, chave, "nao_resolvido")
@@ -381,7 +382,8 @@ class SementeSync:
                 "LCP": "lei_complementar",
                 "DEL": "decreto_lei",
             }.get(tipo, tipo.lower())
-            wk = WorkKey("federal", kind, numero if tipo != "CF" else "1988", ano)
+            # Constituição: número = ano (1824 a 1988); nunca registrar outra Constituição como a de 1988.
+            wk = WorkKey("federal", kind, numero if tipo != "CF" else str(ano), ano)
             status, parsed = self._index_legis(
                 "planalto",
                 chave,

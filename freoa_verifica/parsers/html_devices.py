@@ -26,7 +26,7 @@ from freoa_verifica.parsers.paths import (
     supplement_scope_from_heading,
 )
 
-PARSER_VERSION = "1.2.3"
+PARSER_VERSION = "1.2.4"  # 1.2.4: dispositivo fora de <p> (fonte órfã sob o body; decisão 0091)
 
 DEFAULT_MAX_INPUT_BYTES = 30 * 1024 * 1024
 DEFAULT_MAX_NESTING = 200
@@ -621,6 +621,34 @@ def _classify_line(text: str) -> tuple[str, dict] | None:
     return None
 
 
+_SEGUNDO_DISPOSITIVO = re.compile(
+    r"[.;:]\s+(?:Art\.?\s*\d|§\s*\d|Par[aá]grafo\s+[úu]nico|[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)")
+
+
+def fontes_orfas_de_dispositivo(root, *, todas: bool = False) -> list:
+    """Fontes sob o body, fora de qualquer <p>, cujo texto abre dispositivo (art., §, inciso, alínea).
+
+    `todas=False`: só as que contêm um único dispositivo e nenhum <p> (podem entrar como bloco).
+    `todas=True`: também as compostas, que o parser não decompõe (a sentinela as acusa)."""
+    out = []
+    for el in root.xpath("//body/font"):
+        if el.xpath(".//p"):
+            continue  # o conteúdo em <p> descendente já é bloco próprio
+        plain = paragraph_plain_text(el)
+        kind = _classify_line(plain)
+        if not kind or kind[0] == "art" and not (kind[1].get("rest") or "").strip():
+            continue  # rótulo de artigo sem corpo: tratado pela mescla com a fonte seguinte
+        resto = re.sub(r"\([^()]*\)", " ", kind[1].get("rest") or kind[1].get("text") or "")
+        if len(re.findall(r"[^\W\d_]", resto)) < 3:
+            continue  # só rótulo ou nota ("h) (Revogado ...)"): não vira bloco nem continuação do anterior
+        if kind[0] == "art" and not re.match(r"\s*Art\.?\s*\d+\S*\s+[A-ZÀ-Ý(]", plain):
+            continue  # "art. 45 da Lei ..." é remissão (fragmento de nota), não abre artigo
+        if not todas and _SEGUNDO_DISPOSITIVO.search(plain):
+            continue
+        out.append(el)
+    return out
+
+
 def _iter_device_blocks(root) -> tuple[list, dict[int, str]]:
     """Parágrafos + fontes órfãs 'Art N' sob body (markup quebrado do Planalto).
 
@@ -658,6 +686,17 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str]]:
         # Mantém a 1ª anotação editorial no texto para o extrator principal
         suffix = (" " + anns[0].raw) if anns else ""
         merged_by_id[id(el)] = _normalize_ws(plain + " " + extra + suffix)
+        orphan_fonts.append(el)
+
+    # Dispositivo inteiro fora de <p> (ex.: "<p></font><font>LXXVIII - ...", CF art. 5º): o </font> órfão
+    # esvazia o <p> e o lxml põe a fonte sob o body. Entra na ordem do documento quando contém um só
+    # dispositivo; com mais de um (ou com <p> dentro), a sentinela de órfãos impede negativa (decisão 0091).
+    # Referências vivas: o lxml mantém um único proxy por nó enquanto houver referência (id() estável).
+    consumidas = [el.getnext() for el in orphan_fonts if el.getnext() is not None]
+    ids_consumidas = {id(el) for el in consumidas}
+    for el in fontes_orfas_de_dispositivo(root):
+        if id(el) in ids_consumidas or id(el) in merged_by_id:
+            continue
         orphan_fonts.append(el)
 
     if not orphan_fonts:
@@ -883,6 +922,13 @@ def parse_html_devices(
     blocks, merged_by_id = _iter_device_blocks(root)
     ctx = _Ctx()
     ctx.issues.extend(early_issues)
+    # Sentinela (decisão 0091): dispositivo fora de <p> que não entrou como bloco impede negar ausência.
+    arvore = root.getroottree()
+    incluidos = {arvore.getpath(b) for b in blocks}
+    for el in fontes_orfas_de_dispositivo(root, todas=True):
+        if arvore.getpath(el) not in incluidos:
+            ctx.issues.append(Issue("DISPOSITIVO_FORA_DA_ARVORE", None,
+                                    _normalize_ws(paragraph_plain_text(el))[:160], blocking_scope=None))
     prev_in_bq = False
 
     for el in blocks:

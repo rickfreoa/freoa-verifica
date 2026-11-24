@@ -22,4 +22,13 @@ EXPERIMENTAL: frozenset[str] = frozenset({
     "obter_evidencia:proveniencia",
     # Partição de `obter_decisao` com `parte_idx` (decisão 0073, seção 7; PARIDADE-1.4, CH1–CH6).
     "obter_decisao:particao",
+    # Decisão 0091: artigo integral e frescor por captura mais nova da mesma fonte (aditivos, pendentes de auditoria).
+    "obter_dispositivo:abrangencia",
+    "obter_dispositivo:aviso_abrangencia",
+    "obter_dispositivo:subdispositivos",
+    "obter_dispositivo:subdispositivos_total",
+    "obter_dispositivo:subdispositivos_truncado",
+    "obter_dispositivo:texto_integral",
+    "obter_dispositivo:reconfirmacao",
+    "obter_dispositivo:capturas_recentes_nao_canonicas",
 })

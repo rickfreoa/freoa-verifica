@@ -23,7 +23,9 @@ _log = logging.getLogger(__name__)
 # 4 = 1.2.0 (espécie declarada pela fonte prevalece: monocrática nunca rotulada como acórdão; decisão 0038).
 # 5 = 1.3.0 (interpretação única do corpo; captura sem Content-Type relida só dos bytes, com a decisão registrada
 #     no derivado; decisões 0064 e 0065).
-DERIVED_VERSION = 5
+# 6 = 1.4.0a6 (parser Planalto 1.2.4: dispositivo em fonte órfã fora de <p> entra no modelo; antes, parágrafos de
+#     artigos inteiros eram atribuídos ao artigo anterior, ex.: CF arts. 57, 62, 126 e 222; decisão 0091).
+DERIVED_VERSION = 6
 
 # Captura reprocessável com modelo e sem decisão de interpretação no recibo (0064) nem no derivado (0065), com ou
 # sem Content-Type (F-26, 0066). Decisão = origem e codec, salvo binário: o mesmo de `repo.decisao_registrada`.
@@ -73,6 +75,26 @@ def marcar_origem_nao_publicada(conn: sqlite3.Connection) -> None:
             conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('acervo_origem_nao_publicada', '1')")
     except sqlite3.Error:
         pass
+
+
+def _atualizar_manifesto_local(home: Path) -> None:
+    """0091: a reconstrução muda a versão dos derivados do acervo instalado. O manifesto local registra a nova versão
+    e a anterior (o conjunto de obras e decisões não muda); sem isso, o aviso `derived_version_divergente` persistiria
+    sobre derivados íntegros. O snapshot de origem continua identificado pelo próprio digest."""
+    from freoa_verifica.acervo import MANIFESTO_LOCAL
+
+    path = Path(home) / MANIFESTO_LOCAL
+    try:
+        ref = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+    except (OSError, ValueError):
+        return
+    if not isinstance(ref, dict) or ref.get("derived_version") in (None, DERIVED_VERSION):
+        return
+    ref = {**ref, "derived_version_do_snapshot": ref.get("derived_version_do_snapshot", ref["derived_version"]),
+           "derived_version": DERIVED_VERSION}
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(ref, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def compativel(conn: sqlite3.Connection) -> bool:
@@ -307,6 +329,7 @@ def reconstruir(svc: Any, *, com_situacao: bool = False) -> dict[str, Any]:
             for suf in ("-wal", "-shm"):
                 Path(str(db) + suf).unlink(missing_ok=True)
             os.replace(copia, db)
+            _atualizar_manifesto_local(home)
             svc._clear_caches()
             # Derivados trocados; situação com fonte interrompida é declarada, nunca "ok" por silêncio (F-23).
             situacao = relatorio.get("situacao")
