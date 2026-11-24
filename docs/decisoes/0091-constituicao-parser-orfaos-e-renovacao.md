@@ -222,3 +222,14 @@ regra de classe:
 - Risco declarado: "art. 5 da Constituição de 1988, do Estado de São Paulo exige-se..." (achado 21 da r5) não é
   reconhecida; não há `verified` errado. Medição repetida sem alteração: 122 ganhos, 52 eliminados, 21 redações,
   60 órfãs admitidas, nenhuma fronteira.
+
+**Após a conferência r6 (BLOQUEADOR, levado ao titular).** A r6 mostrou resíduos lexicais nas duas classes
+(`Da supramencionada Lei`, `Art. 45 I, da Lei`; Constituição qualificada em outra frase, antes da citação ou por
+apelido). Medidas de classe, sem lista de palavras:
+- **Sequência de artigos.** Artigo inteiro em fonte órfã só é admitido se continua a numeração do ato (N+1 do artigo
+  anterior, ou N-A); fora disso, fronteira. Texto citado não conta na numeração. No corpus, as órfãs da CF, LINDB e Lei
+  6.385 seguem a sequência; a captura mutilada do DL 1.978/1982 (artigos fora de ordem, caput do art. 1º trocado por
+  texto citado) passou a ter fronteira, o que a bloqueia (120 ganhos, 52 eliminados, 21 redações).
+- **Guarda territorial.** Vale também para Constituição por apelido (`CF, a do Estado de São Paulo`); a frase não
+  termina no ponto de abreviatura (`art. 5`); "do Estado" só qualifica seguido de nome próprio ("do Estado de São
+  Paulo"), não "do Estado Democrático de Direito".

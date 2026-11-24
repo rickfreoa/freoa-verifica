@@ -51,3 +51,36 @@ def test_r5_verificacao_com_qualificador_na_frase_requer_conferencia(tmp_path):
     svc = Verifica(home=tmp_path)
     res = svc.verificar_citacao("art. 5 da Constituição e Emendas Constitucionais do Estado de São Paulo", trecho="x")
     assert _nao_confirma(res)
+
+
+# ------------------------------------------------------------------ conferência r6
+
+
+@pytest.mark.parametrize("orfa", ["Art. 45 Da supramencionada Lei", "Art. 45 Da sobredita Lei", "Art. 45 I, da Lei",
+                                  "Art. 45 Rege o caso."])
+def test_r6_artigo_orfao_fora_da_sequencia_bloqueia(tmp_path, orfa):
+    """Critério estrutural: artigo órfão que não continua a numeração (N+1 ou N-A) vira fronteira, qualquer redação."""
+    html, doc = _doc("<p>Art. 1 Fica previsto no</p>" + _ORFA.format(orfa) + "<p>§ 1 Outro.</p><p>Art. 3 Fim.</p>")
+    assert "art45" not in {p.path for p in doc.provisions} and _fronteiras(doc) == ["art1"]
+    svc = _svc(tmp_path, html, doc)
+    assert _nao_confirma(svc.verificar_citacao("art. 45, § 1 da Lei 9.999/2000", trecho="Outro."))
+    assert _nao_confirma(svc.verificar_citacao("art. 1, § 1 da Lei 9.999/2000", trecho="Outro."))
+
+
+def test_r6_artigo_orfao_com_letra_na_sequencia_e_admitido():
+    _, doc = _doc("<p>Art. 5 Antes.</p>" + _ORFA.format("Art. 5-A Novo artigo.") + "<p>§ 1 Outro.</p><p>Art. 6 Depois.</p>")
+    assert not _fronteiras(doc)
+
+
+@pytest.mark.parametrize("texto", [
+    "art. 5 da CF, a do Estado de São Paulo",
+    "art. 5 da Constituição Federal de 1988 e o contrato do Estado de São Paulo",
+])
+def test_r6_guarda_territorial_vale_para_apelido_e_forma_qualificada(texto):
+    c = parse_one(texto)
+    assert c.confidence == "provavel" and "constituicao_qualificador_territorial_na_frase" in c.flags
+
+
+def test_r6_estado_democratico_nao_e_qualificador_territorial():
+    c = parse_one("art. 5 da Constituição de 1988, fundamento do Estado Democrático de Direito")
+    assert c.confidence == "exata"

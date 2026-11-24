@@ -439,13 +439,13 @@ _CONSTITUICAO_ESTADUAL = _CONSTITUICAO_NAO_FEDERAL
 # Qualificador territorial em qualquer ponto da mesma frase (aposto, coordenação, oração invertida): a Constituição
 # citada pode ser a estadual; a extração continua, mas como provável, nunca exata (0091, r5, regra conservadora).
 _TERRITORIAL_NA_FRASE = re.compile(
-    r"\b(?:do\s+Estado\b|dos?\s+Estados?\s+(?!Unidos)|Estadua(?:l|is)\b|Municipa(?:l|is)\b|Distrital\b"
+    r"\b(?:do\s+Estado\s+d[eoa]s?\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]|dos\s+Estados\b(?!\s+Unidos)|Estadua(?:l|is)\b|Municipa(?:l|is)\b|Distrital\b"
     r"|do\s+Distrito\s+Federal\b|d[oe]\s+Munic[ií]pio\b|Paulista|Mineira|Fluminense|Ga[uú]cha|Baiana|Catarinense"
     r"|Paranaense|Pernambucana|Cearense|Goiana|Capixaba|Paraibana|Potiguar|Alagoana|Sergipana|Maranhense|Piauiense"
     r"|Paraense|Amazonense|Acreana|Rondoniense|Roraimense|Amapaense|Tocantinense|Sul-Mato-Grossense|Mato-Grossense)",
     re.I,
 )
-_FIM_FRASE = re.compile(r"[.;!?\n](?:\s|$)")
+_FIM_FRASE = re.compile(r"[;!?\n]|\.(?=\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]|\s*$)")  # "art. 5" não encerra a frase
 
 
 def _territorial_na_frase(text: str, pos: int) -> bool:
@@ -1333,6 +1333,13 @@ def extract(texto: str) -> list[Citation]:
             if _NONLEGAL_FIELD.search(text[max(0, cite.span[0] - 100):cite.span[0]]):
                 cite.confidence = "provavel"
                 cite.flags.append("campo_nao_juridico")
+
+    # Constituição por apelido ("CF, a do Estado de São Paulo") passa pela mesma guarda territorial da frase.
+    for cite in work_cites:
+        if (cite.work is not None and cite.work.kind == "constituicao" and cite.confidence == "exata"
+                and _territorial_na_frase(text, cite.span[1])):
+            cite.confidence = "provavel"
+            cite.flags = [*cite.flags, "constituicao_qualificador_territorial_na_frase"]
 
     # Anexar dispositivos às normas
     work_cites = _attach_devices(text, work_cites)

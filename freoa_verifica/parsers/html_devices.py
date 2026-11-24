@@ -787,6 +787,7 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
     ids_consumidas = {id(el) for el in consumidas}
     fronteira_ids: set[int] = set()
     fronteira_fonts: list = []
+    ids_inteiras: set[int] = set()
     for el in root.xpath("//body/font"):
         if id(el) in ids_consumidas or id(el) in merged_by_id:
             continue
@@ -794,6 +795,7 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
             continue
         if _fonte_orfa_admissivel(el) and _abertura_citada_introduzida(el):
             orphan_fonts.append(el)
+            ids_inteiras.add(id(el))
         else:
             fronteira_ids.add(id(el))
             fronteira_fonts.append(el)
@@ -807,7 +809,35 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
     for el in root.iter():
         if id(el) in wanted:
             ordered.append(el)
+    _exigir_sequencia_de_artigos(ordered, merged_by_id, ids_inteiras, fronteira_ids)
     return (ordered if ordered else blocks), merged_by_id, fronteira_ids
+
+
+def _exigir_sequencia_de_artigos(ordered: list, merged_by_id: dict[int, str], ids_inteiras: set[int],
+                                 fronteira_ids: set[int]) -> None:
+    """Artigo inteiro em fonte órfã só é admitido se continua a numeração (N+1 do artigo anterior, ou N-A).
+
+    Critério estrutural, não lexical: remissão partida pelo markup ("Art. 45 Da sobredita Lei" depois do art. 1º)
+    quebra a sequência e vira fronteira, qualquer que seja a redação (0091, conferência r6, titular)."""
+    ultimo: int | None = None
+    for el in ordered:
+        texto = merged_by_id.get(id(el)) or paragraph_plain_text(el)
+        if re.match(r"\s*[\"“«]", texto):
+            continue  # texto citado não conta na numeração do ato
+        kind = _classify_line(texto)
+        if not kind or kind[0] != "art":
+            continue
+        try:
+            num = int(str(kind[1].get("num")).replace(".", ""))
+        except ValueError:
+            continue
+        if id(el) in ids_inteiras and ultimo is not None:
+            sequencial = num == ultimo + 1 or (num == ultimo and kind[1].get("letter"))
+            if not sequencial:
+                ids_inteiras.discard(id(el))
+                fronteira_ids.add(id(el))
+                continue
+        ultimo = num
 
 
 def extract_title_ementa(paragraphs: list) -> tuple[str, str | None]:
