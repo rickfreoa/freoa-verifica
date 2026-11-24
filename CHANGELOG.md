@@ -18,6 +18,10 @@
   deixam de registrar toda `CF` como 1988.
 - **`fv acervo renovar`** e aviso `acervo_envelhecendo` (`doctor`, início do MCP); agendamento em
   `docs/operacao/renovacao-do-acervo.md`.
+- **Emenda A da 0091:** `fv acervo revalidar` lê os metadados do normas.leg.br (`dateModified` e versão `Current`) e
+  marca para renovação o que mudou (gatilho, nunca prova); `fv acervo manter` (revalidar e renovar) e
+  `fv acervo agendar` (tarefa diária do usuário, sem administrador); `fv acervo abrir-normas-leg` com escopo
+  `metadados_e_renovacao` por home; URL de metadados com URN literal; `doctor` com `acervo_manutencao`.
 
 ## 1.4.0a5 - 15/11/2026
 

@@ -247,15 +247,14 @@ def test_agendar_monta_comando_windows_e_linux(tmp_path, monkeypatch):
 
 def test_linha_agendada_e_aceita_pelo_parser_do_fv(tmp_path):
     """--home é opção global do `fv`: depois do subcomando o argparse recusaria a tarefa inteira."""
-    import xml.dom.minidom
-
     from freoa_verifica import acervo_manutencao as agenda
     from freoa_verifica.cli import build_parser
 
     home = tmp_path / "home com espaço"
     args = build_parser().parse_args(agenda.argumentos(home))
     assert args.cmd == "acervo" and args.acervo_cmd == "manter" and args.home == str(home)
-    doc = xml.dom.minidom.parseString(agenda.xml_tarefa(home, "05:43").replace('encoding="UTF-16"', 'encoding="UTF-8"'))
-    assert doc.getElementsByTagName("StartWhenAvailable")[0].firstChild.data == "true"
-    assert "--home" in doc.getElementsByTagName("Arguments")[0].firstChild.data
+    xml = agenda.xml_tarefa(home, "05:43")  # gerado pelo próprio código: conferido como texto, sem parser XML
+    assert "<StartWhenAvailable>true</StartWhenAvailable>" in xml and "<RunLevel>LeastPrivilege</RunLevel>" in xml
+    argumentos_xml = xml.split("<Arguments>", 1)[1].split("</Arguments>", 1)[0]
+    assert argumentos_xml.startswith("--home ") and argumentos_xml.endswith("acervo manter --json")
     assert agenda.conteudo_systemd_service(home).count("--home") == 1
