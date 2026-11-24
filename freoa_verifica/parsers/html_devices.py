@@ -832,7 +832,8 @@ def _exigir_sequencia_de_artigos(ordered: list, merged_by_id: dict[int, str], id
         except ValueError:
             continue
         if id(el) in ids_inteiras and ultimo is not None:
-            sequencial = num == ultimo + 1 or (num == ultimo and kind[1].get("letter"))
+            # Art. 1 reinicia a numeração (ADCT depois do corpo permanente).
+            sequencial = num == ultimo + 1 or num == 1 or (num == ultimo and kind[1].get("letter"))
             if not sequencial:
                 ids_inteiras.discard(id(el))
                 fronteira_ids.add(id(el))

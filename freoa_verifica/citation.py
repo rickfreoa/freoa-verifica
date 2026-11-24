@@ -439,19 +439,23 @@ _CONSTITUICAO_ESTADUAL = _CONSTITUICAO_NAO_FEDERAL
 # Qualificador territorial em qualquer ponto da mesma frase (aposto, coordenação, oração invertida): a Constituição
 # citada pode ser a estadual; a extração continua, mas como provável, nunca exata (0091, r5, regra conservadora).
 _TERRITORIAL_NA_FRASE = re.compile(
-    r"\b(?:do\s+Estado\s+d[eoa]s?\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]|dos\s+Estados\b(?!\s+Unidos)|Estadua(?:l|is)\b|Municipa(?:l|is)\b|Distrital\b"
-    r"|do\s+Distrito\s+Federal\b|d[oe]\s+Munic[ií]pio\b|Paulista|Mineira|Fluminense|Ga[uú]cha|Baiana|Catarinense"
-    r"|Paranaense|Pernambucana|Cearense|Goiana|Capixaba|Paraibana|Potiguar|Alagoana|Sergipana|Maranhense|Piauiense"
-    r"|Paraense|Amazonense|Acreana|Rondoniense|Roraimense|Amapaense|Tocantinense|Sul-Mato-Grossense|Mato-Grossense)",
+    # Só marcas de ente determinado; "dos Estados", "do Distrito Federal", "Justiça Estadual" e "do Estado Democrático"
+    # aparecem em qualquer texto federal e não indicam outra Constituição.
+    r"\bdo\s+Estado\s+d[eoa]s?\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]|\bd[oe]\s+Munic[ií]pio\s+d[eoa]s?\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]"
+    r"|\b(?:Constitui[cç][aã]o|Carta)\s+(?:Estadual|Municipal|Distrital|do\s+Estado|Paulista|Mineira|Fluminense"
+    r"|Ga[uú]cha|Baiana|Catarinense|Paranaense|Pernambucana|Cearense|Goiana|Capixaba|Paraibana|Potiguar|Alagoana"
+    r"|Sergipana|Maranhense|Piauiense|Paraense|Amazonense|Acreana|Rondoniense|Roraimense|Amapaense|Tocantinense"
+    r"|Sul-Mato-Grossense|Mato-Grossense|[A-Za-zÀ-ÿ-]+ense\b)|Constitui[cç][oõ]es\s+Estaduais"
+    r"|\bCE\s*/\s*[A-Z]{2}\b|\bLei\s+Org[aâ]nica\b|\b(?:a|da)\s+(?:Estadual|Municipal|Distrital)\b",
     re.I,
 )
-_FIM_FRASE = re.compile(r"[;!?\n]|\.(?=\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]|\s*$)")  # "art. 5" não encerra a frase
 
 
 def _territorial_na_frase(text: str, pos: int) -> bool:
-    resto = text[pos:]
-    m = _FIM_FRASE.search(resto)
-    return bool(_TERRITORIAL_NA_FRASE.search(resto[: m.start()] if m else resto))
+    """Titular, após a r7: qualificador territorial em qualquer ponto do texto (antes ou depois, em outra frase,
+    por sigla como CE/SP ou Lei Orgânica) impede Constituição exata; o nome guarda a origem da regra na frase."""
+    del pos
+    return bool(_TERRITORIAL_NA_FRASE.search(text))
 
 
 _FIM_COMPLEMENTO_CONST = re.compile(r"[,;.\n!?]")

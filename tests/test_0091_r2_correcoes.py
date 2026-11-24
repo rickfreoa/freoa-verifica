@@ -158,6 +158,7 @@ def test_r2_doctor_nao_chama_health_normas_leg_fora_do_escopo(tmp_path, monkeypa
     assert "fora_do_escopo" in str(nl["detalhe"])
 
 
+@pytest.mark.repositorio  # lê o código-fonte do repositório; fora da seleção da wheel
 def test_r2_estrutural_entradas_normas_leg_passam_por_rota_admitida():
     svc_path = ROOT / "freoa_verifica" / "service.py"
     tree = ast.parse(svc_path.read_text(encoding="utf-8"))

@@ -237,3 +237,17 @@ apelido). Medidas de classe, sem lista de palavras:
   Brasil", ano ou sigla (CF, CRFB, CR) sai `provavel`, com a marca `constituicao_sem_qualificacao_federal`, e a
   verificação pede conferência. Fecha a classe da Constituição estadual referida fora da frase; custa a confirmação
   direta de "art. 5º da Constituição", que passa a exigir conferência.
+
+**Encerramento (titular, 24/11, após a conferência r7).** A r7 não demonstrou classe nova; restavam resíduos de
+classes já decididas. O titular escolheu:
+- **Citação, guarda no texto inteiro.** Marca de ente determinado em qualquer ponto do texto analisado ("do Estado
+  de São Paulo", "Constituição Estadual" ou gentílica, CE/SP, Lei Orgânica, "a Estadual") impede Constituição exata;
+  sai `provavel`. Referências à federação em geral ("dos Estados", "do Distrito Federal", "Justiça Estadual", "do
+  Estado Democrático de Direito") não rebaixam. Custo: em peça que cite também uma Constituição estadual, toda
+  citação da Federal pede conferência.
+- **Parser, risco declarado.** Remissão em fonte órfã que comece por preposição seguida de determinante não listado e
+  cite exatamente o artigo seguinte ao anterior (r7, achado 25) pode ser admitida como artigo. Exige markup partido
+  numa remissão ao artigo N+1; não ocorre nas 121 obras medidas. Também declarado (r7, achado 28): texto de emenda
+  citado sem aspas pode deslocar a contagem e bloquear o artigo órfão seguinte, sem `verified` errado. A
+  numeração passa a reiniciar no art. 1º (ADCT).
+- Os testes estruturais que leem o código-fonte foram marcados `repositorio`, fora da seleção da wheel.

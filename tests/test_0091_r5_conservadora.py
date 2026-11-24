@@ -105,3 +105,34 @@ def test_r6_constituicao_sem_qualificacao_federal_requer_conferencia(texto):
 def test_r6_constituicao_qualificada_continua_exata(texto):
     c = parse_one(texto)
     assert c is not None and c.work.number == "1988" and c.confidence == "exata"
+
+
+# ------------------------------------------------------------------ conferência r7 (titular: guarda no texto inteiro)
+
+
+@pytest.mark.parametrize("texto", [
+    "Da Constituição Estadual: consulte o art. 5 da CF",
+    "Da Constituição do Estado de São Paulo: consulte o art. 5 da Constituição Federal",
+    "art. 5 da Constituição Federal, leia-se CE/SP",
+    "art. 5 da Constituição Federal, leia-se a Lei Orgânica de São Paulo",
+    "art. 5 da Constituição de 1988 e respectivas emendas, todas da CE/SP",
+    "art. 5 da CF, a Estadual",
+])
+def test_r7_marca_de_ente_em_qualquer_ponto_do_texto_impede_exata(texto):
+    c = parse_one(texto)
+    assert c is None or c.confidence == "provavel"
+
+
+@pytest.mark.parametrize("texto", [
+    "art. 5 da Constituição Federal; compete à União, aos Estados, ao Distrito Federal e aos Municípios",
+    "art. 5 da Constituição Federal, perante a Justiça Estadual",
+    "art. 5 da Constituição de 1988, fundamento do Estado Democrático de Direito",
+])
+def test_r7_federacao_em_geral_nao_rebaixa(texto):
+    assert parse_one(texto).confidence == "exata"
+
+
+def test_r7_adct_reinicia_a_numeracao():
+    _, doc = _doc("<p>Art. 250 Último.</p><p>ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS</p>"
+                  + _ORFA.format("Art. 1 Primeiro do ADCT.") + "<p>§ 1 Outro.</p><p>Art. 2 Segundo.</p>")
+    assert not _fronteiras(doc)

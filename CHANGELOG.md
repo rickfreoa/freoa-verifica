@@ -32,7 +32,9 @@
 - **Regra conservadora do titular (rodadas r5 e r6).** Artigo inteiro em fonte órfã só entra se continua a
   numeração do ato; remissão com preposição e determinante vira fronteira. "Constituição" sem Federal, da República,
   do Brasil, ano ou CF/CRFB/CR, ou com qualificador territorial na mesma frase, sai `provavel`
-  (`requer_conferencia`), nunca exata.
+  (`requer_conferencia`), nunca exata. Encerramento: marca de ente estadual ou municipal em qualquer ponto do texto
+  (Constituição Estadual, CE/SP, Lei Orgânica, "do Estado de ...") também impede a exata; resíduo do parser
+  declarado na 0091.
 
 ## 1.4.0a5 - 15/11/2026
 

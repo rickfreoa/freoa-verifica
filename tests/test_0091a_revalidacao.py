@@ -84,6 +84,7 @@ def test_sinal_none_sem_current_pt():
     assert rev.sinal_de_metadados(meta) is None
 
 
+@pytest.mark.repositorio  # lê o código-fonte do repositório; fora da seleção da wheel
 def test_gatilho_nao_entra_em_outros_modulos():
     raiz = Path(__file__).resolve().parents[1] / "freoa_verifica"
     permitidos = {raiz / "revalidacao.py", raiz / "service.py", raiz / "cli.py", raiz / "bateria.py"}
