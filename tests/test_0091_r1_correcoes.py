@@ -32,7 +32,7 @@ def _offline(monkeypatch):
 def test_r1_orfa_artigo_rejeitado_bloqueia_atribuicao_errada(tmp_path):
     html = _html(
         "<p>Art. 1 Cabe:</p>"
-        + _ORFA.format("Art. 2 rege o caso.")
+        + _ORFA.format("Art. 2 Rege o caso.")
         + "<p>§ 1 Outro parágrafo.</p><p>Art. 3 Outro artigo.</p>"
     )
     doc = parse_planalto(html, base_url="https://example.invalid/l9999.htm")

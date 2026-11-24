@@ -626,7 +626,8 @@ def _classify_line(text: str) -> tuple[str, dict] | None:
 
 
 _SEGUNDO_DISPOSITIVO = re.compile(
-    r"[.;:]\s+(?:Art\.?\s*(?:\d{1,3}(?:\.\d{3})+|\d+)(?![0-9])|§\s*\d|Par[aá]grafo\s+[úu]nico|[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)")
+    r"[.;:]\s+(?:Art\.?\s*(?:\d{1,3}(?:\.\d{3})+|\d+)(?![0-9])|§\s*\d|Par[aá]grafo\s+[úu]nico|[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)"
+    r"|(?<![Aa]rt)[.;:]\s+\d+[.)]\s")  # item numérico ("1. julgar; 2. processar."), não "Art. 57. O"
 
 
 def paragraph_plain_text_preserve_breaks(el) -> str:
@@ -652,6 +653,11 @@ _LABEL_LINE_START = re.compile(
 )
 
 
+# Abertura citada ("“Art. 2 Novo texto:") também é artigo: entra como bloco para a máquina de citação controlar o
+# contexto, como no <p> equivalente (0091, r3 achado 15).
+_ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
+
+
 def _fonte_orfa_composta(plain_breaks: str, plain: str) -> bool:
     if _SEGUNDO_DISPOSITIVO.search(plain):
         return True
@@ -667,7 +673,7 @@ def _fonte_orfa_parece_dispositivo(el) -> bool:
     if not kind:
         return False
     if kind[0] == "art":
-        if not re.match(r"\s*Art\.?\s*\d", plain):
+        if not _ARTIGO_MAIUSCULO.match(plain):
             return False  # "art. 45 da Lei ..." em minúscula é remissão (resto de nota), não fronteira de artigo
         return True
     return kind[0] in {"par", "parunico", "inc", "ali", "item"}
@@ -682,8 +688,14 @@ def _fonte_orfa_admissivel(el) -> bool:
     if kind[0] == "art" and not (kind[1].get("rest") or "").strip():
         return False
     # Rótulo só com nota ("h) (Revogado ...)", "Art. 2 (Revogado).") é dispositivo: entra como o <p> equivalente.
-    if kind[0] == "art" and not re.match(r"\s*Art\.?\s*\d", plain):  # "art." minúsculo é remissão
-        return False
+    if kind[0] == "art":
+        if not _ARTIGO_MAIUSCULO.match(plain):  # "art." minúsculo é remissão
+            return False
+        # Caput começa por maiúscula ou nota; "Art. 45 da Lei ..." / "Art. 45 desta Lei" é remissão partida
+        # pelo markup: não vira artigo próprio, e a região fica bloqueada como fronteira (0091, r3 achado 14).
+        citada = re.match(r"\s*[\"“«]", plain)
+        if not citada and not re.match(r"[(\"“«]|[^\W\d_a-zà-ÿ]", (kind[1].get("rest") or "").strip()):
+            return False
     return not _fonte_orfa_composta(plain_breaks, plain)
 
 
@@ -696,6 +708,19 @@ def fontes_orfas_de_dispositivo(root, *, todas: bool = False) -> list:
     if todas:
         return [el for el in root.xpath("//body/font") if _fonte_orfa_parece_dispositivo(el) and not _fonte_orfa_admissivel(el)]
     return [el for el in root.xpath("//body/font") if _fonte_orfa_admissivel(el)]
+
+
+def _abertura_citada_introduzida(el) -> bool:
+    """Abertura citada órfã só entra como bloco logo depois do texto que a introduz ("... seguinte redação:").
+
+    Fora disso (markup mutilado, ordem documental incerta) vira fronteira: na dúvida, bloqueia (0091, r3 achado 15)."""
+    if not re.match(r"\s*[\"“«]", paragraph_plain_text(el)):
+        return True
+    for prev in el.itersiblings(preceding=True):
+        texto = paragraph_plain_text(prev) if getattr(prev, "tag", None) in ("p", "font") else ""
+        if texto.strip():
+            return texto.rstrip().endswith(":")
+    return False
 
 
 def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
@@ -750,7 +775,7 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
             continue
         if not _fonte_orfa_parece_dispositivo(el):
             continue
-        if _fonte_orfa_admissivel(el):
+        if _fonte_orfa_admissivel(el) and _abertura_citada_introduzida(el):
             orphan_fonts.append(el)
         else:
             fronteira_ids.add(id(el))

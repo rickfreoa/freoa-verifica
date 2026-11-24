@@ -167,3 +167,22 @@ rótulo se somava ao texto do dispositivo anterior, também no `<p>` (CF art. 10
 teto próprio (teste com a guarda ativa real). Medição nas 121 obras do Planalto do snapshot 1.4.0a5, contra a
 1.2.3: 120 caminhos ganhos, 52 caminhos de atribuição errada ou de texto de emenda citada eliminados, 21 redações
 corrigidas (rótulos soltos e textos de outros artigos), nenhuma fronteira `DISPOSITIVO_FORA_DA_ARVORE`.
+
+### 5.5 Rodada 4 (autorizada pelo titular em 24/11, após o BLOQUEADOR da r3)
+
+A r3 fechou os achados 3, 4, 5, 6, 8, 9, 10, 11 e 12 e apontou dois bloqueadores novos (14 e 15) e o resíduo do 2,
+todos com resposta errada servida como `verified`. Pela D5, voltaram ao titular, que autorizou uma rodada restrita a
+eles e aos resíduos 7, 13 e 16. Regra adotada para fonte órfã: na dúvida, bloqueia a região.
+
+- **Achado 14 (remissão promovida a artigo).** Artigo em fonte órfã só é admitido se o caput começa por maiúscula ou
+  por nota entre parênteses. `Art. 45 da Lei ...`, `Art. 45 desta Lei` e qualquer "Art. N" seguido de minúscula viram
+  fronteira `DISPOSITIVO_FORA_DA_ARVORE` no artigo corrente, sem artigo próprio.
+- **Achado 15 (abertura citada órfã descartada).** A abertura citada (`“Art. 2 ...`) entra como bloco, para a máquina
+  de citação controlar o contexto como no `<p>`, só quando o texto imediatamente anterior a introduz (termina em
+  dois-pontos); fora disso, fronteira.
+- **Achado 2 (itens numéricos).** `1. julgar; 2. processar.` e variantes com ponto ou parêntese são fonte composta
+  (fronteira); "Art. 57. O ..." não é item.
+- Medição nas 121 obras do Planalto (snapshot 1.4.0a5, contra 1.2.3): 122 caminhos ganhos, 52 eliminados, 21
+  redações corrigidas, 60 fontes órfãs admitidas (todas dispositivos genuínos, em CF, DL 1.978/1982, LINDB e Lei
+  6.385/1976) e nenhuma fronteira. Os dois caminhos ganhos a mais são os incisos II e III do art. 1º do DL 1.978/1982,
+  antes `UNPARSED_LABEL`.

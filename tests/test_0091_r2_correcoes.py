@@ -35,7 +35,7 @@ def _offline(monkeypatch):
 # B — parser: fronteira sem conteúdo mínimo; compostas numéricas; paridade h)
 
 
-@pytest.mark.parametrize("label", ["Art. 2 (Revogado).", "Art. 2 X.", "Art. 2 rege o caso."])
+@pytest.mark.parametrize("label", ["Art. 2 (Revogado).", "Art. 2 X.", "Art. 2 Rege o caso."])
 def test_r2_orfa_artigo_entra_e_leva_os_proprios_paragrafos(label):
     """Achado 1 (r1/r2): artigo em fonte órfã, com qualquer corpo (inclusive só nota), entra como o <p> equivalente;
     o parágrafo seguinte é dele, nunca do artigo anterior (supervisor: admissão em vez de fronteira que apagava a região)."""
