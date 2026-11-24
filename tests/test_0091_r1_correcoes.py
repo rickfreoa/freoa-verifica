@@ -37,8 +37,8 @@ def test_r1_orfa_artigo_rejeitado_bloqueia_atribuicao_errada(tmp_path):
     )
     doc = parse_planalto(html, base_url="https://example.invalid/l9999.htm")
     paths = {p.path for p in doc.provisions}
-    assert "art2" not in paths
-    assert any(i.code == "DISPOSITIVO_FORA_DA_ARVORE" for i in doc.issues)
+    # r2 (supervisor): o artigo órfão entra como bloco; o § 1 é do art. 2, nunca do art. 1.
+    assert "art2" in paths and "art2.par1" in paths and "art1.par1" not in paths
 
     svc = Verifica(home=tmp_path)
     svc.indexar_obra(
@@ -53,8 +53,9 @@ def test_r1_orfa_artigo_rejeitado_bloqueia_atribuicao_errada(tmp_path):
     )
     res = svc.verificar_citacao("art. 1, § 1 da Lei 9.999/2000", trecho="Outro parágrafo.")
     assert res["text"]["status"] != "verified"
-    res2 = svc.verificar_citacao("art. 2, § 1 da Lei 9.999/2000", trecho="qualquer")
-    assert res2["text"]["status"] in ("not_found", "unknown")
+    assert res["identity"]["status"] != "verified"
+    res2 = svc.verificar_citacao("art. 2, § 1 da Lei 9.999/2000", trecho="Outro parágrafo.")
+    assert res2["identity"]["status"] == "verified" and res2["text"]["status"] == "verified"
 
 
 # ------------------------------------------------------------------ achado 2: fonte composta com <br> gera sentinela

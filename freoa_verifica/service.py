@@ -4563,11 +4563,10 @@ class Verifica:
         from datetime import datetime, timezone
 
         inicio = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-        with da_chamada():
-            with _revalidacao.manutencao_normas_leg():
-                reval = _revalidacao.revalidar(self, limite=limite)
-        with da_chamada():
-            renov = self.renovar_acervo(dias=dias, limite=limite)
+        # Duas chamadas de fachada guardadas e independentes (achado 6 das auditorias r1/r2): cada uma abre a própria
+        # guarda, com o próprio teto por chamada; `manter_acervo` não abre guarda, para não aninhá-las numa só.
+        reval = self.revalidar_acervo(limite=limite)
+        renov = self.renovar_acervo(dias=dias, limite=limite)
         fim = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         status = "ok" if reval.get("status") == "ok" and renov.get("status") == "ok" else (
             "indisponivel" if reval.get("status") == renov.get("status") == "indisponivel" else "parcial"
@@ -4879,5 +4878,5 @@ for _nome in _CONTADAS:
     setattr(Verifica, _nome, _guardar(getattr(Verifica, _nome)))
 
 # Fora da fachada contada, mas podem chegar à rede: só a guarda da chamada (FIX17/F-23).
-for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install", "renovar_acervo", "revalidar_acervo", "manter_acervo", "abrir_normas_leg"):
+for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install", "renovar_acervo", "revalidar_acervo", "abrir_normas_leg"):
     setattr(Verifica, _nome, sob_guarda(getattr(Verifica, _nome)))

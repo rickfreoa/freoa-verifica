@@ -12,7 +12,7 @@ from freoa_verifica.aliases import WorkKey
 from freoa_verifica import bateria
 from freoa_verifica import revalidacao as rev
 from freoa_verifica.citation import extract, parse_one
-from freoa_verifica.connectors.guarda import da_chamada
+
 from freoa_verifica.identity import declared_identity
 from freoa_verifica.mcp_server import _wrap_dispositivo_resposta, _wrap_oficial
 from freoa_verifica.parsers.planalto import parse_planalto
@@ -36,25 +36,29 @@ def _offline(monkeypatch):
 
 
 @pytest.mark.parametrize("label", ["Art. 2 (Revogado).", "Art. 2 X.", "Art. 2 rege o caso."])
-def test_r2_orfa_artigo_bloqueia_filhos_sem_conteudo_minimo(label):
-    html = _html(
-        "<p>Art. 1 Cabe:</p>"
-        + _ORFA.format(label)
-        + "<p>§ 1 Outro.</p><p>Art. 3 Outro artigo.</p>"
-    )
+def test_r2_orfa_artigo_entra_e_leva_os_proprios_paragrafos(label):
+    """Achado 1 (r1/r2): artigo em fonte órfã, com qualquer corpo (inclusive só nota), entra como o <p> equivalente;
+    o parágrafo seguinte é dele, nunca do artigo anterior (supervisor: admissão em vez de fronteira que apagava a região)."""
+    html = _html("<p>Art. 1 Cabe:</p>" + _ORFA.format(label) + "<p>§ 1 Outro.</p><p>Art. 3 Outro artigo.</p>")
     doc = parse_planalto(html, base_url="https://example.invalid/l9999.htm")
-    assert "art2" not in {p.path for p in doc.provisions}
-    assert any(i.code == "DISPOSITIVO_FORA_DA_ARVORE" for i in doc.issues)
+    caminhos = {p.path: p.redactions[-1].text for p in doc.provisions}
+    assert "art2" in caminhos and caminhos.get("art2.par1") == "Outro." and "art1.par1" not in caminhos
+    assert not any(i.code == "DISPOSITIVO_FORA_DA_ARVORE" for i in doc.issues)
 
 
-def test_r2_orfa_notacao_h_parity_orfa_vs_p():
-    orfa = _html("<p>Art. 1 Cabe:</p>" + _ORFA.format("h) (Revogado pela Lei n. 1.)") + "<p>§ 1 Fim.</p>")
-    p_tag = _html("<p>Art. 1 Cabe:</p><p>h) (Revogado pela Lei n. 1.)</p><p>§ 1 Fim.</p>")
-    d_orfa = parse_planalto(orfa, base_url="https://example.invalid/l9999.htm")
-    d_p = parse_planalto(p_tag, base_url="https://example.invalid/l9999.htm")
-    paths_orfa = {p.path for p in d_orfa.provisions}
-    paths_p = {p.path for p in d_p.provisions}
-    assert "art1.ali-h" not in paths_orfa and "art1.ali-h" not in paths_p
+def test_r2_orfa_notacao_h_paridade_orfa_vs_p():
+    """Rótulo só com nota: a fonte órfã e o <p> equivalente produzem o mesmo modelo, com a alínea h própria e sem
+    somar "h)" ao dispositivo anterior (o <p> também somava, antes da 1.2.4)."""
+    corpo = "<p>Art. 1 Cabe:</p><p>I - processar:</p><p>g) a extradição;</p>{}<p>i) o habeas corpus;</p><p>§ 1 Fim.</p>"
+    orfa = _html(corpo.format(_ORFA.format("h) (Revogado pela Lei n. 1.)")))
+    p_tag = _html(corpo.format("<p>h) (Revogado pela Lei n. 1.)</p>"))
+    modelos = []
+    for html in (orfa, p_tag):
+        doc = parse_planalto(html, base_url="https://example.invalid/l9999.htm")
+        modelos.append({p.path: [r.text for r in p.redactions] for p in doc.provisions})
+    assert modelos[0] == modelos[1]
+    assert "art1.inc1.ali-h" in modelos[0] and modelos[0]["art1.inc1.ali-g"] == ["a extradição;"]
+    assert "art1.inc1.ali-i" in modelos[0] and "art1.par1" in modelos[0]
 
 
 def test_r2_fonte_composta_numerica_emite_sentinela():
@@ -172,27 +176,6 @@ def test_r2_estrutural_entradas_normas_leg_passam_por_rota_admitida():
 
 
 # E — orçamentos separados e cursor de renovação
-
-
-def test_r2_manter_orcamentos_independentes(tmp_path, monkeypatch):
-    import contextlib
-
-    monkeypatch.delenv("FV_OFFLINE", raising=False)
-    chamadas: list[str] = []
-    origem = da_chamada
-
-    @contextlib.contextmanager
-    def _spy():
-        with origem() as g:
-            chamadas.append("open")
-            yield g
-
-    monkeypatch.setattr("freoa_verifica.service.da_chamada", _spy)
-    monkeypatch.setattr("freoa_verifica.service._revalidacao.revalidar", lambda *a, **k: {"status": "ok", "contagens": {}})
-    monkeypatch.setattr(Verifica, "renovar_acervo", lambda *a, **k: {"status": "ok", "renovadas": [], "falhas": []})
-    svc = Verifica(home=tmp_path)
-    svc.manter_acervo(limite=1)
-    assert len(chamadas) == 2
 
 
 def test_r2_renovacao_falha_vai_para_fim_da_fila(tmp_path):
@@ -330,3 +313,31 @@ def test_r2_abrangencia_isolada_entre_threads(tmp_path, monkeypatch):
     tb.join(timeout=10)
     assert vistos.get("a") == "integral"
     assert vistos.get("b") == "dispositivo"
+
+
+def test_r2_manter_abre_guardas_independentes_para_revalidar_e_renovar(tmp_path, monkeypatch):
+    """Achado 6 (r1/r2): o teto por chamada do portão vive no escopo da guarda ativa (`_ESCOPOS[guarda]`).
+    `manter` não abre guarda: revalidar e renovar abrem cada uma a sua, logo cada uma tem orçamento próprio."""
+    from freoa_verifica import revalidacao as _rev
+    from freoa_verifica.connectors.guarda import ativa as guarda_ativa
+    from freoa_verifica.service import Verifica
+
+    vistas: dict = {}
+
+    def revalidar(svc, limite=None):
+        vistas["reval"] = guarda_ativa()
+        return {"status": "ok", "contagens": {}, "obras": 0}
+
+    def pendentes(conn):
+        vistas["renov"] = guarda_ativa()
+        return []
+
+    monkeypatch.setattr(_rev, "revalidar", revalidar)
+    monkeypatch.setattr(_rev, "obras_pendentes", pendentes)
+    with Verifica(tmp_path) as s:
+        monkeypatch.setattr(s, "_offline", lambda: False)
+        assert guarda_ativa() is None
+        s.manter_acervo()
+        assert guarda_ativa() is None
+    assert vistas["reval"] is not None and vistas["renov"] is not None
+    assert vistas["reval"] is not vistas["renov"]

@@ -556,6 +556,8 @@ def _classify_line(text: str) -> tuple[str, dict] | None:
     t = text.strip()
     if not t:
         return None
+    if m := re.fullmatch(r"([a-z])\)", t):  # alínea só com rótulo (nota já extraída): "h) (Revogado ...)"
+        return ("ali", {"letter": m.group(1), "rest": ""})
     # Remove aspas iniciais para classificar texto citado
     t_unq = _strip_quotes(t) if _starts_with_quote(t) else t
 
@@ -679,10 +681,8 @@ def _fonte_orfa_admissivel(el) -> bool:
         return False
     if kind[0] == "art" and not (kind[1].get("rest") or "").strip():
         return False
-    resto = re.sub(r"\([^()]*\)", " ", kind[1].get("rest") or kind[1].get("text") or "")
-    if len(re.findall(r"[^\W\d_]", resto)) < 3:
-        return False
-    if kind[0] == "art" and not re.match(r"\s*Art\.?\s*\d+\S*\s+[A-ZÀ-Ý(]", plain):
+    # Rótulo só com nota ("h) (Revogado ...)", "Art. 2 (Revogado).") é dispositivo: entra como o <p> equivalente.
+    if kind[0] == "art" and not re.match(r"\s*Art\.?\s*\d", plain):  # "art." minúsculo é remissão
         return False
     return not _fonte_orfa_composta(plain_breaks, plain)
 
@@ -981,13 +981,6 @@ def parse_html_devices(
     ctx.issues.extend(early_issues)
     prev_in_bq = False
 
-    def _reset_paths_fronteira() -> None:
-        ctx.art_path = None
-        ctx.par_path = None
-        ctx.inc_path = None
-        ctx.ali_path = None
-        ctx.last_device_path = None
-
     for el in blocks:
         if id(el) in fronteira_ids:
             trecho = _normalize_ws(paragraph_plain_text(el))[:160]
@@ -999,8 +992,7 @@ def parse_html_devices(
                     blocking_scope="provision" if ctx.art_path else None,
                 )
             )
-            _reset_paths_fronteira()
-            continue
+            continue  # o contexto segue; o artigo corrente fica ambíguo (leitura e negativa bloqueadas)
         merged = merged_by_id.get(id(el))
         full_plain = merged or paragraph_plain_text(el)
         if not full_plain:

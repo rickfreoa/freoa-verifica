@@ -157,3 +157,13 @@ recaptura, nunca como prova. Implementação pendente de auditoria Codex.
 9. **Bateria:** contagem de `sync_state` exclui fontes de manutenção.
 10. **Concorrência:** `abrangencia` em `ContextVar` por requisição.
 
+
+**Ajustes do supervisor sobre as correções da r2 (antes da r3).** (a) Artigo ou rótulo só com nota em fonte órfã
+(`Art. 2 (Revogado).`, `h) (Revogado ...)`) é admitido como bloco, igual ao `<p>` equivalente; só a fonte composta
+vira fronteira, e a fronteira não zera mais o contexto (zerar apagava o resto do artigo: na CF, 19 caminhos do art.
+102 sumiam). (b) Alínea só com rótulo (`h)`, depois de extraída a nota) passa a ser dispositivo próprio; antes o
+rótulo se somava ao texto do dispositivo anterior, também no `<p>` (CF art. 102, I, g; Lei 11.101 art. 35, II; LC
+214/2025 arts. 201 e 542). (c) `manter_acervo` deixa de abrir guarda: revalidar e renovar abrem cada uma a sua, com
+teto próprio (teste com a guarda ativa real). Medição nas 121 obras do Planalto do snapshot 1.4.0a5, contra a
+1.2.3: 120 caminhos ganhos, 52 caminhos de atribuição errada ou de texto de emenda citada eliminados, 21 redações
+corrigidas (rótulos soltos e textos de outros artigos), nenhuma fronteira `DISPOSITIVO_FORA_DA_ARVORE`.
