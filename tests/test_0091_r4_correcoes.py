@@ -45,6 +45,8 @@ def test_r4_metadados_coerentes_sao_aceitos():
     "art. 5 da Constituição de 1988.\nO contrato do Estado de Sao Paulo segue outra regra.",
     "art. 5 da Constituição de 1988; o Estado de São Paulo segue outra regra.",
     "art. 5 da Constituição de 1988 e o Estado de São Paulo segue outra regra.",
+    "art. 5 da Constituição de 1988 e o contrato do Estado de São Paulo segue outra regra.",
+    "art. 5 da Constituição de 1988, que não trata do Estado de São Paulo.",
 ])
 def test_r4_citacao_federal_sobrevive_a_qualificador_independente(texto):
     c = parse_one(texto)
@@ -59,6 +61,9 @@ def test_r4_citacao_federal_e_estadual_na_mesma_frase():
     "art. 5 da Constituição do Estado de São Paulo",
     "art. 5 da Constituição Paulista",
     "art. 5 da Constituição Estadual",
+    "art. 5 da Constituição, do Estado de São Paulo",
+    "art. 5 da Constituição, Estadual",
+    "art. 5 da Constituição, do Estado de Minas Gerais",
 ])
 def test_r4_constituicao_estadual_continua_nao_federal(texto):
     c = parse_one(texto)

@@ -655,6 +655,11 @@ _LABEL_LINE_START = re.compile(
 
 # Abertura citada ("“Art. 2 Novo texto:") também é artigo: entra como bloco para a máquina de citação controlar o
 # contexto, como no <p> equivalente (0091, r3 achado 15).
+_INICIO_REMISSIVO = re.compile(
+    r"(?:d[aoe]s?|dest[ae]s?|dess[ae]s?|n[ao]s?|nest[ae]s?|pel[ao]s?)\s+(?:Lei|Decreto|Constitui[cç][aã]o|C[oó]digo"
+    r"|Medida\s+Provis[oó]ria|Emenda|Resolu[cç][aã]o|Portaria|Instru[cç][aã]o|Ato|ADCT|Regulamento|Estatuto)\b",
+    re.I,
+)
 _ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
 
 
@@ -694,7 +699,12 @@ def _fonte_orfa_admissivel(el) -> bool:
         # Caput começa por maiúscula ou nota; "Art. 45 da Lei ..." / "Art. 45 desta Lei" é remissão partida
         # pelo markup: não vira artigo próprio, e a região fica bloqueada como fronteira (0091, r3 achado 14).
         citada = re.match(r"\s*[\"“«]", plain)
-        if not citada and not re.match(r"[(\"“«]|[^\W\d_a-zà-ÿ]", (kind[1].get("rest") or "").strip()):
+        resto = (kind[1].get("rest") or "").strip()
+        if not citada and not re.match(r"[(\"“«]|[^\W\d_a-zà-ÿ]", resto):
+            return False
+        # Remissão com maiúscula ("Art. 45 Da Lei ...", "DESTA LEI"): preposição seguida de nome de ato é remissão,
+        # não caput ("Art. 62. Em caso de ...", "Art. 5o Da decisão ..."); fronteira (r4, achado 14).
+        if not citada and _INICIO_REMISSIVO.match(resto):
             return False
     return not _fonte_orfa_composta(plain_breaks, plain)
 
@@ -719,7 +729,8 @@ def _abertura_citada_introduzida(el) -> bool:
     for prev in el.itersiblings(preceding=True):
         texto = paragraph_plain_text(prev) if getattr(prev, "tag", None) in ("p", "font") else ""
         if texto.strip():
-            return texto.rstrip().endswith(":")
+            # Só a introdução que a máquina de emendas reconhece; dois-pontos genéricos não bastam (r4, achado 17).
+            return texto.rstrip().endswith(":") and bool(_AMEND_TRIGGER.search(texto))
     return False
 
 

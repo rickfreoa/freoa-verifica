@@ -34,6 +34,9 @@ def _nao_confirma(res) -> bool:
     "Art. 45 da Lei no 2.004, de 3 de outubro de 1953",
     "Art. 45 desta Lei",
     "Art. 45 rege o caso.",
+    "Art. 45 Da Lei no 2.004, de 3 de outubro de 1953",
+    "Art. 45 Desta Lei",
+    "Art. 45 DA LEI No 2.004",
 ])
 def test_r4_remissao_em_fonte_orfa_bloqueia_e_nao_vira_artigo(tmp_path, orfa):
     """Achado 14: "Art. N" seguido de minúscula é remissão partida pelo markup ou caput ambíguo: fronteira, sem artigo."""
@@ -86,3 +89,25 @@ def test_r4_artigo_com_ponto_apos_o_numero_nao_e_composto():
                   + "<p>§ 1 Outro.</p><p>Art. 58 Depois.</p>")
     caminhos = {p.path: p.redactions[-1].text for p in doc.provisions}
     assert caminhos.get("art57.par1") == "Outro." and not _fronteiras(doc)
+
+
+@pytest.mark.parametrize("intro", ["Art. 1 Compete:", "Art. 1 São exemplos:", "Art. 1 O total devido é:"])
+def test_r4_abertura_citada_apos_dois_pontos_genericos_bloqueia(tmp_path, intro):
+    """r4, achado 17: dois-pontos sem a introdução que a máquina de emendas reconhece não admitem a abertura citada."""
+    html, doc = _doc(f"<p>{intro}</p>" + _ORFA.format("“Art. 2 Novo texto:") + _ORFA.format("I - julgar;")
+                     + "<p>§ 1 Outro.” (NR)</p><p>Art. 3 Fim.</p>")
+    caminhos = {p.path for p in doc.provisions}
+    assert "art2" not in caminhos and "art2.inc1" not in caminhos
+    assert _fronteiras(doc) == ["art1"]
+    svc = _svc(tmp_path, html, doc)
+    assert _nao_confirma(svc.verificar_citacao("art. 2, I da Lei 9.999/2000", trecho="julgar;"))
+    assert _nao_confirma(svc.verificar_citacao("art. 1, I da Lei 9.999/2000", trecho="julgar;"))
+
+
+@pytest.mark.parametrize("caput", ["Art. 62. Em caso de relevância e urgência, cabe medida.", "Art. 62 Da decisão caberá recurso.",
+                                   "Art. 62 No prazo de dez dias, decide."])
+def test_r4_caput_que_comeca_por_preposicao_nao_e_remissao(caput):
+    """Falso positivo medido na CF (art. 62): preposição só indica remissão seguida de nome de ato."""
+    _, doc = _doc("<p>Art. 61 Antes.</p>" + _ORFA.format(caput) + "<p>§ 1 Outro.</p><p>Art. 63 Depois.</p>")
+    caminhos = {p.path: p.redactions[-1].text for p in doc.provisions}
+    assert caminhos.get("art62.par1") == "Outro." and not _fronteiras(doc)

@@ -437,7 +437,7 @@ _CONSTITUICAO_GENTILICO = re.compile(
 # Constituição estadual: não é a Federal nem cai no apelido "Constituição" (identidade errada).
 _CONSTITUICAO_ESTADUAL = _CONSTITUICAO_NAO_FEDERAL
 _FIM_COMPLEMENTO_CONST = re.compile(r"[,;.\n!?]")
-_COORDENACAO_ORACAO = re.compile(r"\s+e\s+", re.I)
+_COORDENACAO_ORACAO = re.compile(r"(?:^|\s+)e\s+", re.I)
 
 
 def _complemento_constituicao_federal(text: str, pos: int) -> str:
@@ -447,8 +447,15 @@ def _complemento_constituicao_federal(text: str, pos: int) -> str:
     fim = pos
     while fim < len(text) and text[fim] in " \t":
         fim += 1
-    if fim >= len(text) or text[fim] in ",;.\n!?":
+    if fim >= len(text) or text[fim] in ";.\n!?":
         return ""
+    if text[fim] == ",":
+        # Aposto territorial ("Constituição, do Estado de São Paulo") continua qualificando a ocorrência (r4, achado 18);
+        # qualquer outra coisa depois da vírgula é outra oração.
+        resto = text[fim + 1 :]
+        m_fim = _FIM_COMPLEMENTO_CONST.search(resto)
+        aposto = resto[: m_fim.start()] if m_fim else resto
+        return aposto.strip() if _CONSTITUICAO_NAO_FEDERAL.match(" " + aposto.lstrip()) else ""
     trecho = text[fim:]
     # Complemento sintático da ocorrência: termina na pontuação ou em "e" que coordena outra oração (0091, r3 achado 13).
     m_fim = _FIM_COMPLEMENTO_CONST.search(trecho)

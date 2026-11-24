@@ -197,3 +197,13 @@ eles e aos resíduos 7, 13 e 16. Regra adotada para fonte órfã: na dúvida, bl
   variável reaproveitada no laço das redações anteriores e marcava como "sem redação" também item bloqueado por
   outro motivo; o `urn` deixara de ser conferido por igualdade). Teste de injeção MCP ajustado: desde a r2 cada campo
   documental tem envelope próprio.
+
+**Ajustes após a auditoria r4 (BLOQUEADOR, levado ao titular pela D5).** A r4 fechou 2, 7 e 16 e apontou quatro
+resíduos com `verified` errado, corrigidos antes de nova auditoria: (14) remissão com maiúscula (`Art. 45 Da Lei`,
+`DESTA LEI`) vira fronteira, reconhecida por preposição seguida de nome de ato, para não bloquear caput como "Art. 62.
+Em caso de ..."; (17) abertura citada órfã só é admitida depois do gatilho de emenda que a máquina de citação reconhece
+(`_AMEND_TRIGGER`), não depois de dois-pontos genéricos; (18) aposto territorial depois de vírgula ("Constituição, do
+Estado de São Paulo") volta a qualificar a ocorrência; (13) "e" que coordena oração passou a ser reconhecido também no
+início do complemento. Risco declarado (achado 19 da r4): números no corpo de fonte órfã ("1. 2. 2000") podem bloquear
+o artigo; não ocorre no corpus medido. Medição repetida: 122 ganhos, 52 eliminados, 21 redações, 60 órfãs admitidas,
+nenhuma fronteira.
