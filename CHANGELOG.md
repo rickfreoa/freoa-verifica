@@ -23,6 +23,12 @@
   marca para renovação o que mudou (gatilho, nunca prova); `fv acervo manter` (revalidar e renovar) e
   `fv acervo agendar` (tarefa diária do usuário, sem administrador); `fv acervo abrir-normas-leg` com escopo
   `metadados_e_renovacao` por home; URL de metadados com URN literal; `doctor` com `acervo_manutencao`.
+- **Rodadas r2 a r4 (auditoria Codex).** Fonte órfã ambígua (remissão "Art. 45 da Lei ...", abertura citada sem
+  introdução, itens numéricos na mesma fonte) bloqueia o artigo em vez de virar dispositivo; abertura citada órfã
+  depois de "...redação:" segue para a máquina de citação, como no `<p>`; alínea só com rótulo é dispositivo próprio,
+  servido como `unknown` / `dispositivo_sem_redacao_normativa` e marcado em `texto_integral`; metadados do
+  normas.leg.br com qualquer identificador de outra obra são recusados; Constituição estadual só pelo complemento
+  sintático da ocorrência; `manter` com guardas independentes.
 
 ## 1.4.0a5 - 15/11/2026
 

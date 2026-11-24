@@ -504,6 +504,9 @@ def _status_com_falhas(status: str, falhas: dict[str, str], n_itens: int) -> dic
     return {"status": "indisponivel", "motivo": motivo, "reason_code": motivo, "fontes_indisponiveis": falhas}
 
 
+_SEM_REDACAO_NORMATIVA = "dispositivo_sem_redacao_normativa"
+
+
 class Verifica:
     """Fachada de serviço: store + conectores + verificação."""
 
@@ -1917,8 +1920,17 @@ class Verifica:
         cabeca = _find_provision(rw.document, path)
         linhas = [f"{_marcador(cabeca.label)} {out['texto']}" if cabeca is not None and re.match(r"Art", cabeca.label or "")
                   else out["texto"]] if out.get("texto") else []
-        linhas += [f"{_marcador(i['rotulo'])} {i['texto']}" for i in itens if i.get("texto")]
+        # Subdispositivo sem texto servido aparece com o motivo, nunca some da leitura integral (0091, r3 achado 16).
+        linhas += [f"{_marcador(i['rotulo'])} {i['texto'] if i.get('texto') else self._sem_texto_integral(i)}"
+                   for i in itens]
         out["texto_integral"] = "\n".join(linhas) if linhas else None
+
+    @staticmethod
+    def _sem_texto_integral(item: dict[str, Any]) -> str:
+        motivo = item.get("reason_code") or (item.get("vigencia") or {}).get("reason_code")
+        if motivo == _SEM_REDACAO_NORMATIVA:
+            return "(sem redação normativa na fonte)"
+        return f"(texto não servido: {motivo or 'indisponível'})"
 
     def _resposta_dispositivo(self, rw, path, data):
         """Construção comum do contrato de obtenção, inclusive nulidade dos campos."""
@@ -1991,8 +2003,16 @@ class Verifica:
                     }
                 )
         text_out, trunc = _truncate(texto, _DEFAULT_TEXT_LIMIT) if texto is not None else (None, False)
+        # Rótulo sem corpo (alínea "h)" depois de extraída a nota) não é redação corrente: declara a ausência de texto
+        # normativo em vez de "vigente_na_fonte" (0091, r3 achado 16). Revogação e inexistência seguem como estão.
+        vig_status, vig_reason = tr.status, tr.reason
+        sem_texto = texto is not None and not texto.strip()
+        if sem_texto and vig_status == "vigente_na_fonte":
+            vig_status, vig_reason = "unknown", _SEM_REDACAO_NORMATIVA
+        status_disp = "unknown" if sem_texto and vig_status not in ("revogado", "nao_existia") else "encontrada"
         return {
-            "status": "encontrada",
+            "status": status_disp,
+            **({"reason_code": _SEM_REDACAO_NORMATIVA} if status_disp == "unknown" else {}),
             "work_id": rw.work_id,
             "situacao_obra": situacao.resumo(sit),  # C2
             "caminho": path,
@@ -2002,8 +2022,8 @@ class Verifica:
             "truncado": trunc,
             "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, rw),
             "vigencia": {
-                "status": tr.status,
-                "reason_code": tr.reason,
+                "status": vig_status,
+                "reason_code": vig_reason,
                 "regras": tr.rules_applied,
                 "flags": tr.flags,
                 "intervalo": (
@@ -2189,7 +2209,7 @@ class Verifica:
             if red := _current_redaction(prov):
                 out["evidencia"].update(path=path, span=list(red.span), parser_version=rw.document.parser_version)
                 if not red.text.strip():
-                    out.update(status="unknown", reason_code="dispositivo_sem_redacao_normativa", texto=None)
+                    out.update(status="unknown", reason_code=_SEM_REDACAO_NORMATIVA, texto=None)
                 out["anotacoes"] = [asdict(a) for a in _annotations_for_cut(rw, path)]
                 for annotation in out["anotacoes"]:
                     annotation["links"] = [ref for block in rw.document.editorial_blocks

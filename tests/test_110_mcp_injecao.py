@@ -32,7 +32,10 @@ def test_mcp_obter_dispositivo_malicioso(svc, monkeypatch):  # noqa: F811
 
     out = asyncio.run(_run())
     bruto = json.dumps(out, ensure_ascii=False)
-    assert bruto.count(DOC_CLOSE) == 1 and bruto.count(DOC_OPEN) == 1, bruto[:400]
+    # 0091 (r2): cada campo documental tem o próprio envelope (situacao_obra.texto_oficial inclusive); o conteúdo
+    # malicioso não abre nem fecha envelope por conta própria.
+    assert bruto.count(DOC_CLOSE) == bruto.count(DOC_OPEN) >= 1, bruto[:400]
+    assert out["texto"].count(DOC_OPEN) == 1 and out["texto"].count(DOC_CLOSE) == 1, out["texto"][:400]
     assert {a["categoria"] for a in out["alertas_conteudo"]["itens"]} >= {"instrucao_sobreposta", "exfiltracao"}
 
 

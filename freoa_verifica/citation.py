@@ -436,7 +436,8 @@ _CONSTITUICAO_GENTILICO = re.compile(
 )
 # Constituição estadual: não é a Federal nem cai no apelido "Constituição" (identidade errada).
 _CONSTITUICAO_ESTADUAL = _CONSTITUICAO_NAO_FEDERAL
-_LIMITE_PALAVRAS_COMPLEMENTO_CONST = 8
+_FIM_COMPLEMENTO_CONST = re.compile(r"[,;.\n!?]")
+_COORDENACAO_ORACAO = re.compile(r"\s+e\s+", re.I)
 
 
 def _complemento_constituicao_federal(text: str, pos: int) -> str:
@@ -444,19 +445,22 @@ def _complemento_constituicao_federal(text: str, pos: int) -> str:
     if pos >= len(text):
         return ""
     fim = pos
-    while fim < len(text) and text[fim] in " \t,":
+    while fim < len(text) and text[fim] in " \t":
         fim += 1
+    if fim >= len(text) or text[fim] in ",;.\n!?":
+        return ""
     trecho = text[fim:]
-    m_fim = re.search(r"[.!?;\n]", trecho)
+    # Complemento sintático da ocorrência: termina na pontuação ou em "e" que coordena outra oração (0091, r3 achado 13).
+    m_fim = _FIM_COMPLEMENTO_CONST.search(trecho)
     if m_fim:
         trecho = trecho[: m_fim.start()]
+    m_coord = _COORDENACAO_ORACAO.search(trecho)
+    if m_coord:
+        trecho = trecho[: m_coord.start()]
     m_cit = re.search(r"\b(?:art(?:igo)?s?\.?|incisos?|par[aá]grafos?|§)\s", trecho, re.I)
     if m_cit:
         trecho = trecho[: m_cit.start()]
-    palavras = trecho.split()
-    if len(palavras) > _LIMITE_PALAVRAS_COMPLEMENTO_CONST:
-        trecho = " ".join(palavras[:_LIMITE_PALAVRAS_COMPLEMENTO_CONST])
-    return trecho
+    return trecho.strip()
 
 
 

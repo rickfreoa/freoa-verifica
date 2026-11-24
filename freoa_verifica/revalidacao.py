@@ -184,22 +184,20 @@ def _validar_metadados_obra(meta: dict, work: WorkKey) -> str | None:
         return "metadados_invalidos"
     from freoa_verifica.connectors.normas_leg import TIPOS, URN
 
-    esperada_urn = urn_da_chave(esperada)
-    urn = meta.get("urn")
     alvo = (TIPOS[esperada.kind], esperada.year, esperada.number)
-    if isinstance(urn, str):
-        if urn != esperada_urn:
+    # Todo identificador presente confere com a obra pedida, sem precedência que esconda contradição (0091, r3 achado 7).
+    for chave in ("urn", "legislationIdentifier", "@id"):
+        valor = meta.get(chave)
+        if not isinstance(valor, str):
+            continue
+        if chave == "urn" and valor != urn_da_chave(esperada):
             return "identidade_divergente"
-    else:
-        lid = meta.get("legislationIdentifier")
-        if isinstance(lid, str):
-            match = URN.fullmatch(lid)
-            if not match or (match[1], int(match[2][:4]), match[3]) != alvo:
+        match = URN.fullmatch(valor)
+        if match is None:
+            if chave != "@id" and valor.strip():
                 return "identidade_divergente"
-    uid = meta.get("@id")
-    if isinstance(uid, str) and URN.fullmatch(uid) and uid not in {urn, meta.get("legislationIdentifier")}:
-        match = URN.fullmatch(uid)
-        if match and (match[1], int(match[2][:4]), match[3]) != alvo:
+            continue
+        if (match[1], int(match[2][:4]), match[3]) != alvo:
             return "identidade_divergente"
     currents: list[str] = []
     for item in enc or []:

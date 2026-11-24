@@ -186,3 +186,14 @@ eles e aos resíduos 7, 13 e 16. Regra adotada para fonte órfã: na dúvida, bl
   redações corrigidas, 60 fontes órfãs admitidas (todas dispositivos genuínos, em CF, DL 1.978/1982, LINDB e Lei
   6.385/1976) e nenhuma fronteira. Os dois caminhos ganhos a mais são os incisos II e III do art. 1º do DL 1.978/1982,
   antes `UNPARSED_LABEL`.
+- **Achado 7 (metadados).** Todo identificador presente (`urn`, `legislationIdentifier`, `@id` quando é URN) confere
+  com a obra pedida; qualquer contradição recusa o sinal (`identidade_divergente`), sem gravar nem marcar renovação.
+- **Achado 13 (filtro territorial).** O qualificador não federal só é procurado no complemento sintático da
+  ocorrência, que termina em pontuação ou em "e" que coordena outra oração; o limite de oito palavras saiu.
+- **Achado 16 (rótulo sem corpo).** Dispositivo com texto vazio sai `status=unknown`,
+  `reason_code=dispositivo_sem_redacao_normativa` e vigência `unknown` com o mesmo motivo (revogação e inexistência
+  seguem como estão); em `texto_integral`, todo subdispositivo sem texto aparece com o motivo, nunca some.
+- **Delegação.** 2, 14 e 15: supervisor. 7, 13 e 16: rascunho do Cursor, revisado (o rascunho lia a vigência de
+  variável reaproveitada no laço das redações anteriores e marcava como "sem redação" também item bloqueado por
+  outro motivo; o `urn` deixara de ser conferido por igualdade). Teste de injeção MCP ajustado: desde a r2 cada campo
+  documental tem envelope próprio.
