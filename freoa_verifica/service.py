@@ -85,6 +85,7 @@ from freoa_verifica.verify import (
 )
 
 from freoa_verifica import acervo as _acervo
+from freoa_verifica import revalidacao as _revalidacao
 from freoa_verifica.limites import CANCELADO, PRAZO, EntradaInvalida, cancelado, Sobrecarga, validar as _validar
 from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica import derivados as _derivados
@@ -1261,6 +1262,11 @@ class Verifica:
         consultadas: list[dict] = []
         for cid in dict.fromkeys(order):  # cada fonte uma vez por chamada (0058)
             if cid not in _LEGIS_NOVA_CAPTURA:
+                continue
+            if (cid == "normas_leg" and _revalidacao.escopo_restrito(self.home)
+                    and not _revalidacao.em_manutencao_normas_leg()):
+                consultadas.append({"fonte": "normas_leg", "resultado": "fora_do_escopo_do_home",
+                                    "motivo": None, "categoria": None})
                 continue
             try:
                 conn_obj = self._get(cid)
@@ -4455,6 +4461,7 @@ class Verifica:
         aviso = self.acervo_status()
         checks.append({"nome": "acervo", "status": "alerta" if aviso else "ok",
                        "detalhe": aviso or "atende ao manifesto/mínimo"})
+        checks.append(_revalidacao.consulta_manutencao(self.home))
         ok = all(c["status"] in {"ok", "alerta"} for c in checks)
         from freoa_verifica.connectors.stj import resumo_atualizacao
 
@@ -4485,36 +4492,91 @@ class Verifica:
             self._acervo_cache = (True, _acervo.status(self.conn, self.home))
         return self._acervo_cache[1]
 
+    def revalidar_acervo(self, limite: int | None = None) -> dict[str, Any]:
+        with _revalidacao.manutencao_normas_leg():
+            return _revalidacao.revalidar(self, limite=limite)
+
+    def manter_acervo(self, dias: int = _acervo.IDADE_RENOVACAO_DIAS, limite: int | None = None) -> dict[str, Any]:
+        from datetime import datetime, timezone
+
+        inicio = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        with _revalidacao.manutencao_normas_leg():
+            reval = self.revalidar_acervo(limite=limite)
+            renov = self.renovar_acervo(dias=dias, limite=limite)
+        fim = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        status = "ok" if reval.get("status") == "ok" and renov.get("status") == "ok" else (
+            "indisponivel" if reval.get("status") == renov.get("status") == "indisponivel" else "parcial"
+        )
+        registro = {
+            "inicio": inicio,
+            "fim": fim,
+            "status": status,
+            "revalidacao": {"status": reval.get("status"), "contagens": reval.get("contagens"), "obras": reval.get("obras")},
+            "renovacao": {"status": renov.get("status"), "candidatas": renov.get("candidatas"),
+                          "renovadas": len(renov.get("renovadas") or []), "falhas": renov.get("falhas")},
+        }
+        alvo = self.home / "manutencao.json"
+        tmp = self.home / "manutencao.json.tmp"
+        tmp.write_text(json.dumps(registro, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, alvo)
+        return {"status": status, "manutencao": registro, "revalidacao": reval, "renovacao": renov}
+
+    def abrir_normas_leg(self, decisao: str) -> dict[str, Any]:
+        from freoa_verifica.connectors.normas_leg import HOST
+
+        escopo = _revalidacao.gravar_escopo(self.home, decisao)
+        con = self._get("normas_leg")
+        liberado = con.portao().reabrir(decisao)
+        estado = con.portao().estado.bloqueio_do_host(HOST, con.portao().relogio.agora())
+        return {"status": "ok", "escopo": escopo, "host_liberado": liberado,
+                "host": estado or {"host": HOST, "bloqueio": None},
+                "reaberturas": con.portao().estado.reaberturas(HOST)}
+
     def renovar_acervo(self, dias: int = _acervo.IDADE_RENOVACAO_DIAS, limite: int | None = None) -> dict[str, Any]:
-        """0091: recaptura, pelas rotas de nova captura admitidas (0048, 0085), as obras legislativas federais cuja
-        captura canônica mais recente passou de `dias` dias. Cada obra tem resultado próprio; falha nunca é silêncio."""
+        """0091: recaptura obras federais envelhecidas ou marcadas `renovacao_pendente` pelos metadados normas.leg."""
         if self._offline():
             return {"status": "indisponivel", "motivo": "offline", "renovadas": [], "falhas": []}
         from datetime import date, timedelta
 
         corte = (date.today() - timedelta(days=dias)).isoformat()
-        rows = self.conn.execute(
+        velhas = self.conn.execute(
             "SELECT w.id, w.authority, w.kind, w.number, w.year, MAX(c.fetched_at) AS ultima FROM work w "
             "JOIN parsed_document p ON p.work_id=w.id JOIN capture c ON c.id=p.capture_id "
             "WHERE w.authority='federal' AND w.year>0 AND p.candidato_ao_vivo=0 AND p.model_json IS NOT NULL "
             "GROUP BY w.id HAVING ultima < ? ORDER BY ultima", (corte,)).fetchall()
+        pendentes = {wid: True for wid in _revalidacao.obras_pendentes(self.conn)}
+        por_id = {r["id"]: r for r in velhas}
+        for wid in pendentes:
+            if wid in por_id:
+                continue
+            row = self.conn.execute(
+                "SELECT w.id, w.authority, w.kind, w.number, w.year, MAX(c.fetched_at) AS ultima FROM work w "
+                "JOIN parsed_document p ON p.work_id=w.id JOIN capture c ON c.id=p.capture_id "
+                "WHERE w.id=? AND p.candidato_ao_vivo=0 AND p.model_json IS NOT NULL GROUP BY w.id", (wid,)
+            ).fetchone()
+            if row:
+                por_id[wid] = row
+        rows = sorted(por_id.values(), key=lambda r: (r["ultima"] or "", r["id"]))
         if limite is not None:
             rows = rows[:max(0, int(limite))]
         renovadas, falhas = [], []
-        for r in rows:
-            work = WorkKey(r["authority"], r["kind"], r["number"], int(r["year"]))
-            obra = {"work_id": r["id"], "obra": f"{work.kind} {work.number}/{work.year}", "captura_anterior": r["ultima"]}
-            try:
-                novo = self._capture_work(work)
-                if isinstance(novo, ResolvedWork):
-                    renovadas.append({**obra, "fonte": novo.source_id, "fetched_at": novo.fetched_at,
-                                      "capture_id": novo.capture_id})
-                else:
-                    falhas.append({**obra, "motivo": "sem_rota" if novo is None else "ambigua"})
-            except SourceUnavailable as exc:
-                falhas.append({**obra, "motivo": exc.reason[:200]})
-            except IdentityMismatch:
-                falhas.append({**obra, "motivo": "IDENTIDADE_DIVERGENTE"})
+        with _revalidacao.manutencao_normas_leg():
+            for r in rows:
+                work = WorkKey(r["authority"], r["kind"], r["number"], int(r["year"]))
+                obra = {"work_id": r["id"], "obra": f"{work.kind} {work.number}/{work.year}",
+                        "captura_anterior": r["ultima"], "pendente": r["id"] in pendentes}
+                try:
+                    novo = self._capture_work(work)
+                    if isinstance(novo, ResolvedWork):
+                        _revalidacao.desmarcar_renovacao_pendente(self.conn, r["id"])
+                        renovadas.append({**obra, "fonte": novo.source_id, "fetched_at": novo.fetched_at,
+                                          "capture_id": novo.capture_id})
+                    else:
+                        falhas.append({**obra, "motivo": "sem_rota" if novo is None else "ambigua"})
+                except SourceUnavailable as exc:
+                    falhas.append({**obra, "motivo": exc.reason[:200]})
+                except IdentityMismatch:
+                    falhas.append({**obra, "motivo": "IDENTIDADE_DIVERGENTE"})
         self._resolver = MemoryResolver()
         self._acervo_cache = None
         status = "ok" if not falhas else ("parcial" if renovadas else "indisponivel")
@@ -4738,5 +4800,5 @@ for _nome in _CONTADAS:
     setattr(Verifica, _nome, _guardar(getattr(Verifica, _nome)))
 
 # Fora da fachada contada, mas podem chegar à rede: só a guarda da chamada (FIX17/F-23).
-for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install", "renovar_acervo"):
+for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install", "renovar_acervo", "revalidar_acervo", "manter_acervo", "abrir_normas_leg"):
     setattr(Verifica, _nome, sob_guarda(getattr(Verifica, _nome)))

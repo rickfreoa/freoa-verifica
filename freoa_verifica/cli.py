@@ -215,6 +215,27 @@ def build_parser() -> argparse.ArgumentParser:
     pn.add_argument("--limite", type=int, default=None, help="máximo de obras por execução")
     _add_json_flag(pn)
 
+    prv = ac.add_parser("revalidar", help="lê metadados normas.leg das obras federais e marca renovação pendente (0091A)")
+    prv.add_argument("--limite", type=int, default=None, help="máximo de obras por execução")
+    _add_json_flag(prv)
+
+    pab = ac.add_parser("abrir-normas-leg", help="grava escopo do home e reabre o host normas.leg.br (0091A)")
+    pab.add_argument("--decisao", required=True, help="texto da decisão que autoriza a reabertura")
+    _add_json_flag(pab)
+
+    pmt = ac.add_parser("manter", help="revalida e renova o acervo; grava manutencao.json (0091A)")
+    pmt.add_argument("--dias", type=int, default=21, help="idade mínima da captura para renovação (padrão: 21)")
+    pmt.add_argument("--limite", type=int, default=None, help="máximo de obras por execução")
+    _add_json_flag(pmt)
+
+    pag = ac.add_parser("agendar", help="agenda execução diária de fv acervo manter (0091A)")
+    acao = pag.add_mutually_exclusive_group(required=True)
+    acao.add_argument("--instalar", action="store_true")
+    acao.add_argument("--remover", action="store_true")
+    acao.add_argument("--mostrar", action="store_true")
+    pag.add_argument("--hora", default="05:43", metavar="HH:MM", help="horário diário (padrão: 05:43)")
+    _add_json_flag(pag)
+
     pc = ac.add_parser("conferir", help="bateria do snapshot: confere o acervo (somente leitura; decisão 0057)")
     pc.add_argument("--home", dest="home_conferir", default=None, metavar="DIR", help="diretório de dados a conferir")
     pc.add_argument("--manifesto", default=None, metavar="ARQ", help="compara com manifesto congelado")
@@ -459,6 +480,29 @@ def main(argv: list[str] | None = None) -> None:
                 data = svc.renovar_acervo(dias=args.dias, limite=args.limite)
                 _print_result(data, as_json=as_json, titulo="Renovação do acervo")
                 raise SystemExit(0 if data.get("status") == "ok" else 1)  # parcial/indisponível: o agendador acusa
+            if args.acervo_cmd == "revalidar":
+                data = svc.revalidar_acervo(limite=args.limite)
+                _print_result(data, as_json=as_json, titulo="Revalidação do acervo")
+                raise SystemExit(0 if data.get("status") == "ok" else 1)
+            if args.acervo_cmd == "abrir-normas-leg":
+                data = svc.abrir_normas_leg(args.decisao)
+                _print_result(data, as_json=as_json, titulo="Escopo normas.leg.br")
+                raise SystemExit(0 if data.get("status") == "ok" else 1)
+            if args.acervo_cmd == "manter":
+                data = svc.manter_acervo(dias=args.dias, limite=args.limite)
+                _print_result(data, as_json=as_json, titulo="Manutenção do acervo")
+                raise SystemExit(0 if data.get("status") == "ok" else 1)
+            if args.acervo_cmd == "agendar":
+                from freoa_verifica import acervo_manutencao as agenda
+
+                if args.instalar:
+                    data = agenda.agendar_instalar(svc.home, args.hora)
+                elif args.remover:
+                    data = agenda.agendar_remover()
+                else:
+                    data = agenda.agendar_mostrar()
+                _print_result(data, as_json=as_json, titulo="Agendamento do acervo")
+                raise SystemExit(0 if data.get("status") in {"ok", "ausente", "nao_suportado"} else 1)
             if args.acervo_cmd == "reconstruir":
                 data = svc.reconstruir_acervo(com_situacao=args.com_situacao)
                 _print_result(data, as_json=as_json, titulo="Reconstrução do acervo")

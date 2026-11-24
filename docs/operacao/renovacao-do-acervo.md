@@ -5,13 +5,28 @@ A vigência de um dispositivo só sai `verified` ou `vigente_na_fonte` com captu
 legislativo passa da janela cerca de um mês depois da data do snapshot.
 
 `fv acervo renovar` recaptura as obras legislativas federais cuja captura canônica mais recente passou de `--dias`
-(padrão 21), pelas rotas de nova captura admitidas (Câmara e `normas_leg`; o Planalto recusa o cliente identificado,
-decisão 0048). Cada obra tem resultado próprio. Sai com código 1 se alguma falhar, para que o agendador acuse.
+(padrão 21), e também as obras marcadas `renovacao_pendente` pela revalidação (qualquer idade), pelas rotas de nova
+captura admitidas (Câmara e `normas_leg`; o Planalto recusa o cliente identificado, decisão 0048). Cada obra tem
+resultado próprio. Sai com código 1 se alguma falhar, para que o agendador acuse.
+
+`fv acervo revalidar` lê os metadados de normas.leg.br (sem alterar o critério de `verified`). Metadados diferentes do
+último lido marcam a obra para renovação; o estado não entra em verificação nem em resposta ao cliente.
+
+`fv acervo abrir-normas-leg --decisao TEXTO` grava `normas_leg/escopo.json` e registra a reabertura do host. Com o
+escopo `metadados_e_renovacao`, consultas sob demanda declaram `fora_do_escopo_do_home`; revalidar e renovar usam a
+rota.
+
+`fv acervo manter` executa revalidar e depois renovar, gravando `manutencao.json` no home. `fv acervo agendar` instala
+tarefa diária no agendador do usuário (Windows: `schtasks`; Linux: systemd user) para `fv acervo manter --json`.
 
 ```bash
-fv acervo renovar --json            # todas as obras com mais de 21 dias
+fv acervo revalidar --json
+fv acervo renovar --json            # todas as obras com mais de 21 dias ou pendentes
 fv acervo renovar --dias 14 --limite 40
-fv doctor --offline --json          # verificação "acervo_idade"
+fv acervo manter --json             # revalidar + renovar + manutencao.json
+fv acervo agendar --instalar --hora 05:43
+fv acervo abrir-normas-leg --decisao "texto da decisão"
+fv doctor --offline --json          # acervo_idade e acervo_manutencao
 ```
 
 O servidor MCP também avisa no início (`[aviso] acervo_envelhecendo`, em stderr).
@@ -25,7 +40,15 @@ servidor:
 fv acervo reconstruir --json        # ~10 min no snapshot da 1.4.0a5; preserva o banco anterior ao lado
 ```
 
+## Manutenção diária (emenda A)
+
+Preferível a renovar isolado: `fv acervo agendar --instalar` registra `fv acervo manter --json` no usuário corrente,
+sem administrador. O `doctor` alerta se `manutencao.json` está ausente, falhou ou terminou há mais de 48 horas.
+
 ## Linux (systemd, ex.: contêiner LXC)
+
+Com `fv acervo agendar --instalar`, a unidade fica em `~/.config/systemd/user/` (`fv-manter.service` e
+`fv-manter.timer`). Para instalação de sistema, exemplo semanal só com renovar:
 
 `/etc/systemd/system/fv-renovar.service`:
 

@@ -1,8 +1,8 @@
 # 0091 - Constituição pelo MCP: dispositivo fora de `<p>`, citação por ano, artigo integral e renovação do acervo
 
 24/11/2026. Proposta do supervisor (Opus) para o titular, a partir de relato de uso externo (MCP instalado de
-`main`/1.4.0a5 em servidor de terceiro, consultado pelo Claude Desktop). **Pendente de aprovação do titular e de
-auditoria Codex.** Altera parser (1.2.4), derivados (versão 6), a conferência legada da 0065 e o contrato de
+`main`/1.4.0a5 em servidor de terceiro, consultado pelo Claude Desktop). **Aprovada pelo titular em 24/11/2026, inclusive a emenda A (§5); pendente de auditoria
+Codex.** Altera parser (1.2.4), derivados (versão 6), a conferência legada da 0065 e o contrato de
 `obter_dispositivo` (campos aditivos). Não altera o critério de `verified`.
 
 ## 1. Fatos
@@ -89,3 +89,46 @@ auditoria Codex.** Altera parser (1.2.4), derivados (versão 6), a conferência 
 `tests/test_0091_cf_entrega.py` (25 testes; os de parser falham sobre a 1.2.3). Reconstrução de cópia do home do
 snapshot 1.4.0a5 (843 capturas, 0 falhas, 0 divergentes): CF art. 5º, LXXVIII, arts. 57, 62 e 222 `encontrada`;
 art. 61, § 3º `inexistente`.
+
+
+## 5. Emenda A (24/11/2026): revalidação por metadados, escopo do `normas_leg` e manutenção agendada
+
+Aprovada pelo titular em 24/11/2026, em duas respostas afirmativas à proposta do supervisor: (a) reabrir a rota
+`normas_leg` no home real só para metadados e renovação; (b) admitir os metadados do normas.leg.br como gatilho de
+recaptura, nunca como prova. Implementação pendente de auditoria Codex.
+
+### 5.1 Fatos (sonda de 24/11, `claude/sonda-2026-11-24-npl-push-normasleg.md`)
+
+1. NPL e Planalto clássico: conexão reiniciada para o cliente identificado, como em 19/11. Barreira mantida.
+2. Push da Legislação: página de sistema indisponível (acesso suspenso por recomendação do CISC GOV.BR). Mesmo ativo,
+   avisa atos novos por e-mail, não recompilações.
+3. normas.leg.br, metadados da CF (`tipo_documento=maior-detalhe`): 200, 4,79 MB; `dateModified` 2026-10-16;
+   encoding `Current` (`CompilacaoMonoVigente`) com versão `@2026-10-16` no `@id`; sem ETag nem Last-Modified.
+4. Home real: barreira persistente do host desde 14/11/2026 12:05 (`desafio_captcha`, 403) na URL de metadados da
+   Lei 6.404 montada por `urlencode` (`urn%3Alex%3A...`). Na mesma sessão, a URL com `:` e `;` literais foi obtida
+   às 11:33; a sonda de 24/11, também literal, obteve 200. Hipótese não demonstrada: o desafio responde à forma
+   codificada. Não se provoca o desafio para testá-la.
+
+### 5.2 Decisões
+
+1. **Gatilho, não prova.** O sinal de mudança é o par (`dateModified`, data da versão `Current` no `@id`). Fica em
+   `sync_state` e só decide o que recapturar. Nenhum caminho de verificação, temporal, situação, busca ou resposta
+   lê esse estado. Não há inferência de vigência a partir de "a compilação da Câmara não mudou".
+2. **Revalidação.** `fv acervo revalidar` lê os metadados das obras federais do acervo pela rota `normas_leg` (mesmo
+   portão: robots, ritmo de 5 s, teto, barreiras, registro de obtenção). Sinal diferente do último lido marca a obra
+   como `renovacao_pendente`. Primeira leitura só registra. Falha é declarada por obra; não marca nem desmarca.
+3. **Renovação.** `fv acervo renovar` passa a incluir as obras pendentes, qualquer que seja a idade da captura, e
+   desmarca só depois de recaptura bem-sucedida.
+4. **URN literal.** A URL de metadados usa `:`, `;` e `@` literais, na forma do `@id` publicado pela própria fonte.
+5. **Escopo do `normas_leg` por home.** Arquivo `normas_leg/escopo.json` (`{"escopo": "metadados_e_renovacao",
+   "decisao": ..., "em": ...}`). Com ele, a consulta (resolução e obtenção sob demanda) não usa `normas_leg` e
+   declara `{"fonte": "normas_leg", "resultado": "fora_do_escopo_do_home"}` em `fontes_consultadas`; revalidação e
+   renovação usam. Sem o arquivo, o comportamento é o de antes (outras instalações não mudam).
+6. **Reabertura registrada.** `fv acervo abrir-normas-leg --decisao TEXTO` grava o escopo e reabre a barreira do
+   host pelo `NormasPortao.reabrir` (registro em `reaberturas`). Novo desafio fecha o host de novo, pelas regras
+   do portão, sem nova tentativa.
+7. **Manutenção agendada.** `fv acervo manter` executa revalidar e depois renovar, e grava `manutencao.json` no home
+   (início, fim, contagens, falhas). `fv acervo agendar --instalar | --remover | --mostrar [--hora HH:MM]` registra
+   a execução diária no agendador do usuário, sem privilégio de administrador: Agendador de Tarefas no Windows
+   (`schtasks`, tarefa do usuário corrente), unidade e timer de usuário do systemd no Linux. `doctor` alerta se a
+   última manutenção concluída tem mais de 48 horas ou falhou.

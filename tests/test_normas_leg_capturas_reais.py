@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from urllib.parse import unquote, urlencode
+from urllib.parse import unquote
 
 import pytest
 
@@ -21,7 +21,7 @@ BIN_LC118 = nl.BASE + "/api/public/binario/2d8f8857-d7d2-4f31-b1ad-6e64cc27e7fe/
 
 
 def _api(urn: str) -> str:
-    return nl.BASE + "/api/public/normas?" + urlencode({"urn": urn, "tipo_documento": "maior-detalhe"})
+    return nl.url_metadados(urn)
 
 
 def _real(chave: str, url: str, mime: str):

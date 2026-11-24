@@ -7,7 +7,7 @@ import unicodedata
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import date, datetime, timezone
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 from freoa_verifica.aliases import WorkKey
 from freoa_verifica.connectors.base import Candidate, Connector, HealthProbe, HealthReport, Unavailable, register
@@ -64,6 +64,12 @@ def identidade(key):
 def urn_da_chave(w):
     when = "1988-10-05" if w.kind == "constituicao" else str(w.year)
     return f"urn:lex:br:federal:{TIPOS[w.kind]}:{when};{w.number}"
+
+
+def url_metadados(urn: str) -> str:
+    url = BASE + "/api/public/normas?" + f"urn={quote(urn, safe=':;@~.-')}&tipo_documento=maior-detalhe"
+    admitir(url)
+    return url
 
 
 def url_texto(value):
@@ -150,7 +156,7 @@ class NormasLegConnector(Connector):
                     break
         w = identidade(key)
         urn = urn_da_chave(w)
-        url = BASE + "/api/public/normas?" + urlencode({"urn": urn, "tipo_documento": "maior-detalhe"})
+        url = url_metadados(urn)
         resp = self.portao().obter(url)
         try:
             payload = json.loads(texto_do_response(resp))
