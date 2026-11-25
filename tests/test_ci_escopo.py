@@ -22,6 +22,7 @@ _spec.loader.exec_module(ce)
 @pytest.mark.parametrize("arquivos", [
     ["docs/decisoes/0087-reordenacao-sessao-assistida.md"],
     ["docs/auditoria/1.4.0/release-1.4.0a5.md", "docs/auditoria/1.4.0/bench/freoa_raw.jsonl"],
+    ["docs/auditoria/1.4.0/release-1.4.0a6.md"],
 ])
 def test_registro_dispensa(arquivos):
     assert ce.so_registro(arquivos) is True
