@@ -9,3 +9,4 @@ tests/porta_l/** -text
 scripts/porta_l/** -text
 
 docs/auditoria/1.4.0/il2a-sondas/** -text
+*.bin binary

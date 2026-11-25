@@ -44,10 +44,15 @@ def connector_fetch(
     e uma fonte que desafiou ou recusou não é consultada de novo.
     """
     def baixar(**extra: Any) -> Response:
+        from freoa_verifica.assistida.indicacao import observar_tentativa
+
         try:
-            return _connector_fetch(url, **extra, **kw)
+            resposta = _connector_fetch(url, **extra, **kw)
+            observar_tentativa(url, metodo=kw.get("method", "GET"), user_agent=kw.get("user_agent", "identified"))
+            return resposta
         except Unavailable as exc:
             final = reclassificar(exc) if reclassificar is not None else exc
+            observar_tentativa(url, metodo=kw.get("method", "GET"), user_agent=kw.get("user_agent", "identified"), erro=final)
             if final is exc:
                 raise
             raise final from exc

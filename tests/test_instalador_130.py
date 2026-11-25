@@ -58,6 +58,8 @@ def test_registro_final_so_ao_fim_com_digest_do_snapshot():
     assert texto.index('$etapa = "doctor offline"') < final
     assert "digest_snapshot = $info.proveniencia.snapshot_sha256" in texto[final - 300:final + 100]
     assert "sha256_wheel = $shaWheel" in texto[final - 300:final + 100]
+    assert 'Invoke-NativeChecked $etapa $fv @("sessao", "--help")' in texto
+    assert texto.index('$etapa = "validar comando sessao"') < final
 
 
 @pytest.mark.skipif(os.name != "nt", reason="PowerShell Windows")

@@ -124,16 +124,31 @@ if os.name == "nt":
                 root = self._given_basetemp or Path(".tmp")
                 root = Path(root).resolve()
                 root.mkdir(parents=True, exist_ok=True)
-                self._basetemp = root / ("pytest-" + uuid4().hex)
-                self._basetemp.mkdir()
+                # Pytests aninhados (guarda de rede/cópia da wheel) repetem
+                # esta árvore. Caminhos longos podem bloquear o SQLite nativo
+                # do Windows; nomes curtos preservam isolamento e a ACL herdada.
+                while True:
+                    candidate = root / ("pytest-" + uuid4().hex[:16])
+                    try:
+                        candidate.mkdir()
+                    except FileExistsError:
+                        continue
+                    self._basetemp = candidate
+                    break
             return self._basetemp
 
         def mktemp(self, basename, numbered=True):
             basename = self._ensure_relative_to_basetemp(basename)
-            name = basename + uuid4().hex if numbered else basename
-            directory = self.getbasetemp() / name
-            directory.mkdir()
-            return directory
+            while True:
+                name = basename[:16] + uuid4().hex[:16] if numbered else basename
+                directory = self.getbasetemp() / name
+                try:
+                    directory.mkdir()
+                except FileExistsError:
+                    if numbered:
+                        continue
+                    raise
+                return directory
 
     @pytest.fixture(scope="session")
     def tmp_path_factory(request):

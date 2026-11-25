@@ -21,6 +21,20 @@ snapshot 1.1.0 reprocessado com o código 1.2.0 e da semente TJDFT. Instalado em
 
 ## Fonte a fonte
 
+### Acesso assistido (0089; implementação ainda sem aceite integral)
+
+| Fonte | Público humano | Automático | Assistido |
+|---|---|---|---|
+| Planalto | Compilação pública sem autenticação, por declaração do perfil | Mantém a recusa identificada da 0048 | Perfil implementado; prova real e sessão manual pendentes |
+| normas_leg | API pública, CC BY 4.0 declarada no JSON | Mantém portão e barreira da 0085; reabertura só por comando local confirmado | Perfil XHR A/B com vínculo UUID/URN; prova real e sessão manual pendentes |
+| TJSP | Sem nova afirmação nesta trilha | Inalterado | Não habilitado; POST exige decisão própria |
+| NPL/DOU | Sem nova afirmação nesta trilha | Permanecem barrados | Não habilitados |
+
+`listar_fontes.fontes[].cobertura.acesso` e a cobertura dos snapshots separam os três
+denominadores. Nenhuma captura assistida é somada à contagem automática. Declaração
+de perfil não afirma sessão executada, `verified`, vigência ou aprovação da Porta L.
+Ver [limites da entrega](auditoria/0089/implementacao-trilha-b.md).
+
 | Fonte | O que entra e qual prova | Limite |
 |---|---|---|
 | Planalto | HTML oficial com hash; árvore de dispositivos sob sentinelas (ADCT com escopo próprio); redações e atos alteradores presentes na página; parse em processo isolado com limites. | História anterior só quando riscada na própria página; data do ato não é início de vigência (decisão 0002). **Sem atualização ao vivo na 1.3.0:** o Planalto encerra a conexão do cliente que se identifica (UA `freoa-verifica/<versão>`, sem exceção de navegador; decisão 0048), e o pedido ao vivo responde `unavailable(recusa_identificado_planalto)`, categoria `recusa_identificado`, vermelha na saúde das fontes. O acervo instalado continua atendendo consultas sem rede. |

@@ -7,6 +7,19 @@ CONTRATO_VERSAO = "1"
 DEPRECATED: frozenset[str] = frozenset()
 # `experimental` pode mudar sem aviso; fora da exigência do teste de contrato.
 EXPERIMENTAL: frozenset[str] = frozenset({
+    "listar_fontes:fontes[].sessao_assistida",
+    "buscar_legislacao:sessoes_assistidas",
+    "buscar_legislacao:fontes.*.sessao_assistida",
+    "buscar_legislacao:falhas[].sessao_assistida",
+    "verificar_citacao:sessoes_assistidas",
+    "verificar_citacao:fontes.*.sessao_assistida",
+    "verificar_citacao:falhas[].sessao_assistida",
+    "verificar_texto:sessoes_assistidas",
+    "verificar_texto:fontes.*.sessao_assistida",
+    "verificar_texto:falhas[].sessao_assistida",
+    "obter_dispositivo:sessoes_assistidas",
+    "obter_dispositivo:fontes.*.sessao_assistida",
+    "obter_dispositivo:falhas[].sessao_assistida",
     "listar_fontes:fontes[].cobertura",
     "listar_fontes:fontes[].ultimo_health",
     "listar_fontes:fontes[].capacidade",
