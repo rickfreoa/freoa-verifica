@@ -1,6 +1,6 @@
 # Histórico de versões
 
-## Não publicado (branch `fix/cf-entrega-mcp`) - decisão 0091, pendente de aprovação e auditoria
+## 1.4.0a6 - 25/11/2026 (decisão 0091)
 
 - **Auditoria r1 (emenda A).** Dez achados do parecer Codex: fronteira no parser, Constituição por ano, reconfirmação estrita, rota normas_leg, cursor de manutenção, metadados, MCP, evidência, manifesto, bateria.
 - **Parser do Planalto 1.2.4 (confirmação indevida corrigida).** Dispositivo em fonte órfã fora de `<p>` era
