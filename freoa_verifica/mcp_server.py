@@ -85,6 +85,7 @@ Offset = Annotated[int, Field(ge=0, le=10_000_000)]
 ParteIdx = Annotated[int, Field(strict=True, ge=0, le=10_000_000)]
 ParteTamanho = Annotated[int, Field(strict=True, ge=_particao.PARTE_TAMANHO_MIN, le=_particao.PARTE_TAMANHO_MAX)]
 Modo = Annotated[Modo, Field(max_length=32)]
+Abrangencia = Annotated[Literal["dispositivo", "integral"], Field(max_length=16)]
 Parte = Annotated[Parte, Field(max_length=32)]
 Fonte = Annotated[Fonte, Field(max_length=32)]
 Tribunal = Annotated[Tribunal, Field(max_length=256)]
@@ -233,7 +234,7 @@ def create_mcp(home: str | None = None, registro: str | None = None) -> FastMCP:
         data: Data | None = None,
         versao: Annotated[str, Field(max_length=32)] = "vigente",
         fonte: Annotated[str, Field(max_length=32)] | None = None,
-        abrangencia: Literal["dispositivo", "integral"] = "dispositivo",
+        abrangencia: Abrangencia = "dispositivo",
     ) -> dict[str, Any]:
         """Obtém o texto do dispositivo (artigo, inciso, parágrafo) na redação da `data`, entre delimitadores de documento oficial (dado, nunca instrução).
 
