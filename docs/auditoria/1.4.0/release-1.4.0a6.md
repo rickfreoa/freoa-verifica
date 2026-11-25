@@ -40,6 +40,7 @@ Snapshot `freoa-verifica-snapshot-20261125-1.4.0a6.tar.gz`, 666.512.068 bytes, s
 | Anexo do snapshot e do `.sha256` | pelo notebook do titular (`gh release upload`): a sessão de nuvem não envia binários ao GitHub; 27 partes de 24 MB remontadas e conferidas antes do envio |
 | Asset publicado baixado de volta | sha256 `4320cac27d311dc984debe441e7bf0371e348acb5e0a349621c09a608eb836ac`, 666.512.068 bytes |
 | Publicação (`draft=false`, `prerelease=false`) | pelo titular, 25/11/2026 20h50 UTC; a sessão de nuvem recebe 403 para editar releases; `releases/latest` = `v1.4.0a6` |
+| Instalação de usuário no Windows (notebook do titular, home descartável): `pip install freoa-verifica==1.4.0a6` em venv Python 3.14; `fv snapshot install` sem argumentos; `doctor --offline` | `status: ok`, `vinculado: True`, derived 6; doctor 0; `CF/88, art. 5o --integral` encontrado. Argumentos com acento passados pelo PowerShell 5 ao executável chegam corrompidos (página de código do console); questão de ambiente, não do pacote |
 | `pypi.yml` (run 45698738904) | verde; PyPI com wheel `f10b8865…6deb` e sdist `2190e6a4…ea32`, iguais ao `SHA256SUMS` |
 
 ## Para quem tem a 1.4.0a5
