@@ -66,6 +66,9 @@ def declared_identity(document):
         if bcb and not key.year and re.match(r'\d{4}-',bcb[3]):
             date = bcb[3][:10]
             key = WorkKey(key.authority,key.kind,key.number,int(date[:4]))
+        if key.kind == 'constituicao' and key.number != str(key.year):
+            # Constituição se identifica pelo ano (1824 a 1988); a data da epígrafe prevalece.
+            key = WorkKey(key.authority,key.kind,str(key.year),key.year)
         if not key.year and document.profile == 'cvm_html':
             # Data do ato exibida antes da ementa; nunca anos de remissões.
             first = document.text.splitlines()[1:2]

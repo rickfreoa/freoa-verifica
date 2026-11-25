@@ -1,5 +1,41 @@
 # Histórico de versões
 
+## 1.4.0a6 - 25/11/2026 (decisão 0091)
+
+- **Auditoria r1 (emenda A).** Dez achados do parecer Codex: fronteira no parser, Constituição por ano, reconfirmação estrita, rota normas_leg, cursor de manutenção, metadados, MCP, evidência, manifesto, bateria.
+- **Parser do Planalto 1.2.4 (confirmação indevida corrigida).** Dispositivo em fonte órfã fora de `<p>` era
+  descartado; artigos inteiros (CF arts. 57, 62, 126, 222; ADCT art. 52) ficavam fora do modelo e seus parágrafos
+  sob o artigo anterior. `art. 61, § 3º, da CF` com o texto do art. 62, § 3º saía `verified`; `art. 5º, LXXVIII`
+  saía `inexistente`. Também LINDB art. 6º, § 1º, Lei 6.385 art. 21 e DL 1.978/1982. Fonte com mais de um
+  dispositivo gera `DISPOSITIVO_FORA_DA_ARVORE` e impede negativa.
+- **Derivados 6.** Homes anteriores respondem `ACERVO_DESATUALIZADO` até `fv acervo reconstruir`. Emenda à 0065:
+  decisão legada já conferida não exige modelo idêntico quando muda a versão do parser.
+- **`obter_dispositivo(abrangencia="integral")`** (MCP, REST, `fv lei --integral`): artigo com incisos, parágrafos e
+  alíneas, cada um com vigência própria, e `texto_integral`.
+- **Capturas recentes não canônicas** (`capturas_recentes_nao_canonicas`) declaradas em `obter_dispositivo`; reconfirmação retirada na auditoria r2.
+  `capturas_recentes_nao_canonicas` explica por que a captura servida é antiga.
+- **Citação:** "Constituição Federal de 1988, art. 5º", "CF/88", "CRFB/88" e "CR/88"; Constituições de 1824 a 1969
+  como obras próprias (nunca a de 1988); Constituição estadual não vira Federal. Semente e `planalto.work_key`
+  deixam de registrar toda `CF` como 1988.
+- **`fv acervo renovar`** e aviso `acervo_envelhecendo` (`doctor`, início do MCP); agendamento em
+  `docs/operacao/renovacao-do-acervo.md`.
+- **Emenda A da 0091:** `fv acervo revalidar` lê os metadados do normas.leg.br (`dateModified` e versão `Current`) e
+  marca para renovação o que mudou (gatilho, nunca prova); `fv acervo manter` (revalidar e renovar) e
+  `fv acervo agendar` (tarefa diária do usuário, sem administrador); `fv acervo abrir-normas-leg` com escopo
+  `metadados_e_renovacao` por home; URL de metadados com URN literal; `doctor` com `acervo_manutencao`.
+- **Rodadas r2 a r4 (auditoria Codex).** Fonte órfã ambígua (remissão "Art. 45 da Lei ...", abertura citada sem
+  introdução, itens numéricos na mesma fonte) bloqueia o artigo em vez de virar dispositivo; abertura citada órfã
+  depois de "...redação:" segue para a máquina de citação, como no `<p>`; alínea só com rótulo é dispositivo próprio,
+  servido como `unknown` / `dispositivo_sem_redacao_normativa` e marcado em `texto_integral`; metadados do
+  normas.leg.br com qualquer identificador de outra obra são recusados; Constituição estadual só pelo complemento
+  sintático da ocorrência; `manter` com guardas independentes.
+- **Regra conservadora do titular (rodadas r5 e r6).** Artigo inteiro em fonte órfã só entra se continua a
+  numeração do ato; remissão com preposição e determinante vira fronteira. "Constituição" sem Federal, da República,
+  do Brasil, ano ou CF/CRFB/CR, ou com qualificador territorial na mesma frase, sai `provavel`
+  (`requer_conferencia`), nunca exata. Encerramento: marca de ente estadual ou municipal em qualquer ponto do texto
+  (Constituição Estadual, CE/SP, Lei Orgânica, "do Estado de ...") também impede a exata; resíduo do parser
+  declarado na 0091.
+
 ## 1.4.0a5 - 15/11/2026
 
 Mesmo conteúdo funcional da 1.4.0a4, que foi construída (tag `v1.4.0a4`, rascunho no GitHub) e não

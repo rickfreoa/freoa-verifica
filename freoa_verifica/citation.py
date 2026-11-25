@@ -406,6 +406,103 @@ _YEAR = r"(\d{2,4})"
 
 _WORK_PATTERNS: list[tuple[re.Pattern[str], str, str]] = []
 
+# Constituições brasileiras, identificadas pelo ano. A Emenda Constitucional n. 1/1969 é tratada como a
+# "Constituição de 1969" no uso forense; fica como obra própria, nunca como a de 1988.
+CONSTITUICOES_FEDERAIS: frozenset[int] = frozenset({1824, 1891, 1934, 1937, 1946, 1967, 1969, 1988})
+_CONSTITUICAO_ANO_CURTO = {24: 1824, 91: 1891, 34: 1934, 37: 1937, 46: 1946, 67: 1967, 69: 1969, 88: 1988}
+_QUALIFICADOR_CONSTITUICAO = (
+    r"(?:\s+(?:Federal(?:\s+Brasileira)?|Pol[ií]tica\s+do\s+Imp[eé]rio\s+do\s+Brasil"
+    r"|da\s+Rep[uú]blica(?:\s+Federativa)?(?:\s+do\s+Brasil)?"
+    r"|dos\s+Estados\s+Unidos\s+do\s+Brasil|do\s+Brasil|Brasileira))*"
+)
+_CONSTITUICAO = (
+    r"\b(?:Constitui[cç][aã]o"
+    + _QUALIFICADOR_CONSTITUICAO
+    + r"(?:\s*,?\s*\(?\s*de\s+(?:\d{1,2}[ºo°]?\s+de\s+[A-Za-zçÇ]+\s+de\s+)?(\d{4}|\d{2})\)?)?"
+    r"|(?:CF|CRFB|CR)\s*/\s*(\d{4}|\d{2})"
+    r"|(?:CF|CRFB|CR)\s+de\s+(\d{4}|\d{2}))(?!\w)"
+)
+_CONSTITUICAO_NAO_FEDERAL = re.compile(
+    r"(?:\s+(?:do\s+Estado\b|dos?\s+Estados?\s+(?!Unidos)|Estadual\b|Municipal\b|Distrital\b|do\s+Distrito\s+Federal\b)"
+    r"|\s+(?:Paulista|Mineira|Fluminense|Ga[uú]cha|Baiana|Catarinense|Paranaense|Pernambucana|Cearense|Goiana|Capixaba"
+    r"|Paraibana|Potiguar|Alagoana|Sergipana|Maranhense|Piauiense|Paraense|Amazonense|Acreana|Rondoniense|Roraimense"
+    r"|Amapaense|Tocantinense|Sul-Mato-Grossense|Mato-Grossense)\b"
+    r"|(?:[A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)*ense)\b)",
+    re.I,
+)
+_CONSTITUICAO_GENTILICO = re.compile(
+    r"\bConstitui[cç][aã]o\s+(?:sul-rio-grandense|mato-grossense|[A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)*ense)\b",
+    re.I,
+)
+# Constituição estadual: não é a Federal nem cai no apelido "Constituição" (identidade errada).
+_CONSTITUICAO_ESTADUAL = _CONSTITUICAO_NAO_FEDERAL
+# Qualificador territorial em qualquer ponto da mesma frase (aposto, coordenação, oração invertida): a Constituição
+# citada pode ser a estadual; a extração continua, mas como provável, nunca exata (0091, r5, regra conservadora).
+_TERRITORIAL_NA_FRASE = re.compile(
+    # Só marcas de ente determinado; "dos Estados", "do Distrito Federal", "Justiça Estadual" e "do Estado Democrático"
+    # aparecem em qualquer texto federal e não indicam outra Constituição.
+    r"\bdo\s+Estado\s+d[eoa]s?\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]|\bd[oe]\s+Munic[ií]pio\s+d[eoa]s?\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]"
+    r"|\b(?:Constitui[cç][aã]o|Carta)\s+(?:Estadual|Municipal|Distrital|do\s+Estado|Paulista|Mineira|Fluminense"
+    r"|Ga[uú]cha|Baiana|Catarinense|Paranaense|Pernambucana|Cearense|Goiana|Capixaba|Paraibana|Potiguar|Alagoana"
+    r"|Sergipana|Maranhense|Piauiense|Paraense|Amazonense|Acreana|Rondoniense|Roraimense|Amapaense|Tocantinense"
+    r"|Sul-Mato-Grossense|Mato-Grossense|[A-Za-zÀ-ÿ-]+ense\b)|Constitui[cç][oõ]es\s+Estaduais"
+    r"|\bCE\s*/\s*[A-Z]{2}\b|\bLei\s+Org[aâ]nica\b|\b(?:a|da)\s+(?:Estadual|Municipal|Distrital)\b",
+    re.I,
+)
+
+
+def _territorial_na_frase(text: str, pos: int) -> bool:
+    """Titular, após a r7: qualificador territorial em qualquer ponto do texto (antes ou depois, em outra frase,
+    por sigla como CE/SP ou Lei Orgânica) impede Constituição exata; o nome guarda a origem da regra na frase."""
+    del pos
+    return bool(_TERRITORIAL_NA_FRASE.search(text))
+
+
+_FIM_COMPLEMENTO_CONST = re.compile(r"[,;.\n!?]")
+_COORDENACAO_ORACAO = re.compile(r"(?:^|\s+)e\s+", re.I)
+
+
+def _complemento_constituicao_federal(text: str, pos: int) -> str:
+    """Trecho imediato após o casamento da Constituição, sem atravessar fim de oração ou nova citação."""
+    if pos >= len(text):
+        return ""
+    fim = pos
+    while fim < len(text) and text[fim] in " \t":
+        fim += 1
+    if fim >= len(text) or text[fim] in ";.\n!?":
+        return ""
+    if text[fim] == ",":
+        # Aposto territorial ("Constituição, do Estado de São Paulo") continua qualificando a ocorrência (r4, achado 18);
+        # qualquer outra coisa depois da vírgula é outra oração.
+        resto = text[fim + 1 :]
+        m_fim = _FIM_COMPLEMENTO_CONST.search(resto)
+        aposto = resto[: m_fim.start()] if m_fim else resto
+        return aposto.strip() if _CONSTITUICAO_NAO_FEDERAL.match(" " + aposto.lstrip()) else ""
+    trecho = text[fim:]
+    # Complemento sintático da ocorrência: termina na pontuação ou em "e" que coordena outra oração (0091, r3 achado 13).
+    m_fim = _FIM_COMPLEMENTO_CONST.search(trecho)
+    if m_fim:
+        trecho = trecho[: m_fim.start()]
+    m_coord = _COORDENACAO_ORACAO.search(trecho)
+    if m_coord:
+        trecho = trecho[: m_coord.start()]
+    m_cit = re.search(r"\b(?:art(?:igo)?s?\.?|incisos?|par[aá]grafos?|§)\s", trecho, re.I)
+    if m_cit:
+        trecho = trecho[: m_cit.start()]
+    return trecho.strip()
+
+
+
+def ano_constituicao(m: re.Match[str]) -> int | None:
+    """Ano declarado da Constituição citada (None: sem ano, isto é, a vigente)."""
+    raw = next((g for g in m.groups() if g), None)
+    if raw is None:
+        return None
+    ano = int(raw)
+    if len(raw) == 2:
+        return _CONSTITUICAO_ANO_CURTO.get(ano, -1)
+    return ano
+
 
 def _compile_work_patterns() -> None:
     global _WORK_PATTERNS
@@ -447,8 +544,8 @@ def _compile_work_patterns() -> None:
             "federal",
             "lei",
         ),
-        # Constituição / CF/88
-        (r"\bConstitui[cç][aã]o(?:\s+Federal)?\b", "federal", "constituicao"),
+        # Constituição / CF/88: o ano declarado identifica a Constituição (1824 a 1988); sem ano, a vigente.
+        (_CONSTITUICAO, "federal", "constituicao"),
         # CVM
         (
             rf"\b(?:Resolu[cç][aã]o\s+CVM|RCVM|Res\.?\s*CVM)\s*(?:n\.?[º°o]?\.?\s*)?{_NUM}"
@@ -703,7 +800,7 @@ def _parse_work_match(
     if not _reference_boundary(text, m.start(), m.end()):
         return None
     # Abreviações exigem caixa original e separação do número da norma.
-    for token in re.finditer(r"\b(?:LC|MP|RCVM|ICVM|CF|CVM|CMN|BCB)\b", raw, re.I):
+    for token in re.finditer(r"\b(?:LC|MP|RCVM|ICVM|CF|CRFB|CR|CVM|CMN|BCB)\b", raw, re.I):
         if token[0] != token[0].upper():
             return None
     if re.search(r"[A-Za-zÀ-ÿ]\d", raw) or (m.end() < len(text) and text[m.end()].isalnum()):
@@ -720,11 +817,22 @@ def _parse_work_match(
     # Circular genérica sem contexto BCB — ainda authority=bcb conforme spec
     number = _number_from_match(m, kind)
     year = _year_from_match(m)
-    if kind == "constituicao":
-        year = 1988
-        number = "1988"
     conf = "exata"
     flags = ["apelido"] if kind == "constituicao" else []
+    if kind == "constituicao":
+        declarado = ano_constituicao(m)
+        year = 1988 if declarado is None else declarado
+        if declarado is None and not re.search(r"Federal|Rep[uú]blica|Brasil|^(?:CF|CRFB|CR)\b", raw, re.I):
+            # "Constituição" sem ano nem qualificação federal pode ser a estadual referida antes ou depois na
+            # mesma peça; identidade exata exige o texto nomear a Federal (0091, conferência r6, titular).
+            flags = ["apelido", "constituicao_sem_qualificacao_federal"]
+            conf = "provavel"
+        if year not in CONSTITUICOES_FEDERAIS:
+            # Ano que não corresponde a Constituição federal (ex.: estadual de 1989): nunca a de 1988.
+            flags = ["constituicao_nao_federal"]
+            conf = "provavel"
+            year = max(year, 0)
+        number = str(year)
     if year is None:
         year = 0
         # Nasce exata com a marca; no fim de extract() vira provável, com `so_sem_ano` se o ano
@@ -1124,6 +1232,11 @@ def extract(texto: str) -> list[Citation]:
         )
         _mark(m.start(), m.end())
 
+    for m in _CONSTITUICAO_GENTILICO.finditer(text):
+        if not _free(m.start(), m.end()):
+            continue
+        _mark(m.start(), m.end())
+
     # 7) Obras formais
     work_cites: list[Citation] = []
     for pat, auth, kind in _WORK_PATTERNS:
@@ -1135,9 +1248,17 @@ def extract(texto: str) -> list[Citation]:
                 "decreto-lei"
             ):
                 continue
+            if kind == "constituicao" and _CONSTITUICAO_NAO_FEDERAL.search(
+                " " + _complemento_constituicao_federal(text, m.end())
+            ):
+                _mark(m.start(), m.end())
+                continue
             c = _parse_work_match(m, auth, kind, text)
             if c is None:
                 continue
+            if kind == "constituicao" and _territorial_na_frase(text, m.end()):
+                c.confidence = "provavel"
+                c.flags = [*c.flags, "constituicao_qualificador_territorial_na_frase"]
             work_cites.append(c)
             _mark(m.start(), m.end())
 
@@ -1222,12 +1343,31 @@ def extract(texto: str) -> list[Citation]:
                 cite.confidence = "provavel"
                 cite.flags.append("campo_nao_juridico")
 
+    # Constituição por apelido ("CF, a do Estado de São Paulo") passa pela mesma guarda territorial da frase.
+    for cite in work_cites:
+        if (cite.work is not None and cite.work.kind == "constituicao" and cite.confidence == "exata"
+                and _territorial_na_frase(text, cite.span[1])):
+            cite.confidence = "provavel"
+            cite.flags = [*cite.flags, "constituicao_qualificador_territorial_na_frase"]
+
     # Anexar dispositivos às normas
     work_cites = _attach_devices(text, work_cites)
     for cite in work_cites:
         if "adct" in cite.flags:
             cite.flags.remove("adct")
             if cite.path:
+                trecho = text[max(0, cite.span[0] - 40): min(len(text), cite.span[1] + 120)]
+                am = re.search(
+                    r"(?:Constitui[cç][aã]o|(?:CF|CRFB|CR)\b).*?(?:de\s+)?(\d{4}|\d{2})\b",
+                    trecho,
+                    re.I,
+                )
+                if am:
+                    raw = am.group(1)
+                    ano = int(raw) if len(raw) == 4 else _CONSTITUICAO_ANO_CURTO.get(int(raw), -1)
+                    if ano != 1988:
+                        cite.confidence = "provavel"
+                        cite.flags.append("adct_ano_divergente")
                 cite.path = f"adct/{cite.path}"
         if cite.path is None and _unattached_device_nearby(text, cite, work_cites):
             cite.confidence = "provavel"

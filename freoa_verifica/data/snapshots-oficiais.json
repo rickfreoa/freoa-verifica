@@ -40,5 +40,11 @@
     "sha256": "ae728d50dba100ccb20621bc5688f5f6454e930bf41a0b83d617b482713ff232",
     "versao_pacote_min": "1.4.0a5",
     "derived_version": 5
+  },
+  {
+    "arquivo": "freoa-verifica-snapshot-20261125-1.4.0a6.tar.gz",
+    "sha256": "4320cac27d311dc984debe441e7bf0371e348acb5e0a349621c09a608eb836ac",
+    "versao_pacote_min": "1.4.0a6",
+    "derived_version": 6
   }
 ]

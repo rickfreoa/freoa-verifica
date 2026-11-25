@@ -335,7 +335,7 @@ def _ev_from_resolved(rw: ResolvedWork, path: str | None, trecho: str | None, sp
     )
 
 
-_INCOMPLETE_CODES = frozenset({"TRUNCATED", "EXTRACAO_INCOMPLETA"})
+_INCOMPLETE_CODES = frozenset({"TRUNCATED", "EXTRACAO_INCOMPLETA", "DISPOSITIVO_FORA_DA_ARVORE"})
 
 
 def _scope_of(path: str) -> str:

@@ -5,8 +5,6 @@ Não são capturas do portal nem integram um conjunto-ouro; nenhuma requisição
 from __future__ import annotations
 
 import json
-from urllib.parse import urlencode
-
 import pytest
 
 from freoa_verifica.aliases import WorkKey
@@ -22,7 +20,7 @@ KEY = WorkKey("federal", "lei", "6404", 1976)
 
 
 def api(urn="urn:lex:br:federal:lei:1976;6404"):
-    return nl.BASE + "/api/public/normas?" + urlencode({"urn": urn, "tipo_documento": "maior-detalhe"})
+    return nl.url_metadados(urn)
 
 
 def payload(urn="urn:lex:br:federal:lei:1976-12-15;6404", **extra):

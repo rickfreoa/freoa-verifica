@@ -56,8 +56,18 @@ KNOWN_URLS = _load_known_urls()
 
 
 def work_key(tipo: str, numero: int | str, ano: int | str | None = None) -> str:
+    from freoa_verifica.citation import CONSTITUICOES_FEDERAIS
+
     tipo_u = tipo.strip().upper()
     if tipo_u in {"CF", "CONSTITUICAO", "CONSTITUIÇÃO"}:
+        if ano is not None:
+            return f"CF:{int(ano)}"
+        try:
+            n = int(str(numero).strip())
+        except ValueError:
+            n = None
+        if n in CONSTITUICOES_FEDERAIS:
+            return f"CF:{n}"
         return "CF:1988"
     num = str(numero).replace(".", "").lstrip("0") or "0"
     if ano is None:
@@ -300,7 +310,8 @@ def _parse_key(key: Any) -> tuple[str | None, str | None, int | None]:
     if isinstance(key, str):
         parts = key.split(":")
         if parts[0].upper() == "CF":
-            return "CF", "1988", 1988
+            ano_cf = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 1988
+            return "CF", str(ano_cf), ano_cf
         if len(parts) >= 3:
             return parts[0].upper(), parts[1], int(parts[2])
         if len(parts) == 2:

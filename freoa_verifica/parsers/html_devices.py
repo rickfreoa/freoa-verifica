@@ -26,7 +26,7 @@ from freoa_verifica.parsers.paths import (
     supplement_scope_from_heading,
 )
 
-PARSER_VERSION = "1.2.3"
+PARSER_VERSION = "1.2.4"  # 1.2.4: dispositivo fora de <p> (fonte órfã sob o body; decisão 0091)
 
 DEFAULT_MAX_INPUT_BYTES = 30 * 1024 * 1024
 DEFAULT_MAX_NESTING = 200
@@ -240,6 +240,8 @@ def paragraph_mixed_strike(el) -> tuple[str, str] | None:
 
 def paragraph_plain_text(el) -> str:
     return _normalize_ws("".join(t for _, t in walk_text_parts(el)))
+
+
 
 
 def extract_annotations_from_element(
@@ -554,6 +556,8 @@ def _classify_line(text: str) -> tuple[str, dict] | None:
     t = text.strip()
     if not t:
         return None
+    if m := re.fullmatch(r"([a-z])\)", t):  # alínea só com rótulo (nota já extraída): "h) (Revogado ...)"
+        return ("ali", {"letter": m.group(1), "rest": ""})
     # Remove aspas iniciais para classificar texto citado
     t_unq = _strip_quotes(t) if _starts_with_quote(t) else t
 
@@ -621,7 +625,122 @@ def _classify_line(text: str) -> tuple[str, dict] | None:
     return None
 
 
-def _iter_device_blocks(root) -> tuple[list, dict[int, str]]:
+_SEGUNDO_DISPOSITIVO = re.compile(
+    r"[.;:]\s+(?:Art\.?\s*(?:\d{1,3}(?:\.\d{3})+|\d+)(?![0-9])|§\s*\d|Par[aá]grafo\s+[úu]nico|[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s)"
+    r"|(?<![Aa]rt)[.;:]\s+\d+[.)]\s")  # item numérico ("1. julgar; 2. processar."), não "Art. 57. O"
+
+
+def paragraph_plain_text_preserve_breaks(el) -> str:
+    """Texto da fonte/paragrafo preservando quebras como newline."""
+    buf: list[str] = []
+    for node in el.iter():
+        tag = getattr(node, "tag", None)
+        if tag == "br":
+            buf.append("\n")
+        if node.text:
+            buf.append(node.text)
+        if node.tail:
+            buf.append(node.tail)
+    raw = "".join(buf)
+    lines = [re.sub(r"\s+", " ", ln).strip() for ln in raw.split("\n")]
+    return "\n".join(ln for ln in lines if ln)
+
+
+_LABEL_LINE_START = re.compile(
+    r"(?m)^\s*(?:Art\.?\s*(?:\d{1,3}(?:\.\d{3})+|\d+)(?![0-9])|§\s*\d|Par[aá]grafo\s+[úu]nico|"
+    r"[IVXLCDM]+(?:-[A-Za-z])?\s*[-–—]\s|[a-z]\)\s|\d+[.)]\s)",
+    re.I,
+)
+
+
+# Abertura citada ("“Art. 2 Novo texto:") também é artigo: entra como bloco para a máquina de citação controlar o
+# contexto, como no <p> equivalente (0091, r3 achado 15).
+# Preposição seguida de determinante referencial ("Da referida Lei", "Desse mesmo artigo"), de palavra com inicial
+# maiúscula ("Da Lei", "DO DECRETO") ou de nome de ato: classe da remissão partida pelo markup. Caput começa por
+# preposição + substantivo comum ("Em caso de", "Da decisão", "No prazo") e continua admitido (0091, r5, titular).
+_INICIO_REMISSIVO = re.compile(
+    r"(?i:d[aoe]s?|dest[ae]s?|dess[ae]s?|daquel[ae]s?|n[ao]s?|nest[ae]s?|ness[ae]s?|pel[ao]s?)\s+"
+    r"(?:(?i:(?:referid|citad|mencionad|aludid|supracitad|retrocitad|suprarreferid|mesm|pr[oó]pri|respectiv|indicad"
+    r"|transcrit)[oa]s?|presentes?|precedentes?|anteriore?s?|seguintes?)\b"
+    r"|[A-ZÁÉÍÓÚÂÊÔÃÕÇ]"
+    r"|(?i:Lei|Decreto|Constitui[cç][aã]o|C[oó]digo|Medida|Emenda|Resolu[cç][aã]o|Portaria|Instru[cç][aã]o|Ato|ADCT"
+    r"|Regulamento|Estatuto|art(?:igo)?s?|inciso|par[aá]grafo|al[ií]nea|§)\b)"
+)
+_ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
+
+
+def _fonte_orfa_composta(plain_breaks: str, plain: str) -> bool:
+    if _SEGUNDO_DISPOSITIVO.search(plain):
+        return True
+    return len(_LABEL_LINE_START.findall(plain_breaks or plain)) > 1
+
+
+def _fonte_orfa_parece_dispositivo(el) -> bool:
+    """Fronteira documental: rótulo reconhecido por `_classify_line`, sem critério de conteúdo mínimo."""
+    if el.xpath(".//p"):
+        return False
+    plain = paragraph_plain_text(el)
+    kind = _classify_line(plain)
+    if not kind:
+        return False
+    if kind[0] == "art":
+        if not _ARTIGO_MAIUSCULO.match(plain):
+            return False  # "art. 45 da Lei ..." em minúscula é remissão (resto de nota), não fronteira de artigo
+        return True
+    return kind[0] in {"par", "parunico", "inc", "ali", "item"}
+
+
+def _fonte_orfa_admissivel(el) -> bool:
+    plain = paragraph_plain_text(el)
+    plain_breaks = paragraph_plain_text_preserve_breaks(el)
+    kind = _classify_line(plain)
+    if not kind:
+        return False
+    if kind[0] == "art" and not (kind[1].get("rest") or "").strip():
+        return False
+    # Rótulo só com nota ("h) (Revogado ...)", "Art. 2 (Revogado).") é dispositivo: entra como o <p> equivalente.
+    if kind[0] == "art":
+        if not _ARTIGO_MAIUSCULO.match(plain):  # "art." minúsculo é remissão
+            return False
+        # Caput começa por maiúscula ou nota; "Art. 45 da Lei ..." / "Art. 45 desta Lei" é remissão partida
+        # pelo markup: não vira artigo próprio, e a região fica bloqueada como fronteira (0091, r3 achado 14).
+        citada = re.match(r"\s*[\"“«]", plain)
+        resto = (kind[1].get("rest") or "").strip()
+        if not citada and not re.match(r"[(\"“«]|[^\W\d_a-zà-ÿ]", resto):
+            return False
+        # Remissão com maiúscula ("Art. 45 Da Lei ...", "DESTA LEI"): preposição seguida de nome de ato é remissão,
+        # não caput ("Art. 62. Em caso de ...", "Art. 5o Da decisão ..."); fronteira (r4, achado 14).
+        if not citada and _INICIO_REMISSIVO.match(resto):
+            return False
+    return not _fonte_orfa_composta(plain_breaks, plain)
+
+
+
+def fontes_orfas_de_dispositivo(root, *, todas: bool = False) -> list:
+    """Fontes sob o body, fora de qualquer <p>, com rótulo de dispositivo.
+
+    `todas=False`: só as admitidas como bloco único.
+    `todas=True`: todas as fronteiras não admitidas (sentinela legada)."""
+    if todas:
+        return [el for el in root.xpath("//body/font") if _fonte_orfa_parece_dispositivo(el) and not _fonte_orfa_admissivel(el)]
+    return [el for el in root.xpath("//body/font") if _fonte_orfa_admissivel(el)]
+
+
+def _abertura_citada_introduzida(el) -> bool:
+    """Abertura citada órfã só entra como bloco logo depois do texto que a introduz ("... seguinte redação:").
+
+    Fora disso (markup mutilado, ordem documental incerta) vira fronteira: na dúvida, bloqueia (0091, r3 achado 15)."""
+    if not re.match(r"\s*[\"“«]", paragraph_plain_text(el)):
+        return True
+    for prev in el.itersiblings(preceding=True):
+        texto = paragraph_plain_text(prev) if getattr(prev, "tag", None) in ("p", "font") else ""
+        if texto.strip():
+            # Só a introdução que a máquina de emendas reconhece; dois-pontos genéricos não bastam (r4, achado 17).
+            return texto.rstrip().endswith(":") and bool(_AMEND_TRIGGER.search(texto))
+    return False
+
+
+def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
     """Parágrafos + fontes órfãs 'Art N' sob body (markup quebrado do Planalto).
 
     Só inclui //body/font cujo texto é rótulo de artigo sem corpo (ex.: "Art 9º"),
@@ -660,16 +779,66 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str]]:
         merged_by_id[id(el)] = _normalize_ws(plain + " " + extra + suffix)
         orphan_fonts.append(el)
 
-    if not orphan_fonts:
-        return blocks, merged_by_id
+    # Dispositivo inteiro fora de <p> (ex.: "<p></font><font>LXXVIII - ...", CF art. 5º): o </font> órfão
+    # esvazia o <p> e o lxml põe a fonte sob o body. Entra na ordem do documento quando contém um só
+    # dispositivo; com mais de um (ou com <p> dentro), a sentinela de órfãos impede negativa (decisão 0091).
+    # Referências vivas: o lxml mantém um único proxy por nó enquanto houver referência (id() estável).
+    consumidas = [el.getnext() for el in orphan_fonts if el.getnext() is not None]
+    ids_consumidas = {id(el) for el in consumidas}
+    fronteira_ids: set[int] = set()
+    fronteira_fonts: list = []
+    ids_inteiras: set[int] = set()
+    for el in root.xpath("//body/font"):
+        if id(el) in ids_consumidas or id(el) in merged_by_id:
+            continue
+        if not _fonte_orfa_parece_dispositivo(el):
+            continue
+        if _fonte_orfa_admissivel(el) and _abertura_citada_introduzida(el):
+            orphan_fonts.append(el)
+            ids_inteiras.add(id(el))
+        else:
+            fronteira_ids.add(id(el))
+            fronteira_fonts.append(el)
+
+    if not orphan_fonts and not fronteira_fonts:
+        return blocks, merged_by_id, fronteira_ids
 
     # Reconstroi na ordem do documento
-    wanted = {id(el) for el in blocks + orphan_fonts}
+    wanted = {id(el) for el in blocks + orphan_fonts + fronteira_fonts}
     ordered: list = []
     for el in root.iter():
         if id(el) in wanted:
             ordered.append(el)
-    return (ordered if ordered else blocks), merged_by_id
+    _exigir_sequencia_de_artigos(ordered, merged_by_id, ids_inteiras, fronteira_ids)
+    return (ordered if ordered else blocks), merged_by_id, fronteira_ids
+
+
+def _exigir_sequencia_de_artigos(ordered: list, merged_by_id: dict[int, str], ids_inteiras: set[int],
+                                 fronteira_ids: set[int]) -> None:
+    """Artigo inteiro em fonte órfã só é admitido se continua a numeração (N+1 do artigo anterior, ou N-A).
+
+    Critério estrutural, não lexical: remissão partida pelo markup ("Art. 45 Da sobredita Lei" depois do art. 1º)
+    quebra a sequência e vira fronteira, qualquer que seja a redação (0091, conferência r6, titular)."""
+    ultimo: int | None = None
+    for el in ordered:
+        texto = merged_by_id.get(id(el)) or paragraph_plain_text(el)
+        if re.match(r"\s*[\"“«]", texto):
+            continue  # texto citado não conta na numeração do ato
+        kind = _classify_line(texto)
+        if not kind or kind[0] != "art":
+            continue
+        try:
+            num = int(str(kind[1].get("num")).replace(".", ""))
+        except ValueError:
+            continue
+        if id(el) in ids_inteiras and ultimo is not None:
+            # Art. 1 reinicia a numeração (ADCT depois do corpo permanente).
+            sequencial = num == ultimo + 1 or num == 1 or (num == ultimo and kind[1].get("letter"))
+            if not sequencial:
+                ids_inteiras.discard(id(el))
+                fronteira_ids.add(id(el))
+                continue
+        ultimo = num
 
 
 def extract_title_ementa(paragraphs: list) -> tuple[str, str | None]:
@@ -880,12 +1049,23 @@ def parse_html_devices(
     title, ementa = extract_title_ementa(paragraphs)
     # Planalto às vezes quebra <p> com </font> órfão: "Art 9º" fica em
     # //body/font fora de qualquer <p>. Inclui esses blocos na ordem do documento.
-    blocks, merged_by_id = _iter_device_blocks(root)
+    blocks, merged_by_id, fronteira_ids = _iter_device_blocks(root)
     ctx = _Ctx()
     ctx.issues.extend(early_issues)
     prev_in_bq = False
 
     for el in blocks:
+        if id(el) in fronteira_ids:
+            trecho = _normalize_ws(paragraph_plain_text(el))[:160]
+            ctx.issues.append(
+                Issue(
+                    "DISPOSITIVO_FORA_DA_ARVORE",
+                    ctx.art_path,
+                    trecho,
+                    blocking_scope="provision" if ctx.art_path else None,
+                )
+            )
+            continue  # o contexto segue; o artigo corrente fica ambíguo (leitura e negativa bloqueadas)
         merged = merged_by_id.get(id(el))
         full_plain = merged or paragraph_plain_text(el)
         if not full_plain:

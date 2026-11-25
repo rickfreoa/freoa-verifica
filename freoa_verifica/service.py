@@ -17,6 +17,7 @@ import time
 import threading
 from dataclasses import asdict, replace
 from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,9 @@ from freoa_verifica.contrato import CONTRATO_VERSAO
 from freoa_verifica.courts import normalize_court
 from freoa_verifica.search import buscar_and_or, consulta_fts, normalize_fts_query
 from freoa_verifica.connectors.guarda import BLOQUEIAM_A_FONTE, GuardaExecucao, da_chamada
+
+_ctx_abrangencia: ContextVar[str] = ContextVar("abrangencia_obter_dispositivo", default="dispositivo")
+_ctx_cache_capturas: ContextVar[dict | None] = ContextVar("cache_capturas_recentes", default=None)
 from freoa_verifica.connectors.base import (
     AmbiguousCandidates,
     Candidate,
@@ -85,6 +89,7 @@ from freoa_verifica.verify import (
 )
 
 from freoa_verifica import acervo as _acervo
+from freoa_verifica import revalidacao as _revalidacao
 from freoa_verifica.limites import CANCELADO, PRAZO, EntradaInvalida, cancelado, Sobrecarga, validar as _validar
 from freoa_verifica.registro import normalizar as normalizar_registro
 from freoa_verifica import derivados as _derivados
@@ -220,6 +225,22 @@ def _authenticated_output(method):
                     "reason_code": exc.reason,
                     **({"fontes_consultadas": exc.fontes_consultadas} if exc.fontes_consultadas else {})}
     return checked
+
+
+def _marcador(rotulo: str) -> str:
+    """Rótulo do modelo na forma de leitura do texto legal ("Inciso IV" → "IV –", "§ 2" → "§ 2º", "Alínea a" → "a)")."""
+    rotulo = (rotulo or "").strip()
+    if m := re.fullmatch(r"Inciso\s+(\S+)", rotulo):
+        return f"{m[1]} –"
+    if m := re.fullmatch(r"Al[ií]nea\s+(\S+)", rotulo):
+        return f"{m[1]})"
+    if m := re.fullmatch(r"§\s*(\d+)(-[A-Z])?", rotulo):
+        return f"§ {m[1]}{'º' if int(m[1]) < 10 else '.'}{m[2] or ''}"
+    if m := re.fullmatch(r"Art\.?\s*(\d+)(-[A-Z])?", rotulo):
+        return f"Art. {m[1]}{'º' if int(m[1]) < 10 else ''}{m[2] or ''}{'.' if int(m[1]) >= 10 or m[2] else ''}"
+    if m := re.fullmatch(r"Item\s+(\S+)", rotulo):
+        return f"{m[1]}."
+    return f"{rotulo}." if rotulo and not rotulo.endswith((".", ")", "–")) else rotulo
 
 
 def _remissoes_no_texto_emitido(out: dict[str, Any]) -> dict[str, Any]:
@@ -483,6 +504,9 @@ def _status_com_falhas(status: str, falhas: dict[str, str], n_itens: int) -> dic
     return {"status": "indisponivel", "motivo": motivo, "reason_code": motivo, "fontes_indisponiveis": falhas}
 
 
+_SEM_REDACAO_NORMATIVA = "dispositivo_sem_redacao_normativa"
+
+
 class Verifica:
     """Fachada de serviço: store + conectores + verificação."""
 
@@ -691,6 +715,8 @@ class Verifica:
     # ------------------------------------------------------------------
 
     def _get(self, connector_id: str):
+        if connector_id == "normas_leg" and not self._rota_admitida(connector_id):
+            raise Unavailable("fora_do_escopo_do_home")
         if connector_id not in self._connectors:
             self._connectors[connector_id] = get_connector(connector_id)
             if connector_id == "stj":
@@ -1092,9 +1118,21 @@ class Verifica:
                     except ValueError:
                         anterior = None
                     novo = _hash_modelo(asdict(doc))
-                    if anterior is None or anterior != novo:
+                    try:
+                        modelo_anterior = json.loads(row['model_json'])
+                    except ValueError:
+                        modelo_anterior = None
+                    parser_anterior = modelo_anterior.get('parser_version') if isinstance(modelo_anterior, dict) else None
+                    # 0091 (emenda à 0065): a decisão legada já conferida e registrada no derivado, com o mesmo
+                    # codec, não precisa ser reconferida pelo modelo quando a diferença vem de nova versão do parser.
+                    ja_conferida = (row['interpretacao_origem'] == ORIGEM_LEGADO_CONFERIDO
+                                    and row['interpretacao_codificacao'] == decisao[1]
+                                    and parser_anterior is not None and parser_anterior != doc.parser_version)
+                    if (anterior is None or anterior != novo) and not ja_conferida:
                         raise _InterpretacaoIndisponivel('interpretacao_indisponivel')
-                    conferencia = json.dumps({'modelo_anterior_sha256': anterior, 'modelo_novo_sha256': novo})
+                    conferencia = json.dumps({'modelo_anterior_sha256': anterior, 'modelo_novo_sha256': novo,
+                                              **({'parser_anterior': parser_anterior, 'parser_novo': doc.parser_version,
+                                                  'decisao_ja_conferida': True} if anterior != novo else {})})
                 key = WorkKey(work['authority'],work['kind'],work['number'],work['year'])
                 validate_identity(key,doc,row['work_date'])
                 # Recibo (imutável) sem decisão: o derivado registra a desta releitura, com o modelo (0065, 0066).
@@ -1233,6 +1271,10 @@ class Verifica:
         consultadas: list[dict] = []
         for cid in dict.fromkeys(order):  # cada fonte uma vez por chamada (0058)
             if cid not in _LEGIS_NOVA_CAPTURA:
+                continue
+            if cid == "normas_leg" and not self._rota_admitida(cid):
+                consultadas.append({"fonte": "normas_leg", "resultado": "fora_do_escopo_do_home",
+                                    "motivo": None, "categoria": None})
                 continue
             try:
                 conn_obj = self._get(cid)
@@ -1507,6 +1549,9 @@ class Verifica:
             if len(items) >= limite:
                 nao_consultada(cid, "limite_atingido_no_acervo_local")
                 continue
+            if not self._rota_admitida(cid):
+                fontes_status[cid] = {"status": "nao_consultada", "motivo": "fora_do_escopo_do_home", "parcial": False}
+                continue
             try:
                 conn_obj = self._get(cid)
                 lookup = bool(cite and cite.work)
@@ -1564,6 +1609,8 @@ class Verifica:
         }
 
     def _index_candidate_legis(self, connector, cand: Candidate) -> dict[str, Any]:
+        if connector.id == "normas_leg" and not self._rota_admitida(connector.id):
+            return {"nao_indexado": True, "motivo": "fora_do_escopo_do_home"}
         if connector.id not in _LEGIS_NOVA_CAPTURA:
             raise Unavailable("acervo_legado_sem_nova_captura")
         capture_id = None
@@ -1734,10 +1781,23 @@ class Verifica:
         data: str | None = None,
         versao: str = "vigente",
         fonte: str | None = None,
+        abrangencia: str = "dispositivo",
     ) -> dict[str, Any]:
         """Ponto final de emissão: `remissoes` (aditivo, IL.3-a) acompanha o texto EMITIDO e está presente em toda saída,
-        inclusive nas recusas (versão ou fonte inválida, falha de autenticação da evidência)."""
-        out = self._obter_dispositivo_autenticado(citacao, work_id, caminho, data, versao, fonte)
+        inclusive nas recusas (versão ou fonte inválida, falha de autenticação da evidência).
+
+        `abrangencia="integral"` (0091) acrescenta `subdispositivos` (incisos, parágrafos e alíneas do dispositivo, na
+        ordem do documento, cada um com texto e vigência próprios) e `texto_integral`; `texto` continua só a cabeça."""
+        if abrangencia not in {"dispositivo", "integral"}:
+            return _remissoes_no_texto_emitido({"status": "formato_invalido", "motivo": "abrangencia_invalida",
+                                                "abrangencia": abrangencia})
+        token_a = _ctx_abrangencia.set(abrangencia)
+        token_c = _ctx_cache_capturas.set({})
+        try:
+            out = self._obter_dispositivo_autenticado(citacao, work_id, caminho, data, versao, fonte)
+        finally:
+            _ctx_abrangencia.reset(token_a)
+            _ctx_cache_capturas.reset(token_c)
         return _remissoes_no_texto_emitido(out)
 
     @_authenticated_output
@@ -1813,7 +1873,10 @@ class Verifica:
         if fonte is not None and rw.source_id != fonte:
             return {"status": "indisponivel", "motivo": "fonte_selecionada_nao_capturada"}
         if rw.source_id == "camara_legin":
-            return self._obter_camara(rw, path, data, versao)
+            out = self._obter_camara(rw, path, data, versao)
+            if _ctx_abrangencia.get() == "integral":
+                out = {**out, "abrangencia": "dispositivo", "aviso_abrangencia": "integral_indisponivel_na_rota_camara"}
+            return out
         if versao == "publicacao_original":
             meta = next((json.loads(b.text) for b in rw.document.editorial_blocks
                          if b.kind == "normas_leg_metadados"), {}) if rw.source_id == "normas_leg" else {}
@@ -1821,7 +1884,53 @@ class Verifica:
                 return {"status": "unknown", "reason_code": "primeira_publicacao_nao_identificada", "texto": None}
             # Auditoria 0085, I3: o texto `Original` de normas.leg.br reproduz a publicação no DOU,
             # declarada nos metadados da captura (sem valor oficial; atribuição na resposta).
-        return self._resposta_dispositivo(rw, path, data)
+        out = self._resposta_dispositivo(rw, path, data)
+        if _ctx_abrangencia.get() == "integral":
+            self._anexar_subdispositivos(out, rw, path, data)
+        return out
+
+    _INTEGRAL_MAX_CARACTERES = 60_000
+    _INTEGRAL_MAX_ITENS = 400
+
+    def _anexar_subdispositivos(self, out: dict[str, Any], rw, path, data) -> None:
+        """0091: o artigo inteiro numa chamada. Cada subdispositivo passa pela mesma construção do dispositivo (bloqueio
+        de leitura, vigência, reconfirmação); nada é inferido do texto da cabeça. Limite de tamanho declarado."""
+        out["abrangencia"] = "integral"
+        if not path or out.get("status") not in {"encontrada", "unknown"}:
+            out["subdispositivos"] = []
+            return
+        filhos = [p for p in rw.document.provisions if p.path.startswith(path + ".")]
+        itens: list[dict[str, Any]] = []
+        total, truncado = 0, False
+        for filho in filhos:
+            r = self._resposta_dispositivo(rw, filho.path, data)
+            texto = r.get("texto")
+            if len(itens) >= self._INTEGRAL_MAX_ITENS or total + len(texto or "") > self._INTEGRAL_MAX_CARACTERES:
+                truncado = True
+                break
+            total += len(texto or "")
+            vig = r.get("vigencia") or {}
+            itens.append({"caminho": filho.path, "rotulo": filho.label, "status": r.get("status"), "texto": texto,
+                          "truncado": bool(r.get("truncado")),
+                          **({"reason_code": r.get("reason_code")} if r.get("reason_code") else {}),
+                          "vigencia": {"status": vig.get("status"), "reason_code": vig.get("reason_code")}})
+        out["subdispositivos"] = itens
+        out["subdispositivos_total"] = len(filhos)
+        out["subdispositivos_truncado"] = truncado
+        cabeca = _find_provision(rw.document, path)
+        linhas = [f"{_marcador(cabeca.label)} {out['texto']}" if cabeca is not None and re.match(r"Art", cabeca.label or "")
+                  else out["texto"]] if out.get("texto") else []
+        # Subdispositivo sem texto servido aparece com o motivo, nunca some da leitura integral (0091, r3 achado 16).
+        linhas += [f"{_marcador(i['rotulo'])} {i['texto'] if i.get('texto') else self._sem_texto_integral(i)}"
+                   for i in itens]
+        out["texto_integral"] = "\n".join(linhas) if linhas else None
+
+    @staticmethod
+    def _sem_texto_integral(item: dict[str, Any]) -> str:
+        motivo = item.get("reason_code") or (item.get("vigencia") or {}).get("reason_code")
+        if motivo == _SEM_REDACAO_NORMATIVA:
+            return "(sem redação normativa na fonte)"
+        return f"(texto não servido: {motivo or 'indisponível'})"
 
     def _resposta_dispositivo(self, rw, path, data):
         """Construção comum do contrato de obtenção, inclusive nulidade dos campos."""
@@ -1853,7 +1962,9 @@ class Verifica:
                     "vigencia": {"status": "unknown", "reason_code": codes[0], "regras": [],
                                  "flags": codes, "intervalo": None}}
 
-        tr = _temporal_select(rw, prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts, fetched_at=rw.fetched_at, quarantined=rw.quarantined)
+        recentes = self._capturas_recentes_nao_canonicas(rw, prov.path)
+        tr = _temporal_select(rw, prov, data, work_date=rw.work_date, amending_act_texts=rw.amending_act_texts,
+                              fetched_at=rw.fetched_at, quarantined=rw.quarantined)
         tr = situacao.aplicar_situacao_tr(tr, sit, data)  # C2
         red = _redaction_by_id(prov, tr.redaction_id) if tr.redaction_id else None
         # C3: com data pedida e sem redação selecionada, a atual não substitui a resposta.
@@ -1892,8 +2003,16 @@ class Verifica:
                     }
                 )
         text_out, trunc = _truncate(texto, _DEFAULT_TEXT_LIMIT) if texto is not None else (None, False)
+        # Rótulo sem corpo (alínea "h)" depois de extraída a nota) não é redação corrente: declara a ausência de texto
+        # normativo em vez de "vigente_na_fonte" (0091, r3 achado 16). Revogação e inexistência seguem como estão.
+        vig_status, vig_reason = tr.status, tr.reason
+        sem_texto = texto is not None and not texto.strip()
+        if sem_texto and vig_status == "vigente_na_fonte":
+            vig_status, vig_reason = "unknown", _SEM_REDACAO_NORMATIVA
+        status_disp = "unknown" if sem_texto and vig_status not in ("revogado", "nao_existia") else "encontrada"
         return {
-            "status": "encontrada",
+            "status": status_disp,
+            **({"reason_code": _SEM_REDACAO_NORMATIVA} if status_disp == "unknown" else {}),
             "work_id": rw.work_id,
             "situacao_obra": situacao.resumo(sit),  # C2
             "caminho": path,
@@ -1903,8 +2022,8 @@ class Verifica:
             "truncado": trunc,
             "redacao_anterior_ausente_na_fonte": self._anterior_ausente(prov, rw),
             "vigencia": {
-                "status": tr.status,
-                "reason_code": tr.reason,
+                "status": vig_status,
+                "reason_code": vig_reason,
                 "regras": tr.rules_applied,
                 "flags": tr.flags,
                 "intervalo": (
@@ -1919,7 +2038,65 @@ class Verifica:
             "correspondencia_textual": None,
             "evidencia": self._evidencia_dispositivo(rw),
             **({"proveniencia": rw.proveniencia} if rw.proveniencia else {}),
+            **({"capturas_recentes_nao_canonicas": recentes} if recentes else {}),
         }
+
+    def _capturas_recentes_nao_canonicas(self, rw, path: str | None) -> list[dict]:
+        """0091: declara capturas mais novas não canônicas da mesma obra e fonte; sem efeito em vigência ou texto."""
+        if not rw.work_id or not rw.capture_id or not rw.source_id or not rw.fetched_at:
+            return []
+        from freoa_verifica.parsers.model import document_from_dict
+
+        cache = _ctx_cache_capturas.get()
+        chave = (rw.work_id, rw.capture_id)
+        if cache is not None and chave in cache:
+            perdas, caps, docs = cache[chave]
+        else:
+            perdas = {d["capture_id"]: d for d in repo.avaliar_monotonia(self.conn, rw.work_id)[1]}
+            caps = repo.captures_for_work(self.conn, rw.work_id)
+            docs = {}
+            if cache is not None:
+                cache[chave] = (perdas, caps, docs)
+        recentes: list[dict] = []
+        for cap in caps:
+            if cap["id"] == rw.capture_id or not cap.get("fetched_at") or cap["fetched_at"] <= rw.fetched_at:
+                continue
+            if cap.get("source_id") != rw.source_id or not (cap.get("candidato_ao_vivo") or cap["id"] in perdas):
+                continue
+            if cap["id"] not in docs:
+                try:
+                    self._authenticate_capture(cap["id"])
+                    saved = repo.get_parsed_document(self.conn, cap["id"])
+                    docs[cap["id"]] = (
+                        document_from_dict(json.loads(saved["model_json"])) if saved and saved["model_json"] else None
+                    )
+                except (SourceUnavailable, ValueError, TypeError, KeyError):
+                    docs[cap["id"]] = None
+            doc = docs[cap["id"]]
+            if cap["id"] in perdas:
+                perdidos = perdas[cap["id"]]["perdidos"]
+            else:
+                canon = {(p.scope or "", p.path) for p in rw.document.provisions}
+                perdidos = (
+                    sorted(c[1] for c in canon - {(p.scope or "", p.path) for p in doc.provisions})[:20]
+                    if doc is not None
+                    else []
+                )
+            item = {
+                "capture_id": cap["id"],
+                "fetched_at": cap["fetched_at"],
+                "source_id": cap["source_id"],
+                "motivo": "PERDA_ESTRUTURAL" if perdidos else "CANDIDATA_NAO_CANONICA",
+                **({"perdidos": perdidos} if perdidos else {}),
+            }
+            if path and doc is not None:
+                outro = doc.provision(path)
+                item["dispositivo"] = "ausente" if outro is None else (
+                    "presente" if outro is not None and not outro.ambiguous else "redacao_divergente_ou_ambigua"
+                )
+            recentes.append(item)
+        return recentes[:5]
+
 
     def _remissoes_dispositivo(self, rw, path, texto, *, truncado: bool = False,
                                integral: str | None = None) -> list[dict[str, Any]]:
@@ -1963,6 +2140,13 @@ class Verifica:
             return hit if isinstance(hit, ResolvedWork) else None
         except Exception:  # noqa: BLE001  - fechado: sem conferência, a remissão não é resolvida
             return None
+
+    def _rota_admitida(self, cid: str) -> bool:
+        if cid != "normas_leg":
+            return True
+        if _revalidacao.em_manutencao_normas_leg():
+            return True
+        return not _revalidacao.escopo_restrito(self.home)
 
     def _rotas_admissiveis(self) -> set[tuple[str, str]]:
         return {(r["fonte"], r["perfil"]) for r in self._carregar_qualificacao_rotas()
@@ -2025,7 +2209,7 @@ class Verifica:
             if red := _current_redaction(prov):
                 out["evidencia"].update(path=path, span=list(red.span), parser_version=rw.document.parser_version)
                 if not red.text.strip():
-                    out.update(status="unknown", reason_code="dispositivo_sem_redacao_normativa", texto=None)
+                    out.update(status="unknown", reason_code=_SEM_REDACAO_NORMATIVA, texto=None)
                 out["anotacoes"] = [asdict(a) for a in _annotations_for_cut(rw, path)]
                 for annotation in out["anotacoes"]:
                     annotation["links"] = [ref for block in rw.document.editorial_blocks
@@ -3870,10 +4054,45 @@ class Verifica:
         # Padrão da fonte só se a reconstrução o conferiu e registrou no derivado (0065, emenda).
         conferida = None
         if not ctype:
-            der = self.conn.execute("SELECT interpretacao_origem FROM parsed_document WHERE capture_id=?",
-                                    (capture_id,)).fetchone()
+            der = self.conn.execute(
+                "SELECT interpretacao_origem, interpretacao_codificacao FROM parsed_document WHERE capture_id=?",
+                (capture_id,),
+            ).fetchone()
             if der is not None and der[0] == ORIGEM_LEGADO_CONFERIDO:
-                conferida = interpretar_legado_padrao(body, cap.get("source_id"))
+                if der[1] is None:
+                    return {
+                        "status": "indisponivel",
+                        "capture_id": capture_id,
+                        "motivo": "interpretacao_divergente",
+                        "metadados": {
+                            "url": cap.get("url"),
+                            "final_url": cap.get("final_url"),
+                            "fetched_at": cap.get("fetched_at"),
+                            "sha256": cap.get("sha256"),
+                            "mime": cap.get("mime"),
+                            "status_http": cap.get("status"),
+                            "source_id": cap.get("source_id"),
+                            "size": cap.get("size"),
+                        },
+                    }
+                padrao = interpretar_legado_padrao(body, cap.get("source_id"))
+                if padrao is None or padrao.codificacao != der[1]:
+                    return {
+                        "status": "indisponivel",
+                        "capture_id": capture_id,
+                        "motivo": "interpretacao_divergente",
+                        "metadados": {
+                            "url": cap.get("url"),
+                            "final_url": cap.get("final_url"),
+                            "fetched_at": cap.get("fetched_at"),
+                            "sha256": cap.get("sha256"),
+                            "mime": cap.get("mime"),
+                            "status_http": cap.get("status"),
+                            "source_id": cap.get("source_id"),
+                            "size": cap.get("size"),
+                        },
+                    }
+                conferida = padrao
         text = conferida.texto if conferida is not None else texto_para_exibicao(body, ctype)
         if not text:
             text = f"[binário {cap.get('mime') or 'application/octet-stream'}; {len(body)} bytes]"
@@ -4201,6 +4420,9 @@ class Verifica:
             if cid not in registry():
                 relatorio.append({"fonte": cid, "status": "desconhecida"})
                 continue
+            if cid == "normas_leg" and not self._rota_admitida(cid):
+                relatorio.append({"fonte": cid, "status": "fora_do_escopo_do_home"})
+                continue
             try:
                 exigir_nova_captura(cid)
                 conn_obj = self._get(cid)
@@ -4256,6 +4478,12 @@ class Verifica:
             },
         ]
         try:
+            velho = _acervo.envelhecimento(self.conn)
+            checks.append({"nome": "acervo_idade", "status": "alerta" if velho else "ok",
+                           "detalhe": velho or f"capturas legislativas com até {_acervo.IDADE_RENOVACAO_DIAS} dias"})
+        except sqlite3.Error as exc:
+            checks.append({"nome": "acervo_idade", "status": "falha", "detalhe": str(exc)[:200]})
+        try:
             n = self.conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
             checks.append({"nome": "migracoes", "status": "ok", "detalhe": f"{n} versões"})
         except Exception as exc:  # noqa: BLE001
@@ -4269,6 +4497,15 @@ class Verifica:
                         "status": "ok",
                         "detalhe": "offline — health não executado",
                         "cobertura": dict(getattr(cls, "coverage", {}) or {}),
+                    }
+                )
+                continue
+            if cid == "normas_leg" and not self._rota_admitida(cid):
+                checks.append(
+                    {
+                        "nome": f"fonte:{cid}",
+                        "status": "ok",
+                        "detalhe": "fora_do_escopo_do_home — health não executado",
                     }
                 )
                 continue
@@ -4307,6 +4544,7 @@ class Verifica:
         aviso = self.acervo_status()
         checks.append({"nome": "acervo", "status": "alerta" if aviso else "ok",
                        "detalhe": aviso or "atende ao manifesto/mínimo"})
+        checks.append(_revalidacao.consulta_manutencao(self.home))
         ok = all(c["status"] in {"ok", "alerta"} for c in checks)
         from freoa_verifica.connectors.stj import resumo_atualizacao
 
@@ -4336,6 +4574,112 @@ class Verifica:
         if self._acervo_cache is None:
             self._acervo_cache = (True, _acervo.status(self.conn, self.home))
         return self._acervo_cache[1]
+
+    def revalidar_acervo(self, limite: int | None = None) -> dict[str, Any]:
+        with _revalidacao.manutencao_normas_leg():
+            return _revalidacao.revalidar(self, limite=limite)
+
+    def manter_acervo(self, dias: int = _acervo.IDADE_RENOVACAO_DIAS, limite: int | None = None) -> dict[str, Any]:
+        from datetime import datetime, timezone
+
+        inicio = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        # Duas chamadas de fachada guardadas e independentes (achado 6 das auditorias r1/r2): cada uma abre a própria
+        # guarda, com o próprio teto por chamada; `manter_acervo` não abre guarda, para não aninhá-las numa só.
+        reval = self.revalidar_acervo(limite=limite)
+        renov = self.renovar_acervo(dias=dias, limite=limite)
+        fim = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        status = "ok" if reval.get("status") == "ok" and renov.get("status") == "ok" else (
+            "indisponivel" if reval.get("status") == renov.get("status") == "indisponivel" else "parcial"
+        )
+        registro = {
+            "inicio": inicio,
+            "fim": fim,
+            "status": status,
+            "revalidacao": {"status": reval.get("status"), "contagens": reval.get("contagens"), "obras": reval.get("obras")},
+            "renovacao": {"status": renov.get("status"), "candidatas": renov.get("candidatas"),
+                          "renovadas": len(renov.get("renovadas") or []), "falhas": renov.get("falhas")},
+        }
+        alvo = self.home / "manutencao.json"
+        tmp = self.home / "manutencao.json.tmp"
+        tmp.write_text(json.dumps(registro, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, alvo)
+        return {"status": status, "manutencao": registro, "revalidacao": reval, "renovacao": renov}
+
+    def abrir_normas_leg(self, decisao: str) -> dict[str, Any]:
+        from freoa_verifica.connectors.normas_leg import HOST
+
+        escopo = _revalidacao.gravar_escopo(self.home, decisao)
+        with _revalidacao.manutencao_normas_leg():
+            con = self._get("normas_leg")
+        liberado = con.portao().reabrir(decisao)
+        estado = con.portao().estado.bloqueio_do_host(HOST, con.portao().relogio.agora())
+        return {"status": "ok", "escopo": escopo, "host_liberado": liberado,
+                "host": estado or {"host": HOST, "bloqueio": None},
+                "reaberturas": con.portao().estado.reaberturas(HOST)}
+
+    def renovar_acervo(self, dias: int = _acervo.IDADE_RENOVACAO_DIAS, limite: int | None = None) -> dict[str, Any]:
+        """0091: recaptura obras federais envelhecidas ou marcadas `renovacao_pendente` pelos metadados normas.leg."""
+        if self._offline():
+            return {"status": "indisponivel", "motivo": "offline", "renovadas": [], "falhas": []}
+        from datetime import date, timedelta
+
+        corte = (date.today() - timedelta(days=dias)).isoformat()
+        velhas = self.conn.execute(
+            "SELECT w.id, w.authority, w.kind, w.number, w.year, MAX(c.fetched_at) AS ultima FROM work w "
+            "JOIN parsed_document p ON p.work_id=w.id JOIN capture c ON c.id=p.capture_id "
+            "WHERE w.authority='federal' AND w.year>0 AND p.candidato_ao_vivo=0 AND p.model_json IS NOT NULL "
+            "GROUP BY w.id HAVING ultima < ? ORDER BY ultima", (corte,)).fetchall()
+        pendentes = {wid: True for wid in _revalidacao.obras_pendentes(self.conn)}
+        por_id = {r["id"]: r for r in velhas}
+        for wid in pendentes:
+            if wid in por_id:
+                continue
+            row = self.conn.execute(
+                "SELECT w.id, w.authority, w.kind, w.number, w.year, MAX(c.fetched_at) AS ultima FROM work w "
+                "JOIN parsed_document p ON p.work_id=w.id JOIN capture c ON c.id=p.capture_id "
+                "WHERE w.id=? AND p.candidato_ao_vivo=0 AND p.model_json IS NOT NULL GROUP BY w.id", (wid,)
+            ).fetchone()
+            if row:
+                por_id[wid] = row
+        rows = _revalidacao.ordenar_renovacao(self.conn, list(por_id.values()))
+        ultimo = _revalidacao.cursor_renovacao(self.conn)
+        if ultimo and rows:
+            ids = [r["id"] for r in rows]
+            if ultimo in ids:
+                off = ids.index(ultimo) + 1
+                rows = rows[off:] + rows[:off]
+        if limite is not None:
+            rows = rows[:max(0, int(limite))]
+        renovadas, falhas = [], []
+        ultimo_processado: str | None = _revalidacao.cursor_renovacao(self.conn)
+        with _revalidacao.manutencao_normas_leg():
+            for r in rows:
+                work = WorkKey(r["authority"], r["kind"], r["number"], int(r["year"]))
+                obra = {"work_id": r["id"], "obra": f"{work.kind} {work.number}/{work.year}",
+                        "captura_anterior": r["ultima"], "pendente": r["id"] in pendentes}
+                try:
+                    novo = self._capture_work(work)
+                    if isinstance(novo, ResolvedWork):
+                        _revalidacao.desmarcar_renovacao_pendente(self.conn, r["id"])
+                        renovadas.append({**obra, "fonte": novo.source_id, "fetched_at": novo.fetched_at,
+                                          "capture_id": novo.capture_id})
+                        ultimo_processado = r["id"]
+                    else:
+                        falhas.append({**obra, "motivo": "sem_rota" if novo is None else "ambigua"})
+                        _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
+                except SourceUnavailable as exc:
+                    falhas.append({**obra, "motivo": exc.reason[:200]})
+                    _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
+                except IdentityMismatch:
+                    falhas.append({**obra, "motivo": "IDENTIDADE_DIVERGENTE"})
+                    _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
+        if rows and ultimo_processado:
+            _revalidacao.gravar_cursor_renovacao(self.conn, ultimo_processado)
+        self._resolver = MemoryResolver()
+        self._acervo_cache = None
+        status = "ok" if not falhas else ("parcial" if renovadas else "indisponivel")
+        return {"status": status, "dias": dias, "candidatas": len(rows), "renovadas": renovadas, "falhas": falhas,
+                "envelhecimento_restante": _acervo.envelhecimento(self.conn, dias)}
 
     def reconstruir_acervo(self, com_situacao: bool = False) -> dict[str, Any]:
         """Reconstrói os derivados do home numa cópia e troca o banco só se tudo validar (C6)."""
@@ -4554,5 +4898,5 @@ for _nome in _CONTADAS:
     setattr(Verifica, _nome, _guardar(getattr(Verifica, _nome)))
 
 # Fora da fachada contada, mas podem chegar à rede: só a guarda da chamada (FIX17/F-23).
-for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install"):
+for _nome in ("ressincronizar_situacao", "reconstruir_acervo", "snapshot_install", "renovar_acervo", "revalidar_acervo", "abrir_normas_leg"):
     setattr(Verifica, _nome, sob_guarda(getattr(Verifica, _nome)))
