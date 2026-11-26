@@ -59,22 +59,34 @@ ETAPA="conferir permissoes"
 import os, stat, sys
 from pathlib import Path
 uid = os.geteuid()
-for alvo in map(Path, sys.argv[1:]):
-    if alvo.is_symlink():
-        sys.exit(f"{alvo}: link simbolico")
-    for parte in [alvo, *alvo.parents]:
+
+
+def ancestrais_seguros(caminho, incluir_proprio=True):
+    for parte in ([caminho] if incluir_proprio else []) + list(caminho.parents):
         st = parte.lstat()
         if st.st_uid not in (uid, 0):
             sys.exit(f"{parte}: de outro usuario")
-        if parte != alvo and st.st_mode & 0o022 and not (stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX):
+        if st.st_mode & 0o022 and not (stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX):
             sys.exit(f"{parte}: gravavel por grupo ou outros")
+
+
+for alvo in map(Path, sys.argv[1:]):
+    if alvo.is_symlink():
+        sys.exit(f"{alvo}: link simbolico")
+    ancestrais_seguros(alvo, incluir_proprio=False)
     for raiz, dirs, arquivos in os.walk(alvo):
         for nome in [*dirs, *arquivos]:
             p = Path(raiz, nome)
             st = p.lstat()
             if st.st_uid != uid:
                 sys.exit(f"{p}: de outro usuario")
-            if not stat.S_ISLNK(st.st_mode) and st.st_mode & 0o022:
+            if stat.S_ISLNK(st.st_mode):
+                # Link interno (ex.: .venv/bin/python -> python do sistema): o destino resolvido e seus ancestrais
+                # também não podem ser trocáveis por terceiros, ou o instalador executaria código alheio.
+                destino = p.resolve()
+                if destino.exists():
+                    ancestrais_seguros(destino)
+            elif st.st_mode & 0o022:
                 p.chmod(st.st_mode & ~0o022)
     alvo.chmod(alvo.stat().st_mode & ~0o022)
 PY

@@ -64,3 +64,12 @@ de versão nova do pip (stderr) virou erro terminante sob `$ErrorActionPreferenc
    ausência; qualquer falha devolve `erro`.
 3. **Windows elevado.** O instalador recusa execução como administrador antes de qualquer escrita, salvo
    `-PermitirAdministrador` (os testes de CI usam a opção, porque os runners Windows são elevados).
+
+## Auditoria Codex (r3, BLOQUEADOR; última rodada pela D5) e correções
+
+1. **Diretório da unidade ou do plist.** Antes de gravar, o diretório próprio aberto a grupo/outros é fechado e o
+   caminho inteiro (diretório e ancestrais) passa por `caminho_inseguro`; substituível por terceiros, nada é gravado.
+2. **Links internos da instalação reutilizada.** O instalador sh resolve cada link dentro de `~/freoa-verifica` (como
+   `.venv/bin/python`) e exige que o destino e os ancestrais também não sejam trocáveis por terceiros.
+3. **`fv acervo agendar --mostrar`** distingue `ausente` (unidade inexistente, sem crontab, serviço não encontrado)
+   de `indisponivel` (consulta recusada).

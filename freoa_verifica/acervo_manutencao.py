@@ -203,6 +203,10 @@ def _gravar_privado(caminho: Path, conteudo: str, encoding: str = "utf-8") -> No
     """Arquivo que define o comando agendado: substitui link simbólico em vez de segui-lo e fica sem escrita de
     grupo ou outros (0092)."""
     caminho.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if sys.platform != "win32" and caminho.parent.lstat().st_mode & 0o022:
+        caminho.parent.chmod(caminho.parent.lstat().st_mode & ~0o022)  # diretório nosso, existente e aberto
+    if (motivo := caminho_inseguro(caminho.parent)) is not None:
+        raise PermissionError(f"diretório do agendamento substituível por terceiros ({motivo})")
     if caminho.is_symlink():
         caminho.unlink()
     caminho.write_text(conteudo, encoding=encoding)
@@ -269,6 +273,13 @@ def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: in
     if (motivo := caminho_inseguro(caminho_fv())) is not None:
         return {"status": "erro", "plataforma": sys.platform,
                 "erro": f"executável agendado substituível por terceiros ({motivo}); corrija as permissões"}
+    try:
+        return _agendar_instalar(home, hora, intervalo_horas)
+    except PermissionError as exc:
+        return {"status": "erro", "plataforma": sys.platform, "erro": str(exc)}
+
+
+def _agendar_instalar(home: Path, hora: str, intervalo_horas: int) -> dict:
     if sys.platform == "win32":
         arquivo = Path(home) / "agendamento-manter.xml"
         arquivo.write_text(xml_tarefa(home, hora, intervalo_horas=intervalo_horas), encoding="utf-16")
@@ -362,13 +373,20 @@ def agendar_mostrar() -> dict:
         codigo, saida, erro = _rodar(["systemctl", "--user", "status", f"{UNIDADE_LINUX}.timer"])
         if codigo == 0:
             return {"status": "ok", "plataforma": "linux", "mecanismo": "systemd", "detalhe": saida}
-        cod_cron, saida_cron, _ = _rodar(["crontab", "-l"])
+        # systemctl status: 3 e 4 = unidade inativa ou inexistente; outro código = consulta indisponível.
+        systemd_conclusivo = codigo in (3, 4)
+        cod_cron, saida_cron, erro_cron = _rodar(["crontab", "-l"])
         linhas = [linha for linha in saida_cron.splitlines() if MARCA_CRON in linha] if cod_cron == 0 else []
         if linhas:
             return {"status": "ok", "plataforma": "linux", "mecanismo": "cron", "detalhe": "\n".join(linhas)}
-        return {"status": "ausente", "plataforma": "linux", "detalhe": saida or erro}
+        cron_conclusivo = cod_cron == 0 or "no crontab" in (erro_cron + saida_cron).lower()
+        if systemd_conclusivo and cron_conclusivo:
+            return {"status": "ausente", "plataforma": "linux", "detalhe": saida or erro}
+        return {"status": "indisponivel", "plataforma": "linux", "detalhe": "\n".join(x for x in (erro, erro_cron) if x)}
     if sys.platform == "darwin":
         codigo, saida, erro = _rodar(["launchctl", "print", f"gui/{_uid()}/{ROTULO_MAC}"])
-        return {"status": "ok" if codigo == 0 else "ausente", "plataforma": "macos", "mecanismo": "launchd",
-                "detalhe": saida or erro}
+        # launchctl print: 113 = serviço não encontrado; outro código diferente de 0 = consulta indisponível.
+        status = "ok" if codigo == 0 else ("ausente" if codigo == 113 or "could not find service" in erro.lower()
+                                           else "indisponivel")
+        return {"status": status, "plataforma": "macos", "mecanismo": "launchd", "detalhe": saida or erro}
     return {"status": "nao_suportado", "plataforma": sys.platform}

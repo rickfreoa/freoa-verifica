@@ -207,3 +207,43 @@ def test_remover_com_unidade_presente_e_disable_falho_nao_declara_sucesso(chamad
     r = agenda.agendar_remover()
     assert r["status"] == "erro" and r["systemd"] is True
     assert (tmp_path / "usuario/.config/systemd/user/fv-manter.timer").exists()  # nada apagado sem desativar
+
+
+# ------------------------------------------------------------------ auditoria Codex da 0092, rodada 3
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permissões POSIX")
+def test_diretorio_de_unidade_aberto_e_fechado_antes_de_gravar(chamadas, monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "linux")
+    base = tmp_path / "usuario/.config/systemd/user"
+    base.mkdir(parents=True)
+    base.chmod(0o777)
+    assert agenda.agendar_instalar(tmp_path / "h", "05:43")["status"] == "ok"
+    assert base.stat().st_mode & 0o022 == 0
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permissões POSIX")
+def test_ancestral_do_diretorio_de_unidade_aberto_recusa(chamadas, monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "linux")
+    (tmp_path / "usuario/.config").mkdir(parents=True)
+    (tmp_path / "usuario/.config").chmod(0o777)
+    r = agenda.agendar_instalar(tmp_path / "h", "05:43")
+    assert r["status"] == "erro" and "gravável" in r["erro"]
+    assert not (tmp_path / "usuario/.config/systemd/user/fv-manter.service").exists()
+
+
+def test_mostrar_distingue_ausencia_de_consulta_indisponivel(chamadas, monkeypatch):
+    _, respostas = chamadas
+    monkeypatch.setattr(sys, "platform", "linux")
+    respostas["systemctl --user"] = (1, "", "permission denied")
+    respostas["crontab -l"] = (1, "", "permission denied")
+    assert agenda.agendar_mostrar()["status"] == "indisponivel"
+    respostas["systemctl --user"] = (4, "", "Unit fv-manter.timer could not be found.")
+    respostas["crontab -l"] = (1, "", "no crontab for usuario")
+    assert agenda.agendar_mostrar()["status"] == "ausente"
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(agenda, "_uid", lambda: 501)
+    respostas["launchctl print"] = (5, "", "permission denied")
+    assert agenda.agendar_mostrar()["status"] == "indisponivel"
+    respostas["launchctl print"] = (113, "", "Could not find service")
+    assert agenda.agendar_mostrar()["status"] == "ausente"

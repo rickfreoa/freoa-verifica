@@ -137,3 +137,16 @@ def test_destino_link_simbolico_e_recusado(tmp_path):
     (tmp_path / "user/freoa-verifica").symlink_to(alheio)
     run, saida, registro = _rodar(tmp_path, "--sem-attestation")
     assert "FALHOU na etapa: conferir permissoes" in saida and "link simbolico" in saida and registro is None
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
+def test_link_interno_para_arvore_gravavel_por_terceiros_e_recusado(tmp_path):
+    externo = tmp_path / "externo"
+    (externo / "bin").mkdir(parents=True)
+    externo.chmod(0o777)
+    destino = tmp_path / "user/freoa-verifica"
+    destino.mkdir(parents=True)
+    (destino / ".venv").symlink_to(externo)
+    run, saida, registro = _rodar(tmp_path, "--sem-attestation")
+    assert "FALHOU na etapa: conferir permissoes" in saida and "gravavel por grupo ou outros" in saida
+    assert registro is None
