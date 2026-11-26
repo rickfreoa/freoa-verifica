@@ -5,7 +5,7 @@
 # --sem-agendamento dispensa.
 set -euo pipefail
 
-VERSAO="1.4.0a6"
+VERSAO="1.4.0a7"
 SEM_ATTESTATION=0
 SEM_AGENDAMENTO=0
 while [ $# -gt 0 ]; do

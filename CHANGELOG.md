@@ -1,6 +1,6 @@
 # Histórico de versões
 
-## Não publicado (decisão 0092)
+## 1.4.0a7 - 26/11/2026 (decisão 0092)
 
 - **Instalador do Windows não para mais por aviso em stderr.** Com a saída redirecionada, o aviso de versão nova do
   pip derrubava a etapa "instalar wheel" (visto na instalação da 1.4.0a6). O instalador desliga esse aviso e só o
