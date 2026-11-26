@@ -23,8 +23,8 @@ def chamadas(monkeypatch, tmp_path):
     agenda.definir_executar_sistema(executar)
     import os
 
-    if hasattr(os, "geteuid"):
-        monkeypatch.setattr(os, "geteuid", lambda: 1000)  # a sessão de teste pode rodar como root
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        monkeypatch.setattr(os, "geteuid", lambda: 1000)  # sessão como root: simula usuário comum (root é dono aceito)
     monkeypatch.setattr(agenda.Path, "home", classmethod(lambda cls: tmp_path / "usuario"))  # nunca o home real
     monkeypatch.setattr(agenda, "caminho_fv", lambda: Path("/opt/fv venv/bin/fv"))
     yield registro, respostas
@@ -247,3 +247,15 @@ def test_mostrar_distingue_ausencia_de_consulta_indisponivel(chamadas, monkeypat
     assert agenda.agendar_mostrar()["status"] == "indisponivel"
     respostas["launchctl print"] = (113, "", "Could not find service")
     assert agenda.agendar_mostrar()["status"] == "ausente"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permissões POSIX")
+def test_escrita_do_grupo_privado_do_usuario_nao_e_insegura(tmp_path, monkeypatch):
+    """CI: umask 002 das distribuições com grupo por usuário deixa g+w no grupo privado, que não dá acesso a ninguém."""
+    alvo = tmp_path / "fv"
+    alvo.write_text("x")
+    alvo.chmod(0o664)
+    monkeypatch.setattr(agenda, "_grupo_privado", lambda gid: True)
+    assert agenda.caminho_inseguro(alvo) is None
+    monkeypatch.setattr(agenda, "_grupo_privado", lambda gid: False)
+    assert "gravável" in agenda.caminho_inseguro(alvo)

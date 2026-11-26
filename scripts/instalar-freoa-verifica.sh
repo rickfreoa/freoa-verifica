@@ -61,12 +61,23 @@ from pathlib import Path
 uid = os.geteuid()
 
 
+def grupo_privado(gid):
+    # grupo de um só usuário, o próprio (umask 002 das distribuições com grupo por usuário)
+    import grp, pwd
+    try:
+        nome, grupo = pwd.getpwuid(uid).pw_name, grp.getgrgid(gid)
+    except KeyError:
+        return False
+    return grupo.gr_name == nome and set(grupo.gr_mem) <= {nome}
+
+
 def ancestrais_seguros(caminho, incluir_proprio=True):
     for parte in ([caminho] if incluir_proprio else []) + list(caminho.parents):
         st = parte.lstat()
         if st.st_uid not in (uid, 0):
             sys.exit(f"{parte}: de outro usuario")
-        if st.st_mode & 0o022 and not (stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX):
+        bits = 0o002 if grupo_privado(st.st_gid) else 0o022
+        if st.st_mode & bits and not (stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX):
             sys.exit(f"{parte}: gravavel por grupo ou outros")
 
 

@@ -193,10 +193,27 @@ def caminho_inseguro(caminho: Path) -> str | None:
             continue
         if st.st_uid not in (uid, 0):
             return f"{parte}: de outro usuário"
-        gravavel = st.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+        # Escrita de grupo só conta quando o grupo tem mais alguém: o grupo privado do usuário (umask 002 das
+        # distribuições com grupo por usuário) não dá acesso a terceiros.
+        bits = stat.S_IWOTH | (0 if _grupo_privado(st.st_gid) else stat.S_IWGRP)
+        gravavel = st.st_mode & bits
         if gravavel and not (stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX):
             return f"{parte}: gravável por grupo ou outros"
     return None
+
+
+def _grupo_privado(gid: int) -> bool:
+    """Grupo de um só usuário, o próprio: nome igual ao do usuário e nenhum outro membro."""
+    try:
+        import grp
+        import os
+        import pwd
+
+        nome = pwd.getpwuid(os.geteuid()).pw_name
+        grupo = grp.getgrgid(gid)
+    except (ImportError, KeyError):
+        return False
+    return grupo.gr_name == nome and set(grupo.gr_mem) <= {nome}
 
 
 def _gravar_privado(caminho: Path, conteudo: str, encoding: str = "utf-8") -> None:

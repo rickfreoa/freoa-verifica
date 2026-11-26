@@ -73,3 +73,8 @@ de versão nova do pip (stderr) virou erro terminante sob `$ErrorActionPreferenc
    `.venv/bin/python`) e exige que o destino e os ancestrais também não sejam trocáveis por terceiros.
 3. **`fv acervo agendar --mostrar`** distingue `ausente` (unidade inexistente, sem crontab, serviço não encontrado)
    de `indisponivel` (consulta recusada).
+
+**Ajuste pós-CI.** A escrita de grupo só torna um caminho inseguro quando o grupo não é o grupo privado do próprio
+usuário (nome igual ao do usuário e nenhum outro membro). Sem isso, o umask 002 padrão das distribuições com grupo
+por usuário (Ubuntu, Fedora) recusaria toda instalação. Os testes passaram como root e como usuário comum com umask
+002 e 022.
