@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -63,7 +62,7 @@ def linux(monkeypatch, tmp_path):
     agenda.definir_executar_sistema(executar)
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(agenda.Path, "home", classmethod(lambda cls: tmp_path / "usuario"))
-    monkeypatch.setattr(agenda, "caminho_fv", lambda: Path("/opt/fv/bin/fv"))
+    monkeypatch.setattr(agenda, "caminho_fv", lambda: tmp_path / "fv/bin/fv")  # não /opt: gravável nos runners
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         monkeypatch.setattr(os, "geteuid", lambda: 1000)
     monkeypatch.setattr(agenda, "_usuario_efetivo", lambda: "ana")

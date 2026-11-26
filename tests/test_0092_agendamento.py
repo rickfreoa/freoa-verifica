@@ -26,7 +26,8 @@ def chamadas(monkeypatch, tmp_path):
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         monkeypatch.setattr(os, "geteuid", lambda: 1000)  # sessão como root: simula usuário comum (root é dono aceito)
     monkeypatch.setattr(agenda.Path, "home", classmethod(lambda cls: tmp_path / "usuario"))  # nunca o home real
-    monkeypatch.setattr(agenda, "caminho_fv", lambda: Path("/opt/fv venv/bin/fv"))
+    # Executável sob tmp_path: /opt é gravável por terceiros nos runners do GitHub e o guarda recusaria (CI f0b6a59).
+    monkeypatch.setattr(agenda, "caminho_fv", lambda: tmp_path / "fv venv/bin/fv")
     yield registro, respostas
     agenda.definir_executar_sistema(None)
 
@@ -41,7 +42,7 @@ def test_macos_launchagent_valido_e_carregado_no_dominio_do_usuario(chamadas, mo
     plist = tmp_path / "usuario/Library/LaunchAgents/br.freoa.verifica.manter.plist"
     dados = plistlib.loads(plist.read_bytes())
     assert dados["Label"] == "br.freoa.verifica.manter"
-    assert dados["ProgramArguments"] == [str(Path("/opt/fv venv/bin/fv")), *agenda.argumentos(home)]
+    assert dados["ProgramArguments"] == [str(tmp_path / "fv venv/bin/fv"), *agenda.argumentos(home)]
     assert dados["StartCalendarInterval"] == {"Hour": 5, "Minute": 43} and dados["StartInterval"] == 7200
     assert dados["EnvironmentVariables"]["FV_HOME"] == str(home)
     build_parser().parse_args(dados["ProgramArguments"][1:])  # a linha agendada é aceita pelo próprio fv
