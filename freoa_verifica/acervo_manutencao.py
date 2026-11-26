@@ -173,10 +173,35 @@ def _crontab_sem_marca() -> tuple[int, list[str]]:
     return 0, [linha for linha in saida.splitlines() if MARCA_CRON not in linha]
 
 
+def caminho_inseguro(caminho: Path) -> str | None:
+    """Motivo pelo qual um terceiro poderia trocar `caminho` (ou um diretório acima dele), ou None.
+
+    POSIX: cada componente existente precisa ser do usuário ou do root e não pode ser gravável por grupo ou outros,
+    salvo diretório com sticky bit (como /tmp), em que terceiros não renomeiam nem apagam o que é nosso (0092)."""
+    if sys.platform == "win32":
+        return None  # perfil do usuário protegido pela ACL herdada
+    import os
+    import stat
+
+    uid = os.geteuid()
+    atual = Path(caminho)
+    for parte in [atual, *atual.parents]:
+        try:
+            st = parte.lstat()
+        except FileNotFoundError:
+            continue
+        if st.st_uid not in (uid, 0):
+            return f"{parte}: de outro usuário"
+        gravavel = st.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+        if gravavel and not (stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX):
+            return f"{parte}: gravável por grupo ou outros"
+    return None
+
+
 def _gravar_privado(caminho: Path, conteudo: str, encoding: str = "utf-8") -> None:
     """Arquivo que define o comando agendado: substitui link simbólico em vez de segui-lo e fica sem escrita de
     grupo ou outros (0092)."""
-    caminho.parent.mkdir(parents=True, exist_ok=True)
+    caminho.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if caminho.is_symlink():
         caminho.unlink()
     caminho.write_text(conteudo, encoding=encoding)
@@ -240,6 +265,9 @@ def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: in
     _validar_home(Path(home))
     if (recusa := _recusa_root()) is not None:
         return recusa
+    if (motivo := caminho_inseguro(caminho_fv())) is not None:
+        return {"status": "erro", "plataforma": sys.platform,
+                "erro": f"executável agendado substituível por terceiros ({motivo}); corrija as permissões"}
     if sys.platform == "win32":
         arquivo = Path(home) / "agendamento-manter.xml"
         arquivo.write_text(xml_tarefa(home, hora, intervalo_horas=intervalo_horas), encoding="utf-16")
@@ -292,16 +320,29 @@ def agendar_remover() -> dict:
         return {"status": "ok" if codigo == 0 else "erro", "plataforma": "windows", "codigo": codigo, "saida": saida,
                 "erro": erro}
     if sys.platform.startswith("linux"):
-        codigo, saida, erro = _rodar(["systemctl", "--user", "disable", "--now", f"{UNIDADE_LINUX}.timer"])
-        cod_cron, saida_cron, _ = _rodar(["crontab", "-l"])
+        # Cada mecanismo presente precisa ser removido; leitura inconclusiva não comprova ausência (0092).
+        base = Path.home() / ".config" / "systemd" / "user"
+        unidades = [base / f"{UNIDADE_LINUX}.service", base / f"{UNIDADE_LINUX}.timer"]
+        tinha_systemd = any(u.exists() or u.is_symlink() for u in unidades)
+        codigo, saida, erro = 0, "", ""
+        if tinha_systemd:
+            codigo, saida, erro = _rodar(["systemctl", "--user", "disable", "--now", f"{UNIDADE_LINUX}.timer"])
+            if codigo == 0:
+                for u in unidades:
+                    if u.exists() or u.is_symlink():
+                        u.unlink()
+        cod_cron, saida_cron, erro_cron = _rodar(["crontab", "-l"])
+        sem_crontab = cod_cron != 0 and "no crontab" in (erro_cron + saida_cron).lower()
+        leitura_ok = cod_cron == 0 or sem_crontab
         tinha_cron = cod_cron == 0 and MARCA_CRON in saida_cron
         cod_grav = 0
         if tinha_cron:
             cod_leitura, linhas = _crontab_sem_marca()
             cod_grav = cod_leitura or _gravar_crontab(linhas)[0]
-        ok = (codigo == 0 or tinha_cron) and cod_grav == 0
-        return {"status": "ok" if ok else "erro", "plataforma": "linux", "systemd": codigo == 0, "cron": tinha_cron,
-                "codigo": codigo, "codigo_cron": cod_grav, "saida": saida, "erro": erro}
+        ok = codigo == 0 and leitura_ok and cod_grav == 0
+        return {"status": "ok" if ok else "erro", "plataforma": "linux", "systemd": tinha_systemd,
+                "cron": tinha_cron, "crontab_legivel": leitura_ok, "codigo": codigo, "codigo_cron": cod_grav,
+                "saida": saida, "erro": erro or ("" if leitura_ok else erro_cron)}
     if sys.platform == "darwin":
         codigo, saida, erro = _rodar(["launchctl", "bootout", f"gui/{_uid()}/{ROTULO_MAC}"])
         plist = Path.home() / "Library" / "LaunchAgents" / f"{ROTULO_MAC}.plist"

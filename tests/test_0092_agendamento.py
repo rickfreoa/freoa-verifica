@@ -171,3 +171,39 @@ def test_remover_propaga_falha_do_crontab(chamadas, monkeypatch, tmp_path):
     respostas["crontab -l"] = (0, f"@reboot x {agenda.MARCA_CRON}\n", "")
     respostas["crontab -"] = (1, "", "falhou")
     assert agenda.agendar_remover()["status"] == "erro"
+
+
+# ------------------------------------------------------------------ auditoria Codex da 0092, rodada 2
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permissões POSIX")
+def test_executavel_em_diretorio_gravavel_por_terceiros_nao_e_agendado(chamadas, monkeypatch, tmp_path):
+    registro, _ = chamadas
+    monkeypatch.setattr(sys, "platform", "linux")
+    venv = tmp_path / "venv" / "bin"
+    venv.mkdir(parents=True)
+    (venv / "fv").write_text("#!/bin/sh\n")
+    (tmp_path / "venv").chmod(0o777)  # terceiro poderia trocar bin/ inteiro
+    monkeypatch.setattr(agenda, "caminho_fv", lambda: venv / "fv")
+    r = agenda.agendar_instalar(tmp_path / "h", "05:43")
+    assert r["status"] == "erro" and "gravável" in r["erro"] and not registro
+    (tmp_path / "venv").chmod(0o700)
+    assert agenda.caminho_inseguro(venv / "fv") is None
+
+
+def test_remover_com_crontab_ilegivel_nao_declara_sucesso(chamadas, monkeypatch, tmp_path):
+    _, respostas = chamadas
+    monkeypatch.setattr(sys, "platform", "linux")
+    respostas["crontab -l"] = (1, "", "crontab: permission denied")
+    assert agenda.agendar_remover()["status"] == "erro"
+
+
+def test_remover_com_unidade_presente_e_disable_falho_nao_declara_sucesso(chamadas, monkeypatch, tmp_path):
+    _, respostas = chamadas
+    monkeypatch.setattr(sys, "platform", "linux")
+    agenda.agendar_instalar(tmp_path / "h", "05:43")  # cria as unidades
+    respostas["systemctl --user"] = (1, "", "falhou")
+    respostas["crontab -l"] = (1, "", "no crontab for usuario")
+    r = agenda.agendar_remover()
+    assert r["status"] == "erro" and r["systemd"] is True
+    assert (tmp_path / "usuario/.config/systemd/user/fv-manter.timer").exists()  # nada apagado sem desativar

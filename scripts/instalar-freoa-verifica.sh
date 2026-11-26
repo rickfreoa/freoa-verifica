@@ -51,6 +51,34 @@ for candidato in python3.14 python3.13 python3.12 python3.11 python3; do
 done
 [ -n "$PY" ] || falhou "Python 3.11 ou superior ausente"
 
+# Diretórios reutilizados (instalação anterior) não podem ser trocáveis por terceiros: o comando agendado e o acervo
+# saem deles. Link simbólico, dono alheio ou escrita de grupo/outros nos ancestrais interrompem; nos próprios
+# diretórios do usuário a escrita de grupo/outros é removida (0092).
+ETAPA="conferir permissoes"
+"$PY" - "$DESTINO" "$REGISTRO_DIR" <<'PY' || falhou "caminho inseguro"
+import os, stat, sys
+from pathlib import Path
+uid = os.geteuid()
+for alvo in map(Path, sys.argv[1:]):
+    if alvo.is_symlink():
+        sys.exit(f"{alvo}: link simbolico")
+    for parte in [alvo, *alvo.parents]:
+        st = parte.lstat()
+        if st.st_uid not in (uid, 0):
+            sys.exit(f"{parte}: de outro usuario")
+        if parte != alvo and st.st_mode & 0o022 and not (stat.S_ISDIR(st.st_mode) and st.st_mode & stat.S_ISVTX):
+            sys.exit(f"{parte}: gravavel por grupo ou outros")
+    for raiz, dirs, arquivos in os.walk(alvo):
+        for nome in [*dirs, *arquivos]:
+            p = Path(raiz, nome)
+            st = p.lstat()
+            if st.st_uid != uid:
+                sys.exit(f"{p}: de outro usuario")
+            if not stat.S_ISLNK(st.st_mode) and st.st_mode & 0o022:
+                p.chmod(st.st_mode & ~0o022)
+    alvo.chmod(alvo.stat().st_mode & ~0o022)
+PY
+
 sha256() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
     else shasum -a 256 "$1" | cut -d' ' -f1; fi

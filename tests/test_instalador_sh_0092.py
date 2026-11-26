@@ -115,3 +115,25 @@ def test_lock_ausente_interrompe_sem_renuncia(tmp_path):
     run, saida, registro = _rodar(tmp_path, gh=gh, curl=bin_404)
     assert "FALHOU na etapa: baixar lock" in saida and "sem hash" in saida
     assert registro["concluida"] is False and not (tmp_path / "user/freoa-verifica/.venv").exists()
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
+def test_instalacao_anterior_com_escrita_de_terceiros_e_corrigida_ou_recusada(tmp_path):
+    destino = tmp_path / "user/freoa-verifica"
+    destino.mkdir(parents=True)
+    (destino / "velho.txt").write_text("x")
+    (destino / "velho.txt").chmod(0o666)
+    destino.chmod(0o777)
+    run, saida, registro = _rodar(tmp_path, "--sem-attestation")
+    assert "FALHOU na etapa: instalar wheel" in saida  # passou da conferência
+    assert destino.stat().st_mode & 0o022 == 0 and (destino / "velho.txt").stat().st_mode & 0o022 == 0
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
+def test_destino_link_simbolico_e_recusado(tmp_path):
+    alheio = tmp_path / "alheio"
+    alheio.mkdir()
+    (tmp_path / "user").mkdir()
+    (tmp_path / "user/freoa-verifica").symlink_to(alheio)
+    run, saida, registro = _rodar(tmp_path, "--sem-attestation")
+    assert "FALHOU na etapa: conferir permissoes" in saida and "link simbolico" in saida and registro is None

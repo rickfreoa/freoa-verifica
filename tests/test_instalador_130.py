@@ -18,7 +18,8 @@ function Invoke-WebRequest {
     param($Uri, $OutFile, [switch]$UseBasicParsing)
     Set-Content -LiteralPath $OutFile -Value '# lock sintetico'
 }
-if ($SemAttestation) { & $Installer -SemAttestation } else { & $Installer }
+# -PermitirAdministrador: os runners Windows da CI rodam elevados (0092 recusa elevação por padrão).
+if ($SemAttestation) { & $Installer -SemAttestation -PermitirAdministrador } else { & $Installer -PermitirAdministrador }
 exit $LASTEXITCODE
 """
 GH_JSON = ('@echo off\r\necho [{"verificationResult":{"signature":{"certificate":'
@@ -112,7 +113,7 @@ function Invoke-WebRequest {
     param($Uri, $OutFile, [switch]$UseBasicParsing)
     Set-Content -LiteralPath $OutFile -Value '# lock sintetico'
 }
-& $Installer -SemAttestation *>&1 | ForEach-Object { "$_" }
+& $Installer -SemAttestation -PermitirAdministrador *>&1 | ForEach-Object { "$_" }
 exit $LASTEXITCODE
 """
 
@@ -147,3 +148,10 @@ def test_instalador_agenda_manutencao_antes_do_registro_final():
     assert '@("acervo", "agendar", "--instalar", "--json")' in texto
     assert "agendamento = $agendamento" in texto[final - 300:final]
     assert '$attArg += " -SemAgendamento"' in texto  # o relançamento fora do MSIX repassa a opção
+
+
+def test_instalador_recusa_elevacao_salvo_permissao_explicita():
+    texto = SCRIPT.read_text(encoding="utf-8-sig")
+    assert "[switch]$PermitirAdministrador" in texto and '$attArg += " -PermitirAdministrador"' in texto
+    recusa = texto.index("WindowsBuiltInRole]::Administrator) -and -not $PermitirAdministrador")
+    assert recusa < texto.index('$destino = Join-Path $env:USERPROFILE "freoa-verifica"')  # antes de qualquer escrita

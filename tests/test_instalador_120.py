@@ -22,7 +22,8 @@ def test_installer_native_failure_stops(tmp_path):
     (tmp_path / "gh.cmd").write_text("@echo off\r\nexit /b 37\r\n")
     env = dict(os.environ, USERPROFILE=str(tmp_path / "user"), LOCALAPPDATA=str(tmp_path / "local"))
     env["PATH"] = str(tmp_path) + os.pathsep + env["PATH"]
-    run = subprocess.run([powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+    run = subprocess.run([powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script),
+                          "-PermitirAdministrador"],  # runners Windows da CI são elevados (0092)
                          env=env, capture_output=True, text=True, timeout=30)
     assert run.returncode != 0
     output = run.stdout + run.stderr
@@ -77,7 +78,7 @@ function Invoke-WebRequest {
     param($Uri, $OutFile, [switch]$UseBasicParsing)
     Set-Content -LiteralPath $OutFile -Value '# lock sintetico'
 }
-& $Installer -SemAttestation
+& $Installer -SemAttestation -PermitirAdministrador
 exit $LASTEXITCODE
 """, encoding="utf-8-sig")
     env = dict(os.environ, USERPROFILE=str(tmp_path / "user"), LOCALAPPDATA=str(tmp_path / "local"))

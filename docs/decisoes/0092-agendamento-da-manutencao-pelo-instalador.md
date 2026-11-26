@@ -52,3 +52,15 @@ de versão nova do pip (stderr) virou erro terminante sob `$ErrorActionPreferenc
 6. **URI e pipelines.** `file://` gerado por `Path.as_uri()`; saídas do `fv` capturadas antes de examinar o JSON.
 7. **Execução elevada.** O sh e `fv acervo agendar` recusam root; o instalador do Windows avisa quando elevado (a
    tarefa roda com o token do usuário e privilégio mínimo de qualquer modo).
+
+## Auditoria Codex (r2, BLOQUEADOR) e correções
+
+1. **Diretórios reutilizados.** O instalador sh confere, antes de usar `~/freoa-verifica` e o diretório do
+   registro, que nem eles nem os ancestrais sejam link simbólico, de outro usuário ou graváveis por grupo/outros
+   (diretório com sticky bit, como /tmp, é admitido); dentro dos próprios diretórios remove a escrita de grupo/outros.
+   `fv acervo agendar` recusa agendar executável cujo caminho seja substituível por terceiros e cria os diretórios
+   de unidade e plist com modo 0700.
+2. **Remoção.** Unidade systemd presente precisa ser desativada (e só então apagada); crontab ilegível não comprova
+   ausência; qualquer falha devolve `erro`.
+3. **Windows elevado.** O instalador recusa execução como administrador antes de qualquer escrita, salvo
+   `-PermitirAdministrador` (os testes de CI usam a opção, porque os runners Windows são elevados).

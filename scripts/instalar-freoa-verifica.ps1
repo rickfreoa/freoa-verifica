@@ -3,7 +3,8 @@
 param(
     [string]$Versao = "1.4.0a6",
     [switch]$SemAttestation,
-    [switch]$SemAgendamento
+    [switch]$SemAgendamento,
+    [switch]$PermitirAdministrador
 )
 $ErrorActionPreference = "Stop"
 # O aviso de versão nova do pip sai em stderr; com a saída redirecionada, o Windows PowerShell o trata como erro (0092).
@@ -46,6 +47,7 @@ function Invoke-ForaDoPacoteMsix {
             $exitLiteral = $exitFile.Replace("'", "''")
             $attArg = if ($SemAttestation) { " -SemAttestation" } else { "" }
             if ($SemAgendamento) { $attArg += " -SemAgendamento" }
+            if ($PermitirAdministrador) { $attArg += " -PermitirAdministrador" }
             $bootstrap = @"
 `$env:FV_INSTALL_RELAUNCHED = '1'
 `$code = 1
@@ -100,9 +102,11 @@ function Invoke-NativeChecked {
 
 $etapa = "preparar"
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    # A tarefa agendada roda com o token do usuário e privilégio mínimo de qualquer modo; o aviso é sobre o resto.
-    Write-Warning "Executando como administrador: nao e necessario; prefira o PowerShell comum."
+if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) -and -not $PermitirAdministrador) {
+    # Nada aqui precisa de administrador; elevado, o ambiente e o acervo ficariam com dono e ACL do grupo
+    # Administradores (0092). -PermitirAdministrador assume esse risco explicitamente.
+    Write-Error "FALHOU na etapa: preparar - execute no PowerShell comum, sem 'Executar como administrador' (ou use -PermitirAdministrador)" -ErrorAction Continue
+    exit 1
 }
 try {
     $versao = $Versao
