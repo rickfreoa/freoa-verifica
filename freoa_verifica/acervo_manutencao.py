@@ -178,10 +178,11 @@ def caminho_inseguro(caminho: Path) -> str | None:
 
     POSIX: cada componente existente precisa ser do usuário ou do root e não pode ser gravável por grupo ou outros,
     salvo diretório com sticky bit (como /tmp), em que terceiros não renomeiam nem apagam o que é nosso (0092)."""
-    if sys.platform == "win32":
-        return None  # perfil do usuário protegido pela ACL herdada
     import os
     import stat
+
+    if sys.platform == "win32" or not hasattr(os, "geteuid"):
+        return None  # Windows: perfil do usuário protegido pela ACL herdada
 
     uid = os.geteuid()
     atual = Path(caminho)
