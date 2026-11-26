@@ -55,7 +55,9 @@ if ($parent.Name -ne 'Invoke-NativeChecked') { throw 'guard ausente' }
                          capture_output=True, text=True, timeout=30)
     assert run.returncode == 0, run.stdout + run.stderr
     text = SCRIPT.read_text(encoding="utf-8-sig")
-    assert '$resultado = & $Comando @Argumentos\n    $codigo = $LASTEXITCODE' in text
+    # 0092: a chamada roda sob "Continue" (stderr não é falha) e o código de saída é lido logo depois.
+    assert ('try { $resultado = & $Comando @Argumentos } finally { $ErrorActionPreference = $eapAnterior }\n'
+            '    $codigo = $LASTEXITCODE') in text
 
 
 @pytest.mark.skipif(os.name != "nt", reason="PowerShell Windows")

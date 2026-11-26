@@ -12,6 +12,8 @@ import pytest
 
 import freoa_verifica
 
+pytestmark = pytest.mark.repositorio  # lê scripts/ do checkout; o job da wheel só leva o instalador do Windows
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/instalar-freoa-verifica.sh"
 PS1 = SCRIPT.with_suffix(".ps1")
 CURL_200 = '#!/bin/sh\n# curl falso: grava um lock sintético e responde 200\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && { echo "# lock" > "$2"; shift; }; shift; done\nprintf 200\n'
