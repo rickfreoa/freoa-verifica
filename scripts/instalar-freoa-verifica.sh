@@ -21,10 +21,16 @@ done
 
 # O aviso de versão nova do pip não é falha (0092).
 export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1
+# Ambiente, registro e acervo sem escrita de grupo ou outros: o comando agendado sai daqui (0092).
+umask 077
 
 ETAPA="preparar"
 falhou() { echo "FALHOU na etapa: $ETAPA${1:+ - $1}" >&2; exit 1; }
 trap 'falhou "comando com erro (linha $LINENO)"' ERR
+
+if [ "$(id -u)" = 0 ]; then
+    echo "FALHOU na etapa: preparar - execute como usuario comum, nao como root" >&2; exit 1
+fi
 
 REPO="rickfreoa/freoa-verifica"
 BASE="https://github.com/$REPO/releases/download/v$VERSAO"
@@ -104,6 +110,8 @@ LOCK="$DESTINO/requirements-lock.txt"
 TEM_LOCK=1
 CODIGO="$(curl -sSL -w '%{http_code}' -o "$LOCK" "$BASE/requirements-lock.txt")" || falhou "rede"
 if [ "$CODIGO" = 404 ]; then
+    # Sem lock não há hashes das dependências: só com a renúncia explícita à proveniência (0092).
+    [ "$SEM_ATTESTATION" = 1 ] || falhou "requirements-lock.txt ausente nesta release: dependencias sem hash"
     TEM_LOCK=0; rm -f "$LOCK"; echo "AVISO: requirements-lock.txt ausente nesta release" >&2
 elif [ "$CODIGO" != 200 ]; then
     falhou "HTTP $CODIGO"  # só 404 é asset opcional ausente; outra falha não é ausência
@@ -122,7 +130,8 @@ ETAPA="instalar wheel"
 if [ "$TEM_LOCK" = 1 ]; then
     # O lock tem hashes, o que liga --require-hashes; o próprio wheel entra com o hash já conferido.
     REQ="$DESTINO/requirements-wheel.txt"
-    printf 'freoa-verifica[server] @ file://%s --hash=sha256:%s\n' "$WHEEL" "$SHA_WHEEL" > "$REQ"
+    URI="$("$PY" -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve().as_uri())' "$WHEEL")"
+    printf 'freoa-verifica[server] @ %s --hash=sha256:%s\n' "$URI" "$SHA_WHEEL" > "$REQ"
     "$PYV" -m pip install -r "$REQ" -c "$LOCK"
 else
     "$PYV" -m pip install "${WHEEL}[server]"
@@ -158,13 +167,15 @@ if [ "$(ler instalado)" != True ] || [ "$(ler vinculado)" != True ] || [ -z "$(l
 fi
 if [ -z "$(ler derived_version)" ] || [ "$(ler derived_version)" -lt "$(ler derived_version_atual)" ]; then
     ETAPA="reconstruir acervo"
-    [ "$("$FV" acervo reconstruir --json | json_campo status)" = ok ] || falhou "reconstrucao recusada"
+    REB="$("$FV" acervo reconstruir --json)"
+    [ "$(printf '%s' "$REB" | json_campo status)" = ok ] || falhou "reconstrucao recusada"
     INFO="$("$FV" snapshot info --json)"
 fi
 [ "$(ler derived_version)" = "$(ler derived_version_atual)" ] || falhou "derivados incompativeis"
 
 ETAPA="doctor offline"
-"$FV" doctor --offline --json | "$PY" -c 'import json,sys
+DOC="$("$FV" doctor --offline --json)"
+printf '%s' "$DOC" | "$PY" -c 'import json,sys
 d=json.load(sys.stdin)
 ruins=[v for v in d.get("verificacoes") or [] if v.get("status") not in ("ok","alerta")]
 sys.exit(0 if d.get("status")=="ok" and d.get("verificacoes") and not ruins and not d.get("acervo_incompleto") else 1)' ||

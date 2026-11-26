@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -241,6 +242,8 @@ def test_agendar_monta_comando_windows_e_linux(tmp_path, monkeypatch):
     assert "/RU" not in chamadas[0] and "--home" in xml_tarefa and "<StartWhenAvailable>true" in xml_tarefa
     chamadas.clear()
     monkeypatch.setattr(sys, "platform", "linux")
+    if hasattr(os, "geteuid"):
+        monkeypatch.setattr(os, "geteuid", lambda: 1000)  # 0092 recusa root; a sessão de teste pode ser root
     monkeypatch.setattr(agenda.Path, "home", classmethod(lambda cls: tmp_path))  # nunca o ~/.config real
     agenda.agendar_instalar(tmp_path, "06:00")
     assert (tmp_path / ".config" / "systemd" / "user" / "fv-manter.timer").is_file()

@@ -99,6 +99,11 @@ function Invoke-NativeChecked {
 }
 
 $etapa = "preparar"
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    # A tarefa agendada roda com o token do usuário e privilégio mínimo de qualquer modo; o aviso é sobre o resto.
+    Write-Warning "Executando como administrador: nao e necessario; prefira o PowerShell comum."
+}
 try {
     $versao = $Versao
     $repo = "rickfreoa/freoa-verifica"
@@ -141,6 +146,8 @@ try {
     try { Invoke-WebRequest "$base/requirements-lock.txt" -OutFile $lock -UseBasicParsing }
     catch {
         if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) {
+            # Sem lock não há hashes das dependências: só com a renúncia explícita à proveniência (0092).
+            if (-not $SemAttestation) { throw "requirements-lock.txt ausente nesta release: dependencias sem hash" }
             $temLock = $false
             Write-Warning "requirements-lock.txt ausente nesta release"
         } else { throw }

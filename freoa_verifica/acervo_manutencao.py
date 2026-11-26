@@ -65,14 +65,37 @@ def comando_schtasks(home: Path | None, hora: str, arquivo_xml: Path) -> list[st
     return ["schtasks", "/Create", "/TN", TAREFA_WIN, "/XML", str(arquivo_xml), "/F"]
 
 
+def _validar_home(home: Path) -> None:
+    if any(c in str(home) for c in "\r\n\0"):
+        raise ValueError("home_com_quebra_de_linha")
+
+
+def _systemd_escapar(valor: str) -> str:
+    """Argumento de ExecStart entre aspas: especificadores (%), variáveis ($), aspas e barras escapados."""
+    v = valor.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("$", "$$")
+    return f'"{v}"'
+
+
+def linha_systemd(home: Path) -> str:
+    return " ".join(_systemd_escapar(a) for a in [str(caminho_fv()), *argumentos(home)])
+
+
+def linha_shell(home: Path) -> str:
+    """Comando para shell POSIX (cron): cada argumento entre aspas simples, sem expansão possível."""
+    import shlex
+
+    return " ".join(shlex.quote(a) for a in [str(caminho_fv()), *argumentos(home)])
+
+
 def conteudo_systemd_service(home: Path) -> str:
+    _validar_home(home)
     return f"""[Unit]
 Description=FREOA Verifica - manutenção do acervo
 
 [Service]
 Type=oneshot
-Environment=FV_HOME={home}
-ExecStart={linha_comando(home)}
+Environment={_systemd_escapar("FV_HOME=" + str(home))}
+ExecStart={linha_systemd(home)}
 """
 
 
@@ -134,16 +157,39 @@ def conteudo_launchd(home: Path, hora: str, *, intervalo_horas: int = 2) -> str:
 
 def linha_cron(home: Path, hora: str, *, intervalo_horas: int = 2) -> list[str]:
     """Plano B do Linux sem systemd de usuário (WSL, contêiner): a cada N horas no minuto pedido, e ao iniciar."""
+    _validar_home(home)
     _, mm = hora.split(":", 1)
-    comando = linha_comando(home)
+    comando = linha_shell(home).replace("%", "\\%")  # no crontab, % não escapado vira quebra de linha
     return [f"{int(mm)} */{intervalo_horas} * * * {comando} >/dev/null 2>&1 {MARCA_CRON}",
             f"@reboot {comando} >/dev/null 2>&1 {MARCA_CRON}"]
 
 
 def _crontab_sem_marca() -> tuple[int, list[str]]:
-    codigo, saida, _ = _rodar(["crontab", "-l"])
-    linhas = saida.splitlines() if codigo == 0 else []  # sem crontab: `crontab -l` sai com erro
-    return codigo, [linha for linha in linhas if MARCA_CRON not in linha]
+    """Linhas atuais do crontab do usuário, sem as nossas. Código diferente de 0: não foi possível ler e nada deve ser
+    gravado, salvo ausência comprovada de crontab ("no crontab for <usuário>"), que é tabela vazia."""
+    codigo, saida, erro = _rodar(["crontab", "-l"])
+    if codigo != 0:
+        return (0, []) if "no crontab" in (erro + saida).lower() else (codigo or 1, [])
+    return 0, [linha for linha in saida.splitlines() if MARCA_CRON not in linha]
+
+
+def _gravar_privado(caminho: Path, conteudo: str, encoding: str = "utf-8") -> None:
+    """Arquivo que define o comando agendado: substitui link simbólico em vez de segui-lo e fica sem escrita de
+    grupo ou outros (0092)."""
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    if caminho.is_symlink():
+        caminho.unlink()
+    caminho.write_text(conteudo, encoding=encoding)
+    if sys.platform != "win32":
+        caminho.chmod(0o600)
+
+
+def _recusa_root() -> dict | None:
+    import os
+
+    if sys.platform != "win32" and hasattr(os, "geteuid") and os.geteuid() == 0:
+        return {"status": "erro", "plataforma": sys.platform, "erro": "execute como usuário comum, não como root"}
+    return None
 
 
 def _gravar_crontab(linhas: list[str]) -> tuple[int, str, str]:
@@ -191,6 +237,9 @@ def _rodar(cmd: list[str], entrada: str | None = None) -> tuple[int, str, str]:
 def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: int = 2) -> dict:
     hora = validar_hora(hora)
     intervalo_horas = max(1, int(intervalo_horas))
+    _validar_home(Path(home))
+    if (recusa := _recusa_root()) is not None:
+        return recusa
     if sys.platform == "win32":
         arquivo = Path(home) / "agendamento-manter.xml"
         arquivo.write_text(xml_tarefa(home, hora, intervalo_horas=intervalo_horas), encoding="utf-16")
@@ -201,11 +250,8 @@ def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: in
                 "executa_ao_voltar": True}
     if sys.platform.startswith("linux"):
         base = Path.home() / ".config" / "systemd" / "user"
-        base.mkdir(parents=True, exist_ok=True)
-        (base / f"{UNIDADE_LINUX}.service").write_text(conteudo_systemd_service(home), encoding="utf-8")
-        (base / f"{UNIDADE_LINUX}.timer").write_text(
-            conteudo_systemd_timer(hora, intervalo_horas=intervalo_horas), encoding="utf-8"
-        )
+        _gravar_privado(base / f"{UNIDADE_LINUX}.service", conteudo_systemd_service(home))
+        _gravar_privado(base / f"{UNIDADE_LINUX}.timer", conteudo_systemd_timer(hora, intervalo_horas=intervalo_horas))
         codigo, saida, erro = _rodar(["systemctl", "--user", "daemon-reload"])
         if codigo == 0:
             codigo, saida, erro = _rodar(["systemctl", "--user", "enable", "--now", f"{UNIDADE_LINUX}.timer"])
@@ -214,15 +260,16 @@ def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: in
                     "unidade": UNIDADE_LINUX, "codigo": codigo, "saida": saida, "erro": erro}
         # Sem systemd de usuário (WSL, contêiner, sessão sem lingering): crontab do usuário (0092).
         erro_systemd = erro
-        _, linhas = _crontab_sem_marca()
+        cod_leitura, linhas = _crontab_sem_marca()
+        if cod_leitura != 0:
+            return {"status": "erro", "plataforma": "linux", "mecanismo": "cron", "erro_systemd": erro_systemd,
+                    "erro": "crontab ilegível: nada foi gravado para não apagar as linhas existentes"}
         codigo, saida, erro = _gravar_crontab(linhas + linha_cron(home, hora, intervalo_horas=intervalo_horas))
         return {"status": "ok" if codigo == 0 else "erro", "plataforma": "linux", "mecanismo": "cron", "hora": hora,
                 "erro_systemd": erro_systemd, "codigo": codigo, "saida": saida, "erro": erro}
     if sys.platform == "darwin":
-        base = Path.home() / "Library" / "LaunchAgents"
-        base.mkdir(parents=True, exist_ok=True)
-        plist = base / f"{ROTULO_MAC}.plist"
-        plist.write_text(conteudo_launchd(home, hora, intervalo_horas=intervalo_horas), encoding="utf-8")
+        plist = Path.home() / "Library" / "LaunchAgents" / f"{ROTULO_MAC}.plist"
+        _gravar_privado(plist, conteudo_launchd(home, hora, intervalo_horas=intervalo_horas))
         dominio = f"gui/{_uid()}"
         _rodar(["launchctl", "bootout", f"{dominio}/{ROTULO_MAC}"])  # reinstalação: ausente não é erro
         codigo, saida, erro = _rodar(["launchctl", "bootstrap", dominio, str(plist)])
@@ -246,11 +293,15 @@ def agendar_remover() -> dict:
                 "erro": erro}
     if sys.platform.startswith("linux"):
         codigo, saida, erro = _rodar(["systemctl", "--user", "disable", "--now", f"{UNIDADE_LINUX}.timer"])
-        cod_cron, linhas = _crontab_sem_marca()
-        if cod_cron == 0:
-            _gravar_crontab(linhas)
-        return {"status": "ok" if codigo == 0 or cod_cron == 0 else "erro", "plataforma": "linux", "codigo": codigo,
-                "saida": saida, "erro": erro}
+        cod_cron, saida_cron, _ = _rodar(["crontab", "-l"])
+        tinha_cron = cod_cron == 0 and MARCA_CRON in saida_cron
+        cod_grav = 0
+        if tinha_cron:
+            cod_leitura, linhas = _crontab_sem_marca()
+            cod_grav = cod_leitura or _gravar_crontab(linhas)[0]
+        ok = (codigo == 0 or tinha_cron) and cod_grav == 0
+        return {"status": "ok" if ok else "erro", "plataforma": "linux", "systemd": codigo == 0, "cron": tinha_cron,
+                "codigo": codigo, "codigo_cron": cod_grav, "saida": saida, "erro": erro}
     if sys.platform == "darwin":
         codigo, saida, erro = _rodar(["launchctl", "bootout", f"gui/{_uid()}/{ROTULO_MAC}"])
         plist = Path.home() / "Library" / "LaunchAgents" / f"{ROTULO_MAC}.plist"

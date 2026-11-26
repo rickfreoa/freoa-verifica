@@ -41,7 +41,7 @@ def test_sintaxe_bash():
     subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
 
 
-def _rodar(tmp_path, *args, gh=None):
+def _rodar(tmp_path, *args, gh=None, uid="1000", curl=CURL_200):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for nome in ("python3", "sed", "cut", "grep", "mkdir", "cp", "date", "mv", "rm", "dirname", "cat", "sha256sum",
@@ -49,8 +49,10 @@ def _rodar(tmp_path, *args, gh=None):
         real = shutil.which(nome)
         if real:
             (bin_dir / nome).symlink_to(real)
-    (bin_dir / "curl").write_text(CURL_200)
+    (bin_dir / "curl").write_text(curl)
     (bin_dir / "curl").chmod(0o755)
+    (bin_dir / "id").write_text(f"#!/bin/sh\necho {uid}\n")  # a sessão de teste pode rodar como root
+    (bin_dir / "id").chmod(0o755)
     if gh is not None:
         (bin_dir / "gh").write_text(gh)
         (bin_dir / "gh").chmod(0o755)
@@ -61,7 +63,10 @@ def _rodar(tmp_path, *args, gh=None):
     run = subprocess.run([shutil.which("bash"), str(script), *args], env=env, capture_output=True, text=True,
                          timeout=300)
     registro = tmp_path / "user/.local/share/freoa-verifica/instalacao.json"
-    return run, run.stdout + run.stderr, json.loads(registro.read_text(encoding="utf-8")) if registro.exists() else None
+    dados = json.loads(registro.read_text(encoding="utf-8")) if registro.exists() else None
+    if registro.exists():
+        assert registro.stat().st_mode & 0o077 == 0  # umask 077: registro sem acesso de terceiros
+    return run, run.stdout + run.stderr, dados
 
 
 @pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
@@ -93,3 +98,20 @@ def test_sem_attestation_registra_false(tmp_path):
     run, saida, registro = _rodar(tmp_path, "--sem-attestation")
     assert "PROVENIENCIA NAO VERIFICADA" in saida and "FALHOU na etapa: instalar wheel" in saida
     assert registro["attestation_verificada"] is False and registro["concluida"] is False
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
+def test_root_e_recusado_antes_de_gravar(tmp_path):
+    run, saida, registro = _rodar(tmp_path, "--sem-attestation", uid="0")
+    assert run.returncode != 0 and "nao como root" in saida
+    assert registro is None and not (tmp_path / "user/freoa-verifica").exists()
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
+def test_lock_ausente_interrompe_sem_renuncia(tmp_path):
+    gh = ('#!/bin/sh\necho \'[{"verificationResult":{"signature":{"certificate":'
+          '{"sourceRepositoryDigest":"abc123"}}}}]\'\n')
+    bin_404 = '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && { : > "$2"; shift; }; shift; done\nprintf 404\n'
+    run, saida, registro = _rodar(tmp_path, gh=gh, curl=bin_404)
+    assert "FALHOU na etapa: baixar lock" in saida and "sem hash" in saida
+    assert registro["concluida"] is False and not (tmp_path / "user/freoa-verifica/.venv").exists()

@@ -21,6 +21,10 @@ def chamadas(monkeypatch, tmp_path):
         return respostas.get(" ".join(cmd[:2]), (0, "", ""))
 
     agenda.definir_executar_sistema(executar)
+    import os
+
+    if hasattr(os, "geteuid"):
+        monkeypatch.setattr(os, "geteuid", lambda: 1000)  # a sessão de teste pode rodar como root
     monkeypatch.setattr(agenda.Path, "home", classmethod(lambda cls: tmp_path / "usuario"))  # nunca o home real
     monkeypatch.setattr(agenda, "caminho_fv", lambda: Path("/opt/fv venv/bin/fv"))
     yield registro, respostas
@@ -89,3 +93,81 @@ def test_linux_remover_limpa_systemd_e_crontab(chamadas, monkeypatch, tmp_path):
 def test_comando_ausente_vira_codigo_127_sem_excecao(monkeypatch):
     agenda.definir_executar_sistema(None)
     assert agenda._rodar(["comando-que-nao-existe-fv-0092"])[0] == 127
+
+
+# ------------------------------------------------------------------ auditoria Codex da 0092
+
+
+def test_crontab_ilegivel_nao_e_sobrescrito(chamadas, monkeypatch, tmp_path):
+    registro, respostas = chamadas
+    monkeypatch.setattr(sys, "platform", "linux")
+    respostas["systemctl --user"] = (1, "", "Failed to connect to bus")
+    respostas["crontab -l"] = (1, "", "crontab: permission denied")
+    r = agenda.agendar_instalar(tmp_path / "h", "05:43")
+    assert r["status"] == "erro" and not any(c == ["crontab", "-"] for c, _ in registro)
+
+
+def test_sem_crontab_comprovado_e_tabela_vazia(chamadas, monkeypatch, tmp_path):
+    registro, respostas = chamadas
+    monkeypatch.setattr(sys, "platform", "linux")
+    respostas["systemctl --user"] = (1, "", "Failed to connect to bus")
+    respostas["crontab -l"] = (1, "", "no crontab for usuario")
+    assert agenda.agendar_instalar(tmp_path / "h", "05:43")["status"] == "ok"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="shell POSIX")
+def test_home_hostil_nao_executa_nada_no_cron(chamadas, monkeypatch, tmp_path):
+    import subprocess
+
+    monkeypatch.setattr(agenda, "caminho_fv", lambda: Path("/bin/echo"))
+    home = tmp_path / "acervo;touch PWNED;# $(touch PWNED2) 50%"
+    linha = agenda.linha_cron(home, "05:43")[0]
+    comando = linha.split(" ", 5)[5].split(" >/dev/null")[0].replace("\\%", "%")  # o que o cron entrega ao sh
+    saida = subprocess.run(["sh", "-c", comando], cwd=tmp_path, capture_output=True, text=True, check=True).stdout
+    assert str(home) in saida and not (tmp_path / "PWNED").exists() and not (tmp_path / "PWNED2").exists()
+    assert "50\\%" in linha  # % escapado para o parser do cron
+
+
+def test_home_com_quebra_de_linha_e_recusado(chamadas, monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "linux")
+    with pytest.raises(ValueError):
+        agenda.agendar_instalar(tmp_path / "a\nb", "05:43")
+
+
+def test_systemd_escapa_especificadores_e_variaveis():
+    home = Path("/srv/acervo 100% $HOME")
+    unidade = agenda.conteudo_systemd_service(home)
+    assert "100%% $$HOME" in unidade and '"FV_HOME=' in unidade
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permissões POSIX")
+def test_arquivos_agendados_sem_escrita_de_terceiros(chamadas, monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "linux")
+    alvo = tmp_path / "usuario/.config/systemd/user/fv-manter.service"
+    alvo.parent.mkdir(parents=True)
+    alheio = tmp_path / "alheio.service"
+    alheio.write_text("original")
+    alvo.symlink_to(alheio)  # link plantado: substituído, não seguido
+    agenda.agendar_instalar(tmp_path / "h", "05:43")
+    assert alheio.read_text() == "original" and not alvo.is_symlink()
+    assert alvo.stat().st_mode & 0o077 == 0
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX")
+def test_root_e_recusado(chamadas, monkeypatch, tmp_path):
+    import os
+
+    registro, _ = chamadas
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    r = agenda.agendar_instalar(tmp_path / "h", "05:43")
+    assert r["status"] == "erro" and "root" in r["erro"] and not registro
+
+
+def test_remover_propaga_falha_do_crontab(chamadas, monkeypatch, tmp_path):
+    registro, respostas = chamadas
+    monkeypatch.setattr(sys, "platform", "linux")
+    respostas["systemctl --user"] = (1, "", "sem bus")
+    respostas["crontab -l"] = (0, f"@reboot x {agenda.MARCA_CRON}\n", "")
+    respostas["crontab -"] = (1, "", "falhou")
+    assert agenda.agendar_remover()["status"] == "erro"

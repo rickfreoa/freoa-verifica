@@ -37,3 +37,18 @@ de versão nova do pip (stderr) virou erro terminante sob `$ErrorActionPreferenc
 - Cron não recupera execução perdida com a máquina desligada; o `@reboot` e o intervalo de 2 horas compensam em parte.
 - No macOS e no Linux sem systemd o mecanismo foi testado por simulação (comandos e conteúdo gerados), não em máquina
   real; a CI só tem Ubuntu e Windows.
+
+## Auditoria Codex (r1, BLOQUEADOR) e correções
+
+1. **Crontab ilegível era sobrescrito.** Leitura com erro só vale como tabela vazia quando o `crontab -l` afirma não
+   haver crontab; qualquer outra falha aborta sem gravar.
+2. **Injeção no comando agendado.** No cron, cada argumento vai entre aspas simples (`shlex.quote`) e `%` é escapado;
+   no systemd, aspas, `\`, `%` e `$` são escapados; home com quebra de linha é recusado.
+3. **Instalação sem lock verificado.** Lock ausente (404) interrompe os dois instaladores, salvo com
+   `-SemAttestation` / `--sem-attestation`, que já é a renúncia explícita à proveniência.
+4. **Arquivos do comando agendado.** Unidades systemd e plist com modo 0600, substituindo link simbólico em vez de
+   segui-lo; o instalador sh roda com `umask 077`.
+5. **Remoção informava sucesso com falha.** O resultado de cada mecanismo removido é propagado.
+6. **URI e pipelines.** `file://` gerado por `Path.as_uri()`; saídas do `fv` capturadas antes de examinar o JSON.
+7. **Execução elevada.** O sh e `fv acervo agendar` recusam root; o instalador do Windows avisa quando elevado (a
+   tarefa roda com o token do usuário e privilégio mínimo de qualquer modo).
