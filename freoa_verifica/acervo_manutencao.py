@@ -9,6 +9,8 @@ from typing import Callable
 TAREFA_WIN = "FREOA Verifica - manter acervo"
 HORA_PADRAO = "05:43"
 UNIDADE_LINUX = "fv-manter"
+ROTULO_MAC = "br.freoa.verifica.manter"
+MARCA_CRON = "# freoa-verifica: fv acervo manter (decisao 0092)"
 
 
 def caminho_fv() -> Path:
@@ -89,6 +91,72 @@ WantedBy=timers.target
 """
 
 
+def conteudo_launchd(home: Path, hora: str, *, intervalo_horas: int = 2) -> str:
+    """LaunchAgent do usuário: horário diário mais intervalo; o launchd roda ao acordar o que perdeu dormindo."""
+    from xml.sax.saxutils import escape
+
+    hh, mm = (int(x) for x in hora.split(":", 1))
+    args = "".join(f"\n    <string>{escape(a)}</string>" for a in [str(caminho_fv()), *argumentos(home)])
+    log = escape(str(Path(home) / "manutencao-launchd.log"))
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{ROTULO_MAC}</string>
+  <key>ProgramArguments</key>
+  <array>{args}
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>FV_HOME</key>
+    <string>{escape(str(home))}</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>{hh}</integer>
+    <key>Minute</key>
+    <integer>{mm}</integer>
+  </dict>
+  <key>StartInterval</key>
+  <integer>{intervalo_horas * 3600}</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>{log}</string>
+  <key>StandardErrorPath</key>
+  <string>{log}</string>
+</dict>
+</plist>
+"""
+
+
+def linha_cron(home: Path, hora: str, *, intervalo_horas: int = 2) -> list[str]:
+    """Plano B do Linux sem systemd de usuário (WSL, contêiner): a cada N horas no minuto pedido, e ao iniciar."""
+    _, mm = hora.split(":", 1)
+    comando = linha_comando(home)
+    return [f"{int(mm)} */{intervalo_horas} * * * {comando} >/dev/null 2>&1 {MARCA_CRON}",
+            f"@reboot {comando} >/dev/null 2>&1 {MARCA_CRON}"]
+
+
+def _crontab_sem_marca() -> tuple[int, list[str]]:
+    codigo, saida, _ = _rodar(["crontab", "-l"])
+    linhas = saida.splitlines() if codigo == 0 else []  # sem crontab: `crontab -l` sai com erro
+    return codigo, [linha for linha in linhas if MARCA_CRON not in linha]
+
+
+def _gravar_crontab(linhas: list[str]) -> tuple[int, str, str]:
+    conteudo = "\n".join(linhas) + ("\n" if linhas else "")
+    return _rodar(["crontab", "-"], entrada=conteudo)
+
+
+def _uid() -> int:
+    import os
+
+    return os.getuid()  # type: ignore[attr-defined]  # só macOS chama
+
+
 def validar_hora(hora: str) -> str:
     if not re.fullmatch(r"\d{2}:\d{2}", hora or ""):
         raise ValueError("hora_invalida")
@@ -98,20 +166,25 @@ def validar_hora(hora: str) -> str:
     return hora
 
 
-_executar_sistema: Callable[[list[str]], tuple[int, str, str]] | None = None
+_executar_sistema: Callable[..., tuple[int, str, str]] | None = None
 
 
-def definir_executar_sistema(fn: Callable[[list[str]], tuple[int, str, str]] | None) -> None:
+def definir_executar_sistema(fn: Callable[..., tuple[int, str, str]] | None) -> None:
+    """Executor injetável nos testes: recebe o comando e, para `crontab -`, a entrada (`entrada=`)."""
     global _executar_sistema
     _executar_sistema = fn
 
 
-def _rodar(cmd: list[str]) -> tuple[int, str, str]:
+def _rodar(cmd: list[str], entrada: str | None = None) -> tuple[int, str, str]:
     if _executar_sistema is not None:
-        return _executar_sistema(cmd)
+        return _executar_sistema(cmd) if entrada is None else _executar_sistema(cmd, entrada=entrada)
     import subprocess
 
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)  # noqa: S603
+    try:
+        r = subprocess.run(cmd, input=entrada, capture_output=True, text=True, encoding="utf-8",  # noqa: S603
+                           errors="replace", check=False)
+    except FileNotFoundError as exc:  # systemctl/crontab/launchctl ausente
+        return 127, "", str(exc)
     return r.returncode, r.stdout, r.stderr
 
 
@@ -136,8 +209,26 @@ def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: in
         codigo, saida, erro = _rodar(["systemctl", "--user", "daemon-reload"])
         if codigo == 0:
             codigo, saida, erro = _rodar(["systemctl", "--user", "enable", "--now", f"{UNIDADE_LINUX}.timer"])
-        return {"status": "ok" if codigo == 0 else "erro", "plataforma": "linux", "hora": hora,
-                "unidade": UNIDADE_LINUX, "codigo": codigo, "saida": saida, "erro": erro}
+        if codigo == 0:
+            return {"status": "ok", "plataforma": "linux", "mecanismo": "systemd", "hora": hora,
+                    "unidade": UNIDADE_LINUX, "codigo": codigo, "saida": saida, "erro": erro}
+        # Sem systemd de usuário (WSL, contêiner, sessão sem lingering): crontab do usuário (0092).
+        erro_systemd = erro
+        _, linhas = _crontab_sem_marca()
+        codigo, saida, erro = _gravar_crontab(linhas + linha_cron(home, hora, intervalo_horas=intervalo_horas))
+        return {"status": "ok" if codigo == 0 else "erro", "plataforma": "linux", "mecanismo": "cron", "hora": hora,
+                "erro_systemd": erro_systemd, "codigo": codigo, "saida": saida, "erro": erro}
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "LaunchAgents"
+        base.mkdir(parents=True, exist_ok=True)
+        plist = base / f"{ROTULO_MAC}.plist"
+        plist.write_text(conteudo_launchd(home, hora, intervalo_horas=intervalo_horas), encoding="utf-8")
+        dominio = f"gui/{_uid()}"
+        _rodar(["launchctl", "bootout", f"{dominio}/{ROTULO_MAC}"])  # reinstalação: ausente não é erro
+        codigo, saida, erro = _rodar(["launchctl", "bootstrap", dominio, str(plist)])
+        return {"status": "ok" if codigo == 0 else "erro", "plataforma": "macos", "mecanismo": "launchd",
+                "hora": hora, "rotulo": ROTULO_MAC, "plist": str(plist), "codigo": codigo, "saida": saida,
+                "erro": erro, "executa_ao_voltar": True}
     return {
         "status": "nao_suportado",
         "plataforma": sys.platform,
@@ -155,7 +246,17 @@ def agendar_remover() -> dict:
                 "erro": erro}
     if sys.platform.startswith("linux"):
         codigo, saida, erro = _rodar(["systemctl", "--user", "disable", "--now", f"{UNIDADE_LINUX}.timer"])
-        return {"status": "ok" if codigo == 0 else "erro", "plataforma": "linux", "codigo": codigo, "saida": saida,
+        cod_cron, linhas = _crontab_sem_marca()
+        if cod_cron == 0:
+            _gravar_crontab(linhas)
+        return {"status": "ok" if codigo == 0 or cod_cron == 0 else "erro", "plataforma": "linux", "codigo": codigo,
+                "saida": saida, "erro": erro}
+    if sys.platform == "darwin":
+        codigo, saida, erro = _rodar(["launchctl", "bootout", f"gui/{_uid()}/{ROTULO_MAC}"])
+        plist = Path.home() / "Library" / "LaunchAgents" / f"{ROTULO_MAC}.plist"
+        if plist.exists():
+            plist.unlink()
+        return {"status": "ok" if codigo == 0 else "erro", "plataforma": "macos", "codigo": codigo, "saida": saida,
                 "erro": erro}
     return {"status": "nao_suportado", "plataforma": sys.platform}
 
@@ -166,5 +267,15 @@ def agendar_mostrar() -> dict:
         return {"status": "ok" if codigo == 0 else "ausente", "plataforma": "windows", "detalhe": saida or erro}
     if sys.platform.startswith("linux"):
         codigo, saida, erro = _rodar(["systemctl", "--user", "status", f"{UNIDADE_LINUX}.timer"])
-        return {"status": "ok" if codigo == 0 else "ausente", "plataforma": "linux", "detalhe": saida or erro}
+        if codigo == 0:
+            return {"status": "ok", "plataforma": "linux", "mecanismo": "systemd", "detalhe": saida}
+        cod_cron, saida_cron, _ = _rodar(["crontab", "-l"])
+        linhas = [linha for linha in saida_cron.splitlines() if MARCA_CRON in linha] if cod_cron == 0 else []
+        if linhas:
+            return {"status": "ok", "plataforma": "linux", "mecanismo": "cron", "detalhe": "\n".join(linhas)}
+        return {"status": "ausente", "plataforma": "linux", "detalhe": saida or erro}
+    if sys.platform == "darwin":
+        codigo, saida, erro = _rodar(["launchctl", "print", f"gui/{_uid()}/{ROTULO_MAC}"])
+        return {"status": "ok" if codigo == 0 else "ausente", "plataforma": "macos", "mecanismo": "launchd",
+                "detalhe": saida or erro}
     return {"status": "nao_suportado", "plataforma": sys.platform}

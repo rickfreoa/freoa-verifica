@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## Não publicado (decisão 0092)
+
+- **Instalador do Windows não para mais por aviso em stderr.** Com a saída redirecionada, o aviso de versão nova do
+  pip derrubava a etapa "instalar wheel" (visto na instalação da 1.4.0a6). O instalador desliga esse aviso e só o
+  código de saída decide a falha de cada etapa.
+- **Instalador para Linux e macOS** (`scripts/instalar-freoa-verifica.sh`), com as mesmas etapas e exigências de
+  attestation do instalador do Windows.
+- **Manutenção do acervo agendada pelos instaladores** (`-SemAgendamento` / `--sem-agendamento` dispensam), com
+  `agendamento` gravado em `instalacao.json`. `fv acervo agendar` ganhou LaunchAgent no macOS e, no Linux sem systemd
+  de usuário, o crontab do usuário.
+
 ## 1.4.0a6 - 25/11/2026 (decisão 0091)
 
 - **Auditoria r1 (emenda A).** Dez achados do parecer Codex: fronteira no parser, Constituição por ano, reconfirmação estrita, rota normas_leg, cursor de manutenção, metadados, MCP, evidência, manifesto, bateria.
