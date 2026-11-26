@@ -226,7 +226,7 @@ def test_doctor_acervo_manutencao_alertas(tmp_path):
     assert chk["nome"] == "acervo_manutencao" and chk["status"] == "alerta"
     (tmp_path / "manutencao.json").write_text(json.dumps({"status": "parcial", "fim": velho}), encoding="utf-8")
     chk2 = rev.consulta_manutencao(tmp_path)
-    assert chk2["status"] == "falha"
+    assert chk2["status"] == "alerta"  # 0092: parcial roda e alerta; não é falha da manutenção
 
 
 def test_agendar_monta_comando_windows_e_linux(tmp_path, monkeypatch):

@@ -118,6 +118,22 @@ class NormasPortao(Portao):
             return self.estado.liberar_host(HOST, decisao, self.relogio.agora())
 
 
+def normalizar_encoding(payload: dict) -> list | None:
+    """`encoding` da API: lista de manifestações; obra de versão única vem como objeto só (ex.: Lei 15.177/2025)."""
+    enc = payload.get("encoding")
+    if enc is None or isinstance(enc, list):
+        return enc
+    if isinstance(enc, dict):
+        return [enc]
+    raise ValueError("encoding")
+
+
+def idioma_portugues(item: dict) -> bool:
+    """Manifestação em português; sem `inLanguage`, aceita (respostas antigas da API só traziam pt)."""
+    lang = item.get("inLanguage")
+    return lang is None or (isinstance(lang, str) and (lang == "pt" or lang.startswith("pt-")))
+
+
 @register
 class NormasLegConnector(Connector):
     id = "normas_leg"
@@ -172,7 +188,7 @@ class NormasLegConnector(Connector):
                 date.fromisoformat(match[2])
             if w.kind == "constituicao" and full != urn:
                 raise ValueError("data_constituicao")
-            encodings = payload.get("encoding")
+            encodings = normalizar_encoding(payload)
             if not isinstance(encodings, list):
                 raise ValueError("encoding")
             texts = []
@@ -180,9 +196,10 @@ class NormasLegConnector(Connector):
                 if not isinstance(e, dict):
                     raise ValueError("encoding")
                 if any(e.get(k) is not None and not isinstance(e[k], str)
-                       for k in ("version", "name", "legislationLegalValue", "datePublished", "license")):
+                       for k in ("version", "name", "legislationLegalValue", "datePublished", "license", "inLanguage")):
                     raise ValueError("encoding")
-                texts.append({k: e.get(k) for k in ("version", "name", "legislationLegalValue", "datePublished", "license")} |
+                texts.append({k: e.get(k) for k in ("version", "name", "legislationLegalValue", "datePublished", "license",
+                                                    "inLanguage")} |
                              {"contentUrl": url_texto(e.get("contentUrl"))})
             if any(payload.get(k) is not None and not isinstance(payload[k], str)
                    for k in ("abstract", "name", "datePublished", "license", "sdLicense")):
@@ -219,7 +236,8 @@ class NormasLegConnector(Connector):
             raise ValueError("versao_invalida")
         choices = []
         for version in ([wanted] if wanted else ["Current", "Original"]):
-            choices = [e for e in cand.metadata["encoding"] if e["version"] == version]
+            # A CF traz "Current" em pt, en e fr; só o texto em português é a fonte (achado do teste em Debian, 0092).
+            choices = [e for e in cand.metadata["encoding"] if e["version"] == version and idioma_portugues(e)]
             if choices:
                 break
         if len(choices) != 1:

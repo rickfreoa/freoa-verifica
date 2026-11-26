@@ -4597,7 +4597,8 @@ class Verifica:
             "status": status,
             "revalidacao": {"status": reval.get("status"), "contagens": reval.get("contagens"), "obras": reval.get("obras")},
             "renovacao": {"status": renov.get("status"), "candidatas": renov.get("candidatas"),
-                          "renovadas": len(renov.get("renovadas") or []), "falhas": renov.get("falhas")},
+                          "renovadas": len(renov.get("renovadas") or []), "falhas": renov.get("falhas"),
+                          "adiadas": len(renov.get("adiadas") or [])},
         }
         alvo = self.home / "manutencao.json"
         tmp = self.home / "manutencao.json.tmp"
@@ -4650,7 +4651,7 @@ class Verifica:
                 rows = rows[off:] + rows[:off]
         if limite is not None:
             rows = rows[:max(0, int(limite))]
-        renovadas, falhas = [], []
+        renovadas, falhas, adiadas = [], [], []
         ultimo_processado: str | None = _revalidacao.cursor_renovacao(self.conn)
         with _revalidacao.manutencao_normas_leg():
             for r in rows:
@@ -4668,6 +4669,10 @@ class Verifica:
                         falhas.append({**obra, "motivo": "sem_rota" if novo is None else "ambigua"})
                         _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
                 except SourceUnavailable as exc:
+                    if exc.reason in _revalidacao.MOTIVOS_ADIAMENTO:
+                        # Orçamento da execução esgotado: a obra e as seguintes ficam para a próxima (0092).
+                        adiadas.append({**obra, "motivo": exc.reason})
+                        break
                     falhas.append({**obra, "motivo": exc.reason[:200]})
                     _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
                 except IdentityMismatch:
@@ -4679,7 +4684,7 @@ class Verifica:
         self._acervo_cache = None
         status = "ok" if not falhas else ("parcial" if renovadas else "indisponivel")
         return {"status": status, "dias": dias, "candidatas": len(rows), "renovadas": renovadas, "falhas": falhas,
-                "envelhecimento_restante": _acervo.envelhecimento(self.conn, dias)}
+                "adiadas": adiadas, "envelhecimento_restante": _acervo.envelhecimento(self.conn, dias)}
 
     def reconstruir_acervo(self, com_situacao: bool = False) -> dict[str, Any]:
         """Reconstrói os derivados do home numa cópia e troca o banco só se tudo validar (C6)."""

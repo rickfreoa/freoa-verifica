@@ -10,6 +10,11 @@
 - **Manutenção do acervo agendada pelos instaladores** (`-SemAgendamento` / `--sem-agendamento` dispensam), com
   `agendamento` gravado em `instalacao.json`. `fv acervo agendar` ganhou LaunchAgent no macOS e, no Linux sem systemd
   de usuário, o crontab do usuário.
+- **Correções do teste em Debian 13.** A CF volta a renovar pelo normas.leg.br (escolha da manifestação em
+  português); lei com versão única (`encoding` como objeto) deixa de dar `resposta_inesperada`; teto de chamadas
+  adia a rodada sem registrar falha, e `fv acervo manter` sai com 0 em resultado parcial; o agendamento no systemd
+  tenta habilitar lingering e avisa quando não consegue; o instalador sh mostra o motivo da falha do `fv`; mensagem
+  informativa do systemd sai em `detalhe`, não em `erro`.
 
 ## 1.4.0a6 - 25/11/2026 (decisão 0091)
 

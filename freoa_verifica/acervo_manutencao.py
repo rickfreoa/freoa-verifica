@@ -291,9 +291,29 @@ def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: in
         return {"status": "erro", "plataforma": sys.platform,
                 "erro": f"executável agendado substituível por terceiros ({motivo}); corrija as permissões"}
     try:
-        return _agendar_instalar(home, hora, intervalo_horas)
+        resultado = _agendar_instalar(home, hora, intervalo_horas)
     except PermissionError as exc:
         return {"status": "erro", "plataforma": sys.platform, "erro": str(exc)}
+    if resultado.get("status") == "ok" and resultado.get("erro"):
+        # Saída informativa em stderr ("Created symlink ..." do systemd) não é erro de um resultado ok (0092).
+        resultado["detalhe"] = resultado.pop("erro")
+        resultado["erro"] = ""
+    return resultado
+
+
+def _linger() -> tuple[bool, str]:
+    """Timer de usuário só roda sem sessão aberta com lingering. Liga se o polkit permitir; senão, avisa."""
+    import getpass
+
+    usuario = getpass.getuser()
+    codigo, saida, _ = _rodar(["loginctl", "show-user", usuario, "--property=Linger", "--value"])
+    if codigo == 0 and saida.strip() == "yes":
+        return True, ""
+    codigo, _, erro = _rodar(["loginctl", "enable-linger", usuario])
+    if codigo == 0:
+        return True, ""
+    return False, (f"sem lingering, o timer só roda com {usuario} logado; para rodar sempre, um administrador "
+                   f"executa: loginctl enable-linger {usuario}" + (f" ({erro.strip()})" if erro.strip() else ""))
 
 
 def _agendar_instalar(home: Path, hora: str, intervalo_horas: int) -> dict:
@@ -313,8 +333,10 @@ def _agendar_instalar(home: Path, hora: str, intervalo_horas: int) -> dict:
         if codigo == 0:
             codigo, saida, erro = _rodar(["systemctl", "--user", "enable", "--now", f"{UNIDADE_LINUX}.timer"])
         if codigo == 0:
+            linger, aviso = _linger()
             return {"status": "ok", "plataforma": "linux", "mecanismo": "systemd", "hora": hora,
-                    "unidade": UNIDADE_LINUX, "codigo": codigo, "saida": saida, "erro": erro}
+                    "unidade": UNIDADE_LINUX, "codigo": codigo, "saida": saida, "erro": erro, "linger": linger,
+                    **({"aviso": aviso} if aviso else {})}
         # Sem systemd de usuário (WSL, contêiner, sessão sem lingering): crontab do usuário (0092).
         erro_systemd = erro
         cod_leitura, linhas = _crontab_sem_marca()

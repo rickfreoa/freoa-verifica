@@ -33,7 +33,7 @@ def test_ordem_das_etapas_e_registro_final():
     assert posicoes == sorted(posicoes)
     assert texto.rindex('"$AGENDAMENTO" 1') > posicoes[-1]  # concluida=1 só depois do agendamento
     assert "export PIP_DISABLE_PIP_VERSION_CHECK=1" in texto
-    assert "acervo agendar --instalar --json" in texto and "--sem-agendamento" in texto
+    assert "fv_json acervo agendar --instalar" in texto and "--sem-agendamento" in texto
 
 
 @pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
@@ -150,3 +150,33 @@ def test_link_interno_para_arvore_gravavel_por_terceiros_e_recusado(tmp_path):
     run, saida, registro = _rodar(tmp_path, "--sem-attestation")
     assert "FALHOU na etapa: conferir permissoes" in saida and "gravavel por grupo ou outros" in saida
     assert registro is None
+
+
+def _funcao(texto: str, nome: str) -> str:
+    inicio = texto.index(f"{nome}() {{")
+    fim = texto.index("\n}\n", inicio) + 3
+    return texto[inicio:fim]
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
+def test_falha_do_fv_mostra_o_motivo_e_nao_a_linha(tmp_path):
+    """Teste em Debian (0092): snapshot recusado aparecia como "comando com erro (linha 210)"."""
+    texto = SCRIPT.read_text(encoding="utf-8")
+    fv = tmp_path / "fv"
+    fv.write_text('#!/bin/sh\necho \'{"status": "erro", "motivo": "snapshot_http_404"}\'\necho rastro >&2\nexit 1\n')
+    fv.chmod(0o755)
+    trecho = "\n".join([
+        "set -euo pipefail",
+        'ETAPA="instalar snapshot"',
+        [linha for linha in texto.splitlines() if linha.startswith("falhou() {")][0],
+        [linha for linha in texto.splitlines() if linha.startswith("ao_erro() {")][0],
+        "trap 'ao_erro $LINENO' ERR",
+        _funcao(texto, "fv_json"),
+        f'FV="{fv}"; PY="{shutil.which("python3")}"',
+        'INST="$(fv_json snapshot install)"',
+        "echo nao_deveria_chegar",
+    ])
+    run = subprocess.run(["bash", "-c", trecho], capture_output=True, text=True, timeout=30)
+    assert run.returncode == 3
+    assert "FALHOU na etapa: instalar snapshot - fv snapshot install saiu com 1: erro snapshot_http_404" in run.stderr
+    assert "comando com erro" not in run.stderr and "nao_deveria_chegar" not in run.stdout

@@ -78,3 +78,29 @@ de versão nova do pip (stderr) virou erro terminante sob `$ErrorActionPreferenc
 usuário (nome igual ao do usuário e nenhum outro membro). Sem isso, o umask 002 padrão das distribuições com grupo
 por usuário (Ubuntu, Fedora) recusaria toda instalação. Os testes passaram como root e como usuário comum com umask
 002 e 022.
+
+## Teste em Debian 13 (colega, branch c2e4d83) e correções
+
+Instalação limpa, usuário comum, acervo da 1.4.0a6. O timer do usuário foi criado e a manutenção rodou e renovou
+obras. Seis achados, todos corrigidos com teste de regressão:
+
+1. **CF nunca renovava pelo normas.leg.br.** A API devolve três manifestações `Current` (pt, en, fr) e `fetch`
+   filtrava só por versão, o que dava `versao_ausente_ou_ambigua`. A escolha agora exige idioma português
+   (`inLanguage` ausente, `pt` ou `pt-*`), e o idioma fica registrado em `texts`.
+2. **Lei com versão única** (ex.: Lei 15.177/2025) traz `encoding` como objeto, não lista, e dava
+   `resposta_inesperada`. `normalizar_encoding` aceita objeto único na busca e na revalidação de metadados; outro
+   tipo continua `metadados_invalidos`.
+3. **Teto de chamadas não é falha.** `teto_de_chamada`, `teto_de_sessao` e `orcamento` passam a adiar o restante da
+   rodada (`adiado`/`adiadas`), sem registrar falha. `fv acervo manter` sai com 0 em `ok` e `parcial` e com 1 só em
+   falha; o doctor mostra `parcial` como alerta. Assim o timer deixa de ficar `failed` por limite de cortesia.
+4. **Lingering.** No systemd de usuário, `fv acervo agendar` consulta `Linger` e tenta `loginctl enable-linger`; se a
+   política do sistema recusar, o resultado traz `aviso` com o comando que um administrador deve executar, e o
+   instalador o exibe. O timer continua criado.
+5. **Motivo da falha no instalador sh.** Toda chamada `fv … --json` passa por `fv_json`, que em falha mostra
+   `status`, `motivo`, `erro` ou `reason_code` do JSON, ou as últimas linhas de stderr, em vez de
+   "comando com erro (linha N)".
+6. **Mensagem do systemd em resultado ok.** Saída informativa (como "Created symlink") vai para `detalhe`; `erro`
+   fica vazio quando o agendamento deu certo.
+
+O teste do instalador do começo ao fim no Debian fica para depois da publicação da 1.4.0a7, quando o snapshot
+fixado existir na release.

@@ -11,6 +11,7 @@ from typing import Any
 
 from freoa_verifica.aliases import WorkKey
 from freoa_verifica.connectors.base import Unavailable
+from freoa_verifica.connectors.normas_leg import normalizar_encoding
 from freoa_verifica.connectors.normas_leg import HOST, NormasLegConnector, identidade, url_metadados, urn_da_chave
 from freoa_verifica.texto_resposta import texto_do_response
 
@@ -69,7 +70,11 @@ def sinal_de_metadados(meta: dict) -> dict | None:
     if dm is not None and not isinstance(dm, str):
         dm = None
     versao = None
-    for item in meta.get("encoding") or []:
+    try:
+        encodings = normalizar_encoding(meta) or []
+    except ValueError:
+        encodings = []
+    for item in encodings:
         if not isinstance(item, dict):
             continue
         if item.get("version") != "Current" or item.get("inLanguage") != "pt":
@@ -170,8 +175,9 @@ def _validar_metadados_obra(meta: dict, work: WorkKey) -> str | None:
         esperada = identidade(work)
     except Unavailable as exc:
         return exc.reason
-    enc = meta.get("encoding")
-    if enc is not None and not isinstance(enc, list):
+    try:
+        enc = normalizar_encoding(meta)  # objeto único em obra de versão única (0092)
+    except ValueError:
         return "metadados_invalidos"
     if isinstance(enc, list):
         for item in enc:
@@ -180,7 +186,7 @@ def _validar_metadados_obra(meta: dict, work: WorkKey) -> str | None:
     dm = meta.get("dateModified")
     if dm is not None and not isinstance(dm, str):
         return "metadados_invalidos"
-    if not isinstance(meta.get("encoding"), list):
+    if not isinstance(enc, list):
         return "metadados_invalidos"
     from freoa_verifica.connectors.normas_leg import TIPOS, URN
 
@@ -234,6 +240,11 @@ def _ler_metadados(con: NormasLegConnector, work: WorkKey) -> tuple[dict, str, s
     return payload, resp.sha256, datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+# Fim do orçamento da execução (teto por chamada ou de sessão): não é falha da obra; o resto fica para a próxima
+# execução, que retoma pelo cursor (0092, teste em Debian: o timer ficava "failed" a cada execução).
+MOTIVOS_ADIAMENTO = frozenset({"teto_de_chamada", "teto_de_sessao", "orcamento"})
+
+
 def revalidar(svc, limite: int | None = None) -> dict[str, Any]:
     if svc._offline():
         return {"status": "indisponivel", "motivo": "offline", "obras": []}
@@ -260,6 +271,9 @@ def revalidar(svc, limite: int | None = None) -> dict[str, Any]:
         try:
             payload, sha256, lido_em = _ler_metadados(con, work)
         except Unavailable as exc:
+            if exc.reason in MOTIVOS_ADIAMENTO:
+                resultados.append({"work_id": work_id, "obra": obra, "resultado": "adiado", "motivo": exc.reason})
+                break
             if _host_barrado(con):
                 host_parado = True
             resultados.append({"work_id": work_id, "obra": obra, "resultado": "indisponivel",
@@ -296,10 +310,10 @@ def revalidar(svc, limite: int | None = None) -> dict[str, Any]:
     if rows and ultimo_processado:
         _gravar_cursor(svc.conn, ultimo_processado)
     contagem = {k: sum(1 for r in resultados if r["resultado"] == k)
-                for k in ("inalterado", "alterado", "primeira_leitura", "indisponivel")}
+                for k in ("inalterado", "alterado", "primeira_leitura", "indisponivel", "adiado")}
     if not resultados:
         status = "ok"
-    elif contagem["indisponivel"] == len(resultados):
+    elif contagem["indisponivel"] and contagem["indisponivel"] == len(resultados) - contagem["adiado"]:
         status = "indisponivel"
     elif contagem["indisponivel"]:
         status = "parcial"
@@ -379,6 +393,8 @@ def consulta_manutencao(home: Path) -> dict[str, Any]:
         return {"nome": "acervo_manutencao", "status": "falha", "detalhe": {"motivo": "manutencao_ilegivel"}}
     if not isinstance(data, dict):
         return {"nome": "acervo_manutencao", "status": "falha", "detalhe": {"motivo": "manutencao_ilegivel"}}
+    if data.get("status") == "parcial":  # algumas obras falharam; a manutenção roda (0092)
+        return {"nome": "acervo_manutencao", "status": "alerta", "detalhe": data}
     if data.get("status") != "ok":
         return {"nome": "acervo_manutencao", "status": "falha", "detalhe": data}
     fim = data.get("fim")

@@ -25,8 +25,10 @@ export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1
 umask 077
 
 ETAPA="preparar"
-falhou() { echo "FALHOU na etapa: $ETAPA${1:+ - $1}" >&2; exit 1; }
-trap 'falhou "comando com erro (linha $LINENO)"' ERR
+# Saída 3 = falha já explicada (inclusive dentro de $(...)); o trap não a repete como "comando com erro".
+falhou() { echo "FALHOU na etapa: $ETAPA${1:+ - $1}" >&2; exit 3; }
+ao_erro() { local codigo=$?; [ "$codigo" = 3 ] && exit 3; falhou "comando com erro (linha $1)"; }
+trap 'ao_erro $LINENO' ERR
 
 if [ "$(id -u)" = 0 ]; then
     echo "FALHOU na etapa: preparar - execute como usuario comum, nao como root" >&2; exit 1
@@ -121,6 +123,26 @@ with open(destino, "w", encoding="utf-8") as f:
 PY
 }
 
+# Roda o fv pedindo JSON. Saída diferente de 0 interrompe com o motivo do próprio fv (motivo, erro ou o fim do
+# stderr), e não com a linha do script (0092, teste em Debian).
+fv_json() {
+    local saida codigo erro_arq motivo
+    erro_arq="$(mktemp)"
+    codigo=0
+    saida="$("$FV" "$@" --json 2>"$erro_arq")" || codigo=$?
+    if [ "$codigo" != 0 ]; then
+        motivo="$(printf '%s' "$saida" | "$PY" -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(0)
+print(" ".join(str(d.get(k)) for k in ("status","motivo","erro","reason_code") if isinstance(d,dict) and d.get(k)))' 2>/dev/null || true)"
+        [ -n "$motivo" ] || motivo="$(tail -n 5 "$erro_arq" | tr '\n' ' ')"
+        rm -f "$erro_arq"
+        falhou "fv $* saiu com $codigo: ${motivo:-sem detalhe}"
+    fi
+    rm -f "$erro_arq"
+    printf '%s' "$saida"
+}
+
 json_campo() {  # lê um campo (a.b.c) do JSON na entrada padrão
     "$PY" -c 'import json,sys
 v=json.load(sys.stdin)
@@ -194,7 +216,7 @@ ETAPA="validar versao"
 # Instalação de snapshot é anexação: acervo anterior sem vínculo comprovado contaminaria o novo; ele é
 # preservado ao lado e o snapshot vai para home limpo.
 ETAPA="preservar acervo anterior"
-PRE="$("$FV" snapshot info --json)"
+PRE="$(fv_json snapshot info)"
 TEM_DADOS="$(printf '%s' "$PRE" | "$PY" -c 'import json,sys
 d=json.load(sys.stdin)
 print(1 if d.get("instalado") or any(int(d.get(k) or 0) > 0 for k in ("obras","capturas","decisoes")) else 0)')"
@@ -207,25 +229,25 @@ if [ "$TEM_DADOS" = 1 ] && [ "$(printf '%s' "$PRE" | json_campo vinculado)" != "
 fi
 
 ETAPA="instalar snapshot"
-INST="$("$FV" snapshot install --json)"
+INST="$(fv_json snapshot install)"
 [ "$(printf '%s' "$INST" | json_campo status)" = ok ] || falhou "snapshot recusado: $(printf '%s' "$INST" | json_campo motivo)"
 
 ETAPA="validar acervo"
-INFO="$("$FV" snapshot info --json)"
+INFO="$(fv_json snapshot info)"
 ler() { printf '%s' "$INFO" | json_campo "$1"; }
 if [ "$(ler instalado)" != True ] || [ "$(ler vinculado)" != True ] || [ -z "$(ler derived_version_atual)" ]; then
     falhou "acervo nao instalado/vinculado"
 fi
 if [ -z "$(ler derived_version)" ] || [ "$(ler derived_version)" -lt "$(ler derived_version_atual)" ]; then
     ETAPA="reconstruir acervo"
-    REB="$("$FV" acervo reconstruir --json)"
+    REB="$(fv_json acervo reconstruir)"
     [ "$(printf '%s' "$REB" | json_campo status)" = ok ] || falhou "reconstrucao recusada"
-    INFO="$("$FV" snapshot info --json)"
+    INFO="$(fv_json snapshot info)"
 fi
 [ "$(ler derived_version)" = "$(ler derived_version_atual)" ] || falhou "derivados incompativeis"
 
 ETAPA="doctor offline"
-DOC="$("$FV" doctor --offline --json)"
+DOC="$(fv_json doctor --offline)"
 printf '%s' "$DOC" | "$PY" -c 'import json,sys
 d=json.load(sys.stdin)
 ruins=[v for v in d.get("verificacoes") or [] if v.get("status") not in ("ok","alerta")]
@@ -238,8 +260,10 @@ if [ "$SEM_AGENDAMENTO" = 1 ]; then
     echo "AVISO: manutencao automatica do acervo nao agendada: rode 'fv acervo manter' periodicamente." >&2
 else
     ETAPA="agendar manutencao"
-    AG="$("$FV" acervo agendar --instalar --json)"
+    AG="$(fv_json acervo agendar --instalar)"
     [ "$(printf '%s' "$AG" | json_campo status)" = ok ] || falhou "agendamento recusado: $(printf '%s' "$AG" | json_campo erro)"
+    AVISO_AG="$(printf '%s' "$AG" | json_campo aviso)"
+    [ -z "$AVISO_AG" ] || echo "AVISO: $AVISO_AG" >&2
     AGENDAMENTO="instalado: $(printf '%s' "$AG" | json_campo plataforma) $(printf '%s' "$AG" | json_campo mecanismo) $(printf '%s' "$AG" | json_campo hora), a cada 2 h"
 fi
 
