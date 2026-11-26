@@ -12,7 +12,8 @@
   de usuário, o crontab do usuário.
 - **Correções do teste em Debian 13.** A CF volta a renovar pelo normas.leg.br (escolha da manifestação em
   português); lei com versão única (`encoding` como objeto) deixa de dar `resposta_inesperada`; teto de chamadas
-  adia a rodada sem registrar falha, e `fv acervo manter` sai com 0 em resultado parcial; o agendamento no systemd
+  adia a rodada sem registrar falha (também quando o motivo vem agregado por fonte), `fv acervo manter` sai com 0 em
+  resultado parcial e com 1 quando nada foi concluído (`adiado`); o agendamento no systemd
   tenta habilitar lingering e avisa quando não consegue; o instalador sh mostra o motivo da falha do `fv`; mensagem
   informativa do systemd sai em `detalhe`, não em `erro`.
 

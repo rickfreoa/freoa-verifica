@@ -131,11 +131,19 @@ fv_json() {
     codigo=0
     saida="$("$FV" "$@" --json 2>"$erro_arq")" || codigo=$?
     if [ "$codigo" != 0 ]; then
-        motivo="$(printf '%s' "$saida" | "$PY" -c 'import json,sys
+        # Só códigos (status, motivo, reason_code) do JSON; texto livre apenas como última linha do stderr,
+        # sem caracteres de controle e truncada (0092, Codex r-Debian).
+        motivo="$(printf '%s' "$saida" | "$PY" -c 'import json,re,sys
 try: d=json.load(sys.stdin)
 except Exception: sys.exit(0)
-print(" ".join(str(d.get(k)) for k in ("status","motivo","erro","reason_code") if isinstance(d,dict) and d.get(k)))' 2>/dev/null || true)"
-        [ -n "$motivo" ] || motivo="$(tail -n 5 "$erro_arq" | tr '\n' ' ')"
+ok=re.compile(r"[A-Za-z0-9_.:-]{1,80}")
+d=d if isinstance(d,dict) else {}
+cod=[v for v in (d.get(k) for k in ("motivo","reason_code")) if isinstance(v,str) and ok.fullmatch(v)]
+st=d.get("status")
+print(" ".join(([st] if isinstance(st,str) and ok.fullmatch(st) else [])+cod) if cod else "")' 2>/dev/null || true)"
+        [ -n "$motivo" ] || motivo="$("$PY" -c 'import sys
+linhas=[l.strip() for l in open(sys.argv[1],encoding="utf-8",errors="replace") if l.strip()]
+print("".join(c for c in (linhas[-1] if linhas else "") if c.isprintable())[:200])' "$erro_arq" 2>/dev/null || true)"
         rm -f "$erro_arq"
         falhou "fv $* saiu com $codigo: ${motivo:-sem detalhe}"
     fi

@@ -104,3 +104,23 @@ obras. Seis achados, todos corrigidos com teste de regressão:
 
 O teste do instalador do começo ao fim no Debian fica para depois da publicação da 1.4.0a7, quando o snapshot
 fixado existir na release.
+
+### Leitura do Codex sobre 212fbf2 e correções
+
+Cinco achados, todos corrigidos com teste:
+
+1. **(P1) Motivo agregado.** `_capture_work` agrega `fonte:motivo`, e a renovação comparava o motivo simples; o teto
+   real era registrado como falha. A classificação (`_so_adiamento`) usa `fontes_consultadas`: há adiamento quando
+   algum motivo é de teto ou orçamento e os demais são teto, orçamento ou fora do alcance da Câmara; resultado `erro`
+   ou qualquer outra indisponibilidade em fonte alguma faz da causa mista uma falha.
+2. **(P1) Só adiamento não é sucesso.** Revalidação e renovação sem nada concluído e só com adiamentos devolvem
+   `adiado`; com progresso, `parcial`. `manter` agrega em `ok`, `parcial`, `adiado` ou `indisponivel` e grava
+   `falhas` (se houve falha real). Saída 0 para `ok` e `parcial`, 1 para o resto. O doctor trata `parcial` sem falha
+   real como `ok` (pela regra de idade, porque a próxima execução retoma do cursor), `parcial` com falha como alerta
+   e `adiado` como falha. O teto é por execução, de modo que nada concluído indica anomalia, não limite de cortesia.
+3. **(P2) Usuário do lingering.** Vem do uid efetivo (`pwd`), não de `LOGNAME`/`USER`; nome fora do formato de
+   usuário não vai ao `loginctl`, e os argumentos vão depois de `--`.
+4. **(P2) Exceção no `loginctl`.** `OSError` ao consultar ou ligar o lingering vira aviso; o timer instalado continua
+   `ok`.
+5. **(P2) Diagnóstico do instalador sh.** Do JSON do `fv` saem só códigos (`status`, `motivo`, `reason_code` no
+   formato `[A-Za-z0-9_.:-]`); sem código, só a última linha do stderr, sem caracteres de controle e truncada em 200.

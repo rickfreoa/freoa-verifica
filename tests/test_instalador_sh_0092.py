@@ -180,3 +180,34 @@ def test_falha_do_fv_mostra_o_motivo_e_nao_a_linha(tmp_path):
     assert run.returncode == 3
     assert "FALHOU na etapa: instalar snapshot - fv snapshot install saiu com 1: erro snapshot_http_404" in run.stderr
     assert "comando com erro" not in run.stderr and "nao_deveria_chegar" not in run.stdout
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="bash de Linux/macOS")
+@pytest.mark.parametrize("saida,stderr,presente,ausente", [
+    # texto livre do JSON (erro) não é publicado; códigos são
+    ('{"status": "erro", "motivo": "snapshot_http_404", "erro": "token=SEGREDO"}', "", "erro snapshot_http_404",
+     "SEGREDO"),
+    # motivo fora do formato de código é descartado; cai na última linha do stderr
+    ('{"status": "erro", "motivo": "senha SEGREDO aqui"}', "linha1 SEGREDO\nValueError: falhou", "ValueError: falhou",
+     "SEGREDO"),
+    # sem JSON: só a última linha do stderr, sem controle e truncada
+    ("nao e json", "anterior SEGREDO\nfinal\x1b[31m" + "x" * 400, "final", "SEGREDO"),
+])
+def test_fv_json_so_publica_codigos_e_ultima_linha(tmp_path, saida, stderr, presente, ausente):
+    """Codex r-Debian, achado 5: diagnóstico livre sem sanitização."""
+    texto = SCRIPT.read_text(encoding="utf-8")
+    (tmp_path / "saida").write_text(saida, encoding="utf-8")
+    (tmp_path / "erro").write_text(stderr, encoding="utf-8")
+    fv = tmp_path / "fv"
+    fv.write_text(f'#!/bin/sh\ncat "{tmp_path / "saida"}"\ncat "{tmp_path / "erro"}" >&2\nexit 1\n')
+    fv.chmod(0o755)
+    trecho = "\n".join([
+        "set -euo pipefail", 'ETAPA="x"',
+        [linha for linha in texto.splitlines() if linha.startswith("falhou() {")][0],
+        _funcao(texto, "fv_json"),
+        f'FV="{fv}"; PY="{shutil.which("python3")}"',
+        'R="$(fv_json snapshot info)"',
+    ])
+    run = subprocess.run(["bash", "-c", trecho], capture_output=True, text=True, timeout=30)
+    assert run.returncode == 3 and presente in run.stderr and ausente not in run.stderr
+    assert "\x1b" not in run.stderr and len(run.stderr.splitlines()[-1]) < 300

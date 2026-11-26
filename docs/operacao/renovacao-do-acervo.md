@@ -56,7 +56,8 @@ final; `-SemAgendamento` / `--sem-agendamento` dispensam. Mecanismo por platafor
 | macOS | LaunchAgent `br.freoa.verifica.manter` (horário diário e intervalo; o launchd roda ao acordar o que perdeu) | `~/Library/LaunchAgents/` | idem |
 
 Teto de chamadas atingido não é falha: o restante da rodada fica adiado para a próxima execução, o resultado é
-`parcial` e `fv acervo manter` sai com 0 (1 só em falha). No Linux com systemd, o timer de usuário só roda sem sessão
+`parcial` e `fv acervo manter` sai com 0; o doctor só alerta quando houve falha real. Execução que não concluiu nada
+(`adiado`) sai com 1. No Linux com systemd, o timer de usuário só roda sem sessão
 aberta com lingering; `fv acervo agendar` tenta `loginctl enable-linger` e, se a política do sistema recusar, avisa
 o comando que um administrador deve executar.
 

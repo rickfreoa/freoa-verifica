@@ -317,6 +317,9 @@ def revalidar(svc, limite: int | None = None) -> dict[str, Any]:
         status = "indisponivel"
     elif contagem["indisponivel"]:
         status = "parcial"
+    elif contagem["adiado"]:
+        # Só adiamentos não é sucesso; com obras lidas antes do teto, é parcial (0092, Codex r-Debian).
+        status = "adiado" if contagem["adiado"] == len(resultados) else "parcial"
     else:
         status = "ok"
     return {"status": status, "obras": len(rows), "contagens": contagem, "resultados": resultados}
@@ -393,9 +396,11 @@ def consulta_manutencao(home: Path) -> dict[str, Any]:
         return {"nome": "acervo_manutencao", "status": "falha", "detalhe": {"motivo": "manutencao_ilegivel"}}
     if not isinstance(data, dict):
         return {"nome": "acervo_manutencao", "status": "falha", "detalhe": {"motivo": "manutencao_ilegivel"}}
-    if data.get("status") == "parcial":  # algumas obras falharam; a manutenção roda (0092)
-        return {"nome": "acervo_manutencao", "status": "alerta", "detalhe": data}
-    if data.get("status") != "ok":
+    if data.get("status") == "parcial" and data.get("falhas") is not False:
+        return {"nome": "acervo_manutencao", "status": "alerta", "detalhe": data}  # obras falharam (0092)
+    # "parcial" sem falha real (só teto/orçamento, com progresso) segue a regra de idade como "ok"; o restante
+    # fica para a próxima execução, que retoma do cursor.
+    if data.get("status") not in ("ok", "parcial"):
         return {"nome": "acervo_manutencao", "status": "falha", "detalhe": data}
     fim = data.get("fim")
     if not isinstance(fim, str):

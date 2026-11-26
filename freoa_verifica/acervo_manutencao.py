@@ -301,19 +301,41 @@ def agendar_instalar(home: Path, hora: str = HORA_PADRAO, *, intervalo_horas: in
     return resultado
 
 
-def _linger() -> tuple[bool, str]:
-    """Timer de usuário só roda sem sessão aberta com lingering. Liga se o polkit permitir; senão, avisa."""
-    import getpass
+_NOME_USUARIO = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}\$?")
 
-    usuario = getpass.getuser()
-    codigo, saida, _ = _rodar(["loginctl", "show-user", usuario, "--property=Linger", "--value"])
-    if codigo == 0 and saida.strip() == "yes":
-        return True, ""
-    codigo, _, erro = _rodar(["loginctl", "enable-linger", usuario])
+
+def _usuario_efetivo() -> str | None:
+    """Nome do usuário pelo uid efetivo (não por LOGNAME/USER, que o ambiente controla); None se não confiável."""
+    import os
+
+    try:
+        import pwd
+
+        nome = pwd.getpwuid(os.geteuid()).pw_name
+    except (ImportError, KeyError, AttributeError, OSError):
+        return None
+    return nome if _NOME_USUARIO.fullmatch(nome) else None
+
+
+def _linger() -> tuple[bool, str]:
+    """Timer de usuário só roda sem sessão aberta com lingering. Liga se o polkit permitir; senão, avisa.
+
+    Falha ao consultar ou ligar o lingering nunca desfaz o agendamento já instalado: vira aviso (0092, r-Debian).
+    """
+    usuario = _usuario_efetivo()
+    if usuario is None:
+        return False, "sem lingering: não foi possível identificar o usuário pelo uid efetivo"
+    try:
+        codigo, saida, _ = _rodar(["loginctl", "show-user", "--property=Linger", "--value", "--", usuario])
+        if codigo == 0 and saida.strip() == "yes":
+            return True, ""
+        codigo, _, erro = _rodar(["loginctl", "enable-linger", "--", usuario])
+    except OSError as exc:
+        codigo, erro = 126, type(exc).__name__
     if codigo == 0:
         return True, ""
     return False, (f"sem lingering, o timer só roda com {usuario} logado; para rodar sempre, um administrador "
-                   f"executa: loginctl enable-linger {usuario}" + (f" ({erro.strip()})" if erro.strip() else ""))
+                   f"executa: loginctl enable-linger {usuario}" + (f" ({erro.strip()[:200]})" if erro.strip() else ""))
 
 
 def _agendar_instalar(home: Path, hora: str, intervalo_horas: int) -> dict:
