@@ -86,7 +86,7 @@ def _sha(path):
 
 
 def test_home_novo_tem_derived_version_e_responde(novo):
-    assert derivados.versao(novo.conn) == derivados.DERIVED_VERSION == 6
+    assert derivados.versao(novo.conn) == derivados.DERIVED_VERSION == 7
     esperado = _respostas(novo)
     assert esperado[0][2] == ("verified", esperado[0][2][1])  # art. 60 permanente verified
     assert esperado[1][3][0] != "verified"  # trecho do ADCT não confirma o permanente

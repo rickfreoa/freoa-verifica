@@ -26,7 +26,8 @@ from freoa_verifica.parsers.paths import (
     supplement_scope_from_heading,
 )
 
-PARSER_VERSION = "1.2.4"  # 1.2.4: dispositivo fora de <p> (fonte órfã sob o body; decisão 0091)
+PARSER_VERSION = "1.2.5"  # 1.2.5: marcas defensivas da decisão 0094 (rótulo sem separador, artigo em link de outro
+# ato, redação viva vazia depois de riscada, nota editorial truncada); 1.2.4: fonte órfã sob o body (decisão 0091)
 
 DEFAULT_MAX_INPUT_BYTES = 30 * 1024 * 1024
 DEFAULT_MAX_NESTING = 200
@@ -668,6 +669,46 @@ _INICIO_REMISSIVO = re.compile(
 )
 _ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
 
+# Numeral romano no início do bloco, seguido de espaço, ")" ou "." e de texto, sem o travessão que `_classify_line`
+# exige ("II processar e julgar ...", "II) ...", "II. ..."): inciso que o parser não reconhece. Nunca cria caminho
+# nem move texto; marca o dispositivo receptor (0094, achados 2, 6 e 9 do colega).
+_ROTULO_SEM_SEPARADOR = re.compile(
+    r"\s*(?=[IVXLCDM])(M{0,3})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})(?:\s+|\)\s*|\.\s+)(?=[^\W\d_])"
+)
+# Nota editorial aberta e não fechada no fim da redação ("(Redação dada pela Emenda Constitucional no 40, de 2"):
+# o resto da nota ficou em outro nó (0094, achado 8).
+_NOTA_EDITORIAL_TRUNCADA = re.compile(
+    r"\((?:Reda[cç][aã]o\s+dada|Inclu[ií]d[oa]|Acrescid[oa]|Revogad[oa]|Vide|Renumerad[oa]|Vig[eê]ncia|Produ[cç][aã]o"
+    r"\s+de\s+efeitos|Vetad[oa]|VETAD[OA]|Regulamento|Promulga[cç][aã]o)[^()]*$",
+    re.I,
+)
+
+
+def _rotulo_sem_separador(texto: str) -> bool:
+    m = _ROTULO_SEM_SEPARADOR.match(texto or "")
+    return bool(m and any(m.group(i) for i in range(1, 5)))
+
+
+def _artigo_inteiro_em_link_de_outro_ato(el, proprio: str | None) -> bool:
+    """Todo o texto da fonte órfã está dentro de links para OUTRO ato (0094, achado 7 do colega).
+
+    `href` com arquivo diferente do da própria obra (ou qualquer arquivo, se a URL da obra não é conhecida); âncora
+    da própria página (`#art2`) ou do próprio arquivo continua sendo o artigo."""
+    texto = _normalize_ws(paragraph_plain_text(el))
+    if not texto:
+        return False
+    links = el.xpath(".//a[@href]")
+    if not links:
+        return False
+    em_link = _normalize_ws(" ".join(paragraph_plain_text(a) for a in links))
+    if em_link != texto:
+        return False
+    for a in links:
+        arquivo = (a.get("href") or "").split("#", 1)[0].split("?", 1)[0].rsplit("/", 1)[-1].strip().lower()
+        if not arquivo or (proprio and arquivo == proprio):
+            return False
+    return True
+
 
 def _fonte_orfa_composta(plain_breaks: str, plain: str) -> bool:
     if _SEGUNDO_DISPOSITIVO.search(plain):
@@ -740,7 +781,7 @@ def _abertura_citada_introduzida(el) -> bool:
     return False
 
 
-def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
+def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[int, str], set[int], set[int]]:
     """Parágrafos + fontes órfãs 'Art N' sob body (markup quebrado do Planalto).
 
     Só inclui //body/font cujo texto é rótulo de artigo sem corpo (ex.: "Art 9º"),
@@ -788,10 +829,19 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
     fronteira_ids: set[int] = set()
     fronteira_fonts: list = []
     ids_inteiras: set[int] = set()
+    rotulo_ids: set[int] = set()
+    proprio = (base_url or "").split("#", 1)[0].split("?", 1)[0].rsplit("/", 1)[-1].strip().lower() or None
     for el in root.xpath("//body/font"):
         if id(el) in ids_consumidas or id(el) in merged_by_id:
             continue
         if not _fonte_orfa_parece_dispositivo(el):
+            if not el.xpath(".//p") and _rotulo_sem_separador(paragraph_plain_text(el)):
+                rotulo_ids.add(id(el))
+                fronteira_fonts.append(el)  # entra na ordem do documento só para marcar o dispositivo corrente
+            continue
+        if _artigo_inteiro_em_link_de_outro_ato(el, proprio):
+            fronteira_ids.add(id(el))  # texto de outro ato não abre dispositivo da obra (achado 7)
+            fronteira_fonts.append(el)
             continue
         if _fonte_orfa_admissivel(el) and _abertura_citada_introduzida(el):
             orphan_fonts.append(el)
@@ -801,7 +851,7 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
             fronteira_fonts.append(el)
 
     if not orphan_fonts and not fronteira_fonts:
-        return blocks, merged_by_id, fronteira_ids
+        return blocks, merged_by_id, fronteira_ids, rotulo_ids
 
     # Reconstroi na ordem do documento
     wanted = {id(el) for el in blocks + orphan_fonts + fronteira_fonts}
@@ -810,7 +860,7 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
         if id(el) in wanted:
             ordered.append(el)
     _exigir_sequencia_de_artigos(ordered, merged_by_id, ids_inteiras, fronteira_ids)
-    return (ordered if ordered else blocks), merged_by_id, fronteira_ids
+    return (ordered if ordered else blocks), merged_by_id, fronteira_ids, rotulo_ids
 
 
 def _exigir_sequencia_de_artigos(ordered: list, merged_by_id: dict[int, str], ids_inteiras: set[int],
@@ -1049,12 +1099,15 @@ def parse_html_devices(
     title, ementa = extract_title_ementa(paragraphs)
     # Planalto às vezes quebra <p> com </font> órfão: "Art 9º" fica em
     # //body/font fora de qualquer <p>. Inclui esses blocos na ordem do documento.
-    blocks, merged_by_id, fronteira_ids = _iter_device_blocks(root)
+    blocks, merged_by_id, fronteira_ids, rotulo_ids = _iter_device_blocks(root, base_url)
     ctx = _Ctx()
     ctx.issues.extend(early_issues)
     prev_in_bq = False
 
     for el in blocks:
+        if id(el) in rotulo_ids:
+            _marcar_rotulo_sem_separador(ctx, _normalize_ws(paragraph_plain_text(el)))
+            continue
         if id(el) in fronteira_ids:
             trecho = _normalize_ws(paragraph_plain_text(el))[:160]
             ctx.issues.append(
@@ -1263,6 +1316,14 @@ def parse_html_devices(
             ctx.doc_parts.append("\n")
             continue
 
+        if kind is None and not ctx.in_quote and _rotulo_sem_separador(cleaned or full_plain):
+            # Inciso sem travessão: não é continuação do dispositivo anterior (0094, achados 2 e 9).
+            _marcar_rotulo_sem_separador(ctx, _normalize_ws(full_plain))
+            ctx.doc_parts.append(full_plain)
+            ctx.doc_len += len(full_plain) + 1
+            ctx.doc_parts.append("\n")
+            continue
+
         if kind is None:
             # Continuação sem rótulo → agrega ao dispositivo anterior
             if cleaned and ctx.last_device_path and not annotations:
@@ -1426,6 +1487,7 @@ def parse_html_devices(
 
     doc_text = "".join(ctx.doc_parts)
     provisions = list(ctx.provisions.values())
+    ctx.issues.extend(_marcas_de_redacao(provisions))
     return (
         title,
         ementa,
@@ -1435,6 +1497,31 @@ def parse_html_devices(
         ctx.amendments,
         ctx.editorial_blocks,
     )
+
+
+def _marcar_rotulo_sem_separador(ctx: _Ctx, trecho: str) -> None:
+    alvo = ctx.last_device_path or ctx.art_path
+    ctx.issues.append(Issue("ROTULO_SEM_SEPARADOR", alvo, trecho[:160], blocking_scope="provision" if alvo else None))
+
+
+def _marcas_de_redacao(provisions: list) -> list[Issue]:
+    """Redação vigente que não pode ser servida (0094, achados 1 e 8 do colega); nunca corrige o texto."""
+    marcas = []
+    for prov in provisions:
+        if prov.ambiguous or not prov.redactions:
+            continue
+        vigente = next((r for r in reversed(prov.redactions) if not r.struck and not r.superseded_without_strike), None)
+        if vigente is None:
+            continue
+        notas = {a.kind for a in vigente.annotations}
+        if (not vigente.text.strip() and any(r.struck for r in prov.redactions)
+                and not notas & {"revogado", "veto"}):
+            # Texto novo perdido (</font> órfão tirou o fim do <p>): a redação viva vazia não é a vigente.
+            marcas.append(Issue("REDACAO_VIVA_VAZIA", prov.path, "redação viva vazia depois de redação riscada",
+                                blocking_scope="provision"))
+        elif _NOTA_EDITORIAL_TRUNCADA.search(vigente.text):
+            marcas.append(Issue("NOTA_EDITORIAL_TRUNCADA", prov.path, vigente.text[-80:], blocking_scope="provision"))
+    return marcas
 
 
 def _append_mixed(

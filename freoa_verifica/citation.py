@@ -459,6 +459,42 @@ def _territorial_na_frase(text: str, pos: int) -> bool:
 
 
 _FIM_COMPLEMENTO_CONST = re.compile(r"[,;.\n!?]")
+
+# Logo depois da norma citada, vocabulário de dispositivo ou de alternativa: o pedido é outro dispositivo (ou outra
+# norma) e a citação resolvida não pode confirmar o artigo inteiro (0094, achado 4 do colega). ", caput" e prosa
+# comum não entram.
+_COMPLEMENTO_DE_DISPOSITIVO = re.compile(
+    r"\s*,?\s*(?:"
+    r"§|par[aá]grafos?\b|inc(?:isos?)?\b\.?|al(?:[ií]neas?)?\b\.?|itens?\b"
+    r"|[IVXLC]+(?=\s*(?:[,;.)?!]|$|\s+(?:e|ou)\b))"
+    r"|\d+\s*[ºo°]?(?=\s*(?:[,;.)?!]|$))"
+    r"|[a-z]\)"
+    r"|ou\b|\(\s*ou\b"
+    r")"
+)
+_COMPLEMENTO_CAPUT = re.compile(r"\s*,?\s*caput\b", re.I)
+
+# Data de promulgação de cada Constituição (a de 1969 é a EC n. 1). Data declarada diferente não é exata (achado 3).
+_PROMULGACAO_CONSTITUICAO = {1824: (25, 3), 1891: (24, 2), 1934: (16, 7), 1937: (10, 11), 1946: (18, 9),
+                             1967: (24, 1), 1969: (17, 10), 1988: (5, 10)}
+_MESES = {"janeiro": 1, "fevereiro": 2, "marco": 3, "março": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+          "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
+_DATA_DA_CONSTITUICAO = re.compile(r"\bde\s+(\d{1,2})[ºo°]?\s+de\s+([A-Za-zçÇ]+)\s+de\s+(\d{4})\b", re.I)
+
+
+def _complemento_de_dispositivo_apos(text: str, fim: int) -> bool:
+    resto = text[fim:fim + 40]
+    if _COMPLEMENTO_CAPUT.match(resto):
+        return False
+    return bool(_COMPLEMENTO_DE_DISPOSITIVO.match(resto))
+
+
+def _data_divergente_da_promulgacao(raw: str, ano: int) -> bool:
+    m = _DATA_DA_CONSTITUICAO.search(raw)
+    if not m or int(m.group(3)) != ano or ano not in _PROMULGACAO_CONSTITUICAO:
+        return False
+    mes = _MESES.get(m.group(2).lower())
+    return (int(m.group(1)), mes) != _PROMULGACAO_CONSTITUICAO[ano]
 _COORDENACAO_ORACAO = re.compile(r"(?:^|\s+)e\s+", re.I)
 
 
@@ -832,6 +868,10 @@ def _parse_work_match(
             flags = ["constituicao_nao_federal"]
             conf = "provavel"
             year = max(year, 0)
+        elif _data_divergente_da_promulgacao(raw, year):
+            # "Constituição Federal de 31 de outubro de 1988": a data declarada não é a da promulgação (0094, achado 3).
+            flags = [*flags, "constituicao_data_divergente"]
+            conf = "provavel"
         number = str(year)
     if year is None:
         year = 0
@@ -1375,6 +1415,10 @@ def extract(texto: str) -> list[Citation]:
             cite.flags.remove("apelido")
             if cite.path is None:
                 cite.confidence = "provavel"
+    for cite in work_cites:
+        if cite.path and cite.confidence == "exata" and _complemento_de_dispositivo_apos(text, cite.span[1]):
+            cite.confidence = "provavel"
+            cite.flags = [*cite.flags, "complemento_de_dispositivo_apos_a_norma"]
     raw_cites.extend(work_cites)
     for cite in raw_cites:
         if "sem_ano" in cite.flags and cite.confidence == "exata":

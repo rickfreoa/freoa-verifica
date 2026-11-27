@@ -377,6 +377,33 @@ def desmarcar_renovacao_pendente(conn, work_id: str) -> None:
     conn.commit()
 
 
+def instante(valor) -> datetime | None:
+    """ISO 8601 com fuso como instante; qualquer outra coisa (vazio, "sem-data", sem fuso) é None (0094, achado 5).
+
+    Datas de captura e de sinal são comparadas como instantes, nunca como texto."""
+    if not isinstance(valor, str) or not valor:
+        return None
+    try:
+        dt = datetime.fromisoformat(valor.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo is not None else None
+
+
+def data_do_sinal_da_pendencia(conn, work_id: str) -> datetime | None:
+    """Instante do sinal que abriu a pendência (`payload.em`); pendência antiga sem ele: a data do próprio registro."""
+    row = conn.execute("SELECT payload_json, updated_at FROM sync_state WHERE fonte=? AND chave=?",
+                       (FONTE_PENDENTE, work_id)).fetchone()
+    if row is None:
+        return None
+    try:
+        payload = json.loads(row[0] or "{}")
+    except (ValueError, TypeError):
+        payload = {}
+    em = instante(payload.get("em")) if isinstance(payload, dict) else None
+    return em or instante(row[1])
+
+
 def obras_pendentes(conn) -> list[str]:
     rows = conn.execute(
         "SELECT chave FROM sync_state WHERE fonte=?",

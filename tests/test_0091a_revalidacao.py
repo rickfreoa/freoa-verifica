@@ -201,8 +201,11 @@ def test_pendente_renovado_apaga_marca(tmp_path, monkeypatch):
         rev._gravar_sync(svc.conn, rev.FONTE_PENDENTE, work_id, "pendente", motivo="metadados_alterados", payload={})
         captura = svc.conn.execute("SELECT capture_id FROM parsed_document WHERE work_id=?", (work_id,)).fetchone()[0]
         doc = parse_planalto(b"<html><body><p>Art. 1</p></body></html>", base_url="https://example.invalid")
+        # Captura posterior ao sinal (registrado agora). A mesma captura de T0 não renova mais (0094, achado 5).
+        from datetime import datetime, timedelta, timezone
+        depois = (datetime.now(timezone.utc) + timedelta(minutes=1)).replace(microsecond=0).isoformat()
         falsa = ResolvedWork(work_id=work_id, work_key=KEY, work_date=None, source_id="normas_leg", capture_id=captura,
-                             fetched_at=T0, url="https://example.invalid", sha256="0" * 64, document=doc,
+                             fetched_at=depois, url="https://example.invalid", sha256="0" * 64, document=doc,
                              quarantined=False)
         monkeypatch.setattr(svc, "_capture_work", lambda *a, **k: falsa)
         r = svc.renovar_acervo(dias=9999, limite=5)

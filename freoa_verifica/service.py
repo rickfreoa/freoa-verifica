@@ -112,6 +112,21 @@ from freoa_verifica.politica_captura import (  # noqa: E402
 _CAMARA_FORA_DE_ALCANCE = frozenset({"ativacao_ao_vivo_pendente", "especie_busca_nao_demonstrada"})
 
 
+def _nao_renovou(novo, anterior: str | None, sinal) -> str | None:
+    """Motivo pelo qual a captura canônica devolvida não renova a obra, ou None (0094, achado 5 do colega).
+
+    Renova só a captura cuja data é instante válido posterior à captura que a obra tinha e, havendo pendência, ao
+    sinal que a abriu. Data que não é instante nunca conta como posterior."""
+    from freoa_verifica.revalidacao import instante
+
+    nova, antes = instante(novo.fetched_at), instante(anterior)
+    if nova is None or (antes is not None and nova <= antes):
+        return "captura_canonica_nao_renovada"
+    if sinal is not None and nova <= sinal:
+        return "captura_anterior_ao_sinal_da_pendencia"
+    return None
+
+
 def _so_adiamento(exc: SourceUnavailable) -> bool:
     """0092: a captura parou só por teto ou orçamento da execução, sem falha real em fonte alguma.
 
@@ -4611,7 +4626,7 @@ class Verifica:
         estados = {reval.get("status"), renov.get("status")}
         contagens = reval.get("contagens") or {}
         progresso = (sum(v for k, v in contagens.items() if k not in ("adiado", "indisponivel"))
-                     + len(renov.get("renovadas") or []))
+                     + len(renov.get("renovadas") or []) + len(renov.get("sem_renovacao") or []))
         if estados == {"ok"}:
             status = "ok"
         elif estados == {"indisponivel"}:
@@ -4629,6 +4644,7 @@ class Verifica:
             "revalidacao": {"status": reval.get("status"), "contagens": reval.get("contagens"), "obras": reval.get("obras")},
             "renovacao": {"status": renov.get("status"), "candidatas": renov.get("candidatas"),
                           "renovadas": len(renov.get("renovadas") or []), "falhas": renov.get("falhas"),
+                          "sem_renovacao": len(renov.get("sem_renovacao") or []),
                           "adiadas": len(renov.get("adiadas") or [])},
         }
         alvo = self.home / "manutencao.json"
@@ -4683,16 +4699,24 @@ class Verifica:
                 rows = rows[off:] + rows[:off]
         if limite is not None:
             rows = rows[:max(0, int(limite))]
-        renovadas, falhas, adiadas = [], [], []
+        renovadas, falhas, adiadas, sem_renovacao = [], [], [], []
         ultimo_processado: str | None = _revalidacao.cursor_renovacao(self.conn)
         with _revalidacao.manutencao_normas_leg():
             for r in rows:
                 work = WorkKey(r["authority"], r["kind"], r["number"], int(r["year"]))
                 obra = {"work_id": r["id"], "obra": f"{work.kind} {work.number}/{work.year}",
                         "captura_anterior": r["ultima"], "pendente": r["id"] in pendentes}
+                sinal = _revalidacao.data_do_sinal_da_pendencia(self.conn, r["id"]) if obra["pendente"] else None
                 try:
                     novo = self._capture_work(work)
-                    if isinstance(novo, ResolvedWork):
+                    if isinstance(novo, ResolvedWork) and (motivo := _nao_renovou(novo, r["ultima"], sinal)):
+                        # A captura canônica efetiva não é posterior à que a obra tinha (mesmos bytes, monotonia) ou
+                        # ao sinal da pendência: nada novo foi lido. A pendência fica; a obra vai para o fim da fila.
+                        sem_renovacao.append({**obra, "motivo": motivo, "fetched_at": novo.fetched_at,
+                                              "capture_id": novo.capture_id})
+                        _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
+                        ultimo_processado = r["id"]
+                    elif isinstance(novo, ResolvedWork):
                         _revalidacao.desmarcar_renovacao_pendente(self.conn, r["id"])
                         renovadas.append({**obra, "fonte": novo.source_id, "fetched_at": novo.fetched_at,
                                           "capture_id": novo.capture_id})
@@ -4716,13 +4740,15 @@ class Verifica:
         self._acervo_cache = None
         if falhas:
             status = "parcial" if renovadas else "indisponivel"
+        elif sem_renovacao:
+            status = "parcial"  # consultadas sem falha, mas sem captura nova: não é sucesso pleno (0094)
         elif adiadas:
             # Adiada sem nenhuma renovada não é sucesso: nada foi feito nesta execução (0092, Codex r-Debian).
             status = "parcial" if renovadas else "adiado"
         else:
             status = "ok"
         return {"status": status, "dias": dias, "candidatas": len(rows), "renovadas": renovadas, "falhas": falhas,
-                "adiadas": adiadas, "envelhecimento_restante": _acervo.envelhecimento(self.conn, dias)}
+                "adiadas": adiadas, "sem_renovacao": sem_renovacao, "envelhecimento_restante": _acervo.envelhecimento(self.conn, dias)}
 
     def reconstruir_acervo(self, com_situacao: bool = False) -> dict[str, Any]:
         """Reconstrói os derivados do home numa cópia e troca o banco só se tudo validar (C6)."""

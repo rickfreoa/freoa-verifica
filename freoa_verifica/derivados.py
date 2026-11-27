@@ -25,7 +25,9 @@ _log = logging.getLogger(__name__)
 #     no derivado; decisões 0064 e 0065).
 # 6 = 1.4.0a6 (parser Planalto 1.2.4: dispositivo em fonte órfã fora de <p> entra no modelo; antes, parágrafos de
 #     artigos inteiros eram atribuídos ao artigo anterior, ex.: CF arts. 57, 62, 126 e 222; decisão 0091).
-DERIVED_VERSION = 6
+# 7 = 1.4.0a9 (parser Planalto 1.2.5: marcas defensivas que impedem confirmar texto errado ou vazio: inciso sem
+#     travessão, artigo de outro ato em link, redação viva vazia depois de riscada, nota editorial truncada; 0094).
+DERIVED_VERSION = 7
 
 # Captura reprocessável com modelo e sem decisão de interpretação no recibo (0064) nem no derivado (0065), com ou
 # sem Content-Type (F-26, 0066). Decisão = origem e codec, salvo binário: o mesmo de `repo.decisao_registrada`.
