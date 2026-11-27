@@ -465,7 +465,7 @@ _FIM_COMPLEMENTO_CONST = re.compile(r"[,;.\n!?]")
 # comum não entram.
 _COMPLEMENTO_DE_DISPOSITIVO = re.compile(
     # Conector entre a norma e o complemento: vírgula, ponto e vírgula, travessão, "e (o/seu/...)" (Codex r1, achado 4)
-    r"\s*(?:[,;–—-]\s*|(?i:e)\s+(?:(?i:seus?|suas?|os?|as?|respectivos?|respectivas?)\s+)?)?(?:"
+    r"\s*(?:[,;–—-]\s*)?(?:(?i:e)\s+(?:(?i:seus?|suas?|os?|as?|respectivos?|respectivas?)\s+)?)?(?:"
     r"§|(?i:par[aá]grafos?)\b|(?i:inc(?:isos?)?)\b\.?|(?i:al(?:[ií]neas?)?)\b\.?|(?i:ite(?:m|ns))\b"
     r"|[IVXLC]+(?=\s*(?:[,;.)?!]|$|\s+(?:e|ou)\b))"
     r"|\d+\s*[ºo°]?(?=\s*(?:[,;.)?!]|$))"

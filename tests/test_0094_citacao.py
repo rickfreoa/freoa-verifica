@@ -61,3 +61,8 @@ def test_r1_conectores_caixa_e_item(texto):
 @pytest.mark.parametrize("texto", ["art. 5º da CF/88 - fundamento da ordem", "art. 5º da CF/88; Outro assunto."])
 def test_r1_prosa_depois_de_conector_continua_exata(texto):
     assert _uma(texto).confidence == "exata"
+
+
+@pytest.mark.parametrize("texto", ["art. 5º da CF/88, e seu § 2º", "art. 5º da CF/88; e o inciso II"])
+def test_r2_virgula_seguida_de_e(texto):
+    assert _uma(texto).confidence == "provavel"

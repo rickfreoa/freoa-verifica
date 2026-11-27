@@ -74,6 +74,22 @@ mais seis do instalador (os do instalador entraram na 0092). Reproduzidos no có
 6. **Pendência sem instante legível** (sem `em`, data do registro sem fuso) não é tratada como livre: nenhuma captura
    a supera (`sinal_da_pendencia_sem_data`).
 
+## Auditoria Codex, rodada 2 (BLOQUEADOR) e correções
+
+A sessão do Codex foi encerrada por engano do supervisor durante a redação do parecer; a conclusão consta do log
+(`codex-0094r2.log`): renovação correta (sinal concorrente preservado, pendência sem data mantida, caso normal limpo),
+nenhuma marca nova nas seis fixtures, e três escapes que ainda permitiam confirmação indevida:
+
+1. **Inciso depois de `<br>` sem pontuação final** ("I - julgar Presidente<br>II processar Ministros"). A exigência
+   de pontuação saiu; no lugar, guardas de diagramação de remissão: linha anterior terminada em vírgula, parêntese
+   aberto, palavra de remissão ("do", "inciso", "art.") ou título de divisão ("CAPÍTULO"); linha seguinte que continua
+   remissão ("II do § 2º", "I deste caput", "§ 2º do art. 23", "parágrafo único do art. 12"). Nas seis fixtures,
+   nenhuma marca nova.
+2. **Rótulo em `<div>` que também contém `<p>`**: conta o texto próprio do elemento antes do primeiro filho.
+3. **"CF/88, e seu § 2º"**: vírgula (ou ponto e vírgula, travessão) seguida de "e (seu/o...)".
+
+Também: linha riscada depois de `<br>` no mesmo bloco não marca (redação antiga não esconde a vigente).
+
 ## Conferência no acervo reconstruído
 
 Reconstruído o acervo da 1.4.0a8 com o parser corrigido, as marcas fora da CF foram lidas uma a uma. Ruído eliminado:

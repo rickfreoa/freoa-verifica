@@ -695,17 +695,46 @@ def _rotulo_sem_separador(texto: str) -> bool:
 def _linha_de_dispositivo_escondida(el) -> str | None:
     """Linha depois de <br> no mesmo bloco que começa por rótulo de dispositivo (com ou sem separador): o bloco
     funde dois dispositivos e o segundo não vira caminho (0094, Codex r1, achado 1)."""
-    linhas = paragraph_plain_text_preserve_breaks(el).split("\n")
+    import copy
+
+    vivo = copy.deepcopy(el)
+    for riscado in [n for n in vivo.iter() if _is_strike_element(n)]:  # redação riscada não esconde a vigente
+        pai, cauda = riscado.getparent(), riscado.tail
+        if pai is None:
+            continue
+        anterior_no = riscado.getprevious()
+        if cauda:
+            if anterior_no is not None:
+                anterior_no.tail = (anterior_no.tail or "") + cauda
+            else:
+                pai.text = (pai.text or "") + cauda
+        pai.remove(riscado)
+    linhas = paragraph_plain_text_preserve_breaks(vivo).split("\n")
     for anterior, linha in zip(linhas, linhas[1:]):
-        # Quebra no meio da frase ("... do inciso<br>II do § 2º") é só diagramação: a linha anterior tem de fechar
-        # um dispositivo (";", ":" ou ".") para a seguinte poder abrir outro.
-        if not re.search(r"[;:.]\s*$", anterior) or re.match(r"\s*art\.", linha):
+        if re.match(r"\s*art\.", linha) or _QUEBRA_DE_REMISSAO.search(anterior) or _CONTINUA_REMISSAO.match(linha) \
+                or (not re.search(r"[;:.]\s*$", anterior) and _PARAGRAFO_REMISSIVO.match(linha)):
             continue
         kind = _classify_line(linha)
-        if _rotulo_sem_separador(linha) or (kind and kind[0] in {"par", "parunico", "inc", "ali"}
-                                            and (kind[1].get("rest") or "").strip()):
-            return linha  # rótulo sozinho no fim do bloco ("§ 1º", corpo no <p> seguinte) não esconde texto
+        if kind and kind[0] in {"par", "parunico", "inc", "ali"} and (kind[1].get("rest") or "").strip():
+            return linha  # rótulo com separador e corpo; rótulo sozinho ("§ 1º", corpo no <p> seguinte) não conta
+        # Numeral sem separador: quebra no meio de remissão ("... do inciso<br>II do § 2º deste artigo") é só
+        # diagramação; fora disso marca, com ou sem pontuação no fim da linha anterior (Codex 0094 r2).
+        if _rotulo_sem_separador(linha) and not _QUEBRA_DE_REMISSAO.search(anterior) \
+                and not _CONTINUA_REMISSAO.match(linha):
+            return linha
     return None
+
+
+# Linha anterior que não fecha dispositivo: termina em vírgula ou parêntese aberto (lista de remissão, "art. 137,"),
+# em palavra de remissão ("do inciso") ou em título de divisão ("CAPÍTULO" antes de "VII-A").
+_QUEBRA_DE_REMISSAO = re.compile(
+    r"(?:[,(]|(?i:\b(?:incisos?|al[ií]neas?|itens?|arts?\.?|artigos?|e|ou|a|ao|do|da|de|n[ºo°]?|cap[ií]tulo|t[ií]tulo"
+    r"|se[cç][aã]o|subse[cç][aã]o|livro|parte|anexo))|§§?)\s*$")
+# "§ 2º do art. 23", "§ 1º, segunda parte", "parágrafo único do art. 12": remissão partida pela diagramação.
+_PARAGRAFO_REMISSIVO = re.compile(
+    r"\s*(?:§\s*\d+[ºo°]?|(?i:par[aá]grafo\s+[úu]nico))\s*(?:[,;]|(?i:d[aoe]s?|dest[ae]s?|e|ou|caput)\b|\w*caput)")
+_CONTINUA_REMISSAO = re.compile(
+    r"\s*[IVXL]+[.)]?\s+(?i:d[aoe]s?|dest[ae]s?|dess[ae]s?|nest[ae]s?|n[ao]s?|e|ou|a|ao|c/c|combinad[oa])\b")
 
 
 def _nos_de_dispositivo_fora_de_p(root, ja: set[int]) -> list:
@@ -717,13 +746,15 @@ def _nos_de_dispositivo_fora_de_p(root, ja: set[int]) -> list:
         tag = getattr(el, "tag", None)
         if not isinstance(tag, str) or tag in {"p", "body", "html", "head", "title", "br", "a", "script", "style"}:
             continue
-        if id(el) in ja or el.xpath("ancestor::p") or el.xpath(".//p"):
+        if id(el) in ja or el.xpath("ancestor::p"):
             continue
+        contem_p = bool(el.xpath(".//p"))
         if _is_strike_element(el) or any(_is_strike_element(a) for a in el.iterancestors()):
             continue  # redação riscada fora de <p> é histórica: não esconde a vigente
         if any(id(anc) in escolhidos or id(anc) in ja for anc in el.iterancestors()):
             continue
-        texto = _normalize_ws(paragraph_plain_text(el))
+        # Elemento que contém <p>: só o texto próprio antes do primeiro filho conta (o resto já é bloco; Codex r2).
+        texto = _normalize_ws(el.text or "") if contem_p else _normalize_ws(paragraph_plain_text(el))
         kind = _classify_line(texto)
         if _rotulo_sem_separador(texto) or (kind and kind[0] in {"par", "parunico", "inc", "ali", "item"}
                                             and (kind[1].get("rest") or "").strip()):
@@ -1180,7 +1211,8 @@ def parse_html_devices(
             _marcar_rotulo_sem_separador(ctx, escondida)
             escondida = None
         if id(el) in rotulo_ids:
-            _marcar_rotulo_sem_separador(ctx, _normalize_ws(paragraph_plain_text(el)))
+            _marcar_rotulo_sem_separador(ctx, _normalize_ws((el.text or "") if el.xpath(".//p")
+                                                            else paragraph_plain_text(el)))
             continue
         if id(el) not in fronteira_ids:
             escondida = _linha_de_dispositivo_escondida(el)

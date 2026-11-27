@@ -221,3 +221,35 @@ def test_conferencia_texto_igual_em_outro_artigo_nao_derruba_a_marca():
              "<p>Art. 2 Compõe-se de:</p><p>II - juízes de carreira;</p>"
              "<div>I um quinto dentre advogados com mais de dez anos de atividade;</div><p>Art. 3 Fim.</p>")
     assert _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR") == {"art2.inc2"}
+
+
+# --- Codex 0094, rodada 2 -----------------------------------------------------------------------------------------
+
+def test_r2_inciso_depois_de_br_sem_pontuacao_final(tmp_path):
+    corpo = ("<p>Art. 1 Cabe:</p><p>I - julgar Presidente<br>II processar Ministros</p>"
+             "<p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>")
+    svc, doc = _svc(tmp_path, corpo)
+    assert "art1.inc1" in _codigos(doc, "ROTULO_SEM_SEPARADOR")
+    assert svc.verificar_citacao(f"art. 1, I, da {CIT}", trecho="processar Ministros")["text"]["status"] != "verified"
+
+
+@pytest.mark.parametrize("linhas", ["aplicar o disposto no inciso<br>II do § 2º deste artigo;",
+                                    "observado o<br>IV do Capítulo VI;", "nos termos do<br>I deste caput."])
+def test_r2_quebra_em_remissao_nao_marca(linhas):
+    corpo = f"<p>Art. 1 Cabe:</p><p>I - {linhas}</p><p>II - outro.</p>"
+    assert not _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR")
+
+
+def test_r2_rotulo_em_div_que_contem_p(tmp_path):
+    corpo = ("<p>Art. 1 Cabe:</p><p>I - julgar Presidente;</p><div>II processar Ministros;<p>a) elaborar.</p></div>"
+             "<p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>")
+    svc, doc = _svc(tmp_path, corpo)
+    assert _codigos(doc, "ROTULO_SEM_SEPARADOR") == {"art1.inc1"}
+    assert svc.verificar_citacao(f"art. 1, I, a, da {CIT}", trecho="elaborar.")["text"]["status"] != "verified"
+
+
+def test_r2_linha_riscada_depois_de_br_nao_marca(tmp_path):
+    corpo = ("<p>Art. 1 Cabe:</p><p>I - julgar Presidente;<br><strike>II - processar Ministros;</strike></p>"
+             "<p>II - processar Ministros e membros;</p><p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>")
+    svc, doc = _svc(tmp_path, corpo)
+    assert not _codigos(doc, "ROTULO_SEM_SEPARADOR")  # (o bloco misto já sai unknown por MIXED_STRIKE, regra anterior)
