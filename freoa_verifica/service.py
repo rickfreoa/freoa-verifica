@@ -4637,15 +4637,16 @@ class Verifica:
         os.replace(tmp, alvo)
         return {"status": status, "manutencao": registro, "revalidacao": reval, "renovacao": renov}
 
-    def abrir_normas_leg(self, decisao: str) -> dict[str, Any]:
+    def abrir_normas_leg(self, decisao: str, liberar_recursos_do_parser: bool = False) -> dict[str, Any]:
         from freoa_verifica.connectors.normas_leg import HOST
 
         escopo = _revalidacao.gravar_escopo(self.home, decisao)
         with _revalidacao.manutencao_normas_leg():
             con = self._get("normas_leg")
         liberado = con.portao().reabrir(decisao)
+        recursos = con.portao().liberar_recursos_do_parser(decisao) if liberar_recursos_do_parser else []
         estado = con.portao().estado.bloqueio_do_host(HOST, con.portao().relogio.agora())
-        return {"status": "ok", "escopo": escopo, "host_liberado": liberado,
+        return {"status": "ok", "escopo": escopo, "host_liberado": liberado, "recursos_liberados": recursos,
                 "host": estado or {"host": HOST, "bloqueio": None},
                 "reaberturas": con.portao().estado.reaberturas(HOST)}
 

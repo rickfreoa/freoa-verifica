@@ -117,6 +117,27 @@ class NormasPortao(Portao):
         with self.estado.trava_do_host(HOST):
             return self.estado.liberar_host(HOST, decisao, self.relogio.agora())
 
+    def liberar_recursos_do_parser(self, decisao) -> list[str]:
+        """Libera, com reabertura registrada, só os bloqueios por recurso da API de normas gravados como
+        `resposta_inesperada` / `corpo_ou_mime` (decisão 0093).
+
+        Até a 1.4.0a6 a leitura recusava `encoding` como objeto único e bloqueava o recurso para sempre; a falha era do
+        parser, não da fonte. Nova resposta realmente inesperada volta a ser bloqueada na próxima obtenção."""
+        if not isinstance(decisao, str) or not decisao.strip():
+            raise ValueError("decisao_necessaria")
+        revisao = f"{decisao.strip()}; bloqueio de parser (encoding como objeto), decisão 0093"
+        liberados = []
+        with self.estado.trava_do_host(HOST):
+            agora = self.relogio.agora()
+            recursos = self.estado.recursos_bloqueados(HOST)
+            for url, registro in sorted(recursos.items()):
+                if (url.startswith(f"https://{HOST}/api/public/normas?") and isinstance(registro, dict)
+                        and registro.get("motivo") == "resposta_inesperada"
+                        and registro.get("classe") == "corpo_ou_mime"):
+                    if self.estado.liberar_recurso(HOST, url, revisao, agora):
+                        liberados.append(url)
+        return liberados
+
 
 def normalizar_encoding(payload: dict) -> list | None:
     """`encoding` da API: lista de manifestações; obra de versão única vem como objeto só (ex.: Lei 15.177/2025)."""
