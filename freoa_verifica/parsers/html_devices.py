@@ -1519,7 +1519,9 @@ def _marcas_de_redacao(provisions: list) -> list[Issue]:
             # Texto novo perdido (</font> órfão tirou o fim do <p>): a redação viva vazia não é a vigente.
             marcas.append(Issue("REDACAO_VIVA_VAZIA", prov.path, "redação viva vazia depois de redação riscada",
                                 blocking_scope="provision"))
-        elif _NOTA_EDITORIAL_TRUNCADA.search(vigente.text):
+        elif (m := _NOTA_EDITORIAL_TRUNCADA.search(vigente.text)) and not re.search(r"\b\d{4}\s*$", m.group(0)):
+            # Só nota cortada no meio ("..., de 2", "(Vigência"); nota completa a que falta o ")" final não esconde
+            # texto normativo (Lei 11.076, 29 provisões) e fica como estava.
             marcas.append(Issue("NOTA_EDITORIAL_TRUNCADA", prov.path, vigente.text[-80:], blocking_scope="provision"))
     return marcas
 

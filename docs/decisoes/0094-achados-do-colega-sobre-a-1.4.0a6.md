@@ -38,7 +38,12 @@ mais seis do instalador (os do instalador entraram na 0092). Reproduzidos no có
      arquivo quando a URL da obra não é conhecida) é fronteira (`DISPOSITIVO_FORA_DA_ARVORE`), não dispositivo.
      Âncora da própria obra (`#art2`, `l9999.htm#art2`) continua abrindo o artigo.
    - `REDACAO_VIVA_VAZIA`: redação vigente vazia depois de redação riscada, sem nota de revogação ou veto.
-   - `NOTA_EDITORIAL_TRUNCADA`: redação vigente que termina em nota editorial aberta e não fechada.
+   - `NOTA_EDITORIAL_TRUNCADA`: redação vigente que termina em nota editorial aberta, não fechada e cortada no meio
+     ("..., de 2", "(Vigência"). Nota completa a que só falta o `)` final (termina em ano de quatro dígitos) não marca:
+     na Lei 11.076 seriam 29 provisões perdidas sem que nenhum texto normativo estivesse escondido.
+
+   No acervo da 1.4.0a8 reconstruído: 66 `ROTULO_SEM_SEPARADOR` na CF (a contagem do colega) e 2 na Lei 13.043; na CF,
+   os incisos IX a XV do art. 93 estavam sendo anexados ao inciso VIII-B.
 2. **Citação.** Logo depois da norma citada (com o dispositivo antes dela), vocabulário de dispositivo (§,
    parágrafo, inc./inciso, al./alínea, item, numeral romano, número, `a)`) ou de alternativa (`ou`, `(ou`, também
    depois de vírgula) rebaixa a citação a `provavel` (`complemento_de_dispositivo_apos_a_norma`), para qualquer

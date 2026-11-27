@@ -129,3 +129,17 @@ def test_nota_editorial_truncada_nao_e_confirmada(tmp_path):
     assert _codigos(doc, "NOTA_EDITORIAL_TRUNCADA") == {"art1.inc5"}
     v = svc.verificar_citacao(f"art. 1, V, da {CIT}", trecho="Redação dada pela Emenda Constitucional no 40, de 2")
     assert v["text"]["status"] != "verified"
+
+
+def test_nota_completa_sem_parentese_final_nao_marca():
+    corpo = "<p>Art. 1 Cabe:</p><p>I - registrar o título. (Redação dada pela Lei no 13.986, de 2020</p><p>II - outro.</p>"
+    doc = parse_planalto(_html(corpo), base_url=URL)
+    assert not _codigos(doc, "NOTA_EDITORIAL_TRUNCADA")
+
+
+@pytest.mark.parametrize("fim", ["(Vigência", "(Redação dada pela Emenda Constitucional no 40, de 2",
+                                 "(Incluído pela Lei nº 9.457, de 5 de"])
+def test_nota_cortada_no_meio_marca(fim):
+    corpo = f"<p>Art. 1 Cabe:</p><p>I - registrar o título. {fim}</p><p>II - outro.</p>"
+    doc = parse_planalto(_html(corpo), base_url=URL)
+    assert _codigos(doc, "NOTA_EDITORIAL_TRUNCADA") == {"art1.inc1"}
