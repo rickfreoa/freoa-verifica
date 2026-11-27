@@ -74,6 +74,16 @@ mais seis do instalador (os do instalador entraram na 0092). Reproduzidos no có
 6. **Pendência sem instante legível** (sem `em`, data do registro sem fuso) não é tratada como livre: nenhuma captura
    a supera (`sinal_da_pendencia_sem_data`).
 
+## Conferência no acervo reconstruído
+
+Reconstruído o acervo da 1.4.0a8 com o parser corrigido, as marcas fora da CF foram lidas uma a uma. Ruído eliminado:
+variável de fórmula ("X: é o valor..." em resoluções do BCB) e título ("D a Isenção..." na Lei 13.043). O numeral vai
+até LXXXIX e o separador por pontuação exige numeral de duas letras ou mais. Rótulo cujo corpo já está numa redação
+do MESMO artigo não esconde nada e não marca; na primeira versão o filtro comparava com a obra inteira e derrubava 5
+marcas verdadeiras da CF, que repete textos entre artigos (art. 111-A, I, igual ao art. 107, I). Resultado final:
+66 na CF, 3 no DL 1.978 (alíneas a a c do art. 1º fora de `<p>`), 3 na Lei 4.728, 1 na Lei 6.404, 1 na Lei 8.668 e
+1 na IN BCB 733.
+
 ## O que fica de fora
 
 - **Causa do achado 1.** Recuperar o texto que o `</font>` órfão tira do `<p>` (o colega sugere) devolveria as 18
