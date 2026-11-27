@@ -123,7 +123,9 @@ def _nao_renovou(novo, anterior: str | None, sinal) -> str | None:
     if nova is None or (antes is not None and nova <= antes):
         return "captura_canonica_nao_renovada"
     if sinal is not None and nova <= sinal:
-        return "captura_anterior_ao_sinal_da_pendencia"
+        from freoa_verifica.revalidacao import SINAL_INDETERMINADO
+
+        return "sinal_da_pendencia_sem_data" if sinal == SINAL_INDETERMINADO else "captura_anterior_ao_sinal_da_pendencia"
     return None
 
 
@@ -4706,10 +4708,17 @@ class Verifica:
                 work = WorkKey(r["authority"], r["kind"], r["number"], int(r["year"]))
                 obra = {"work_id": r["id"], "obra": f"{work.kind} {work.number}/{work.year}",
                         "captura_anterior": r["ultima"], "pendente": r["id"] in pendentes}
-                sinal = _revalidacao.data_do_sinal_da_pendencia(self.conn, r["id"]) if obra["pendente"] else None
+                versao, sinal = _revalidacao.pendencia(self.conn, r["id"])
                 try:
                     novo = self._capture_work(work)
-                    if isinstance(novo, ResolvedWork) and (motivo := _nao_renovou(novo, r["ultima"], sinal)):
+                    if isinstance(novo, ResolvedWork) and not (motivo := _nao_renovou(novo, r["ultima"], sinal)):
+                        # Sinal novo gravado durante a captura (revalidação concorrente): reavaliar contra ele.
+                        if not _revalidacao.desmarcar_se_inalterada(self.conn, r["id"], versao):
+                            versao, sinal = _revalidacao.pendencia(self.conn, r["id"])
+                            motivo = _nao_renovou(novo, r["ultima"], sinal)
+                            if not motivo and not _revalidacao.desmarcar_se_inalterada(self.conn, r["id"], versao):
+                                motivo = "pendencia_alterada_durante_a_captura"
+                    if isinstance(novo, ResolvedWork) and motivo:
                         # A captura canônica efetiva não é posterior à que a obra tinha (mesmos bytes, monotonia) ou
                         # ao sinal da pendência: nada novo foi lido. A pendência fica; a obra vai para o fim da fila.
                         sem_renovacao.append({**obra, "motivo": motivo, "fetched_at": novo.fetched_at,
@@ -4717,7 +4726,6 @@ class Verifica:
                         _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
                         ultimo_processado = r["id"]
                     elif isinstance(novo, ResolvedWork):
-                        _revalidacao.desmarcar_renovacao_pendente(self.conn, r["id"])
                         renovadas.append({**obra, "fonte": novo.source_id, "fetched_at": novo.fetched_at,
                                           "capture_id": novo.capture_id})
                         ultimo_processado = r["id"]

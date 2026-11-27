@@ -47,3 +47,17 @@ def test_data_da_promulgacao(texto, esperado):
     c = _uma(texto)
     assert c.confidence == esperado
     assert ("constituicao_data_divergente" in c.flags) is (esperado == "provavel")
+
+
+@pytest.mark.parametrize("texto", [
+    "art. 5º da CF/88 e seu § 2º", "art. 5º, da CF/88, § 2º", "art. 5º da CF/88 - § 2º", "art. 5º da CF/88; § 2º",
+    "art. 5º da CF/88, item 2", "art. 5º da CF/88, INCISO II", "art. 5º da CF/88 e o inciso II",
+])
+def test_r1_conectores_caixa_e_item(texto):
+    c = _uma(texto)
+    assert c.path == "art5" and c.confidence == "provavel"
+
+
+@pytest.mark.parametrize("texto", ["art. 5º da CF/88 - fundamento da ordem", "art. 5º da CF/88; Outro assunto."])
+def test_r1_prosa_depois_de_conector_continua_exata(texto):
+    assert _uma(texto).confidence == "exata"

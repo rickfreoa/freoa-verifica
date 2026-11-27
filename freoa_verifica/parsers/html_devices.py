@@ -673,7 +673,8 @@ _ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
 # exige ("II processar e julgar ...", "II) ...", "II. ..."): inciso que o parser não reconhece. Nunca cria caminho
 # nem move texto; marca o dispositivo receptor (0094, achados 2, 6 e 9 do colega).
 _ROTULO_SEM_SEPARADOR = re.compile(
-    r"\s*(?=[IVXLCDM])(M{0,3})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})(?:\s+|\)\s*|\.\s+)(?=[^\W\d_])"
+    r"\s*(?=[IVXLCDM])(M{0,3})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})"
+    r"(?:\s+|\)\s*|\.\s+|[:;,]\s*)(?=[^\W\d_])"
 )
 # Nota editorial aberta e não fechada no fim da redação ("(Redação dada pela Emenda Constitucional no 40, de 2"):
 # o resto da nota ficou em outro nó (0094, achado 8).
@@ -687,6 +688,46 @@ _NOTA_EDITORIAL_TRUNCADA = re.compile(
 def _rotulo_sem_separador(texto: str) -> bool:
     m = _ROTULO_SEM_SEPARADOR.match(texto or "")
     return bool(m and any(m.group(i) for i in range(1, 5)))
+
+
+def _linha_de_dispositivo_escondida(el) -> str | None:
+    """Linha depois de <br> no mesmo bloco que começa por rótulo de dispositivo (com ou sem separador): o bloco
+    funde dois dispositivos e o segundo não vira caminho (0094, Codex r1, achado 1)."""
+    linhas = paragraph_plain_text_preserve_breaks(el).split("\n")
+    for anterior, linha in zip(linhas, linhas[1:]):
+        # Quebra no meio da frase ("... do inciso<br>II do § 2º") é só diagramação: a linha anterior tem de fechar
+        # um dispositivo (";", ":" ou ".") para a seguinte poder abrir outro.
+        if not re.search(r"[;:.]\s*$", anterior) or re.match(r"\s*art\.", linha):
+            continue
+        kind = _classify_line(linha)
+        if _rotulo_sem_separador(linha) or (kind and kind[0] in {"par", "parunico", "inc", "ali"}
+                                            and (kind[1].get("rest") or "").strip()):
+            return linha  # rótulo sozinho no fim do bloco ("§ 1º", corpo no <p> seguinte) não esconde texto
+    return None
+
+
+def _nos_de_dispositivo_fora_de_p(root, ja: set[int]) -> list:
+    """Elementos fora de qualquer <p> (div, span, font aninhada, ...) cujo texto começa por rótulo de dispositivo,
+    com ou sem separador, e que não entram como bloco: o dispositivo existe na fonte e não vira caminho."""
+    achados = []
+    escolhidos: set[int] = set()
+    for el in root.iter():
+        tag = getattr(el, "tag", None)
+        if not isinstance(tag, str) or tag in {"p", "body", "html", "head", "title", "br", "a", "script", "style"}:
+            continue
+        if id(el) in ja or el.xpath("ancestor::p") or el.xpath(".//p"):
+            continue
+        if _is_strike_element(el) or any(_is_strike_element(a) for a in el.iterancestors()):
+            continue  # redação riscada fora de <p> é histórica: não esconde a vigente
+        if any(id(anc) in escolhidos or id(anc) in ja for anc in el.iterancestors()):
+            continue
+        texto = _normalize_ws(paragraph_plain_text(el))
+        kind = _classify_line(texto)
+        if _rotulo_sem_separador(texto) or (kind and kind[0] in {"par", "parunico", "inc", "ali", "item"}
+                                            and (kind[1].get("rest") or "").strip()):
+            achados.append(el)
+            escolhidos.add(id(el))
+    return achados
 
 
 def _artigo_inteiro_em_link_de_outro_ato(el, proprio: str | None) -> bool:
@@ -704,10 +745,31 @@ def _artigo_inteiro_em_link_de_outro_ato(el, proprio: str | None) -> bool:
     if em_link != texto:
         return False
     for a in links:
-        arquivo = (a.get("href") or "").split("#", 1)[0].split("?", 1)[0].rsplit("/", 1)[-1].strip().lower()
-        if not arquivo or (proprio and arquivo == proprio):
+        if _mesmo_documento(a.get("href") or "", proprio):
             return False
     return True
+
+
+def _documento(url: str) -> str:
+    """Identidade do documento: host e caminho, sem esquema, consulta nem fragmento, em minúsculas."""
+    from urllib.parse import urlsplit
+
+    partes = urlsplit(url)
+    return f"{partes.netloc.lower()}{partes.path.lower()}"
+
+
+def _mesmo_documento(href: str, base_url: str | None) -> bool:
+    """`href` aponta para a própria obra: só fragmento, ou o mesmo documento resolvido contra a URL da obra.
+
+    Sem URL da obra conhecida, só o fragmento puro é a própria obra (0094, Codex r1, achado 3)."""
+    from urllib.parse import urljoin
+
+    href = href.strip()
+    if not href.split("#", 1)[0]:
+        return True
+    if not base_url:
+        return False
+    return _documento(urljoin(base_url, href)) == _documento(base_url)
 
 
 def _fonte_orfa_composta(plain_breaks: str, plain: str) -> bool:
@@ -830,7 +892,7 @@ def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[i
     fronteira_fonts: list = []
     ids_inteiras: set[int] = set()
     rotulo_ids: set[int] = set()
-    proprio = (base_url or "").split("#", 1)[0].split("?", 1)[0].rsplit("/", 1)[-1].strip().lower() or None
+    proprio = base_url or None
     for el in root.xpath("//body/font"):
         if id(el) in ids_consumidas or id(el) in merged_by_id:
             continue
@@ -849,6 +911,11 @@ def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[i
         else:
             fronteira_ids.add(id(el))
             fronteira_fonts.append(el)
+
+    ja = {id(el) for el in blocks + orphan_fonts + fronteira_fonts} | ids_consumidas
+    for el in _nos_de_dispositivo_fora_de_p(root, ja):
+        rotulo_ids.add(id(el))
+        fronteira_fonts.append(el)
 
     if not orphan_fonts and not fronteira_fonts:
         return blocks, merged_by_id, fronteira_ids, rotulo_ids
@@ -1104,10 +1171,17 @@ def parse_html_devices(
     ctx.issues.extend(early_issues)
     prev_in_bq = False
 
+    escondida: str | None = None
     for el in blocks:
+        if escondida is not None:
+            # Marca o dispositivo que o bloco anterior abriu ou continuou (achado 1 do Codex r1).
+            _marcar_rotulo_sem_separador(ctx, escondida)
+            escondida = None
         if id(el) in rotulo_ids:
             _marcar_rotulo_sem_separador(ctx, _normalize_ws(paragraph_plain_text(el)))
             continue
+        if id(el) not in fronteira_ids:
+            escondida = _linha_de_dispositivo_escondida(el)
         if id(el) in fronteira_ids:
             trecho = _normalize_ws(paragraph_plain_text(el))[:160]
             ctx.issues.append(
@@ -1482,6 +1556,8 @@ def parse_html_devices(
                 _append_redaction(ctx, path, label, body, struck, annotations, full_plain)
             continue
 
+    if escondida is not None:
+        _marcar_rotulo_sem_separador(ctx, escondida)
     if ctx.in_quote:
         _exit_quote_mode(ctx)
 
@@ -1499,7 +1575,7 @@ def parse_html_devices(
     )
 
 
-def _marcar_rotulo_sem_separador(ctx: _Ctx, trecho: str) -> None:
+def _marcar_rotulo_sem_separador(ctx: _Ctx, trecho: str, origem: str = "") -> None:
     alvo = ctx.last_device_path or ctx.art_path
     ctx.issues.append(Issue("ROTULO_SEM_SEPARADOR", alvo, trecho[:160], blocking_scope="provision" if alvo else None))
 

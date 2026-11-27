@@ -189,7 +189,7 @@ def test_manifesto_carrega_derived_version_real(tmp_path, novo):
     import json
     dest = tmp_path / "snap"
     novo.snapshot_export(dest)
-    assert json.loads((dest / "MANIFEST.json").read_text())["derived_version"] == "6"
+    assert json.loads((dest / "MANIFEST.json").read_text())["derived_version"] == str(derivados.DERIVED_VERSION) == "7"
 
 
 # ---------------------------------------------------------------------------

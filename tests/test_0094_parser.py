@@ -143,3 +143,58 @@ def test_nota_cortada_no_meio_marca(fim):
     corpo = f"<p>Art. 1 Cabe:</p><p>I - registrar o título. {fim}</p><p>II - outro.</p>"
     doc = parse_planalto(_html(corpo), base_url=URL)
     assert _codigos(doc, "NOTA_EDITORIAL_TRUNCADA") == {"art1.inc1"}
+
+
+# --- Codex 0094, rodada 1 -----------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("bloco", [
+    "<div>II processar Ministros;</div>",
+    "<span>II processar Ministros;</span>",
+    "<div>II - processar Ministros;</div>",
+])
+def test_r1_inciso_fora_de_p_marca_e_bloqueia(tmp_path, bloco):
+    corpo = ("<p>Art. 1 Cabe:</p><p>I - julgar Presidente;</p>" + bloco
+             + "<p>a) elaborar propostas.</p><p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>")
+    svc, doc = _svc(tmp_path, corpo)
+    assert _codigos(doc, "ROTULO_SEM_SEPARADOR") == {"art1.inc1"}
+    assert svc.verificar_citacao(f"art. 1, I, a, da {CIT}", trecho="elaborar propostas.")["text"]["status"] != "verified"
+    assert svc.verificar_citacao(f"art. 1, II, da {CIT}", trecho="processar")["identity"]["status"] != "not_found"
+
+
+@pytest.mark.parametrize("forma", ["p", "orfa"])
+def test_r1_inciso_depois_de_br_no_mesmo_bloco(tmp_path, forma):
+    bloco = "I - julgar Presidente;<br>II processar Ministros;"
+    corpo = ("<p>Art. 1 Cabe:</p>" + (f"<p>{bloco}</p>" if forma == "p" else _ORFA.format(bloco))
+             + "<p>a) elaborar propostas.</p><p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>")
+    svc, doc = _svc(tmp_path, corpo)
+    assert "art1.inc1" in _codigos(doc, "ROTULO_SEM_SEPARADOR")
+    for trecho in ("processar Ministros", "elaborar propostas."):
+        for cit in ("art. 1, I", "art. 1, I, a"):
+            assert svc.verificar_citacao(f"{cit}, da {CIT}", trecho=trecho)["text"]["status"] != "verified"
+
+
+def test_r1_quebra_no_meio_da_frase_nao_marca():
+    corpo = "<p>Art. 1 Cabe:</p><p>I - aplicar o disposto no inciso<br>II do § 2º deste artigo;</p><p>II - outro.</p>"
+    assert not _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR")
+
+
+def test_r1_dois_pontos_depois_do_numeral_bloqueia_negativa(tmp_path):
+    corpo = ("<p>Art. 1 Cabe:</p><p>I - julgar Presidente;</p><p>II: processar Ministros;</p>"
+             "<p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>")
+    svc, doc = _svc(tmp_path, corpo)
+    assert _codigos(doc, "ROTULO_SEM_SEPARADOR") == {"art1.inc1"}
+    assert svc.verificar_citacao(f"art. 1, II, da {CIT}", trecho="processar Ministros")["identity"]["status"] != "not_found"
+
+
+@pytest.mark.parametrize("href", ["../outro/l9999.htm#art2", "https://outro.invalid/l9999.htm#art2",
+                                  "https://example.invalid/outra/l9999.htm#art2"])
+def test_r1_mesmo_nome_de_arquivo_em_outro_endereco_e_outro_ato(tmp_path, href):
+    svc, doc = _svc(tmp_path, LINK.format(href=href), url="https://example.invalid/leis/l9999.htm")
+    assert "art2" not in {p.path for p in doc.provisions}
+    assert svc.verificar_citacao(f"art. 2 da {CIT}", trecho="Cabe recurso imediato.")["text"]["status"] != "verified"
+
+
+def test_r1_sem_url_da_obra_so_fragmento_e_proprio():
+    assert "art2" in {p.path for p in parse_planalto(_html(LINK.format(href="#art2")), base_url=None).provisions}
+    assert "art2" not in {p.path for p in parse_planalto(_html(LINK.format(href="l9999.htm#art2")),
+                                                          base_url=None).provisions}

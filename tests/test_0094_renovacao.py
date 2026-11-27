@@ -90,3 +90,47 @@ def test_sem_renovacao_conta_como_progresso_sem_falha_real(tmp_path, monkeypatch
 ])
 def test_instante(valor, esperado):
     assert (rev.instante(valor) is not None) is esperado
+
+
+def test_r1_sinal_novo_gravado_durante_a_captura_sobrevive(tmp_path, monkeypatch):
+    """Codex 0094 r1, achado 5: captura de 02/03 não pode apagar o sinal de 03/03 gravado durante ela."""
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+    with Verifica(tmp_path) as svc:
+        work_id = _obra(svc)
+        _pendencia(svc, work_id, "2026-03-01T00:00:00+00:00")
+
+        def captura(work):
+            _pendencia(svc, work_id, "2026-03-03T00:00:00+00:00")
+            return _resolvido(svc, work_id, "2026-03-02T00:00:00+00:00")
+
+        monkeypatch.setattr(svc, "_capture_work", captura)
+        r = svc.renovar_acervo(dias=1)
+        assert r["renovadas"] == [] and r["sem_renovacao"][0]["motivo"] == "captura_anterior_ao_sinal_da_pendencia"
+        assert work_id in rev.obras_pendentes(svc.conn)
+
+
+def test_r1_pendencia_criada_durante_a_captura_de_obra_envelhecida_sobrevive(tmp_path, monkeypatch):
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+    with Verifica(tmp_path) as svc:
+        work_id = _obra(svc)
+
+        def captura(work):
+            _pendencia(svc, work_id, "2026-03-03T00:00:00+00:00")
+            return _resolvido(svc, work_id, "2026-03-02T00:00:00+00:00")
+
+        monkeypatch.setattr(svc, "_capture_work", captura)
+        r = svc.renovar_acervo(dias=1)
+        assert r["renovadas"] == [] and work_id in rev.obras_pendentes(svc.conn)
+
+
+def test_r1_pendencia_sem_instante_legivel_nao_sai(tmp_path, monkeypatch):
+    """Codex 0094 r1, achado 6: sem `em` e com `updated_at` sem fuso, a pendência não é tratada como livre."""
+    monkeypatch.delenv("FV_OFFLINE", raising=False)
+    with Verifica(tmp_path) as svc:
+        work_id = _obra(svc)
+        rev._gravar_sync(svc.conn, rev.FONTE_PENDENTE, work_id, "pendente", motivo="metadados_alterados")
+        svc.conn.execute("UPDATE sync_state SET updated_at='2026-03-03 00:00:00' WHERE fonte=? AND chave=?",
+                         (rev.FONTE_PENDENTE, work_id))
+        r = _renovar(svc, monkeypatch, "2026-03-02T00:00:00+00:00")
+        assert r["sem_renovacao"][0]["motivo"] == "sinal_da_pendencia_sem_data"
+        assert work_id in rev.obras_pendentes(svc.conn)

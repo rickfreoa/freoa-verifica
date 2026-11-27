@@ -464,12 +464,13 @@ _FIM_COMPLEMENTO_CONST = re.compile(r"[,;.\n!?]")
 # norma) e a citação resolvida não pode confirmar o artigo inteiro (0094, achado 4 do colega). ", caput" e prosa
 # comum não entram.
 _COMPLEMENTO_DE_DISPOSITIVO = re.compile(
-    r"\s*,?\s*(?:"
-    r"§|par[aá]grafos?\b|inc(?:isos?)?\b\.?|al(?:[ií]neas?)?\b\.?|itens?\b"
+    # Conector entre a norma e o complemento: vírgula, ponto e vírgula, travessão, "e (o/seu/...)" (Codex r1, achado 4)
+    r"\s*(?:[,;–—-]\s*|(?i:e)\s+(?:(?i:seus?|suas?|os?|as?|respectivos?|respectivas?)\s+)?)?(?:"
+    r"§|(?i:par[aá]grafos?)\b|(?i:inc(?:isos?)?)\b\.?|(?i:al(?:[ií]neas?)?)\b\.?|(?i:ite(?:m|ns))\b"
     r"|[IVXLC]+(?=\s*(?:[,;.)?!]|$|\s+(?:e|ou)\b))"
     r"|\d+\s*[ºo°]?(?=\s*(?:[,;.)?!]|$))"
     r"|[a-z]\)"
-    r"|ou\b|\(\s*ou\b"
+    r"|(?i:ou)\b|\(\s*(?i:ou)\b"
     r")"
 )
 _COMPLEMENTO_CAPUT = re.compile(r"\s*,?\s*caput\b", re.I)

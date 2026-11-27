@@ -56,6 +56,24 @@ mais seis do instalador (os do instalador entraram na 0092). Reproduzidos no có
    comparadas como texto. `sem_renovacao` não é falha da fonte: a execução fica `parcial`, sem falha real.
 4. **Derivados.** Parser 1.2.5 e `DERIVED_VERSION` 7: o acervo é reconstruído e há snapshot novo.
 
+## Auditoria Codex, rodada 1 (BLOQUEADOR) e correções
+
+1. **Inciso fora de `<p>` ou depois de `<br>`.** `<div>`/`<span>` com rótulo de dispositivo (com ou sem separador)
+   fora de qualquer `<p>`, e linha depois de `<br>` que abre dispositivo no mesmo bloco, também marcam o dispositivo
+   corrente. Para não marcar diagramação: a linha anterior ao `<br>` tem de fechar dispositivo (`;`, `:` ou `.`),
+   rótulo sozinho sem corpo não conta e redação riscada fora de `<p>` é ignorada. Nas seis fixtures do Planalto do
+   repositório, nenhuma marca nova além das 18 de redação vazia da Lei 6.404.
+2. **`II:`** (também `II;` e `II,`) entra no padrão do rótulo sem separador; a negativa no artigo fica bloqueada.
+3. **Link de outro ato com arquivo de mesmo nome.** A comparação é do documento inteiro (host e caminho, resolvido
+   contra a URL da obra, sem esquema, consulta nem fragmento). Sem URL da obra, só o fragmento puro (`#art2`) é a
+   própria obra.
+4. **Complemento com conector.** "e (seu/o/...)", ponto e vírgula e travessão antes do complemento; `item` no
+   singular; vocabulário sem distinção de caixa (numeral romano continua só em maiúsculas).
+5. **Sinal gravado durante a captura.** A pendência só é removida se ainda é o registro avaliado (remoção
+   condicional por payload e data); se mudou, a captura é reavaliada contra o sinal novo.
+6. **Pendência sem instante legível** (sem `em`, data do registro sem fuso) não é tratada como livre: nenhuma captura
+   a supera (`sinal_da_pendencia_sem_data`).
+
 ## O que fica de fora
 
 - **Causa do achado 1.** Recuperar o texto que o `</font>` órfão tira do `<p>` (o colega sugere) devolveria as 18

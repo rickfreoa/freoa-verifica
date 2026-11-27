@@ -390,18 +390,41 @@ def instante(valor) -> datetime | None:
     return dt if dt.tzinfo is not None else None
 
 
-def data_do_sinal_da_pendencia(conn, work_id: str) -> datetime | None:
-    """Instante do sinal que abriu a pendência (`payload.em`); pendência antiga sem ele: a data do próprio registro."""
+# Pendência existente cujo sinal não tem instante legível: nenhuma captura a supera (Codex 0094 r1, achado 6).
+SINAL_INDETERMINADO = datetime.max.replace(tzinfo=timezone.utc)
+
+
+def pendencia(conn, work_id: str) -> tuple[tuple | None, datetime | None]:
+    """(versão do registro, instante do sinal) da pendência; (None, None) sem pendência.
+
+    O instante é `payload.em`; pendência antiga sem ele usa a data do próprio registro; nenhum dos dois legível dá
+    `SINAL_INDETERMINADO`. A versão (payload e data do registro) serve para a remoção condicional."""
     row = conn.execute("SELECT payload_json, updated_at FROM sync_state WHERE fonte=? AND chave=?",
                        (FONTE_PENDENTE, work_id)).fetchone()
     if row is None:
-        return None
+        return None, None
     try:
         payload = json.loads(row[0] or "{}")
     except (ValueError, TypeError):
         payload = {}
     em = instante(payload.get("em")) if isinstance(payload, dict) else None
-    return em or instante(row[1])
+    return (row[0], row[1]), (em or instante(row[1]) or SINAL_INDETERMINADO)
+
+
+def data_do_sinal_da_pendencia(conn, work_id: str) -> datetime | None:
+    return pendencia(conn, work_id)[1]
+
+
+def desmarcar_se_inalterada(conn, work_id: str, versao: tuple | None) -> bool:
+    """Remove a pendência só se ela ainda é a que foi avaliada (ou continua ausente); sinal novo gravado durante a
+    captura sobrevive (Codex 0094 r1, achado 5). Devolve se a pendência avaliada era a vigente."""
+    if versao is None:
+        return conn.execute("SELECT 1 FROM sync_state WHERE fonte=? AND chave=?",
+                            (FONTE_PENDENTE, work_id)).fetchone() is None
+    cur = conn.execute("DELETE FROM sync_state WHERE fonte=? AND chave=? AND payload_json IS ? AND updated_at IS ?",
+                       (FONTE_PENDENTE, work_id, versao[0], versao[1]))
+    conn.commit()
+    return cur.rowcount == 1
 
 
 def obras_pendentes(conn) -> list[str]:
