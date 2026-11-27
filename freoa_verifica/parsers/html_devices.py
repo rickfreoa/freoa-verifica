@@ -710,55 +710,113 @@ def _linha_de_dispositivo_escondida(el) -> str | None:
                 pai.text = (pai.text or "") + cauda
         pai.remove(riscado)
     linhas = paragraph_plain_text_preserve_breaks(vivo).split("\n")
+    fraca = None
     for anterior, linha in zip(linhas, linhas[1:]):
-        if re.match(r"\s*art\.", linha) or _QUEBRA_DE_REMISSAO.search(anterior) or _CONTINUA_REMISSAO.match(linha) \
-                or (not re.search(r"[;:.]\s*$", anterior) and _PARAGRAFO_REMISSIVO.match(linha)):
+        if re.match(r"\s*art\.", linha):
             continue
         kind = _classify_line(linha)
-        if kind and kind[0] in {"par", "parunico", "inc", "ali"} and (kind[1].get("rest") or "").strip():
-            return linha  # rótulo com separador e corpo; rótulo sozinho ("§ 1º", corpo no <p> seguinte) não conta
-        # Numeral sem separador: quebra no meio de remissão ("... do inciso<br>II do § 2º deste artigo") é só
-        # diagramação; fora disso marca, com ou sem pontuação no fim da linha anterior (Codex 0094 r2).
-        if _rotulo_sem_separador(linha) and not _QUEBRA_DE_REMISSAO.search(anterior) \
-                and not _CONTINUA_REMISSAO.match(linha):
-            return linha
-    return None
+        rotulado = bool(kind and kind[0] in {"par", "parunico", "inc", "ali"} and (kind[1].get("rest") or "").strip())
+        candidato = rotulado or _rotulo_sem_separador(linha) or _romano_qualquer(linha)
+        if not candidato:
+            continue
+        # Exceção só com remissão estrutural expressa ("... do inciso<br>II do § 2º deste artigo", "art. 137,<br>II,
+        # mediante"): vírgula ou preposição soltas não provam remissão (Codex 0094 r3, achado 1).
+        remissao = (_QUEBRA_DE_REMISSAO.search(anterior) or _CONTINUA_REMISSAO.match(linha)
+                    or _PARAGRAFO_REMISSIVO.match(linha))
+        if (rotulado or _rotulo_sem_separador(linha)) and not remissao:
+            return linha, True
+        fraca = fraca or linha  # excluída pela heurística: ao menos a negativa fica suspensa (achado 4)
+    return (fraca, False) if fraca else None
 
 
-# Linha anterior que não fecha dispositivo: termina em vírgula ou parêntese aberto (lista de remissão, "art. 137,"),
-# em palavra de remissão ("do inciso") ou em título de divisão ("CAPÍTULO" antes de "VII-A").
+# Remissão estrutural expressa no fim da linha anterior: palavra de dispositivo ou de divisão, referência a artigo,
+# inciso ou parágrafo seguida de vírgula, ou parêntese aberto (Codex 0094 r3: nunca vírgula ou preposição soltas).
 _QUEBRA_DE_REMISSAO = re.compile(
-    r"(?:[,(]|(?i:\b(?:incisos?|al[ií]neas?|itens?|arts?\.?|artigos?|e|ou|a|ao|do|da|de|n[ºo°]?|cap[ií]tulo|t[ií]tulo"
-    r"|se[cç][aã]o|subse[cç][aã]o|livro|parte|anexo))|§§?)\s*$")
-# "§ 2º do art. 23", "§ 1º, segunda parte", "parágrafo único do art. 12": remissão partida pela diagramação.
+    r"(?:\((?i:\s*(?:arts?\.?|artigos?|incisos?|§)[^()]*)?|(?i:\b(?:incisos?|al[ií]neas?|itens?|arts?\.|artigos?"
+    r"|par[aá]grafos?|n[ºo°]|cap[ií]tulo|t[ií]tulo|se[cç][aã]o|subse[cç][aã]o|livro|anexo))"
+    r"|§§?|(?i:\b(?:arts?\.?|artigos?)\s*\d[\d.]*[ºo°]?(?:-[A-Z])?(?:\s*,\s*(?:caput|§\s*\d+[ºo°]?|[IVXL]+))*\s*,)"
+    r"|(?i:\bincisos?\s+[IVXL]+(?:\s*(?:,|a|e)\s*[IVXL]+)*\s*,)|§\s*\d+[ºo°]?\s*,)\s*$")
+# Parágrafo citado em remissão: "§ 2º do art. 23", "§ 1º, segunda parte", "parágrafo único do art. 12" (preposição em
+# minúscula seguida de referência estrutural; "§ 2º De qualquer decisão" é parágrafo).
+_REF_ESTRUTURAL = (r"(?:§|arts?\.|artigos?|incisos?|\w{0,2}caput|cap[ií]tulo|t[ií]tulo|se[cç][aã]o|par[aá]grafos?|al[ií]neas?"
+                   r"|itens?|anexo|lei|decreto|desta\s+lei|deste\s+artigo)")
 _PARAGRAFO_REMISSIVO = re.compile(
-    r"\s*(?:§\s*\d+[ºo°]?|(?i:par[aá]grafo\s+[úu]nico))\s*(?:[,;]|(?i:d[aoe]s?|dest[ae]s?|e|ou|caput)\b|\w*caput)")
+    r"\s*(?:§\s*\d+[ºo°]?|(?i:par[aá]grafo\s+[úu]nico))\s*(?:,\s*(?:segunda|primeira|parte|in\s+fine)"
+    r"|(?:d[aoe]s?|dest[ae]s?|e|ou)\s*(?:$|\s" + _REF_ESTRUTURAL + r")|\w*caput)")
+# Numeral que continua remissão: "II do § 2º", "I deste caput", "IV do Capítulo VI" (preposição em minúscula seguida
+# de referência estrutural; "II nos crimes de responsabilidade" é inciso).
 _CONTINUA_REMISSAO = re.compile(
-    r"\s*[IVXL]+[.)]?\s+(?i:d[aoe]s?|dest[ae]s?|dess[ae]s?|nest[ae]s?|n[ao]s?|e|ou|a|ao|c/c|combinad[oa])\b")
+    r"\s*[IVXL]+[.)]?\s+(?:d[aoe]s?|dest[ae]s?|dess[ae]s?|nest[ae]s?|e|ou|c/c|combinad[oa]\s+com)\s*(?:$|\s"
+    + _REF_ESTRUTURAL + r")", re.I)
+# Qualquer numeral romano válido no início, com espaço ou pontuação e texto: candidato fraco (só suspende a negativa).
+_ROMANO_QUALQUER = re.compile(
+    r"\s*(?=[IVXLCDM])(M{0,3})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})(?:\s+|[).:;,]\s*)(?=[^\W\d_])")
 
 
-def _nos_de_dispositivo_fora_de_p(root, ja: set[int]) -> list:
-    """Elementos fora de qualquer <p> (div, span, font aninhada, ...) cujo texto começa por rótulo de dispositivo,
-    com ou sem separador, e que não entram como bloco: o dispositivo existe na fonte e não vira caminho."""
+def _romano_qualquer(texto: str) -> bool:
+    m = _ROMANO_QUALQUER.match(texto or "")
+    return bool(m and any(m.group(i) for i in range(1, 5)))
+
+
+_INLINE = {"span", "font", "b", "i", "u", "em", "strong", "small", "big", "sup", "sub", "a", "abbr", "cite", "label"}
+
+
+def _segmentos_fora_de_p(el, ja: frozenset | set = frozenset()) -> list[tuple]:
+    """Segmentos de texto do elemento fora dos seus <p>: (âncora, texto, filhos absorvidos). Âncora None: o segmento
+    abre no próprio elemento; âncora <p>: o segmento vem depois desse <p> (cauda). Filhos sem <p> entram no segmento
+    em que aparecem, para rótulo e corpo ficarem juntos (Codex 0094 r3, achado 3)."""
+    if not el.xpath(".//p"):
+        return [(None, _normalize_ws(paragraph_plain_text(el)), [])]
+    segmentos, ancora, atual, absorvidos = [], None, [el.text or ""], []
+    for filho in el:
+        tag = getattr(filho, "tag", None)
+        if tag == "p" or (isinstance(tag, str) and filho.xpath(".//p")) or id(filho) in ja:
+            segmentos.append((ancora, _normalize_ws(" ".join(atual)), absorvidos))
+            # Depois de <p>, de bloco já tratado (fonte órfã) ou de contêiner aninhado (visitado por conta própria),
+            # a âncora é o último bloco: o segmento seguinte vem depois dele na ordem do documento.
+            ultimo = filho if tag == "p" or id(filho) in ja else (filho.xpath(".//p") or [None])[-1]
+            ancora, atual, absorvidos = ultimo, [filho.tail or ""], []
+        else:
+            if isinstance(tag, str) and not _is_strike_element(filho):
+                atual.append(paragraph_plain_text(filho))
+                absorvidos.append(filho)
+            atual.append(filho.tail or "")
+    segmentos.append((ancora, _normalize_ws(" ".join(atual)), absorvidos))
+    return [(a, t, ab) for a, t, ab in segmentos if t]
+
+
+def _nos_de_dispositivo_fora_de_p(root, ja: set[int]) -> list[tuple]:
+    """(elemento ou <p> âncora, texto, forte, depois_do_p) para texto fora de qualquer <p> (div, span, font aninhada,
+    cauda de <p>) que começa por rótulo de dispositivo e não entra como bloco: o dispositivo existe na fonte e não vira
+    caminho. Forte (rótulo com corpo, ou numeral sem separador no padrão estrito) bloqueia o dispositivo corrente;
+    fraco (qualquer outro numeral romano) só suspende a negativa no artigo."""
     achados = []
     escolhidos: set[int] = set()
+    # id() de proxy lxml só é estável enquanto o proxy vive: a lista segura cada elemento visitado, senão um id
+    # liberado é reaproveitado por outro nó e a marca some de forma não determinística.
+    vivos: list = []
     for el in root.iter():
+        vivos.append(el)
         tag = getattr(el, "tag", None)
-        if not isinstance(tag, str) or tag in {"p", "body", "html", "head", "title", "br", "a", "script", "style"}:
+        if not isinstance(tag, str) or tag in {"p", "html", "head", "title", "br", "script", "style"}:
             continue
-        if id(el) in ja or el.xpath("ancestor::p"):
+        if id(el) in ja or id(el) in escolhidos or el.xpath("ancestor::p"):
             continue
-        contem_p = bool(el.xpath(".//p"))
         if _is_strike_element(el) or any(_is_strike_element(a) for a in el.iterancestors()):
             continue  # redação riscada fora de <p> é histórica: não esconde a vigente
         if any(id(anc) in escolhidos or id(anc) in ja for anc in el.iterancestors()):
             continue
-        # Elemento que contém <p>: só o texto próprio antes do primeiro filho conta (o resto já é bloco; Codex r2).
-        texto = _normalize_ws(el.text or "") if contem_p else _normalize_ws(paragraph_plain_text(el))
-        kind = _classify_line(texto)
-        if _rotulo_sem_separador(texto) or (kind and kind[0] in {"par", "parunico", "inc", "ali", "item"}
-                                            and (kind[1].get("rest") or "").strip()):
-            achados.append(el)
+        for ancora, texto, absorvidos in _segmentos_fora_de_p(el, ja):
+            kind = _classify_line(texto)
+            forte = _rotulo_sem_separador(texto) or bool(
+                kind and kind[0] in {"par", "parunico", "inc", "ali", "item"} and (kind[1].get("rest") or "").strip())
+            if forte or _romano_qualquer(texto):
+                achados.append((ancora if ancora is not None else el, texto, forte, ancora is not None))
+            for x in absorvidos:
+                for y in [x, *x.iterdescendants()]:
+                    vivos.append(y)
+                    escolhidos.add(id(y))
+        if not el.xpath(".//p"):
             escolhidos.add(id(el))
     return achados
 
@@ -876,7 +934,7 @@ def _abertura_citada_introduzida(el) -> bool:
     return False
 
 
-def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[int, str], set[int], set[int]]:
+def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[int, str], set[int], dict]:
     """Parágrafos + fontes órfãs 'Art N' sob body (markup quebrado do Planalto).
 
     Só inclui //body/font cujo texto é rótulo de artigo sem corpo (ex.: "Art 9º"),
@@ -924,14 +982,16 @@ def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[i
     fronteira_ids: set[int] = set()
     fronteira_fonts: list = []
     ids_inteiras: set[int] = set()
-    rotulo_ids: set[int] = set()
+    rotulo_ids: dict[int, tuple[str, bool]] = {}
+    apos_ids: dict[int, tuple[str, bool]] = {}
     proprio = base_url or None
     for el in root.xpath("//body/font"):
         if id(el) in ids_consumidas or id(el) in merged_by_id:
             continue
         if not _fonte_orfa_parece_dispositivo(el):
-            if not el.xpath(".//p") and _rotulo_sem_separador(paragraph_plain_text(el)):
-                rotulo_ids.add(id(el))
+            texto = _normalize_ws(paragraph_plain_text(el))
+            if not el.xpath(".//p") and (_rotulo_sem_separador(texto) or _romano_qualquer(texto)):
+                rotulo_ids[id(el)] = (texto, _rotulo_sem_separador(texto))
                 fronteira_fonts.append(el)  # entra na ordem do documento só para marcar o dispositivo corrente
             continue
         if _artigo_inteiro_em_link_de_outro_ato(el, proprio):
@@ -946,10 +1006,14 @@ def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[i
             fronteira_fonts.append(el)
 
     ja = {id(el) for el in blocks + orphan_fonts + fronteira_fonts} | ids_consumidas
-    for el in _nos_de_dispositivo_fora_de_p(root, ja):
-        rotulo_ids.add(id(el))
-        fronteira_fonts.append(el)
+    for el, texto, forte, depois in _nos_de_dispositivo_fora_de_p(root, ja):
+        if depois:
+            apos_ids[id(el)] = (texto, forte)  # cauda de um <p>: marca depois de processá-lo
+        else:
+            rotulo_ids[id(el)] = (texto, forte)
+            fronteira_fonts.append(el)
 
+    rotulo_ids["apos"] = apos_ids  # type: ignore[assignment]
     if not orphan_fonts and not fronteira_fonts:
         return blocks, merged_by_id, fronteira_ids, rotulo_ids
 
@@ -1204,18 +1268,23 @@ def parse_html_devices(
     ctx.issues.extend(early_issues)
     prev_in_bq = False
 
-    escondida: str | None = None
+    escondida: tuple[str, bool] | None = None
     for el in blocks:
         if escondida is not None:
             # Marca o dispositivo que o bloco anterior abriu ou continuou (achado 1 do Codex r1).
-            _marcar_rotulo_sem_separador(ctx, escondida)
+            _marcar_rotulo_sem_separador(ctx, escondida[0], forte=escondida[1])
             escondida = None
         if id(el) in rotulo_ids:
-            _marcar_rotulo_sem_separador(ctx, _normalize_ws((el.text or "") if el.xpath(".//p")
-                                                            else paragraph_plain_text(el)))
+            texto, forte = rotulo_ids[id(el)]
+            _marcar_rotulo_sem_separador(ctx, texto, forte=forte)
+            if el.xpath(".//p"):
+                pass  # contêiner: os <p> dentro dele seguem como blocos próprios
             continue
         if id(el) not in fronteira_ids:
             escondida = _linha_de_dispositivo_escondida(el)
+            depois = rotulo_ids["apos"].get(id(el))
+            if depois and (escondida is None or (depois[1] and not escondida[1])):
+                escondida = depois
         if id(el) in fronteira_ids:
             trecho = _normalize_ws(paragraph_plain_text(el))[:160]
             ctx.issues.append(
@@ -1424,6 +1493,12 @@ def parse_html_devices(
             ctx.doc_parts.append("\n")
             continue
 
+        if kind is None and not ctx.in_quote and not _rotulo_sem_separador(cleaned or full_plain) \
+                and _romano_qualquer(cleaned or full_plain):
+            # Numeral fora do padrão estrito ("X:", "XC ..."): segue como antes, mas a negativa fica suspensa no
+            # artigo, porque pode ser inciso (Codex 0094 r3, achado 4).
+            _marcar_rotulo_sem_separador(ctx, _normalize_ws(full_plain), forte=False)
+
         if kind is None and not ctx.in_quote and _rotulo_sem_separador(cleaned or full_plain):
             # Inciso sem travessão: não é continuação do dispositivo anterior (0094, achados 2 e 9).
             _marcar_rotulo_sem_separador(ctx, _normalize_ws(full_plain))
@@ -1591,13 +1666,12 @@ def parse_html_devices(
             continue
 
     if escondida is not None:
-        _marcar_rotulo_sem_separador(ctx, escondida)
+        _marcar_rotulo_sem_separador(ctx, escondida[0], forte=escondida[1])
     if ctx.in_quote:
         _exit_quote_mode(ctx)
 
     doc_text = "".join(ctx.doc_parts)
     provisions = list(ctx.provisions.values())
-    ctx.issues[:] = _sem_marca_de_texto_ja_na_arvore(ctx.issues, provisions)
     ctx.issues.extend(_marcas_de_redacao(provisions))
     return (
         title,
@@ -1610,33 +1684,15 @@ def parse_html_devices(
     )
 
 
-def _marcar_rotulo_sem_separador(ctx: _Ctx, trecho: str, origem: str = "") -> None:
+def _marcar_rotulo_sem_separador(ctx: _Ctx, trecho: str, forte: bool = True) -> None:
+    """Forte: o dispositivo corrente não é confirmável e a negativa no artigo fica suspensa. Fraca (numeral que a
+    heurística não toma por inciso): só a negativa no artigo fica suspensa (0094, Codex r3)."""
     alvo = ctx.last_device_path or ctx.art_path
-    ctx.issues.append(Issue("ROTULO_SEM_SEPARADOR", alvo, trecho[:160], blocking_scope="provision" if alvo else None))
-
-
-def _corpo_do_rotulo(trecho: str) -> str:
-    kind = _classify_line(trecho)
-    if kind:
-        return _normalize_ws(kind[1].get("rest") or "")
-    m = _ROTULO_SEM_SEPARADOR.match(trecho)
-    return _normalize_ws(trecho[m.end():] if m else trecho)
-
-
-def _sem_marca_de_texto_ja_na_arvore(issues: list[Issue], provisions: list) -> list[Issue]:
-    """Rótulo achado fora de bloco cujo corpo já está numa redação da árvore não esconde nada (o mesmo texto repetido
-    em outro nó do markup): a marca cai (0094, conferência no acervo)."""
-    # Só dentro do mesmo artigo: a CF repete textos em artigos diferentes (art. 111-A, I, igual ao art. 107, I).
-    textos = [(p.path.split(".", 1)[0], _normalize_ws(r.text)) for p in provisions for r in p.redactions if r.text]
-    saida = []
-    for i in issues:
-        if i.code == "ROTULO_SEM_SEPARADOR" and i.path:
-            artigo = i.path.split(".", 1)[0]
-            corpo = _corpo_do_rotulo(i.detail)[:60]
-            if len(corpo) >= 20 and any(a == artigo and t.startswith(corpo) for a, t in textos):
-                continue
-        saida.append(i)
-    return saida
+    if forte:
+        ctx.issues.append(Issue("ROTULO_SEM_SEPARADOR", alvo, trecho[:160],
+                                blocking_scope="provision" if alvo else None))
+    else:
+        ctx.issues.append(Issue("POSSIVEL_ROTULO_NAO_RECONHECIDO", alvo, trecho[:160], blocking_scope=None))
 
 
 def _marcas_de_redacao(provisions: list) -> list[Issue]:

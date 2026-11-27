@@ -90,6 +90,29 @@ nenhuma marca nova nas seis fixtures, e três escapes que ainda permitiam confir
 
 Também: linha riscada depois de `<br>` no mesmo bloco não marca (redação antiga não esconde a vigente).
 
+## Auditoria Codex, rodada 3 (BLOQUEADOR) e decisão do titular
+
+Quatro escapes reproduzíveis, todos nascidos dos filtros contra falso positivo: guardas de remissão que aceitavam
+vírgula ou preposição soltas; filtro de texto repetido no mesmo artigo; rótulo partido entre `<div>` e `<span>` ou
+na cauda de um `<p>`; numerais excluídos ("X:", "XC") com negativa falsa. Pela D5, o bloqueador da terceira rodada foi
+ao titular, que decidiu (27/11/2026) pela correção conservadora com rodada 4 restrita:
+
+1. O filtro de texto repetido saiu: repetição não prova que o dispositivo está na árvore.
+2. As guardas de remissão exigem referência estrutural expressa: linha anterior terminada em palavra de dispositivo
+   ou divisão, em "art. 137,", "incisos III a XV," ou "§ 2º,", ou em parêntese aberto de remissão; linha seguinte
+   "II do § 2º", "I deste caput", "§ 2º do art. 23" (preposição em minúscula seguida de referência, ou fim de linha).
+3. Todo segmento fora de `<p>` é examinado (texto próprio, filhos inline e caudas), com rótulo e corpo juntos, na
+   posição documental certa (depois do `<p>` que o precede).
+4. Marca fraca `POSSIVEL_ROTULO_NAO_RECONHECIDO` para numeral romano que a heurística não toma por inciso e para
+   linha dispensada como remissão: não bloqueia a confirmação, mas suspende a negativa no artigo.
+
+Ao conferir as fixtures apareceu defeito do próprio supervisor: `_nos_de_dispositivo_fora_de_p` guardava `id()` de
+proxies lxml já liberados, e a marca do § 4º escondido no art. 6º da Lei 6.385 aparecia ou não conforme a coleta de
+lixo. Os elementos visitados ficam referenciados durante a varredura (teste de estabilidade).
+
+Custo nas seis fixtures: marcas fortes só no § 4º da Lei 6.385 (dispositivo realmente ausente da árvore); marcas
+fracas em 21 remissões partidas por `<br>` (negativa suspensa nesses artigos).
+
 ## Conferência no acervo reconstruído
 
 Reconstruído o acervo da 1.4.0a8 com o parser corrigido, as marcas fora da CF foram lidas uma a uma. Ruído eliminado:

@@ -208,11 +208,12 @@ def test_conferencia_variavel_de_formula_e_titulo_nao_marcam(texto):
     assert not _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR")
 
 
-def test_conferencia_texto_repetido_de_dispositivo_ja_na_arvore_nao_marca():
+def test_r3_texto_repetido_tambem_marca():
+    """Codex 0094 r3, achado 2: repetição de texto não prova que o dispositivo está na árvore; a marca fica."""
     corpo = ("<p>Art. 1 Cabe:</p><p>§ 6º O contrato celebrado na forma prevista será extinto no caso de retirada.</p>"
              "<span>§ 6º O contrato celebrado na forma prevista será extinto no caso de retirada.</span>"
              "<p>Art. 2 Fim.</p>")
-    assert not _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR")
+    assert _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR") == {"art1.par6"}
 
 
 def test_conferencia_texto_igual_em_outro_artigo_nao_derruba_a_marca():
@@ -253,3 +254,71 @@ def test_r2_linha_riscada_depois_de_br_nao_marca(tmp_path):
              "<p>II - processar Ministros e membros;</p><p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>")
     svc, doc = _svc(tmp_path, corpo)
     assert not _codigos(doc, "ROTULO_SEM_SEPARADOR")  # (o bloco misto já sai unknown por MIXED_STRIKE, regra anterior)
+
+
+# --- Codex 0094, rodada 3 (reproduções do parecer) ----------------------------------------------------------------
+
+FIM = "<p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>"
+
+
+def _nao_confirma_nem_nega(svc, confirmar, negar):
+    for cit, trecho in confirmar:
+        assert svc.verificar_citacao(f"{cit}, da {CIT}", trecho=trecho)["text"]["status"] != "verified", (cit, trecho)
+    for cit, trecho in negar:
+        v = svc.verificar_citacao(f"{cit}, da {CIT}", trecho=trecho)
+        assert v["identity"]["status"] != "not_found", (cit, v["identity"])
+
+
+@pytest.mark.parametrize("bloco,seguinte,citacao_seguinte", [
+    ("I - julgar Presidente,<br>II - processar Ministros;", "processar Ministros", "art. 1, II"),
+    ("I - primeiro;<br>II nos crimes de responsabilidade, julgar os Ministros;", "julgar os Ministros", "art. 1, II"),
+    ("I - julgar Presidente<br>§ 2º De qualquer decisão cabe recurso.", "De qualquer decisão cabe recurso.",
+     "art. 1, § 2º"),
+])
+def test_r3_guarda_de_remissao_exige_referencia_estrutural(tmp_path, bloco, seguinte, citacao_seguinte):
+    svc, doc = _svc(tmp_path, f"<p>Art. 1 Cabe:</p><p>{bloco}</p>" + FIM)
+    assert "art1.inc1" in _codigos(doc, "ROTULO_SEM_SEPARADOR")
+    _nao_confirma_nem_nega(svc, [("art. 1, I", seguinte)], [(citacao_seguinte, seguinte)])
+
+
+@pytest.mark.parametrize("par", [
+    ("<p>I - processar e julgar os Ministros de Estado;</p>", "<div>II processar e julgar os Ministros de Estado;</div>"),
+    ("<p>I - o contrato celebrado na forma prevista nesta Lei será extinto somente por decisão judicial.</p>",
+     "<div>II o contrato celebrado na forma prevista nesta Lei será extinto automaticamente.</div>"),
+])
+def test_r3_texto_parecido_no_mesmo_artigo_nao_derruba_a_marca(tmp_path, par):
+    svc, doc = _svc(tmp_path, "<p>Art. 1 Cabe:</p>" + par[0] + par[1] + "<p>a) elaborar.</p>" + FIM)
+    assert _codigos(doc, "ROTULO_SEM_SEPARADOR") == {"art1.inc1"}
+    _nao_confirma_nem_nega(svc, [("art. 1, I, a", "elaborar.")], [("art. 1, II", "extinto")])
+
+
+@pytest.mark.parametrize("conteiner", [
+    "<div>II <span>processar Ministros;</span><p>a) elaborar.</p></div>",
+    "<div><p>continuação.</p>II processar Ministros;<p>a) elaborar.</p></div>",
+])
+def test_r3_rotulo_partido_dentro_de_conteiner(tmp_path, conteiner):
+    svc, doc = _svc(tmp_path, "<p>Art. 1 Cabe:</p><p>I - julgar Presidente;</p>" + conteiner + FIM)
+    assert _codigos(doc, "ROTULO_SEM_SEPARADOR")
+    assert None not in _codigos(doc, "ROTULO_SEM_SEPARADOR")
+    _nao_confirma_nem_nega(svc, [("art. 1, I, a", "elaborar.")], [("art. 1, II", "processar Ministros")])
+
+
+@pytest.mark.parametrize("bloco,citacao", [("X: processar Ministros;", "art. 1, X"),
+                                           ("XC processar Ministros;", "art. 1, XC")])
+def test_r3_numeral_fora_do_padrao_estrito_suspende_a_negativa(tmp_path, bloco, citacao):
+    svc, doc = _svc(tmp_path, f"<p>Art. 1 Cabe:</p><p>I - julgar Presidente;</p><p>{bloco}</p>" + FIM)
+    assert _codigos(doc, "POSSIVEL_ROTULO_NAO_RECONHECIDO") == {"art1.inc1"}
+    _nao_confirma_nem_nega(svc, [("art. 1, I", "processar Ministros")], [(citacao, "processar Ministros")])
+    assert svc.verificar_citacao(f"art. 2 da {CIT}", trecho="Fim.")["text"]["status"] == "verified"
+
+
+def test_r3_marca_estavel_com_proxies_lxml():
+    """`_nos_de_dispositivo_fora_de_p` usava id() de proxies lxml já liberados: o § 4º escondido no art. 6º da Lei
+    6.385 aparecia ou não conforme a coleta de lixo. A marca tem de sair sempre."""
+    import gc
+
+    corpo = Path("tests/fixtures/planalto_lei_6385_1976.html").read_bytes()
+    for _ in range(3):
+        gc.collect()
+        doc = parse_planalto(corpo, base_url="https://www.planalto.gov.br/ccivil_03/leis/l6385.htm")
+        assert "art6.par3" in _codigos(doc, "ROTULO_SEM_SEPARADOR")
