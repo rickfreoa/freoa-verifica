@@ -13,7 +13,9 @@ _URL_PROJETO = "https://github.com/rickfreoa/freoa-verifica"
 USER_AGENT_IDENTIFICADO = f"freoa-verifica/{__version__} (+{_URL_PROJETO})"
 # Mesma identidade de qualquer versão do pacote (versão no formato PEP 440 que o projeto usa: 1.4.0, 1.4.0a7, 1.4.0rc1).
 _UA_IDENTIFICADO_DE_QUALQUER_VERSAO = re.compile(
-    r"freoa-verifica/\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)? \(\+" + re.escape(_URL_PROJETO) + r"\)"
+    r"freoa-verifica/[0-9]+(?:\.[0-9]+){1,3}(?:(?:a|b|rc)[0-9]+)?(?:\.post[0-9]+)?(?:\.dev[0-9]+)? \(\+"
+    + re.escape(_URL_PROJETO) + r"\)",
+    re.ASCII,
 )
 
 

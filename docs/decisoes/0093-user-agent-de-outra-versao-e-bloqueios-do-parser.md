@@ -28,10 +28,20 @@ revalidação 113/113 `indisponivel` e renovação 67/67 `persistencia_local_fal
    do formato continua falha local terminal. A política obtida por versão anterior vale até o fim da validade (24 h) e
    é então relida com o UA da versão corrente.
 2. **Reabertura dos bloqueios do parser.** `fv acervo abrir-normas-leg --decisao "…" --liberar-recursos-do-parser`
-   libera, além do host, só os bloqueios por recurso da API de normas com `motivo` `resposta_inesperada` e `classe`
-   `corpo_ou_mime`. Cada liberação vai para `reaberturas` com escopo `recurso`, a URL, o bloqueio anterior e a revisão
-   (texto da decisão e referência a esta). Resposta que continue inesperada é bloqueada de novo na próxima obtenção.
-   Sem a opção, o comando faz o que sempre fez.
+   libera, além do host, só os bloqueios por recurso da API de normas com `motivo` `resposta_inesperada`, `classe`
+   `corpo_ou_mime` e `desde` anterior à publicação da 1.4.0a7 (27/11/2026 10h08 UTC), primeira versão que lê
+   `encoding` como objeto. O corte garante que o bloqueio foi gravado pela leitura antiga; a causa de cada um não é
+   reconstituída, e o registro diz isso. Bloqueio posterior não é tocado, de modo que repetir o comando não libera
+   falhas novas. Cada liberação vai para `reaberturas` com escopo `recurso`, a URL, o bloqueio anterior e a revisão
+   (texto da decisão, o corte e referência a esta). Resposta que continue inesperada é bloqueada de novo na próxima
+   obtenção. Sem a opção, o comando faz o que sempre fez.
+
+## Auditoria Codex (uma rodada, autorizada pelo titular): APROVADO COM RESSALVAS e correções
+
+1. **Seletividade causal.** O filtro só por motivo e classe liberava também bloqueios gravados pela leitura já
+   corrigida (identidade divergente, `encoding` inválido) e atribuía a eles a causa antiga. Correção: corte temporal
+   na publicação da 1.4.0a7 e revisão redigida sem atribuir causa.
+2. **Dígitos não ASCII.** O padrão do User-Agent aceitava dígitos Unicode (`\d`). Correção: `[0-9]` com `re.ASCII`.
 
 ## Consequências
 

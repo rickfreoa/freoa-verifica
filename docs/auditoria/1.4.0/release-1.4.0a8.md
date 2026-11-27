@@ -28,3 +28,4 @@ Snapshot `freoa-verifica-snapshot-20261127-1.4.0a8.tar.gz`, 666.511.458 bytes, s
 | Etapa | Saída |
 |---|---|
 | Pacote com o digest: instalação vinculada em home vazio, S4 pós-instalação, `doctor --offline` | 0 (`vinculado: True`), 0, 0 |
+| Auditoria Codex de `d7ad8d4` (uma rodada, só leitura) | APROVADO COM RESSALVAS: liberação alcançava bloqueios posteriores à correção; regex aceitava dígitos Unicode. Corrigidos com teste (decisão 0093). O snapshot não muda; a wheel muda e é refeita pelo `release.yml` |

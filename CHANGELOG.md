@@ -8,7 +8,8 @@
   versão do pacote; os demais campos continuam conferidos contra os bytes.
 - **Reabertura dos bloqueios herdados do parser.** `fv acervo abrir-normas-leg --decisao "…"
   --liberar-recursos-do-parser` libera, com registro, os bloqueios por recurso gravados como `resposta_inesperada`
-  quando a leitura não aceitava `encoding` como objeto único (até a 1.4.0a6).
+  antes da publicação da 1.4.0a7, quando a leitura não aceitava `encoding` como objeto único; bloqueios posteriores
+  não são tocados.
 - Snapshot oficial `freoa-verifica-snapshot-20261127-1.4.0a8.tar.gz` (mesmo acervo da 1.4.0a7).
 
 ## 1.4.0a7 - 26/11/2026 (decisão 0092)

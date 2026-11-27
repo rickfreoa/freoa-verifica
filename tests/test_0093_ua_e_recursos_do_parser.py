@@ -28,6 +28,7 @@ URL = "(+https://github.com/rickfreoa/freoa-verifica)"
     (f"freoa-verifica/x {URL}", False),
     ("freoa-verifica/1.4.0a6 (+https://alheio.invalid)", False),
     (f"freoa-verifica/1.4.0a6 {URL} extra", False),
+    ("freoa-verifica/\u0661.4.0 (+https://github.com/rickfreoa/freoa-verifica)", False),  # dígito não ASCII
     (None, False),
     (1, False),
 ])
@@ -74,8 +75,8 @@ API2 = f"https://{nl.HOST}/api/public/normas?urn=urn:lex:br:federal:lei:2024;150
 API3 = f"https://{nl.HOST}/api/public/normas?urn=urn:lex:br:federal:lei:2016;13256&tipo_documento=maior-detalhe"
 
 
-def _bloqueio(motivo, classe):
-    return {"motivo": motivo, "classe": classe, "categoria": motivo, "desde": "2026-11-26T22:44:32+00:00", "ate": None,
+def _bloqueio(motivo, classe, desde="2026-11-26T22:44:32+00:00"):
+    return {"motivo": motivo, "classe": classe, "categoria": motivo, "desde": desde, "ate": None,
             "evidencia": {"url": API}}
 
 
@@ -95,7 +96,27 @@ def test_libera_so_os_bloqueios_de_parser_e_registra(tmp_path):
     reab = [r for r in p.estado.reaberturas(nl.HOST) if r["escopo"] == "recurso"]
     assert {r["url"] for r in reab} == {API, API2}
     assert all("0093, titular, 27/11/2026" in r["revisao"] and r["anterior"]["motivo"] == "resposta_inesperada"
-               for r in reab)
+               and "causa não reconstituída" in r["revisao"] for r in reab)
+
+
+@pytest.mark.parametrize("desde", [
+    "2026-11-27T10:08:15+00:00",   # o próprio instante da publicação da correção
+    "2026-11-28T09:00:00+00:00",   # gravado pela leitura corrigida: identidade divergente, encoding inválido etc.
+])
+def test_bloqueio_posterior_a_correcao_nao_e_liberado(tmp_path, desde):
+    """Codex 0093, achado 1: repetir o comando liberava bloqueios novos e atribuía causa sem prova."""
+    p = _portao_normas(tmp_path)
+    p.estado.bloquear_recurso(nl.HOST, API, _bloqueio("resposta_inesperada", "corpo_ou_mime", desde))
+    assert p.liberar_recursos_do_parser("0093, titular, 27/11/2026") == []
+    assert p.estado.bloqueio_do_recurso(nl.HOST, API) is not None
+
+
+@pytest.mark.parametrize("desde,esperado", [
+    ("2026-11-26T22:44:32+00:00", True), ("2026-11-27T10:08:14+00:00", True), ("2026-11-27T10:08:15+00:00", False),
+    ("2026-11-27T07:08:14-03:00", True), ("2026-11-26T22:44:32", False), ("ontem", False), (None, False),
+])
+def test_corte_temporal_da_correcao(desde, esperado):
+    assert nl._anterior_a_correcao(desde) is esperado
 
 
 @pytest.mark.parametrize("decisao", ["", "   ", None])
