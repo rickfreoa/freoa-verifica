@@ -2,9 +2,9 @@
 
 ## 1.4.0a9 - (decisão 0094)
 
-- **Parser Planalto 1.2.5: deixa de confirmar texto errado.** Inciso sem travessão ("II processar ...", `II)`,
-  `II.`) não é mais anexado ao inciso anterior; artigo de outro ato dentro de link não vira artigo da obra; redação
-  viva vazia depois de riscada e nota editorial truncada não são servidas. Os dispositivos afetados saem `unknown`.
+- **Parser Planalto 1.2.5: deixa de confirmar texto errado.** Artigo de outro ato dentro de link não vira artigo
+  da obra; redação viva vazia depois de riscada e nota editorial cortada no meio não são servidas (os dispositivos
+  afetados saem `unknown`). O inciso sem travessão da CF continua pendente (decisão 0095).
 - **Citação.** Complemento de dispositivo ou alternativa logo depois da norma ("art. 5º da CF/88, § 2º", "... ou do
   ADCT?", "art. 5º da Lei 6.404/1976, § 2º") não confirma o artigo; data diferente da promulgação da Constituição
   não é exata.

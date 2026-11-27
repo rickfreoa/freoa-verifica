@@ -28,7 +28,9 @@ mais seis do instalador (os do instalador entraram na 0092). Reproduzidos no có
 ## Decisão
 
 1. **Marcas defensivas no parser (1.2.5).** Nenhuma cria caminho nem move texto; o dispositivo marcado passa a
-   `unknown` em identidade, texto e tempo (issue de escopo `provision`, que alcança ancestrais e descendentes):
+   `unknown` em identidade, texto e tempo (issue de escopo `provision`, que alcança ancestrais e descendentes).
+   **A marca do inciso sem travessão (`ROTULO_SEM_SEPARADOR`) saiu da 0094 por decisão do titular depois da rodada 4
+   (ver abaixo) e vai para a decisão 0095; o item seguinte fica como registro do que foi tentado.**
    - `ROTULO_SEM_SEPARADOR`: bloco sem rótulo reconhecido que começa por numeral romano válido seguido de espaço,
      `)` ou `.` e de texto, em `<p>` ou em fonte órfã. O bloco não é anexado ao dispositivo anterior; a marca vai
      para o dispositivo corrente. A negativa (`DISPOSITIVO_INEXISTENTE`) fica bloqueada em todo o artigo, porque o
@@ -123,12 +125,27 @@ marcas verdadeiras da CF, que repete textos entre artigos (art. 111-A, I, igual 
 66 na CF, 3 no DL 1.978 (alíneas a a c do art. 1º fora de `<p>`), 3 na Lei 4.728, 1 na Lei 6.404, 1 na Lei 8.668 e
 1 na IN BCB 733.
 
+## Auditoria Codex, rodada 4 (restrita, BLOQUEADOR) e decisão do titular
+
+Os quatro achados da rodada 3 foram corrigidos, mas o Codex reproduziu quatro contornos diretos (parêntese aberto e
+preposição em maiúscula aceitos pelas guardas; `<span>` antes do rótulo dentro de contêiner; marca fraca
+sobrescrevendo a forte na mesma âncora; marca fraca que suspende a negativa mas deixa confirmar o inciso receptor e
+suas alíneas). Em paralelo, o acervo reconstruído mostrou que a versão conservadora dava marca forte em títulos
+espaçados ("R E S O L V E U :"), listas de numerais em remissão e parágrafos repetidos em `<span>`, e que marca sem
+artigo corrente suspendia a negativa do documento inteiro.
+
+Avaliação do supervisor: a marca heurística não converge (cada filtro contra falso positivo abre um escape; cada
+fechamento custa cobertura). Decisão do titular (27/11/2026): **tirar a marca de rótulo da 1.4.0a9** e tratá-la em
+decisão própria (0095), com outra abordagem. Consequência aceita: os incisos sem travessão da CF (66 no acervo)
+continuam como na 1.4.0a8, com o texto de um inciso confirmável em outro, até a 0095. Ficam na 1.4.0a9: citação,
+renovação, artigo de outro ato em link, redação viva vazia e nota editorial truncada, sem achados abertos nas
+auditorias.
+
 ## O que fica de fora
 
 - **Causa do achado 1.** Recuperar o texto que o `</font>` órfão tira do `<p>` (o colega sugere) devolveria as 18
   provisões da Lei 6.404 à verificação; hoje elas saem `unknown`. Fica para decisão própria, com teste nas fixtures.
-- **Reconhecer o inciso sem travessão** quando o numeral é o seguinte ao corrente (sugestão do colega) criaria
-  caminhos; a marca defensiva vem antes.
+- **Inciso sem travessão** (achados 2, 6 e 9): decisão 0095.
 - A fixture da CF do Planalto usada pelo colega não está no repositório; as medições da CF são dele.
 
 ## Testes

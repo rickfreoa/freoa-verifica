@@ -25,3 +25,6 @@ Snapshot `freoa-verifica-snapshot-20261127-1.4.0a9.tar.gz`, 668.023.455 bytes, s
 |---|---|
 | Codex r1 sobre `83bea38` | BLOQUEADOR, 6 achados, corrigidos em `95d7797` (ver decisão 0094) |
 | Conferência das marcas no acervo reconstruído | ruído ("X:", "D a Isenção", texto repetido) eliminado em `9cdd149`; o filtro de texto repetido derrubava 5 marcas verdadeiras da CF (texto igual em outro artigo) e foi restrito ao mesmo artigo em `6f5869d` |
+| Codex r2 sobre `95d7797` | BLOQUEADOR (conclusão extraída do log; sessão encerrada por engano do supervisor), 3 escapes do rótulo, corrigidos em `91355b3` |
+| Codex r3 sobre `91355b3` | BLOQUEADOR, 4 achados do rótulo; titular: correção conservadora e rodada 4 restrita (`c66d5b9`) |
+| Codex r4 (restrita) sobre `c66d5b9` | BLOQUEADOR, 4 contornos do rótulo; titular: marca de rótulo sai da 1.4.0a9 (decisão 0095) |
