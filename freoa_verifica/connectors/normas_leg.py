@@ -117,6 +117,49 @@ class NormasPortao(Portao):
         with self.estado.trava_do_host(HOST):
             return self.estado.liberar_host(HOST, decisao, self.relogio.agora())
 
+    def liberar_recursos_do_parser(self, decisao) -> list[str]:
+        """Libera, com reabertura registrada, só os bloqueios por recurso da API de normas gravados como
+        `resposta_inesperada` / `corpo_ou_mime` ANTES da publicação da 1.4.0a7 (decisão 0093).
+
+        Até a 1.4.0a6 a leitura recusava `encoding` como objeto único e bloqueava o recurso para sempre. A causa de cada
+        bloqueio não é reconstituída: o corte temporal só garante que ele foi gravado pela leitura antiga. Bloqueio
+        posterior não é tocado; resposta que continue inesperada volta a ser bloqueada na próxima obtenção."""
+        if not isinstance(decisao, str) or not decisao.strip():
+            raise ValueError("decisao_necessaria")
+        revisao = (f"{decisao.strip()}; bloqueio gravado antes da correção da leitura de encoding (1.4.0a7), "
+                   "causa não reconstituída; decisão 0093")
+        liberados = []
+        with self.estado.trava_do_host(HOST):
+            agora = self.relogio.agora()
+            recursos = self.estado.recursos_bloqueados(HOST)
+            for url, registro in sorted(recursos.items()):
+                if (url.startswith(f"https://{HOST}/api/public/normas?") and isinstance(registro, dict)
+                        and registro.get("motivo") == "resposta_inesperada"
+                        and registro.get("classe") == "corpo_ou_mime"
+                        and _anterior_a_correcao(registro.get("desde"))):
+                    if self.estado.liberar_recurso(HOST, url, revisao, agora):
+                        liberados.append(url)
+        return liberados
+
+
+# Publicação da 1.4.0a7 (decisão 0092), primeira versão que lê `encoding` como objeto único. Bloqueio por
+# `resposta_inesperada` gravado antes disso veio da leitura antiga; depois, não se presume nada (decisão 0093).
+CORRECAO_ENCODING = "2026-11-27T10:08:15+00:00"
+
+
+def _anterior_a_correcao(desde) -> bool:
+    from datetime import datetime
+
+    if not isinstance(desde, str):
+        return False
+    try:
+        instante = datetime.fromisoformat(desde.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if instante.tzinfo is None:
+        return False
+    return instante < datetime.fromisoformat(CORRECAO_ENCODING)
+
 
 def normalizar_encoding(payload: dict) -> list | None:
     """`encoding` da API: lista de manifestações; obra de versão única vem como objeto só (ex.: Lei 15.177/2025)."""

@@ -26,7 +26,7 @@ from pathlib import Path
 from freoa_verifica import trava
 from freoa_verifica.connectors import camara_robots as rb
 from freoa_verifica.connectors.camara_policy import HOSTS, TERMO_URL
-from freoa_verifica.identidade_http import USER_AGENT_IDENTIFICADO
+from freoa_verifica.identidade_http import eh_user_agent_identificado
 from freoa_verifica.texto_resposta import texto_da_resposta
 from freoa_verifica.transport import RespostaInvalida
 
@@ -166,7 +166,7 @@ def _conferir_com_o_corpo(registro: dict, corpo: bytes) -> None:
         _invalido("corpo_do_robots_diverge_do_hash")
     if (registro["status"] != 200 or registro["bytes"] != len(corpo) or not 0 < len(corpo) <= _LIMITE_ROBOTS
             or registro["mime"] != "text/plain" or _media(registro["content_type"]) != "text/plain"
-            or registro["user_agent"] != USER_AGENT_IDENTIFICADO or registro["tokens"] != list(rb.TOKENS)):
+            or not eh_user_agent_identificado(registro["user_agent"]) or registro["tokens"] != list(rb.TOKENS)):
         _invalido("politica_recibo_incoerente")
     try:
         grupos = rb.interpretar(texto_da_resposta(corpo, registro["content_type"]))
@@ -282,7 +282,7 @@ def validar_recibo_do_termo(recibo, digest: str, tamanho: int) -> dict:
             or isinstance(recibo.get("status"), bool) or recibo.get("mime") != "text/html"
             or recibo.get("bytes") != tamanho or isinstance(recibo.get("bytes"), bool)
             or recibo.get("sha256") != digest or not eh_sha256(recibo.get("politica_robots_sha256"))
-            or recibo.get("user_agent") != USER_AGENT_IDENTIFICADO
+            or not eh_user_agent_identificado(recibo.get("user_agent"))
             or (recibo.get("data_ou_versao_exibida") is not None and not isinstance(recibo["data_ou_versao_exibida"], str))):
         _invalido("recibo_do_termo")
     _de_iso(recibo.get("capturado_em"))
@@ -476,6 +476,10 @@ class Estado:
         if dados.get("ate") is not None and agora >= _de_iso(dados["ate"]):
             return None
         return dados
+
+    def recursos_bloqueados(self, host: str) -> dict[str, dict]:
+        """Cópia dos bloqueios por recurso do host (url -> registro), já validados."""
+        return dict(self._bloqueios(host)["recursos"])
 
     def bloqueio_do_recurso(self, host: str, url: str) -> dict | None:
         return self._bloqueios(host)["recursos"].get(url)

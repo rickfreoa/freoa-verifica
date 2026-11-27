@@ -221,6 +221,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     pab = ac.add_parser("abrir-normas-leg", help="grava escopo do home e reabre o host normas.leg.br (0091A)")
     pab.add_argument("--decisao", required=True, help="texto da decisão que autoriza a reabertura")
+    pab.add_argument("--liberar-recursos-do-parser", action="store_true",
+                     help="libera também os bloqueios por recurso causados pela leitura antiga de encoding (0093)")
     _add_json_flag(pab)
 
     pmt = ac.add_parser("manter", help="revalida e renova o acervo; grava manutencao.json (0091A)")
@@ -486,7 +488,7 @@ def main(argv: list[str] | None = None) -> None:
                 _print_result(data, as_json=as_json, titulo="Revalidação do acervo")
                 raise SystemExit(0 if data.get("status") == "ok" else 1)
             if args.acervo_cmd == "abrir-normas-leg":
-                data = svc.abrir_normas_leg(args.decisao)
+                data = svc.abrir_normas_leg(args.decisao, liberar_recursos_do_parser=args.liberar_recursos_do_parser)
                 _print_result(data, as_json=as_json, titulo="Escopo normas.leg.br")
                 raise SystemExit(0 if data.get("status") == "ok" else 1)
             if args.acervo_cmd == "manter":

@@ -1,5 +1,17 @@
 # Histórico de versões
 
+## 1.4.0a8 - 27/11/2026 (decisão 0093)
+
+- **Atualizar o pacote não paralisa mais a manutenção.** O recibo persistido do robots.txt (e o do termo da Câmara)
+  exigia o User-Agent exato da versão em execução; depois da atualização para a 1.4.0a7, toda obtenção falhava como
+  `persistencia_local_falhou`, sem prazo para passar. Os recibos aceitam o User-Agent identificado de qualquer
+  versão do pacote; os demais campos continuam conferidos contra os bytes.
+- **Reabertura dos bloqueios herdados do parser.** `fv acervo abrir-normas-leg --decisao "…"
+  --liberar-recursos-do-parser` libera, com registro, os bloqueios por recurso gravados como `resposta_inesperada`
+  antes da publicação da 1.4.0a7, quando a leitura não aceitava `encoding` como objeto único; bloqueios posteriores
+  não são tocados.
+- Snapshot oficial `freoa-verifica-snapshot-20261127-1.4.0a8.tar.gz` (mesmo acervo da 1.4.0a7).
+
 ## 1.4.0a7 - 26/11/2026 (decisão 0092)
 
 - **Instalador do Windows não para mais por aviso em stderr.** Com a saída redirecionada, o aviso de versão nova do

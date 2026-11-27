@@ -16,6 +16,11 @@ resultado próprio. Sai com código 1 se alguma falhar, para que o agendador acu
 escopo `metadados_e_renovacao`, consultas sob demanda declaram `fora_do_escopo_do_home`; revalidar e renovar usam a
 rota.
 
+Com `--liberar-recursos-do-parser`, o mesmo comando libera também, com registro em `reaberturas`, os bloqueios por
+recurso que a leitura antiga de `encoding` (até a 1.4.0a6) gravou como `resposta_inesperada` (decisão 0093). Homes
+atualizados da 1.4.0a6 para a 1.4.0a7 têm a manutenção paralisada por `persistencia_local_falhou` até instalar a
+1.4.0a8 ou rodar de novo `fv acervo abrir-normas-leg`, que descarta a política antiga do robots.txt.
+
 `fv acervo manter` executa revalidar e depois renovar, gravando `manutencao.json` no home. `fv acervo agendar` instala
 tarefa diária no agendador do usuário (Windows: `schtasks`; Linux: systemd user) para `fv acervo manter --json`,
 com repetição a cada 2 horas (`--intervalo-horas`, padrão 2) para percorrer o acervo em lotes dentro do teto do portão.
