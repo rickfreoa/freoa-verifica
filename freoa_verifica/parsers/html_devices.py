@@ -1594,12 +1594,14 @@ def _corpo_do_rotulo(trecho: str) -> str:
 def _sem_marca_de_texto_ja_na_arvore(issues: list[Issue], provisions: list) -> list[Issue]:
     """Rótulo achado fora de bloco cujo corpo já está numa redação da árvore não esconde nada (o mesmo texto repetido
     em outro nó do markup): a marca cai (0094, conferência no acervo)."""
-    textos = [_normalize_ws(r.text) for p in provisions for r in p.redactions if r.text]
+    # Só dentro do mesmo artigo: a CF repete textos em artigos diferentes (art. 111-A, I, igual ao art. 107, I).
+    textos = [(p.path.split(".", 1)[0], _normalize_ws(r.text)) for p in provisions for r in p.redactions if r.text]
     saida = []
     for i in issues:
-        if i.code == "ROTULO_SEM_SEPARADOR":
+        if i.code == "ROTULO_SEM_SEPARADOR" and i.path:
+            artigo = i.path.split(".", 1)[0]
             corpo = _corpo_do_rotulo(i.detail)[:60]
-            if len(corpo) >= 20 and any(t.startswith(corpo) for t in textos):
+            if len(corpo) >= 20 and any(a == artigo and t.startswith(corpo) for a, t in textos):
                 continue
         saida.append(i)
     return saida

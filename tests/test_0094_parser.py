@@ -213,3 +213,11 @@ def test_conferencia_texto_repetido_de_dispositivo_ja_na_arvore_nao_marca():
              "<span>§ 6º O contrato celebrado na forma prevista será extinto no caso de retirada.</span>"
              "<p>Art. 2 Fim.</p>")
     assert not _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR")
+
+
+def test_conferencia_texto_igual_em_outro_artigo_nao_derruba_a_marca():
+    """CF: o art. 111-A, I, repete o art. 107, I; o inciso escondido no 111-A continua marcado."""
+    corpo = ("<p>Art. 1 Compõe-se de:</p><p>I - um quinto dentre advogados com mais de dez anos de atividade;</p>"
+             "<p>Art. 2 Compõe-se de:</p><p>II - juízes de carreira;</p>"
+             "<div>I um quinto dentre advogados com mais de dez anos de atividade;</div><p>Art. 3 Fim.</p>")
+    assert _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR") == {"art2.inc2"}
