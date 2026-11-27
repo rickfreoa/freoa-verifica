@@ -50,7 +50,7 @@ def test_published_pin():
          "sha256": "e8bb209f1029ff4c7715b53ad48a14d9c3c4212eb66a88230ec5a13f23395bef",
          "versao_pacote_min": "1.4.0a8", "derived_version": 6},
         {"arquivo": "freoa-verifica-snapshot-20261127-1.4.0a9.tar.gz",
-         "sha256": "9f041f37d0b3cb5a0aa25f6d8fa1d68bf52a93cd13c245cd963c3f67ad31f745",
+         "sha256": "22a0320b1196f1ef81381039e75b8012b937346e774e1f64423ce79368d158ea",
          "versao_pacote_min": "1.4.0a9", "derived_version": 7}]
 
 

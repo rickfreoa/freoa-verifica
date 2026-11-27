@@ -10,14 +10,18 @@ relatório; três rodadas do Codex (D5).
 |---|---|
 | Pacote 1.4.0a9 construído com `requirements/build.lock`, instalado em venv limpo com `requirements/ci.lock` | `freoa-verifica 1.4.0a9` |
 | Candidato: snapshot oficial da 1.4.0a8 (sha256 `e8bb209f…5bef`) instalado em home vazio, experimental | 0; 826 obras, 2.069 capturas |
-| `fv acervo reconstruir` (derivados 6 para 7; parser 1.2.5) | 0; 843 documentos reprocessados |
-| Marcas novas no acervo | `ROTULO_SEM_SEPARADOR`: 66 na CF (a contagem do colega), 3 no DL 1.978, 3 na Lei 4.728, 1 na IN BCB 733, 1 na Lei 6.404, 1 na Lei 8.668; `NOTA_EDITORIAL_TRUNCADA`: 2 na CF |
+| `fv acervo reconstruir` (derivados 6 para 7; parser 1.2.5 final, `900edd5`), em candidato novo a partir do snapshot da 1.4.0a8 | 0; 843 documentos reprocessados |
+| Marcas novas no acervo | `NOTA_EDITORIAL_TRUNCADA`: 2 na CF; nenhuma `REDACAO_VIVA_VAZIA` (a Lei 6.404 do acervo não tem o markup da fixture). A marca de rótulo saiu (decisão 0095) |
 | S4 no candidato (`--estrito --gravar-manifesto manifesto-1.4.0a9.json`) | 0; difere do da 1.4.0a8 só em `derived_version` |
 | Exportação `--arquivo-unico` | 0 |
 | Pacote com o digest: instalação vinculada em home vazio, S4 pós-instalação, `doctor --offline` | 0 (`vinculado: True`), 0, 0 |
 
-Snapshot `freoa-verifica-snapshot-20261127-1.4.0a9.tar.gz`, 668.023.455 bytes, sha256
-`9f041f37d0b3cb5a0aa25f6d8fa1d68bf52a93cd13c245cd963c3f67ad31f745`, `derived_version` 7.
+Snapshot `freoa-verifica-snapshot-20261127-1.4.0a9.tar.gz`, 666.988.193 bytes, sha256
+`22a0320b1196f1ef81381039e75b8012b937346e774e1f64423ce79368d158ea`, `derived_version` 7.
+
+A reconstrução sobre o candidato já reconstruído com parsers de desenvolvimento (também rotulados 1.2.5) foi recusada
+pela regra da 0065 (mesma versão de parser, modelo diferente numa captura legada conferida): a regra funcionou; o
+candidato foi refeito do snapshot da 1.4.0a8. Nenhum home de usuário tem modelos dessas versões intermediárias.
 
 ## Auditoria, CI e publicação
 
