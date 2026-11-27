@@ -355,7 +355,7 @@ def pode_negar(rw: ResolvedWork | None, path: str) -> str | None:
         return "ESTRUTURA_INCOMPLETA"
     artigo = path.split(".", 1)[0]
     if any(i.code in ("ROTULO_SEM_SEPARADOR", "POSSIVEL_ROTULO_NAO_RECONHECIDO")
-           and (i.path is None or i.path.split(".", 1)[0] == artigo) for i in doc.issues):
+           and i.path and i.path.split(".", 1)[0] == artigo for i in doc.issues):
         # Inciso sem travessão existe na fonte e não virou caminho: nenhuma negativa dentro do artigo (0094).
         return "ESTRUTURA_INCOMPLETA"
     if rw.quarantined:

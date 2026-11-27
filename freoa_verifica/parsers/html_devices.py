@@ -360,6 +360,7 @@ def _art_num_int(num: str) -> int:
 
 @dataclass
 class _Ctx:
+    rotulos_fortes: list = field(default_factory=list)  # (issue, texto integral) das marcas fortes (0094)
     scope: str = ""
     headings: list[str] = field(default_factory=list)
     art_path: str | None = None
@@ -674,9 +675,10 @@ _ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
 # nem move texto; marca o dispositivo receptor (0094, achados 2, 6 e 9 do colega).
 # Numeral até LXXXIX (inciso real; "D a Isenção ..." de título não entra). Separador por pontuação (":", ";", ",")
 # só com numeral de duas letras ou mais: "X:" e "V:" são variáveis de fórmula, "II:" é inciso (0094, conferência).
+# Forte só com corpo em minúscula ("II processar e julgar", "IV as ilhas"): título espaçado ("R E S O L V E U :"),
+# lista de numerais em remissão ("III, IV e V desta Lei") e corpo em maiúscula ficam na marca fraca (0094, acervo).
 _ROTULO_SEM_SEPARADOR = re.compile(
-    r"\s*(?=[IVXL])(L?X{0,3})(IX|IV|V?I{0,3})"
-    r"(?:\s+|\)\s*|\.\s+|(?<=[IVXL]{2})[:;,]\s*)(?=[^\W\d_])"
+    r"\s*(?=[IVXL])(L?X{0,3})(IX|IV|V?I{0,3})(?:\s+|\)\s*|\.\s+)(?=[a-zà-ÿ](?:[a-zà-ÿ]|\s))"
 )
 # Nota editorial aberta e não fechada no fim da redação ("(Redação dada pela Emenda Constitucional no 40, de 2"):
 # o resto da nota ficou em outro nó (0094, achado 8).
@@ -714,16 +716,14 @@ def _linha_de_dispositivo_escondida(el) -> str | None:
     for anterior, linha in zip(linhas, linhas[1:]):
         if re.match(r"\s*art\.", linha):
             continue
-        kind = _classify_line(linha)
-        rotulado = bool(kind and kind[0] in {"par", "parunico", "inc", "ali"} and (kind[1].get("rest") or "").strip())
-        candidato = rotulado or _rotulo_sem_separador(linha) or _romano_qualquer(linha)
-        if not candidato:
+        forca = _forca_do_rotulo(linha)
+        if forca is None:
             continue
         # Exceção só com remissão estrutural expressa ("... do inciso<br>II do § 2º deste artigo", "art. 137,<br>II,
         # mediante"): vírgula ou preposição soltas não provam remissão (Codex 0094 r3, achado 1).
         remissao = (_QUEBRA_DE_REMISSAO.search(anterior) or _CONTINUA_REMISSAO.match(linha)
                     or _PARAGRAFO_REMISSIVO.match(linha))
-        if (rotulado or _rotulo_sem_separador(linha)) and not remissao:
+        if forca == "forte" and not remissao:
             return linha, True
         fraca = fraca or linha  # excluída pela heurística: ao menos a negativa fica suspensa (achado 4)
     return (fraca, False) if fraca else None
@@ -751,6 +751,26 @@ _CONTINUA_REMISSAO = re.compile(
 # Qualquer numeral romano válido no início, com espaço ou pontuação e texto: candidato fraco (só suspende a negativa).
 _ROMANO_QUALQUER = re.compile(
     r"\s*(?=[IVXLCDM])(M{0,3})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})(?:\s+|[).:;,]\s*)(?=[^\W\d_])")
+
+
+def _forca_do_rotulo(texto: str) -> str | None:
+    """"forte" (bloqueia o dispositivo corrente), "fraco" (só suspende a negativa no artigo) ou None.
+
+    Forte: inciso, alínea ou item com separador e corpo; parágrafo rotulado com corpo em maiúscula (corpo em minúscula,
+    "§ 1º e no § 18 do art. 176", é remissão partida); numeral sem separador seguido de palavra em minúscula. Fraco:
+    qualquer outro numeral romano no início (0094, Codex r3 e conferência no acervo)."""
+    kind = _classify_line(texto)
+    resto = (kind[1].get("rest") or "").strip() if kind else ""
+    if kind and kind[0] in {"inc", "ali", "item"} and resto:
+        return "forte"
+    if kind and kind[0] in {"par", "parunico"} and resto:
+        resto = re.sub(r"^[oº°]\s+(?=\S)", "", resto)  # ordinal solto do sobrescrito ("§ 4 o Cabe ...")
+        return "forte" if re.match(r"[\"“«]?[A-ZÁÉÍÓÚÂÊÔÃÕÇ]", resto) else "fraco"
+    if _rotulo_sem_separador(texto):
+        return "forte"
+    if _romano_qualquer(texto):
+        return "fraco"
+    return None
 
 
 def _romano_qualquer(texto: str) -> bool:
@@ -807,11 +827,9 @@ def _nos_de_dispositivo_fora_de_p(root, ja: set[int]) -> list[tuple]:
         if any(id(anc) in escolhidos or id(anc) in ja for anc in el.iterancestors()):
             continue
         for ancora, texto, absorvidos in _segmentos_fora_de_p(el, ja):
-            kind = _classify_line(texto)
-            forte = _rotulo_sem_separador(texto) or bool(
-                kind and kind[0] in {"par", "parunico", "inc", "ali", "item"} and (kind[1].get("rest") or "").strip())
-            if forte or _romano_qualquer(texto):
-                achados.append((ancora if ancora is not None else el, texto, forte, ancora is not None))
+            forca = _forca_do_rotulo(texto)
+            if forca:
+                achados.append((ancora if ancora is not None else el, texto, forca == "forte", ancora is not None))
             for x in absorvidos:
                 for y in [x, *x.iterdescendants()]:
                     vivos.append(y)
@@ -990,8 +1008,8 @@ def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[i
             continue
         if not _fonte_orfa_parece_dispositivo(el):
             texto = _normalize_ws(paragraph_plain_text(el))
-            if not el.xpath(".//p") and (_rotulo_sem_separador(texto) or _romano_qualquer(texto)):
-                rotulo_ids[id(el)] = (texto, _rotulo_sem_separador(texto))
+            if not el.xpath(".//p") and (forca := _forca_do_rotulo(texto)):
+                rotulo_ids[id(el)] = (texto, forca == "forte")
                 fronteira_fonts.append(el)  # entra na ordem do documento só para marcar o dispositivo corrente
             continue
         if _artigo_inteiro_em_link_de_outro_ato(el, proprio):
@@ -1493,13 +1511,12 @@ def parse_html_devices(
             ctx.doc_parts.append("\n")
             continue
 
-        if kind is None and not ctx.in_quote and not _rotulo_sem_separador(cleaned or full_plain) \
-                and _romano_qualquer(cleaned or full_plain):
+        if kind is None and not ctx.in_quote and _forca_do_rotulo(cleaned or full_plain) == "fraco":
             # Numeral fora do padrão estrito ("X:", "XC ..."): segue como antes, mas a negativa fica suspensa no
             # artigo, porque pode ser inciso (Codex 0094 r3, achado 4).
             _marcar_rotulo_sem_separador(ctx, _normalize_ws(full_plain), forte=False)
 
-        if kind is None and not ctx.in_quote and _rotulo_sem_separador(cleaned or full_plain):
+        if kind is None and not ctx.in_quote and _forca_do_rotulo(cleaned or full_plain) == "forte":
             # Inciso sem travessão: não é continuação do dispositivo anterior (0094, achados 2 e 9).
             _marcar_rotulo_sem_separador(ctx, _normalize_ws(full_plain))
             ctx.doc_parts.append(full_plain)
@@ -1672,6 +1689,7 @@ def parse_html_devices(
 
     doc_text = "".join(ctx.doc_parts)
     provisions = list(ctx.provisions.values())
+    ctx.issues[:] = _sem_paragrafo_repetido(ctx.issues, ctx.rotulos_fortes, provisions)
     ctx.issues.extend(_marcas_de_redacao(provisions))
     return (
         title,
@@ -1688,11 +1706,32 @@ def _marcar_rotulo_sem_separador(ctx: _Ctx, trecho: str, forte: bool = True) -> 
     """Forte: o dispositivo corrente não é confirmável e a negativa no artigo fica suspensa. Fraca (numeral que a
     heurística não toma por inciso): só a negativa no artigo fica suspensa (0094, Codex r3)."""
     alvo = ctx.last_device_path or ctx.art_path
+    if alvo is None:
+        return  # antes do primeiro artigo (preâmbulo, títulos espaçados): não há dispositivo a proteger
     if forte:
-        ctx.issues.append(Issue("ROTULO_SEM_SEPARADOR", alvo, trecho[:160],
-                                blocking_scope="provision" if alvo else None))
+        issue = Issue("ROTULO_SEM_SEPARADOR", alvo, trecho[:160], blocking_scope="provision")
+        ctx.issues.append(issue)
+        ctx.rotulos_fortes.append((issue, trecho))
     else:
         ctx.issues.append(Issue("POSSIVEL_ROTULO_NAO_RECONHECIDO", alvo, trecho[:160], blocking_scope=None))
+
+
+def _sem_paragrafo_repetido(issues: list[Issue], fortes: list, provisions: list) -> list[Issue]:
+    """Parágrafo rotulado fora de bloco que repete, no MESMO caminho, o começo integral da redação que já está na árvore
+    (o markup partiu o mesmo parágrafo em dois nós) não esconde nada: a marca cai. Exige o mesmo rótulo e caminho e o
+    corpo inteiro do trecho como começo da redação; repetição em outro dispositivo nunca basta (Codex 0094 r3)."""
+    por_caminho = {p.path: [_normalize_ws(r.text) for r in p.redactions if r.text] for p in provisions}
+    descartar = set()
+    for issue, texto in fortes:
+        kind = _classify_line(texto)
+        if not kind or kind[0] not in {"par", "parunico"} or not issue.path:
+            continue
+        artigo = issue.path.split(".", 1)[0]
+        caminho = f"{artigo}.parunico" if kind[0] == "parunico" else f"{artigo}.par{int(kind[1]['num'])}"
+        corpo = _normalize_ws(kind[1].get("rest") or "")
+        if len(corpo) >= 10 and any(t.startswith(corpo) for t in por_caminho.get(caminho, [])):
+            descartar.add(id(issue))
+    return [i for i in issues if id(i) not in descartar]
 
 
 def _marcas_de_redacao(provisions: list) -> list[Issue]:

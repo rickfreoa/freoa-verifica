@@ -60,9 +60,9 @@ def test_inciso_sem_travessao_nao_e_anexado_ao_anterior(tmp_path, rotulo, forma)
 @pytest.mark.parametrize("texto", ["V. Exa. decidirá.", "Integra o sistema.", "III Congresso"])
 def test_prosa_sem_numeral_romano_isolado_nao_marca(texto):
     doc = parse_planalto(_html(f"<p>Art. 1 Cabe:</p><p>I - fazer;</p><p>{texto}</p>"), base_url=URL)
-    # "V. Exa." e "III Congresso" casam o padrão: a marca é deliberadamente conservadora (só bloqueia confirmação).
-    marcado = bool(_codigos(doc, "ROTULO_SEM_SEPARADOR"))
-    assert marcado is (texto.split()[0].rstrip(".") in {"V", "III"})
+    # "V. Exa." e "III Congresso" (corpo em maiúscula) só suspendem a negativa (marca fraca); nunca a forte.
+    assert not _codigos(doc, "ROTULO_SEM_SEPARADOR")
+    assert bool(_codigos(doc, "POSSIVEL_ROTULO_NAO_RECONHECIDO")) is (texto.split()[0].rstrip(".") in {"V", "III"})
 
 
 # --- achado 7: artigo de outro ato dentro de link -----------------------------------------------------------------
@@ -182,8 +182,9 @@ def test_r1_dois_pontos_depois_do_numeral_bloqueia_negativa(tmp_path):
     corpo = ("<p>Art. 1 Cabe:</p><p>I - julgar Presidente;</p><p>II: processar Ministros;</p>"
              "<p>Art. 2 Fim.</p><p>Art. 3 Vigência.</p>")
     svc, doc = _svc(tmp_path, corpo)
-    assert _codigos(doc, "ROTULO_SEM_SEPARADOR") == {"art1.inc1"}
+    assert _codigos(doc, "POSSIVEL_ROTULO_NAO_RECONHECIDO") == {"art1.inc1"}  # "II:" fica na marca fraca
     assert svc.verificar_citacao(f"art. 1, II, da {CIT}", trecho="processar Ministros")["identity"]["status"] != "not_found"
+    assert svc.verificar_citacao(f"art. 1, I, da {CIT}", trecho="processar Ministros")["text"]["status"] != "verified"
 
 
 @pytest.mark.parametrize("href", ["../outro/l9999.htm#art2", "https://outro.invalid/l9999.htm#art2",
@@ -208,12 +209,13 @@ def test_conferencia_variavel_de_formula_e_titulo_nao_marcam(texto):
     assert not _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR")
 
 
-def test_r3_texto_repetido_tambem_marca():
-    """Codex 0094 r3, achado 2: repetição de texto não prova que o dispositivo está na árvore; a marca fica."""
-    corpo = ("<p>Art. 1 Cabe:</p><p>§ 6º O contrato celebrado na forma prevista será extinto no caso de retirada.</p>"
-             "<span>§ 6º O contrato celebrado na forma prevista será extinto no caso de retirada.</span>"
-             "<p>Art. 2 Fim.</p>")
-    assert _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR") == {"art1.par6"}
+def test_r3_mesmo_paragrafo_no_mesmo_caminho_nao_marca_mas_outro_rotulo_marca():
+    """Repetição só dispensa a marca com o mesmo rótulo, o mesmo caminho e o corpo integral (Codex 0094 r3, achado 2)."""
+    base = "<p>Art. 1 Cabe:</p><p>§ 6º O contrato celebrado na forma prevista será extinto no caso de retirada.</p>"
+    mesmo = base + "<span>§ 6º O contrato celebrado na forma prevista será</span><p>Art. 2 Fim.</p>"
+    assert not _codigos(parse_planalto(_html(mesmo), base_url=URL), "ROTULO_SEM_SEPARADOR")
+    outro = base + "<span>§ 7º O contrato celebrado na forma prevista será</span><p>Art. 2 Fim.</p>"
+    assert _codigos(parse_planalto(_html(outro), base_url=URL), "ROTULO_SEM_SEPARADOR") == {"art1.par6"}
 
 
 def test_conferencia_texto_igual_em_outro_artigo_nao_derruba_a_marca():
