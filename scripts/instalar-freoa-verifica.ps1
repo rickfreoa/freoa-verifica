@@ -1,10 +1,15 @@
 ﻿# Instala FREOA Verifica; Python 3.11+. O padrão de -Versao é o __version__ do repositório na release.
 # A attestation é obrigatória; -SemAttestation pula a verificação e grava attestation_verificada: false.
 param(
-    [string]$Versao = "1.4.0a6",
-    [switch]$SemAttestation
+    [string]$Versao = "1.4.0a7",
+    [switch]$SemAttestation,
+    [switch]$SemAgendamento,
+    [switch]$PermitirAdministrador
 )
 $ErrorActionPreference = "Stop"
+# O aviso de versão nova do pip sai em stderr; com a saída redirecionada, o Windows PowerShell o trata como erro (0092).
+$env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
+$env:PIP_NO_INPUT = "1"
 
 # Detection happens before any installation/home write (0085 §4).
 # Identidade de pacote pela API WinRT do Windows PowerShell, sem compilar C# (a compilação grava em %TEMP% e falha
@@ -41,6 +46,8 @@ function Invoke-ForaDoPacoteMsix {
             $logLiteral = $log.Replace("'", "''")
             $exitLiteral = $exitFile.Replace("'", "''")
             $attArg = if ($SemAttestation) { " -SemAttestation" } else { "" }
+            if ($SemAgendamento) { $attArg += " -SemAgendamento" }
+            if ($PermitirAdministrador) { $attArg += " -PermitirAdministrador" }
             $bootstrap = @"
 `$env:FV_INSTALL_RELAUNCHED = '1'
 `$code = 1
@@ -80,7 +87,11 @@ Invoke-ForaDoPacoteMsix
 
 function Invoke-NativeChecked {
     param([string]$Etapa, [string]$Comando, [string[]]$Argumentos)
-    $resultado = & $Comando @Argumentos
+    # Quem decide a falha é o código de saída: stderr de programa nativo (avisos do pip, progresso do gh) não para a
+    # instalação, mesmo com a saída do script redirecionada (*>), caso em que viraria ErrorRecord sob "Stop" (0092).
+    $eapAnterior = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { $resultado = & $Comando @Argumentos } finally { $ErrorActionPreference = $eapAnterior }
     $codigo = $LASTEXITCODE
     if ($codigo -ne 0) {
         $saida = (($resultado | Out-String).Trim() -split "`n" | Select-Object -Last 15) -join "`n"
@@ -90,6 +101,13 @@ function Invoke-NativeChecked {
 }
 
 $etapa = "preparar"
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) -and -not $PermitirAdministrador) {
+    # Nada aqui precisa de administrador; elevado, o ambiente e o acervo ficariam com dono e ACL do grupo
+    # Administradores (0092). -PermitirAdministrador assume esse risco explicitamente.
+    Write-Error "FALHOU na etapa: preparar - execute no PowerShell comum, sem 'Executar como administrador' (ou use -PermitirAdministrador)" -ErrorAction Continue
+    exit 1
+}
 try {
     $versao = $Versao
     $repo = "rickfreoa/freoa-verifica"
@@ -132,6 +150,8 @@ try {
     try { Invoke-WebRequest "$base/requirements-lock.txt" -OutFile $lock -UseBasicParsing }
     catch {
         if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) {
+            # Sem lock não há hashes das dependências: só com a renúncia explícita à proveniência (0092).
+            if (-not $SemAttestation) { throw "requirements-lock.txt ausente nesta release: dependencias sem hash" }
             $temLock = $false
             Write-Warning "requirements-lock.txt ausente nesta release"
         } else { throw }
@@ -191,8 +211,19 @@ try {
     if ($doctor.status -ne "ok" -or -not $doctor.verificacoes -or
         @($doctor.verificacoes | Where-Object { $_.status -notin @("ok", "alerta") }).Count -gt 0 -or
         $doctor.acervo_incompleto) { throw "diagnostico bloqueante" }
+    # Manutenção periódica do acervo (decisões 0091-A e 0092): tarefa do usuário, sem administrador.
+    if ($SemAgendamento) {
+        $agendamento = "dispensado (-SemAgendamento)"
+        Write-Warning "Manutencao automatica do acervo nao agendada (-SemAgendamento): rode 'fv acervo manter' periodicamente."
+    } else {
+        $etapa = "agendar manutencao"
+        $ag = (Invoke-NativeChecked $etapa $fv @("acervo", "agendar", "--instalar", "--json")) -join "`n" | ConvertFrom-Json
+        if ($ag.status -ne "ok") { throw "agendamento recusado: $($ag.erro)" }
+        $agendamento = "instalado: $($ag.plataforma) $($ag.hora), a cada 2 h e ao voltar"
+    }
     @{ versao = $versao; sha256_wheel = $shaWheel; digest_snapshot = $info.proveniencia.snapshot_sha256
-       proveniencia = $proveniencia; attestation_verificada = $verificada; commit = $commit; concluida = $true } |
+       proveniencia = $proveniencia; attestation_verificada = $verificada; commit = $commit; agendamento = $agendamento
+       concluida = $true } |
         ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $registroDir "instalacao.json")
     Write-Host "Pronto. Comandos em: $destino\.venv\Scripts (fv.exe e freoa-verifica-mcp.exe)."
 } catch {

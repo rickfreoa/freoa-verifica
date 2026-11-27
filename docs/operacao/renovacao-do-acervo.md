@@ -45,6 +45,21 @@ fv acervo reconstruir --json        # ~10 min no snapshot da 1.4.0a5; preserva o
 
 Preferível a renovar isolado: `fv acervo agendar --instalar` registra `fv acervo manter --json` no usuário corrente,
 sem administrador. O `doctor` alerta se `manutencao.json` está ausente, falhou ou terminou há mais de 48 horas.
+Desde a decisão 0092, os instaladores (`instalar-freoa-verifica.ps1` e `instalar-freoa-verifica.sh`) fazem isso ao
+final; `-SemAgendamento` / `--sem-agendamento` dispensam. Mecanismo por plataforma:
+
+| Plataforma | Mecanismo | Onde fica | Remover |
+|---|---|---|---|
+| Windows | Agendador de Tarefas, "FREOA Verifica - manter acervo" | tarefa do usuário | `fv acervo agendar --remover` |
+| Linux com systemd de usuário | timer `fv-manter` | `~/.config/systemd/user/` | idem |
+| Linux sem systemd de usuário (WSL, contêiner) | crontab do usuário, linhas marcadas `# freoa-verifica` (a cada 2 h e `@reboot`) | `crontab -l` | idem |
+| macOS | LaunchAgent `br.freoa.verifica.manter` (horário diário e intervalo; o launchd roda ao acordar o que perdeu) | `~/Library/LaunchAgents/` | idem |
+
+Teto de chamadas atingido não é falha: o restante da rodada fica adiado para a próxima execução, o resultado é
+`parcial` e `fv acervo manter` sai com 0; o doctor só alerta quando houve falha real. Execução que não concluiu nada
+(`adiado`) sai com 1. No Linux com systemd, o timer de usuário só roda sem sessão
+aberta com lingering; `fv acervo agendar` tenta `loginctl enable-linger` e, se a política do sistema recusar, avisa
+o comando que um administrador deve executar.
 
 ## Linux (systemd, ex.: contêiner LXC)
 

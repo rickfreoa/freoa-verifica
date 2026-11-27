@@ -18,7 +18,8 @@ function Invoke-WebRequest {
     param($Uri, $OutFile, [switch]$UseBasicParsing)
     Set-Content -LiteralPath $OutFile -Value '# lock sintetico'
 }
-if ($SemAttestation) { & $Installer -SemAttestation } else { & $Installer }
+# -PermitirAdministrador: os runners Windows da CI rodam elevados (0092 recusa elevação por padrão).
+if ($SemAttestation) { & $Installer -SemAttestation -PermitirAdministrador } else { & $Installer -PermitirAdministrador }
 exit $LASTEXITCODE
 """
 GH_JSON = ('@echo off\r\necho [{"verificationResult":{"signature":{"certificate":'
@@ -104,3 +105,53 @@ def test_verified_attestation_records_true_version_and_commit(tmp_path):
     # registro parcial (instalação interrompida): ligado ao arquivo baixado, ainda sem digest nem conclusão
     assert record["sha256_wheel"] == hashlib.sha256(b"wheel falso").hexdigest()
     assert record["digest_snapshot"] is None and record["concluida"] is False
+
+
+WRAPPER_REDIRECIONADO = """
+param($Installer)
+function Invoke-WebRequest {
+    param($Uri, $OutFile, [switch]$UseBasicParsing)
+    Set-Content -LiteralPath $OutFile -Value '# lock sintetico'
+}
+& $Installer -SemAttestation -PermitirAdministrador *>&1 | ForEach-Object { "$_" }
+exit $LASTEXITCODE
+"""
+
+
+@pytest.mark.skipif(os.name != "nt", reason="PowerShell Windows")
+def test_stderr_de_programa_nativo_com_saida_redirecionada_nao_derruba_etapa(tmp_path):
+    """0092: o aviso do pip em stderr derrubava "instalar wheel" quando a saída do instalador estava redirecionada."""
+    powershell = shutil.which("powershell")
+    if not powershell:
+        pytest.skip("PowerShell não disponível")
+    script = tmp_path / SCRIPT.name
+    shutil.copyfile(SCRIPT, script)
+    (tmp_path / f"freoa_verifica-{freoa_verifica.__version__}-py3-none-any.whl").write_bytes(b"wheel falso")
+    # "criar venv" escreve em stderr e sai com 0: deve passar e parar adiante, ao faltar o python do venv.
+    (tmp_path / "python.cmd").write_text("@echo off\r\necho [notice] A new release of pip is available 1>&2\r\nexit /b 0\r\n")
+    wrapper = tmp_path / "wrapper.ps1"
+    wrapper.write_text(WRAPPER_REDIRECIONADO, encoding="utf-8-sig")
+    env = dict(os.environ, USERPROFILE=str(tmp_path / "user"), LOCALAPPDATA=str(tmp_path / "local"), PATH=str(tmp_path))
+    run = subprocess.run([powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(wrapper), str(script)],
+                         env=env, capture_output=True, text=True, timeout=60)
+    compacto = "".join((run.stdout + run.stderr).split())
+    assert "FALHOUnaetapa:criarvenv" not in compacto
+    assert "FALHOUnaetapa:instalarwheel" in compacto
+
+
+def test_instalador_agenda_manutencao_antes_do_registro_final():
+    texto = SCRIPT.read_text(encoding="utf-8-sig")
+    assert "[switch]$SemAgendamento" in texto and '$env:PIP_DISABLE_PIP_VERSION_CHECK = "1"' in texto
+    final = texto.index("concluida = $true")
+    agendar = texto.index('$etapa = "agendar manutencao"')
+    assert texto.index('$etapa = "doctor offline"') < agendar < final
+    assert '@("acervo", "agendar", "--instalar", "--json")' in texto
+    assert "agendamento = $agendamento" in texto[final - 300:final]
+    assert '$attArg += " -SemAgendamento"' in texto  # o relançamento fora do MSIX repassa a opção
+
+
+def test_instalador_recusa_elevacao_salvo_permissao_explicita():
+    texto = SCRIPT.read_text(encoding="utf-8-sig")
+    assert "[switch]$PermitirAdministrador" in texto and '$attArg += " -PermitirAdministrador"' in texto
+    recusa = texto.index("WindowsBuiltInRole]::Administrator) -and -not $PermitirAdministrador")
+    assert recusa < texto.index('$destino = Join-Path $env:USERPROFILE "freoa-verifica"')  # antes de qualquer escrita

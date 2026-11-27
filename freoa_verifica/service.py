@@ -110,6 +110,26 @@ from freoa_verifica.politica_captura import (  # noqa: E402
 # Motivos da Câmara que indicam norma fora do alcance da rota, não falha dela (0085): só estes
 # autorizam a consulta seguinte a normas_leg.
 _CAMARA_FORA_DE_ALCANCE = frozenset({"ativacao_ao_vivo_pendente", "especie_busca_nao_demonstrada"})
+
+
+def _so_adiamento(exc: SourceUnavailable) -> bool:
+    """0092: a captura parou só por teto ou orçamento da execução, sem falha real em fonte alguma.
+
+    `_capture_work` agrega os motivos como `fonte:motivo` em `reason` e os detalha em `fontes_consultadas`; a
+    classificação usa o detalhe estruturado. Causa mista (teto numa fonte, falha real noutra) é falha.
+    """
+    from freoa_verifica.revalidacao import MOTIVOS_ADIAMENTO
+
+    consultadas = exc.fontes_consultadas
+    if consultadas:
+        motivos = [(c.get("resultado"), c.get("motivo")) for c in consultadas if isinstance(c, dict)]
+        if len(motivos) != len(consultadas) or any(r != "indisponivel" for r, _ in motivos):
+            return False
+        nomes = [m for _, m in motivos]
+    else:
+        nomes = [parte.rsplit(":", 1)[-1] for parte in str(exc.reason).split(";") if parte]
+    return (any(m in MOTIVOS_ADIAMENTO for m in nomes)
+            and all(m in MOTIVOS_ADIAMENTO or m in _CAMARA_FORA_DE_ALCANCE for m in nomes))
 # Falha que é da fonte, não do item: o controlador para de consultá-la e a declara indisponível (FIX17/F-23).
 _INTERROMPEM_A_FONTE = BLOQUEIAM_A_FONTE | {"fonte_fora"}
 
@@ -4588,16 +4608,28 @@ class Verifica:
         reval = self.revalidar_acervo(limite=limite)
         renov = self.renovar_acervo(dias=dias, limite=limite)
         fim = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-        status = "ok" if reval.get("status") == "ok" and renov.get("status") == "ok" else (
-            "indisponivel" if reval.get("status") == renov.get("status") == "indisponivel" else "parcial"
-        )
+        estados = {reval.get("status"), renov.get("status")}
+        contagens = reval.get("contagens") or {}
+        progresso = (sum(v for k, v in contagens.items() if k not in ("adiado", "indisponivel"))
+                     + len(renov.get("renovadas") or []))
+        if estados == {"ok"}:
+            status = "ok"
+        elif estados == {"indisponivel"}:
+            status = "indisponivel"
+        elif estados <= {"ok", "adiado"} and not progresso:
+            status = "adiado"  # só adiamentos e nada concluído: não é sucesso
+        else:
+            status = "parcial"
+        falhas_reais = bool(contagens.get("indisponivel")) or bool(renov.get("falhas")) or "indisponivel" in estados
         registro = {
             "inicio": inicio,
             "fim": fim,
             "status": status,
+            "falhas": falhas_reais,
             "revalidacao": {"status": reval.get("status"), "contagens": reval.get("contagens"), "obras": reval.get("obras")},
             "renovacao": {"status": renov.get("status"), "candidatas": renov.get("candidatas"),
-                          "renovadas": len(renov.get("renovadas") or []), "falhas": renov.get("falhas")},
+                          "renovadas": len(renov.get("renovadas") or []), "falhas": renov.get("falhas"),
+                          "adiadas": len(renov.get("adiadas") or [])},
         }
         alvo = self.home / "manutencao.json"
         tmp = self.home / "manutencao.json.tmp"
@@ -4650,7 +4682,7 @@ class Verifica:
                 rows = rows[off:] + rows[:off]
         if limite is not None:
             rows = rows[:max(0, int(limite))]
-        renovadas, falhas = [], []
+        renovadas, falhas, adiadas = [], [], []
         ultimo_processado: str | None = _revalidacao.cursor_renovacao(self.conn)
         with _revalidacao.manutencao_normas_leg():
             for r in rows:
@@ -4668,6 +4700,10 @@ class Verifica:
                         falhas.append({**obra, "motivo": "sem_rota" if novo is None else "ambigua"})
                         _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
                 except SourceUnavailable as exc:
+                    if _so_adiamento(exc):
+                        # Orçamento da execução esgotado: a obra e as seguintes ficam para a próxima (0092).
+                        adiadas.append({**obra, "motivo": exc.reason})
+                        break
                     falhas.append({**obra, "motivo": exc.reason[:200]})
                     _revalidacao.registrar_falha_renovacao(self.conn, r["id"])
                 except IdentityMismatch:
@@ -4677,9 +4713,15 @@ class Verifica:
             _revalidacao.gravar_cursor_renovacao(self.conn, ultimo_processado)
         self._resolver = MemoryResolver()
         self._acervo_cache = None
-        status = "ok" if not falhas else ("parcial" if renovadas else "indisponivel")
+        if falhas:
+            status = "parcial" if renovadas else "indisponivel"
+        elif adiadas:
+            # Adiada sem nenhuma renovada não é sucesso: nada foi feito nesta execução (0092, Codex r-Debian).
+            status = "parcial" if renovadas else "adiado"
+        else:
+            status = "ok"
         return {"status": status, "dias": dias, "candidatas": len(rows), "renovadas": renovadas, "falhas": falhas,
-                "envelhecimento_restante": _acervo.envelhecimento(self.conn, dias)}
+                "adiadas": adiadas, "envelhecimento_restante": _acervo.envelhecimento(self.conn, dias)}
 
     def reconstruir_acervo(self, com_situacao: bool = False) -> dict[str, Any]:
         """Reconstrói os derivados do home numa cópia e troca o banco só se tudo validar (C6)."""

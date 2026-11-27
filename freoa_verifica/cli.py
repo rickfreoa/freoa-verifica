@@ -492,7 +492,9 @@ def main(argv: list[str] | None = None) -> None:
             if args.acervo_cmd == "manter":
                 data = svc.manter_acervo(dias=args.dias, limite=args.limite)
                 _print_result(data, as_json=as_json, titulo="Manutenção do acervo")
-                raise SystemExit(0 if data.get("status") == "ok" else 1)
+                # Parcial (algumas obras falharam) sai com 0: o agendador não marca "failed" a cada execução por uma
+                # fonte instável; quem acusa é o doctor (acervo_manutencao). Nada processado sai com 1 (0092).
+                raise SystemExit(0 if data.get("status") in ("ok", "parcial") else 1)
             if args.acervo_cmd == "agendar":
                 from freoa_verifica import acervo_manutencao as agenda
 

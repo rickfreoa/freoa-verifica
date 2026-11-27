@@ -1,5 +1,22 @@
 # Histórico de versões
 
+## 1.4.0a7 - 26/11/2026 (decisão 0092)
+
+- **Instalador do Windows não para mais por aviso em stderr.** Com a saída redirecionada, o aviso de versão nova do
+  pip derrubava a etapa "instalar wheel" (visto na instalação da 1.4.0a6). O instalador desliga esse aviso e só o
+  código de saída decide a falha de cada etapa.
+- **Instalador para Linux e macOS** (`scripts/instalar-freoa-verifica.sh`), com as mesmas etapas e exigências de
+  attestation do instalador do Windows.
+- **Manutenção do acervo agendada pelos instaladores** (`-SemAgendamento` / `--sem-agendamento` dispensam), com
+  `agendamento` gravado em `instalacao.json`. `fv acervo agendar` ganhou LaunchAgent no macOS e, no Linux sem systemd
+  de usuário, o crontab do usuário.
+- **Correções do teste em Debian 13.** A CF volta a renovar pelo normas.leg.br (escolha da manifestação em
+  português); lei com versão única (`encoding` como objeto) deixa de dar `resposta_inesperada`; teto de chamadas
+  adia a rodada sem registrar falha (também quando o motivo vem agregado por fonte), `fv acervo manter` sai com 0 em
+  resultado parcial e com 1 quando nada foi concluído (`adiado`); o agendamento no systemd
+  tenta habilitar lingering e avisa quando não consegue; o instalador sh mostra o motivo da falha do `fv`; mensagem
+  informativa do systemd sai em `detalhe`, não em `erro`.
+
 ## 1.4.0a6 - 25/11/2026 (decisão 0091)
 
 - **Auditoria r1 (emenda A).** Dez achados do parecer Codex: fronteira no parser, Constituição por ano, reconfirmação estrita, rota normas_leg, cursor de manutenção, metadados, MCP, evidência, manifesto, bateria.

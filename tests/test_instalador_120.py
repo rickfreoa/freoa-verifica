@@ -22,7 +22,8 @@ def test_installer_native_failure_stops(tmp_path):
     (tmp_path / "gh.cmd").write_text("@echo off\r\nexit /b 37\r\n")
     env = dict(os.environ, USERPROFILE=str(tmp_path / "user"), LOCALAPPDATA=str(tmp_path / "local"))
     env["PATH"] = str(tmp_path) + os.pathsep + env["PATH"]
-    run = subprocess.run([powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+    run = subprocess.run([powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script),
+                          "-PermitirAdministrador"],  # runners Windows da CI são elevados (0092)
                          env=env, capture_output=True, text=True, timeout=30)
     assert run.returncode != 0
     output = run.stdout + run.stderr
@@ -55,7 +56,9 @@ if ($parent.Name -ne 'Invoke-NativeChecked') { throw 'guard ausente' }
                          capture_output=True, text=True, timeout=30)
     assert run.returncode == 0, run.stdout + run.stderr
     text = SCRIPT.read_text(encoding="utf-8-sig")
-    assert '$resultado = & $Comando @Argumentos\n    $codigo = $LASTEXITCODE' in text
+    # 0092: a chamada roda sob "Continue" (stderr não é falha) e o código de saída é lido logo depois.
+    assert ('try { $resultado = & $Comando @Argumentos } finally { $ErrorActionPreference = $eapAnterior }\n'
+            '    $codigo = $LASTEXITCODE') in text
 
 
 @pytest.mark.skipif(os.name != "nt", reason="PowerShell Windows")
@@ -75,7 +78,7 @@ function Invoke-WebRequest {
     param($Uri, $OutFile, [switch]$UseBasicParsing)
     Set-Content -LiteralPath $OutFile -Value '# lock sintetico'
 }
-& $Installer -SemAttestation
+& $Installer -SemAttestation -PermitirAdministrador
 exit $LASTEXITCODE
 """, encoding="utf-8-sig")
     env = dict(os.environ, USERPROFILE=str(tmp_path / "user"), LOCALAPPDATA=str(tmp_path / "local"))
