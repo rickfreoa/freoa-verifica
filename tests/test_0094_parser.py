@@ -198,3 +198,18 @@ def test_r1_sem_url_da_obra_so_fragmento_e_proprio():
     assert "art2" in {p.path for p in parse_planalto(_html(LINK.format(href="#art2")), base_url=None).provisions}
     assert "art2" not in {p.path for p in parse_planalto(_html(LINK.format(href="l9999.htm#art2")),
                                                           base_url=None).provisions}
+
+
+@pytest.mark.parametrize("texto", ["X: é o valor dos componentes importados, somando-se:",
+                                   "D a Isenção de Imposto de Renda sobre Alienação em Bolsa",
+                                   "C a contribuição devida", "V: valor apurado no período;"])
+def test_conferencia_variavel_de_formula_e_titulo_nao_marcam(texto):
+    corpo = f"<p>Art. 1 Cabe:</p><p>I - fazer;</p><div>{texto}</div><p>Art. 2 Fim.</p>"
+    assert not _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR")
+
+
+def test_conferencia_texto_repetido_de_dispositivo_ja_na_arvore_nao_marca():
+    corpo = ("<p>Art. 1 Cabe:</p><p>§ 6º O contrato celebrado na forma prevista será extinto no caso de retirada.</p>"
+             "<span>§ 6º O contrato celebrado na forma prevista será extinto no caso de retirada.</span>"
+             "<p>Art. 2 Fim.</p>")
+    assert not _codigos(parse_planalto(_html(corpo), base_url=URL), "ROTULO_SEM_SEPARADOR")

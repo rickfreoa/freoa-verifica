@@ -672,9 +672,11 @@ _ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
 # Numeral romano no início do bloco, seguido de espaço, ")" ou "." e de texto, sem o travessão que `_classify_line`
 # exige ("II processar e julgar ...", "II) ...", "II. ..."): inciso que o parser não reconhece. Nunca cria caminho
 # nem move texto; marca o dispositivo receptor (0094, achados 2, 6 e 9 do colega).
+# Numeral até LXXXIX (inciso real; "D a Isenção ..." de título não entra). Separador por pontuação (":", ";", ",")
+# só com numeral de duas letras ou mais: "X:" e "V:" são variáveis de fórmula, "II:" é inciso (0094, conferência).
 _ROTULO_SEM_SEPARADOR = re.compile(
-    r"\s*(?=[IVXLCDM])(M{0,3})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})"
-    r"(?:\s+|\)\s*|\.\s+|[:;,]\s*)(?=[^\W\d_])"
+    r"\s*(?=[IVXL])(L?X{0,3})(IX|IV|V?I{0,3})"
+    r"(?:\s+|\)\s*|\.\s+|(?<=[IVXL]{2})[:;,]\s*)(?=[^\W\d_])"
 )
 # Nota editorial aberta e não fechada no fim da redação ("(Redação dada pela Emenda Constitucional no 40, de 2"):
 # o resto da nota ficou em outro nó (0094, achado 8).
@@ -687,7 +689,7 @@ _NOTA_EDITORIAL_TRUNCADA = re.compile(
 
 def _rotulo_sem_separador(texto: str) -> bool:
     m = _ROTULO_SEM_SEPARADOR.match(texto or "")
-    return bool(m and any(m.group(i) for i in range(1, 5)))
+    return bool(m and any(m.group(i) for i in range(1, 3)))
 
 
 def _linha_de_dispositivo_escondida(el) -> str | None:
@@ -1563,6 +1565,7 @@ def parse_html_devices(
 
     doc_text = "".join(ctx.doc_parts)
     provisions = list(ctx.provisions.values())
+    ctx.issues[:] = _sem_marca_de_texto_ja_na_arvore(ctx.issues, provisions)
     ctx.issues.extend(_marcas_de_redacao(provisions))
     return (
         title,
@@ -1578,6 +1581,28 @@ def parse_html_devices(
 def _marcar_rotulo_sem_separador(ctx: _Ctx, trecho: str, origem: str = "") -> None:
     alvo = ctx.last_device_path or ctx.art_path
     ctx.issues.append(Issue("ROTULO_SEM_SEPARADOR", alvo, trecho[:160], blocking_scope="provision" if alvo else None))
+
+
+def _corpo_do_rotulo(trecho: str) -> str:
+    kind = _classify_line(trecho)
+    if kind:
+        return _normalize_ws(kind[1].get("rest") or "")
+    m = _ROTULO_SEM_SEPARADOR.match(trecho)
+    return _normalize_ws(trecho[m.end():] if m else trecho)
+
+
+def _sem_marca_de_texto_ja_na_arvore(issues: list[Issue], provisions: list) -> list[Issue]:
+    """Rótulo achado fora de bloco cujo corpo já está numa redação da árvore não esconde nada (o mesmo texto repetido
+    em outro nó do markup): a marca cai (0094, conferência no acervo)."""
+    textos = [_normalize_ws(r.text) for p in provisions for r in p.redactions if r.text]
+    saida = []
+    for i in issues:
+        if i.code == "ROTULO_SEM_SEPARADOR":
+            corpo = _corpo_do_rotulo(i.detail)[:60]
+            if len(corpo) >= 20 and any(t.startswith(corpo) for t in textos):
+                continue
+        saida.append(i)
+    return saida
 
 
 def _marcas_de_redacao(provisions: list) -> list[Issue]:
