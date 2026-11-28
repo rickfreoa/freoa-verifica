@@ -29,3 +29,14 @@ Snapshot `freoa-verifica-snapshot-20261127-1.4.0a8.tar.gz`, 666.511.458 bytes, s
 |---|---|
 | Pacote com o digest: instalação vinculada em home vazio, S4 pós-instalação, `doctor --offline` | 0 (`vinculado: True`), 0, 0 |
 | Auditoria Codex de `d7ad8d4` (uma rodada, só leitura) | APROVADO COM RESSALVAS: liberação alcançava bloqueios posteriores à correção; regex aceitava dígitos Unicode. Corrigidos com teste (decisão 0093). O snapshot não muda; a wheel muda e é refeita pelo `release.yml` |
+| CI do PR #58 em `ef602b3` | 11/11 verdes |
+| Merge do PR #58 | `6edc822` (merge commit) |
+| Tag anotada `v1.4.0a8` | criada e empurrada pelo notebook do titular |
+| `release.yml` (run 46034451920) | verde; rascunho com wheel, sdist, `requirements-lock.txt` e `SHA256SUMS` |
+| `sha256sum -c SHA256SUMS` no rascunho baixado | OK nos três arquivos |
+| `gh attestation verify` | wheel e sdist: 1 attestation cada, `release.yml@refs/tags/v1.4.0a8` |
+| Wheel sem `tests/`; digest em `snapshots-oficiais.json` da wheel | 0 entradas; `e8bb209f…5bef`, `versao_pacote_min` 1.4.0a8, derived 6 |
+| Wheel baixada em venv limpo com o lock da release (`--require-hashes`); snapshot instalado; S4 estrito; `doctor --offline` | `vinculado: True`; 0; 0 |
+| Anexo do snapshot e do `.sha256` | pelo notebook do titular (`gh release upload`); asset baixado de volta: sha256 `e8bb209f1029ff4c7715b53ad48a14d9c3c4212eb66a88230ec5a13f23395bef` |
+| Publicação (`draft=false`, `prerelease=false`) | pelo titular, 28/11/2026 00h44 UTC |
+| `pypi.yml` (run 46089477446) | verde; PyPI com wheel `07f7d0eb…` e sdist `43d082bc…`, iguais ao `SHA256SUMS` |
