@@ -1,6 +1,7 @@
 # 0096 - Paridade da leitura de HTML entre plataformas (libxml2 2.11 e 2.14)
 
-Status: aprovada pelo titular em 28/11/2026 ("Normalizar antes da lxml"; rito: "Atualização no Windows").
+Status: aprovada pelo titular em 28/11/2026 ("Normalizar antes da lxml"; rito: "Atualização no Windows"; depois da
+rodada 3 do Codex: "HTML5 como referência").
 
 ## Problema
 
@@ -40,7 +41,10 @@ home com histórico no Windows: a reconstrução era testada só a partir do sna
    `<!-->`, declaração e instrução até o primeiro `>`, `script`/`style` só com o nome inteiro), e a varredura é
    linear.
 2. `DERIVED_VERSION` 8: reconstrução e snapshot novos.
-3. **Rito (RELEASE.md, passo 3):** antes da tag, o candidato é instalado, com o snapshot, sobre uma cópia integral de
+3. **Referência da leitura: o HTML5.** Onde as duas libxml2 divergem, a leitura correta é a que o HTML5 define
+   (a do navegador), não a de uma delas. Em particular, `</body>` ou `</html>` no meio do corpo não fecha os
+   elementos abertos e o texto continua (`n</body>ão` é "não"; `1</body>0 dias` é "10 dias").
+4. **Rito (RELEASE.md, passo 3):** antes da tag, o candidato é instalado, com o snapshot, sobre uma cópia integral de
    um home com histórico numa máquina Windows, sem tocar o home real; instalação `ok`, S4 estrito e doctor.
 
 ## Auditoria
@@ -64,7 +68,7 @@ Codex r3 sobre `7c2fd74`: BLOQUEADOR. Os três achados da r2 confirmados corrigi
    normalização separava os nós ("n ão") e mantinha o `<s>` fechado. Leitura do supervisor: essa é a leitura que o
    HTML5 define (conferida com o html5lib nos quatro casos) e a que o navegador mostra; a 2.11 separa os nós e a 2.14
    corta o resto do parágrafo ("n"), e nenhuma das duas é a referência. A normalização leva as duas à leitura do
-   HTML5. Questão de regra levada ao titular (D5).
+   HTML5. Questão de regra levada ao titular (D5), que decidiu: **HTML5 como referência**.
 2. Fechamento de `script`/`style` com atributo ou barra (`</script x>`, `</script/>`) não era reconhecido. Corrigido
    com teste.
 
