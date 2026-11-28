@@ -1,6 +1,16 @@
 # Histórico de versões
 
-## 1.4.0a9 - (decisão 0094)
+## 1.4.0a10 - (decisão 0096)
+
+- **Leitura idêntica no Windows e no Linux.** A lxml traz libxml2 2.11 no Windows e 2.14 no Linux, e as duas liam de
+  modo diferente o HTML do Planalto: referências numéricas de 128 a 159 (`&#150;`, o travessão do inciso) viravam
+  caracteres de controle no Windows, e `</body></html>` soltos no meio da página mudavam o que era lido. O parser
+  1.2.6 normaliza as duas coisas antes da lxml. Corrige a falha da atualização da 1.4.0a9 no Windows sobre home com
+  acervo (`reprocessamento falhou em 10 captura(s): interpretacao_indisponivel`).
+- **Rito.** Antes da tag, o candidato é instalado no Windows sobre a cópia de um home com histórico.
+- `DERIVED_VERSION` 8: acervo reconstruído e snapshot novo.
+
+## 1.4.0a9 - 28/11/2026 (decisão 0094)
 
 - **Parser Planalto 1.2.5: deixa de confirmar texto errado.** Artigo de outro ato dentro de link não vira artigo
   da obra; redação viva vazia depois de riscada e nota editorial cortada no meio não são servidas (os dispositivos

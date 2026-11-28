@@ -86,7 +86,7 @@ def _sha(path):
 
 
 def test_home_novo_tem_derived_version_e_responde(novo):
-    assert derivados.versao(novo.conn) == derivados.DERIVED_VERSION == 7
+    assert derivados.versao(novo.conn) == derivados.DERIVED_VERSION == 8
     esperado = _respostas(novo)
     assert esperado[0][2] == ("verified", esperado[0][2][1])  # art. 60 permanente verified
     assert esperado[1][3][0] != "verified"  # trecho do ADCT não confirma o permanente
@@ -189,7 +189,7 @@ def test_manifesto_carrega_derived_version_real(tmp_path, novo):
     import json
     dest = tmp_path / "snap"
     novo.snapshot_export(dest)
-    assert json.loads((dest / "MANIFEST.json").read_text())["derived_version"] == str(derivados.DERIVED_VERSION) == "7"
+    assert json.loads((dest / "MANIFEST.json").read_text())["derived_version"] == str(derivados.DERIVED_VERSION) == "8"
 
 
 # ---------------------------------------------------------------------------

@@ -27,7 +27,9 @@ _log = logging.getLogger(__name__)
 #     artigos inteiros eram atribuídos ao artigo anterior, ex.: CF arts. 57, 62, 126 e 222; decisão 0091).
 # 7 = 1.4.0a9 (parser Planalto 1.2.5: marcas defensivas que impedem confirmar texto errado ou vazio: inciso sem
 #     travessão, artigo de outro ato em link, redação viva vazia depois de riscada, nota editorial truncada; 0094).
-DERIVED_VERSION = 7
+# 8 = 1.4.0a10 (parser Planalto 1.2.6: leitura idêntica em qualquer libxml2; referências de 128 a 159 e
+#     fechamentos de body/html soltos normalizados antes da lxml; 0096).
+DERIVED_VERSION = 8
 
 # Captura reprocessável com modelo e sem decisão de interpretação no recibo (0064) nem no derivado (0065), com ou
 # sem Content-Type (F-26, 0066). Decisão = origem e codec, salvo binário: o mesmo de `repo.decisao_registrada`.

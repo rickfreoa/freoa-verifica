@@ -49,6 +49,10 @@ Checksums provam integridade, e a origem depende do canal da release.
    `fv acervo conferir --home <descartável> --manifesto manifesto.json --pos-instalacao --estrito`, que deve sair com 0.
 3. Congelar os bytes exportados, gravar o digest em `freoa_verifica/data/snapshots-oficiais.json` e commitar.
    Repetir a instalação, agora vinculada, em home vazio.
+   Atualização no Windows (decisão 0096): instalar o candidato, com o snapshot, sobre uma **cópia integral de um home
+   com histórico** (banco e blobs de uma instalação real da versão anterior) numa máquina Windows, sem tocar o home
+   real; a instalação deve sair com `status: ok` e a cópia passar em `fv acervo conferir --estrito` e
+   `fv doctor --offline`. Se a versão muda os derivados, o reprocessamento completo roda nessa etapa.
 4. Auditoria independente sobre esse commit (manifesto, instalador, digest, código).
 5. PR para `main` com CI verde nas oito combinações (Python 3.11–3.14 × Ubuntu e Windows), merge e tag `vX.Y.Z`
    sobre o commit auditado. `release.yml` constrói com dependências travadas e cria a release como **rascunho**

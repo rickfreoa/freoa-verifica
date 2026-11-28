@@ -10,6 +10,7 @@ from lxml import etree
 from lxml import html as lhtml
 
 from freoa_verifica.texto_resposta import codec_html_declarado
+from freoa_verifica.parsers.html_paridade import normalizar_para_lxml
 from freoa_verifica.parsers.model import (
     Annotation,
     EditorialBlock,
@@ -26,7 +27,7 @@ from freoa_verifica.parsers.paths import (
     supplement_scope_from_heading,
 )
 
-PARSER_VERSION = "1.2.5"  # 1.2.5: marcas defensivas da decisão 0094 (artigo em link de outro ato, redação viva vazia
+PARSER_VERSION = "1.2.6"  # 1.2.6: leitura idêntica em qualquer libxml2 (decisão 0096). 1.2.5: marcas defensivas da decisão 0094 (artigo em link de outro ato, redação viva vazia
 # depois de riscada, nota editorial truncada); 1.2.4: fonte órfã sob o body (decisão 0091)
 
 DEFAULT_MAX_INPUT_BYTES = 30 * 1024 * 1024
@@ -1086,6 +1087,8 @@ def parse_html_devices(
     # lxml recusa str com `<?xml encoding?>`; a codificação já foi decidida antes (FIX17, como `arvore_html`).
     html_text = re.sub(r"^﻿?\s*<\?xml[^>]*\?>", "", html_text)
     # HTMLParser: huge_tree/no_network (resolve_entities só existe no XMLParser).
+    # 0096: leitura idêntica em qualquer libxml2 (referências de 128 a 159 e fechamentos de body/html soltos).
+    html_text = normalizar_para_lxml(html_text)
     parser = etree.HTMLParser(huge_tree=False, no_network=True, recover=True)
     root = lhtml.fromstring(html_text, parser=parser)
     depth = _max_element_depth(root)
