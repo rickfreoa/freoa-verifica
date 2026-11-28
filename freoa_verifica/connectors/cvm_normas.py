@@ -332,7 +332,7 @@ def _especie_numero(texto: str) -> tuple[str | None, int | None]:
 def _html_tree(body: bytes | str):
     """Árvore do texto da interpretação única; bytes só chegam aqui de chamadores diretos (testes)."""
     try:
-        return arvore_html(body)
+        return arvore_html(body, paridade=True)  # 0096: modelo reprocessável, leitura idêntica em qualquer libxml2
     except (ValueError, lxml_etree.ParserError, RespostaInvalida) as exc:
         raise Unavailable("resposta_inesperada") from exc
 
@@ -465,7 +465,7 @@ def _parse_ato_html(body: bytes, *, base_url: str) -> ParsedDocument:
     text = "\n".join((p.text_content() or "").strip() for p in paras if (p.text_content() or "").strip())
     return ParsedDocument(
         profile="cvm_html",
-        parser_version="cvm-html-1",
+        parser_version="cvm-html-2",  # 2: leitura idêntica em qualquer libxml2 (0096)
         title=title,
         ementa=ementa,
         text=f"[situacao={situacao}]\n" + text,

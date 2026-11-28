@@ -28,14 +28,25 @@ home com histórico no Windows: a reconstrução era testada só a partir do sna
 
 ## Decisão
 
-1. **Normalização antes da lxml** (`parsers/html_paridade.py`, parser Planalto 1.2.6): referência numérica de 128 a
-   159, decimal ou hexadecimal, com ou sem ponto e vírgula, vira o caractere que o HTML5 lhe atribui (tabela do
-   cp1252); os cinco códigos sem mapeamento (0x81, 0x8D, 0x8F, 0x90, 0x9D) ficam como estão, porque as duas versões
-   concordam neles. `</body>` e `</html>` saem; o parser fecha ambos no fim do documento, e as duas versões leem a
-   página inteira. Nenhuma outra marcação é tocada.
+1. **Normalização léxica antes da lxml** (`parsers/html_paridade.py`; parser Planalto 1.2.6 e `cvm-html-2`, os
+   parsers HTML que gravam modelo reprocessável). Só o texto entre tags é tocado; comentários, CDATA, `<script>`,
+   `<style>` e o interior das tags (atributos) ficam intactos. No texto, a referência numérica de 128 a 159, decimal
+   ou hexadecimal, com ou sem ponto e vírgula e com zeros à esquerda, lida por inteiro, vira o caractere que o HTML5
+   lhe atribui (tabela do cp1252); os cinco códigos sem mapeamento (0x81, 0x8D, 0x8F, 0x90, 0x9D) e qualquer número
+   fora da faixa ficam como estão. As tags de fechamento `</body>` e `</html>`, inteiras, saem; o parser fecha ambos no
+   fim do documento, e as duas versões leem a página inteira. A remoção não junta fragmentos (`<</body>s>` vira
+   `&lt;s>`, não `<s>`).
 2. `DERIVED_VERSION` 8: reconstrução e snapshot novos.
 3. **Rito (RELEASE.md, passo 3):** antes da tag, o candidato é instalado, com o snapshot, sobre uma cópia integral de
    um home com histórico numa máquina Windows, sem tocar o home real; instalação `ok`, S4 estrito e doctor.
+
+## Auditoria
+
+Codex r1 sobre `521303f`: BLOQUEADOR. A primeira versão removia fechamentos e convertia referências sem contexto
+(atributo `line-</body>through` virava `line-through` e tornava texto vigente riscado; `<</body>s>` virava `<s>`),
+consumia referências longas pela metade (`&#00001500;` virava `-0;`), não lia zeros à esquerda e deixava fora o
+parser HTML da CVM. Todos corrigidos com teste; o teste do fechamento solto passou a reproduzir a estrutura real da
+Lei 14.661 (falhava só na 2.14 sem a correção; o anterior não falhava em plataforma alguma).
 
 ## Verificação
 
@@ -48,5 +59,6 @@ no texto. Testes de regressão em `tests/test_0096_paridade_libxml2.py`; a CI ro
 - A paridade é garantida para as duas divergências encontradas e medida sobre o acervo atual. Outra divergência da
   libxml2 em HTML não visto continua possível; a 0065 continua a recusá-la em vez de gravar modelo diferente, e o
   passo novo do rito a expõe antes do release.
-- Os parsers que não geram modelo reprocessável (Câmara, TJDFT, descoberta) não passam pela normalização.
+- Os parsers que não geram modelo reprocessável (`arvore_html` dos conectores de decisões, Câmara, TJDFT, descoberta)
+  não passam pela normalização.
 - A 1.4.0a9 publicada continua com o defeito: aviso nas notas da release; não atualizar no Windows home com acervo.

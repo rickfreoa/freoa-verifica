@@ -5,19 +5,28 @@ duas divergem em dois pontos que o HTML do Planalto exercita:
 
 1. referência numérica de 128 a 159 (`&#150;`): a 2.14 segue o HTML5 e lê o caractere do cp1252 ("–"); a 2.11 grava
    o caractere de controle U+0096, e o travessão do inciso desaparece;
-2. `</body>` ou `</html>` no meio do documento: a 2.14 descarta o que vem depois; a 2.11 mantém.
+2. `</body>` ou `</html>` no meio do documento: as duas versões divergem sobre o que vem depois.
 
-O texto entregue à lxml é normalizado antes: a referência vira o caractere que o HTML5 define, e os fechamentos de
-`body` e `html` saem (o parser fecha ambos no fim do documento), de modo que as duas versões leiam a página inteira.
-Nenhuma outra marcação é tocada.
+O texto entregue à lxml é normalizado antes, com análise léxica: só o texto entre tags é tocado. Nele, a referência
+de 128 a 159 vira o caractere que o HTML5 define; e as tags de fechamento `</body>` e `</html>`, inteiras, saem (o
+parser fecha ambos no fim do documento). Comentários, `<script>`, `<style>`, CDATA e o interior de qualquer tag
+(atributos) ficam como estão, e a remoção nunca junta fragmentos em marcação nova.
 """
 
 from __future__ import annotations
 
 import re
 
-_REFERENCIA_NUMERICA = re.compile(r"&#(?:[xX]([0-9a-fA-F]{1,6})|([0-9]{1,7}));?")
-_FECHAMENTO_BODY_HTML = re.compile(r"</(?:body|html)\s*>", re.IGNORECASE)
+# Ordem importa: comentário, CDATA e elementos de conteúdo bruto antes de tag genérica.
+_TOKEN = re.compile(
+    r"(?P<bruto><!--.*?(?:-->|\Z)|<!\[CDATA\[.*?(?:\]\]>|\Z)|<(?P<raw>script|style)\b"
+    r"(?:\"[^\"]*\"|'[^']*'|[^'\">])*>.*?(?:</(?P=raw)\s*>|\Z))"
+    r"|(?P<tag><[A-Za-z/!?](?:\"[^\"]*\"|'[^']*'|[^'\">])*>)",
+    re.IGNORECASE | re.DOTALL,
+)
+_FECHAMENTO_BODY_HTML = re.compile(r"</(?:body|html)\s*>\Z", re.IGNORECASE)
+_REFERENCIA_NUMERICA = re.compile(r"&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?")
+_MAX_DIGITOS = 8  # sem zeros à esquerda; acima disso o código está fora de 128-159 e não precisa ser convertido
 
 
 def _caractere_html5(codigo: int) -> str | None:
@@ -31,10 +40,31 @@ def _caractere_html5(codigo: int) -> str | None:
 
 
 def _substituir(m: re.Match[str]) -> str:
-    codigo = int(m.group(1), 16) if m.group(1) is not None else int(m.group(2))
+    hexa, dec = m.group(1), m.group(2)
+    digitos = (hexa if hexa is not None else dec).lstrip("0") or "0"
+    if len(digitos) > _MAX_DIGITOS:
+        return m.group(0)
+    codigo = int(digitos, 16 if hexa is not None else 10)
     return _caractere_html5(codigo) or m.group(0)
+
+
+def _texto(trecho: str) -> str:
+    return _REFERENCIA_NUMERICA.sub(_substituir, trecho)
 
 
 def normalizar_para_lxml(html_text: str) -> str:
     """HTML com as duas divergências neutralizadas, para leitura idêntica em qualquer libxml2."""
-    return _FECHAMENTO_BODY_HTML.sub("", _REFERENCIA_NUMERICA.sub(_substituir, html_text))
+    partes: list[str] = []
+    pos = 0
+    for m in _TOKEN.finditer(html_text):
+        partes.append(_texto(html_text[pos:m.start()]))
+        token = m.group(0)
+        if m.group("tag") is not None and _FECHAMENTO_BODY_HTML.match(token):
+            # Retirar a tag não pode juntar um "<" literal anterior ao texto seguinte (`<</body>s>` não vira `<s>`).
+            if partes and partes[-1].endswith("<"):
+                partes[-1] = partes[-1][:-1] + "&lt;"
+        else:
+            partes.append(token)
+        pos = m.end()
+    partes.append(_texto(html_text[pos:]))
+    return "".join(partes)

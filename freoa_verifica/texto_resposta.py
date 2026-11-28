@@ -562,14 +562,21 @@ def corpo_binario(resp) -> bytes:
     return resp.body
 
 
-def arvore_html(corpo: bytes | str, content_type: str | None = None):
+def arvore_html(corpo: bytes | str, content_type: str | None = None, *, paridade: bool = False):
     """Árvore lxml do TEXTO da interpretação única: o parser nunca recebe bytes (FIX16/F-22).
 
     Declaração `<?xml ... encoding?>` é retirada: lxml recusa str com ela, e a codificação já foi decidida.
+    `paridade`: normaliza antes da lxml para leitura idêntica em qualquer libxml2 (decisão 0096); usado pelos
+    parsers que gravam modelo reprocessável.
     """
     from lxml import html as lxml_html
 
-    return lxml_html.fromstring(re.sub(r"^\s*<\?xml[^>]*\?>", "", texto_da_resposta(corpo, content_type)))
+    texto = re.sub(r"^\s*<\?xml[^>]*\?>", "", texto_da_resposta(corpo, content_type))
+    if paridade:
+        from freoa_verifica.parsers.html_paridade import normalizar_para_lxml
+
+        texto = normalizar_para_lxml(texto)
+    return lxml_html.fromstring(texto)
 
 
 def normalizar_para_busca(texto: str) -> str:
