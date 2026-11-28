@@ -20,11 +20,12 @@ import re
 
 # Ordem importa: comentário, CDATA, declaração, instrução e elementos de conteúdo bruto antes de tag genérica. Os
 # limites seguem os da libxml2: comentário curto (`<!-->`, `<!--->`) termina ali; declaração e instrução terminam no
-# primeiro `>`; `script`/`style` só com o nome inteiro. Nenhuma alternativa atravessa outro `<` fora de aspas, o que
+# primeiro `>`; `script`/`style` só com o nome inteiro, na abertura e no fechamento (`</script x>`,
+# `</script/>`). Nenhuma alternativa atravessa outro `<` fora de aspas, o que
 # mantém a varredura linear.
 _TOKEN = re.compile(
     r"(?P<bruto><!--(?:-?>|.*?(?:-->|\Z))|<!\[CDATA\[.*?(?:\]\]>|\Z)|<![^>]*(?:>|\Z)|<\?[^>]*(?:>|\Z)"
-    r"|<(?P<raw>script|style)(?=[\s/>])(?:\"[^\"]*\"|'[^']*'|[^'\"<>])*>.*?(?:</(?P=raw)\s*>|\Z))"
+    r"|<(?P<raw>script|style)(?=[\s/>])(?:\"[^\"]*\"|'[^']*'|[^'\"<>])*>.*?(?:</(?P=raw)(?=[\s/>])[^>]*(?:>|\Z)|\Z))"
     r"|(?P<tag></?[A-Za-z](?:\"[^\"]*\"|'[^']*'|[^'\"<>])*>)",
     re.IGNORECASE | re.DOTALL,
 )

@@ -61,6 +61,15 @@ def test_remocao_nao_junta_fragmentos_em_marcacao_nova():
     assert normalizar_para_lxml("<</body>s>x") == "<<!---->s>x"
 
 
+def test_fechamento_no_meio_do_paragrafo_segue_o_html5():
+    # Leitura do HTML5 (html5lib, navegadores): `</body>` no meio do corpo não fecha o parágrafo nem o `<s>`, e o texto
+    # continua. Sem a normalização, a libxml2 2.11 separa os nós ("n ão") e a 2.14 corta o resto ("n").
+    _t, prov = _ler("<p>Art. 1o n</body>ão é permitido contratar.</p>")
+    assert prov["art1"].redactions[-1].text == "não é permitido contratar."
+    _t, prov = _ler("<p>Art. 1o O prazo é de 1</body>0 dias.</p>")
+    assert prov["art1"].redactions[-1].text == "O prazo é de 10 dias."
+
+
 def test_remocao_nao_fabrica_referencia_nem_texto():
     texto, prov = _ler("<p>Art. 1o n&ati</body>lde;o e permitido contratar &n</body>ot; aqui.</p>")
     vigente = prov["art1"].redactions[-1].text
@@ -68,7 +77,8 @@ def test_remocao_nao_fabrica_referencia_nem_texto():
 
 
 def test_limites_lexicos_seguem_os_da_libxml2():
-    for prefixo in ("<!-->", "<!--->", "<script-x></script-x>", '<?x a=">', "<!DOCTYPE html>"):
+    for prefixo in ("<!-->", "<!--->", "<script-x></script-x>", '<?x a=">', "<!DOCTYPE html>",
+                    "<script>x</script x>", "<script>x</script/>", "<style>p{}</style x>"):
         texto, prov = _ler(prefixo + "<p>Art. 1o Compete:</p><p>I &#150; legislar.</p>")
         assert "art1.inc1" in prov and _sem_c1(texto), prefixo
 
@@ -76,7 +86,7 @@ def test_limites_lexicos_seguem_os_da_libxml2():
 def test_varredura_linear_em_entrada_adversarial():
     import time
 
-    for unidade in ("<p ", "<!", "<?", "<p a=\"x", "<script ", "&#", "<!--x", "</body"):
+    for unidade in ("<p ", "<!", "<?", "<p a=\"x", "<script ", "&#", "<!--x", "</body", "<script></script x"):
         inicio = time.perf_counter()
         normalizar_para_lxml(unidade * 40000)
         assert time.perf_counter() - inicio < 1.0, unidade

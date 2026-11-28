@@ -57,6 +57,17 @@ podia fabricar referência (`n&ati</body>lde;o` virava "não"); a tokenização 
 com teste (comentário vazio no lugar da tag, limites léxicos da libxml2, varredura linear). O parser segue 1.2.6:
 nenhum modelo das versões intermediárias foi distribuído; os candidatos foram descartados e refeitos.
 
+Codex r3 sobre `7c2fd74`: BLOQUEADOR. Os três achados da r2 confirmados corrigidos; dois novos:
+
+1. `</body>` no meio de um parágrafo, trocado por comentário, deixa o texto continuar (`n</body>ão` vira "não";
+   `Art. 1</body>0.` vira art. 10; `<s>permitido</body> vedado</s>` deixa "vedado" riscado), quando a libxml2 2.11 sem
+   normalização separava os nós ("n ão") e mantinha o `<s>` fechado. Leitura do supervisor: essa é a leitura que o
+   HTML5 define (conferida com o html5lib nos quatro casos) e a que o navegador mostra; a 2.11 separa os nós e a 2.14
+   corta o resto do parágrafo ("n"), e nenhuma das duas é a referência. A normalização leva as duas à leitura do
+   HTML5. Questão de regra levada ao titular (D5).
+2. Fechamento de `script`/`style` com atributo ou barra (`</script x>`, `</script/>`) não era reconhecido. Corrigido
+   com teste.
+
 ## Verificação
 
 Paridade sobre o acervo inteiro (844 capturas reprocessáveis de Planalto, CVM e BCB), com o código do ramo: hashes dos
