@@ -41,7 +41,8 @@ def test_fora_da_faixa_ou_sem_mapeamento_fica_intacto():
 
 
 def test_fechamentos_inteiros_de_body_e_html_saem_so_entre_tags():
-    assert normalizar_para_lxml("<p>a</p></body></html><p>b</p></BODY ></HTML>") == "<p>a</p><p>b</p>"
+    assert (normalizar_para_lxml("<p>a</p></body></html><p>b</p></BODY ></HTML>")
+            == "<p>a</p><!----><!----><p>b</p><!----><!---->")
     for intacto in ("</body", "</ body>", "</bodyx>", "</htmlx>"):
         assert normalizar_para_lxml("a" + intacto + "b") == "a" + intacto + "b"
 
@@ -57,7 +58,28 @@ def test_atributos_comentarios_e_conteudo_bruto_ficam_intactos():
 
 
 def test_remocao_nao_junta_fragmentos_em_marcacao_nova():
-    assert normalizar_para_lxml("<</body>s>x") == "&lt;s>x"
+    assert normalizar_para_lxml("<</body>s>x") == "<<!---->s>x"
+
+
+def test_remocao_nao_fabrica_referencia_nem_texto():
+    texto, prov = _ler("<p>Art. 1o n&ati</body>lde;o e permitido contratar &n</body>ot; aqui.</p>")
+    vigente = prov["art1"].redactions[-1].text
+    assert "não" not in vigente and "¬" not in vigente and "lde;o" in vigente
+
+
+def test_limites_lexicos_seguem_os_da_libxml2():
+    for prefixo in ("<!-->", "<!--->", "<script-x></script-x>", '<?x a=">', "<!DOCTYPE html>"):
+        texto, prov = _ler(prefixo + "<p>Art. 1o Compete:</p><p>I &#150; legislar.</p>")
+        assert "art1.inc1" in prov and _sem_c1(texto), prefixo
+
+
+def test_varredura_linear_em_entrada_adversarial():
+    import time
+
+    for unidade in ("<p ", "<!", "<?", "<p a=\"x", "<script ", "&#", "<!--x", "</body"):
+        inicio = time.perf_counter()
+        normalizar_para_lxml(unidade * 40000)
+        assert time.perf_counter() - inicio < 1.0, unidade
 
 
 # --- efeito no parser ----------------------------------------------------------------------------------------

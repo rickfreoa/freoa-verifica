@@ -9,23 +9,28 @@ duas divergem em dois pontos que o HTML do Planalto exercita:
 
 O texto entregue à lxml é normalizado antes, com análise léxica: só o texto entre tags é tocado. Nele, a referência
 de 128 a 159 vira o caractere que o HTML5 define; e as tags de fechamento `</body>` e `</html>`, inteiras, saem (o
-parser fecha ambos no fim do documento). Comentários, `<script>`, `<style>`, CDATA e o interior de qualquer tag
-(atributos) ficam como estão, e a remoção nunca junta fragmentos em marcação nova.
+parser fecha ambos no fim do documento) e dão lugar a um comentário vazio, que separa os dois lados sem acrescentar
+texto. Comentários, `<script>`, `<style>`, CDATA, declarações, instruções e o interior de qualquer tag (atributos)
+ficam como estão, e a remoção nunca junta fragmentos em marcação ou referência nova.
 """
 
 from __future__ import annotations
 
 import re
 
-# Ordem importa: comentário, CDATA e elementos de conteúdo bruto antes de tag genérica.
+# Ordem importa: comentário, CDATA, declaração, instrução e elementos de conteúdo bruto antes de tag genérica. Os
+# limites seguem os da libxml2: comentário curto (`<!-->`, `<!--->`) termina ali; declaração e instrução terminam no
+# primeiro `>`; `script`/`style` só com o nome inteiro. Nenhuma alternativa atravessa outro `<` fora de aspas, o que
+# mantém a varredura linear.
 _TOKEN = re.compile(
-    r"(?P<bruto><!--.*?(?:-->|\Z)|<!\[CDATA\[.*?(?:\]\]>|\Z)|<(?P<raw>script|style)\b"
-    r"(?:\"[^\"]*\"|'[^']*'|[^'\">])*>.*?(?:</(?P=raw)\s*>|\Z))"
-    r"|(?P<tag><[A-Za-z/!?](?:\"[^\"]*\"|'[^']*'|[^'\">])*>)",
+    r"(?P<bruto><!--(?:-?>|.*?(?:-->|\Z))|<!\[CDATA\[.*?(?:\]\]>|\Z)|<![^>]*(?:>|\Z)|<\?[^>]*(?:>|\Z)"
+    r"|<(?P<raw>script|style)(?=[\s/>])(?:\"[^\"]*\"|'[^']*'|[^'\"<>])*>.*?(?:</(?P=raw)\s*>|\Z))"
+    r"|(?P<tag></?[A-Za-z](?:\"[^\"]*\"|'[^']*'|[^'\"<>])*>)",
     re.IGNORECASE | re.DOTALL,
 )
 _FECHAMENTO_BODY_HTML = re.compile(r"</(?:body|html)\s*>\Z", re.IGNORECASE)
 _REFERENCIA_NUMERICA = re.compile(r"&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?")
+_SEPARADOR = "<!---->"
 _MAX_DIGITOS = 8  # sem zeros à esquerda; acima disso o código está fora de 128-159 e não precisa ser convertido
 
 
@@ -60,9 +65,9 @@ def normalizar_para_lxml(html_text: str) -> str:
         partes.append(_texto(html_text[pos:m.start()]))
         token = m.group(0)
         if m.group("tag") is not None and _FECHAMENTO_BODY_HTML.match(token):
-            # Retirar a tag não pode juntar um "<" literal anterior ao texto seguinte (`<</body>s>` não vira `<s>`).
-            if partes and partes[-1].endswith("<"):
-                partes[-1] = partes[-1][:-1] + "&lt;"
+            # A tag dá lugar a um comentário vazio: o texto lido não ganha nada, e os dois lados não se juntam em
+            # marcação ou referência nova (`<</body>s>` não vira `<s>`; `&ati</body>lde;` não vira `&atilde;`).
+            partes.append(_SEPARADOR)
         else:
             partes.append(token)
         pos = m.end()

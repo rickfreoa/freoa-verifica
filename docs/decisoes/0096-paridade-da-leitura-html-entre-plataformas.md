@@ -34,8 +34,11 @@ home com histórico no Windows: a reconstrução era testada só a partir do sna
    ou hexadecimal, com ou sem ponto e vírgula e com zeros à esquerda, lida por inteiro, vira o caractere que o HTML5
    lhe atribui (tabela do cp1252); os cinco códigos sem mapeamento (0x81, 0x8D, 0x8F, 0x90, 0x9D) e qualquer número
    fora da faixa ficam como estão. As tags de fechamento `</body>` e `</html>`, inteiras, saem; o parser fecha ambos no
-   fim do documento, e as duas versões leem a página inteira. A remoção não junta fragmentos (`<</body>s>` vira
-   `&lt;s>`, não `<s>`).
+   fim do documento, e as duas versões leem a página inteira. A tag dá lugar a um comentário vazio (`<!---->`), que
+   não acrescenta texto e impede que os dois lados se juntem em marcação ou referência nova (`<</body>s>` não vira
+   `<s>`; `&ati</body>lde;` não vira `&atilde;`). Os limites léxicos seguem os da libxml2 (comentário curto
+   `<!-->`, declaração e instrução até o primeiro `>`, `script`/`style` só com o nome inteiro), e a varredura é
+   linear.
 2. `DERIVED_VERSION` 8: reconstrução e snapshot novos.
 3. **Rito (RELEASE.md, passo 3):** antes da tag, o candidato é instalado, com o snapshot, sobre uma cópia integral de
    um home com histórico numa máquina Windows, sem tocar o home real; instalação `ok`, S4 estrito e doctor.
@@ -47,6 +50,12 @@ Codex r1 sobre `521303f`: BLOQUEADOR. A primeira versão removia fechamentos e c
 consumia referências longas pela metade (`&#00001500;` virava `-0;`), não lia zeros à esquerda e deixava fora o
 parser HTML da CVM. Todos corrigidos com teste; o teste do fechamento solto passou a reproduzir a estrutura real da
 Lei 14.661 (falhava só na 2.14 sem a correção; o anterior não falhava em plataforma alguma).
+
+Codex r2 sobre `40dfead`: BLOQUEADOR. Os quatro achados da r1 confirmados corrigidos; três novos: a remoção ainda
+podia fabricar referência (`n&ati</body>lde;o` virava "não"); a tokenização divergia da libxml2 em comentário curto,
+`<script-x>` e instrução `<?...>`, deixando parágrafos sem normalização; custo quadrático com `"<p " * N`. Corrigidos
+com teste (comentário vazio no lugar da tag, limites léxicos da libxml2, varredura linear). O parser segue 1.2.6:
+nenhum modelo das versões intermediárias foi distribuído; os candidatos foram descartados e refeitos.
 
 ## Verificação
 
