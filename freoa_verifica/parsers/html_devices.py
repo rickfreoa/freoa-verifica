@@ -26,7 +26,8 @@ from freoa_verifica.parsers.paths import (
     supplement_scope_from_heading,
 )
 
-PARSER_VERSION = "1.2.4"  # 1.2.4: dispositivo fora de <p> (fonte órfã sob o body; decisão 0091)
+PARSER_VERSION = "1.2.5"  # 1.2.5: marcas defensivas da decisão 0094 (artigo em link de outro ato, redação viva vazia
+# depois de riscada, nota editorial truncada); 1.2.4: fonte órfã sob o body (decisão 0091)
 
 DEFAULT_MAX_INPUT_BYTES = 30 * 1024 * 1024
 DEFAULT_MAX_NESTING = 200
@@ -668,6 +669,56 @@ _INICIO_REMISSIVO = re.compile(
 )
 _ARTIGO_MAIUSCULO = re.compile(r"\s*[\"“«]?\s*Art\.?\s*\d")
 
+# Nota editorial aberta e não fechada no fim da redação ("(Redação dada pela Emenda Constitucional no 40, de 2"):
+# o resto da nota ficou em outro nó (0094, achado 8).
+_NOTA_EDITORIAL_TRUNCADA = re.compile(
+    r"\((?:Reda[cç][aã]o\s+dada|Inclu[ií]d[oa]|Acrescid[oa]|Revogad[oa]|Vide|Renumerad[oa]|Vig[eê]ncia|Produ[cç][aã]o"
+    r"\s+de\s+efeitos|Vetad[oa]|VETAD[OA]|Regulamento|Promulga[cç][aã]o)[^()]*$",
+    re.I,
+)
+
+
+def _artigo_inteiro_em_link_de_outro_ato(el, proprio: str | None) -> bool:
+    """Todo o texto da fonte órfã está dentro de links para OUTRO ato (0094, achado 7 do colega).
+
+    `href` com arquivo diferente do da própria obra (ou qualquer arquivo, se a URL da obra não é conhecida); âncora
+    da própria página (`#art2`) ou do próprio arquivo continua sendo o artigo."""
+    texto = _normalize_ws(paragraph_plain_text(el))
+    if not texto:
+        return False
+    links = el.xpath(".//a[@href]")
+    if not links:
+        return False
+    em_link = _normalize_ws(" ".join(paragraph_plain_text(a) for a in links))
+    if em_link != texto:
+        return False
+    for a in links:
+        if _mesmo_documento(a.get("href") or "", proprio):
+            return False
+    return True
+
+
+def _documento(url: str) -> str:
+    """Identidade do documento: host e caminho, sem esquema, consulta nem fragmento, em minúsculas."""
+    from urllib.parse import urlsplit
+
+    partes = urlsplit(url)
+    return f"{partes.netloc.lower()}{partes.path.lower()}"
+
+
+def _mesmo_documento(href: str, base_url: str | None) -> bool:
+    """`href` aponta para a própria obra: só fragmento, ou o mesmo documento resolvido contra a URL da obra.
+
+    Sem URL da obra conhecida, só o fragmento puro é a própria obra (0094, Codex r1, achado 3)."""
+    from urllib.parse import urljoin
+
+    href = href.strip()
+    if not href.split("#", 1)[0]:
+        return True
+    if not base_url:
+        return False
+    return _documento(urljoin(base_url, href)) == _documento(base_url)
+
 
 def _fonte_orfa_composta(plain_breaks: str, plain: str) -> bool:
     if _SEGUNDO_DISPOSITIVO.search(plain):
@@ -740,7 +791,7 @@ def _abertura_citada_introduzida(el) -> bool:
     return False
 
 
-def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
+def _iter_device_blocks(root, base_url: str | None = None) -> tuple[list, dict[int, str], set[int]]:
     """Parágrafos + fontes órfãs 'Art N' sob body (markup quebrado do Planalto).
 
     Só inclui //body/font cujo texto é rótulo de artigo sem corpo (ex.: "Art 9º"),
@@ -792,6 +843,10 @@ def _iter_device_blocks(root) -> tuple[list, dict[int, str], set[int]]:
         if id(el) in ids_consumidas or id(el) in merged_by_id:
             continue
         if not _fonte_orfa_parece_dispositivo(el):
+            continue
+        if _artigo_inteiro_em_link_de_outro_ato(el, base_url):
+            fronteira_ids.add(id(el))  # texto de outro ato não abre dispositivo da obra (0094, achado 7)
+            fronteira_fonts.append(el)
             continue
         if _fonte_orfa_admissivel(el) and _abertura_citada_introduzida(el):
             orphan_fonts.append(el)
@@ -1049,7 +1104,7 @@ def parse_html_devices(
     title, ementa = extract_title_ementa(paragraphs)
     # Planalto às vezes quebra <p> com </font> órfão: "Art 9º" fica em
     # //body/font fora de qualquer <p>. Inclui esses blocos na ordem do documento.
-    blocks, merged_by_id, fronteira_ids = _iter_device_blocks(root)
+    blocks, merged_by_id, fronteira_ids = _iter_device_blocks(root, base_url)
     ctx = _Ctx()
     ctx.issues.extend(early_issues)
     prev_in_bq = False
@@ -1426,6 +1481,7 @@ def parse_html_devices(
 
     doc_text = "".join(ctx.doc_parts)
     provisions = list(ctx.provisions.values())
+    ctx.issues.extend(_marcas_de_redacao(provisions))
     return (
         title,
         ementa,
@@ -1435,6 +1491,28 @@ def parse_html_devices(
         ctx.amendments,
         ctx.editorial_blocks,
     )
+
+
+def _marcas_de_redacao(provisions: list) -> list[Issue]:
+    """Redação vigente que não pode ser servida (0094, achados 1 e 8 do colega); nunca corrige o texto."""
+    marcas = []
+    for prov in provisions:
+        if prov.ambiguous or not prov.redactions:
+            continue
+        vigente = next((r for r in reversed(prov.redactions) if not r.struck and not r.superseded_without_strike), None)
+        if vigente is None:
+            continue
+        notas = {a.kind for a in vigente.annotations}
+        if (not vigente.text.strip() and any(r.struck for r in prov.redactions)
+                and not notas & {"revogado", "veto"}):
+            # Texto novo perdido (</font> órfão tirou o fim do <p>): a redação viva vazia não é a vigente.
+            marcas.append(Issue("REDACAO_VIVA_VAZIA", prov.path, "redação viva vazia depois de redação riscada",
+                                blocking_scope="provision"))
+        elif (m := _NOTA_EDITORIAL_TRUNCADA.search(vigente.text)) and not re.search(r"\b\d{4}\s*$", m.group(0)):
+            # Só nota cortada no meio ("..., de 2", "(Vigência"); nota completa a que falta o ")" final não esconde
+            # texto normativo (Lei 11.076, 29 provisões) e fica como estava.
+            marcas.append(Issue("NOTA_EDITORIAL_TRUNCADA", prov.path, vigente.text[-80:], blocking_scope="provision"))
+    return marcas
 
 
 def _append_mixed(

@@ -1,5 +1,17 @@
 # Histórico de versões
 
+## 1.4.0a9 - (decisão 0094)
+
+- **Parser Planalto 1.2.5: deixa de confirmar texto errado.** Artigo de outro ato dentro de link não vira artigo
+  da obra; redação viva vazia depois de riscada e nota editorial cortada no meio não são servidas (os dispositivos
+  afetados saem `unknown`). O inciso sem travessão da CF continua pendente (decisão 0095).
+- **Citação.** Complemento de dispositivo ou alternativa logo depois da norma ("art. 5º da CF/88, § 2º", "... ou do
+  ADCT?", "art. 5º da Lei 6.404/1976, § 2º") não confirma o artigo; data diferente da promulgação da Constituição
+  não é exata.
+- **Renovação.** A pendência só sai com captura de data posterior à anterior e ao sinal que a abriu; mesmos bytes,
+  captura mantida pela monotonia ou intermediária vão para `sem_renovacao`.
+- `DERIVED_VERSION` 7: acervo reconstruído e snapshot novo.
+
 ## 1.4.0a8 - 27/11/2026 (decisão 0093)
 
 - **Atualizar o pacote não paralisa mais a manutenção.** O recibo persistido do robots.txt (e o do termo da Câmara)
