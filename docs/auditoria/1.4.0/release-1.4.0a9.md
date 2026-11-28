@@ -32,3 +32,30 @@ candidato foi refeito do snapshot da 1.4.0a8. Nenhum home de usuário tem modelo
 | Codex r2 sobre `95d7797` | BLOQUEADOR (conclusão extraída do log; sessão encerrada por engano do supervisor), 3 escapes do rótulo, corrigidos em `91355b3` |
 | Codex r3 sobre `91355b3` | BLOQUEADOR, 4 achados do rótulo; titular: correção conservadora e rodada 4 restrita (`c66d5b9`) |
 | Codex r4 (restrita) sobre `c66d5b9` | BLOQUEADOR, 4 contornos do rótulo; titular: marca de rótulo sai da 1.4.0a9 (decisão 0095) |
+| CI do PR #59 em `3d15c22` | 11/11 verdes |
+| Merge do PR #59 | `8124e1c` (merge commit), depois da publicação da 1.4.0a8 |
+| Tag anotada `v1.4.0a9` | criada e empurrada pelo notebook do titular |
+| `release.yml` (run 46089755264) | verde (Windows 3.13 em cerca de 5h30, dentro do limite de 6 h do job); rascunho com wheel, sdist, `requirements-lock.txt` e `SHA256SUMS` |
+| `sha256sum -c SHA256SUMS` no rascunho baixado | OK nos três arquivos |
+| `gh attestation verify` | wheel e sdist: `release.yml@refs/tags/v1.4.0a9`, commit `8124e1c` |
+| Wheel sem `tests/`; digest em `snapshots-oficiais.json` da wheel | 0 entradas; `22a0320b…58ea`, `versao_pacote_min` 1.4.0a9, derived 7 |
+| Wheel baixada em venv limpo com o lock da release (`--require-hashes`); snapshot instalado; S4 estrito; `doctor --offline` | `vinculado: True`; 0; 0. Uma primeira execução do doctor sem `--offline` fez as verificações de saúde em rede e acusou `fonte:planalto` `acervo_legado_sem_nova_captura`; não integra o rito e foi refeita offline |
+| Anexo do snapshot e do `.sha256` | pelo notebook do titular (`gh release upload`); asset baixado de volta: sha256 `22a0320b1196f1ef81381039e75b8012b937346e774e1f64423ce79368d158ea` |
+| Publicação (`draft=false`, `prerelease=false`) | pelo titular, 28/11/2026 11h52 UTC |
+| `pypi.yml` (run 46141899255) | verde; PyPI com wheel `ffa1a027…` e sdist `7f911dfc…`, iguais ao `SHA256SUMS` |
+
+## Ressalva: atualização no Windows
+
+A instalação pelo instalador oficial no home real (Windows 11), sobre acervo da 1.4.0a8, falhou na etapa do snapshot:
+`reprocessamento falhou em 10 captura(s): interpretacao_indisponivel`, `rollback: false` (falha no staging; banco
+intacto). O pacote ficou na 1.4.0a9 com derivados 6, e as consultas de legislação passaram a ser recusadas; o home
+voltou à 1.4.0a8 (wheel com sha256 conferido, só o pacote) e o `doctor --offline` voltou a `ok`.
+
+Causa, reproduzida numa cópia integral do home: a lxml 6.1.3 traz libxml2 2.11.9 no Windows e 2.14.6 no Linux, e as
+duas leem de modo diferente parte do HTML do Planalto (referências numéricas `&#128;`–`&#159;`, como `&#150;`, viram
+caracteres de controle no Windows; texto solto após a assinatura é mantido no Windows e descartado no Linux). As 10
+capturas legadas conferidas do snapshot (gerado no Linux) não se reproduzem no Windows com o mesmo parser 1.2.5, e a
+regra da 0065 recusou a instalação. Sem a recusa, o reprocessamento no Windows grava em silêncio modelos errados (seis
+na cópia, entre eles a Constituição, com 37 travessões trocados e incisos perdidos). Os modelos do home real não foram
+afetados (nenhum caractere de controle nos 965 modelos). O rito não cobria atualização sobre home com histórico no
+Windows. Correção e teste de paridade entre plataformas na 1.4.0a10.
