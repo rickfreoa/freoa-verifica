@@ -43,3 +43,19 @@ candidato foi refeito do snapshot da 1.4.0a8. Nenhum home de usuário tem modelo
 | Anexo do snapshot e do `.sha256` | pelo notebook do titular (`gh release upload`); asset baixado de volta: sha256 `22a0320b1196f1ef81381039e75b8012b937346e774e1f64423ce79368d158ea` |
 | Publicação (`draft=false`, `prerelease=false`) | pelo titular, 28/11/2026 11h52 UTC |
 | `pypi.yml` (run 46141899255) | verde; PyPI com wheel `ffa1a027…` e sdist `7f911dfc…`, iguais ao `SHA256SUMS` |
+
+## Ressalva: atualização no Windows
+
+A instalação pelo instalador oficial no home real (Windows 11), sobre acervo da 1.4.0a8, falhou na etapa do snapshot:
+`reprocessamento falhou em 10 captura(s): interpretacao_indisponivel`, `rollback: false` (falha no staging; banco
+intacto). O pacote ficou na 1.4.0a9 com derivados 6, e as consultas de legislação passaram a ser recusadas; o home
+voltou à 1.4.0a8 (wheel com sha256 conferido, só o pacote) e o `doctor --offline` voltou a `ok`.
+
+Causa, reproduzida numa cópia integral do home: a lxml 6.1.3 traz libxml2 2.11.9 no Windows e 2.14.6 no Linux, e as
+duas leem de modo diferente parte do HTML do Planalto (referências numéricas `&#128;`–`&#159;`, como `&#150;`, viram
+caracteres de controle no Windows; texto solto após a assinatura é mantido no Windows e descartado no Linux). As 10
+capturas legadas conferidas do snapshot (gerado no Linux) não se reproduzem no Windows com o mesmo parser 1.2.5, e a
+regra da 0065 recusou a instalação. Sem a recusa, o reprocessamento no Windows grava em silêncio modelos errados (seis
+na cópia, entre eles a Constituição, com 37 travessões trocados e incisos perdidos). Os modelos do home real não foram
+afetados (nenhum caractere de controle nos 965 modelos). O rito não cobria atualização sobre home com histórico no
+Windows. Correção e teste de paridade entre plataformas na 1.4.0a10.
