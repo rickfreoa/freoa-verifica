@@ -35,14 +35,43 @@ _SEPARADOR = "<!---->"
 _MAX_DIGITOS = 8  # sem zeros à esquerda; acima disso o código está fora de 128-159 e não precisa ser convertido
 
 
+# Tabela do HTML5 para referências numéricas de 128 a 159 (a do cp1252). Os cinco códigos sem caractere (0x81, 0x8D,
+# 0x8F, 0x90, 0x9D) ficam de fora: o HTML5 os mantém, e as duas versões da libxml2 concordam. Tabela fixa, sem decode
+# (decodificação só na interpretação única, garantia estrutural 3).
+_HTML5_C1 = {
+    0x80: "\u20AC",
+    0x82: "\u201A",
+    0x83: "\u0192",
+    0x84: "\u201E",
+    0x85: "\u2026",
+    0x86: "\u2020",
+    0x87: "\u2021",
+    0x88: "\u02C6",
+    0x89: "\u2030",
+    0x8A: "\u0160",
+    0x8B: "\u2039",
+    0x8C: "\u0152",
+    0x8E: "\u017D",
+    0x91: "\u2018",
+    0x92: "\u2019",
+    0x93: "\u201C",
+    0x94: "\u201D",
+    0x95: "\u2022",
+    0x96: "\u2013",
+    0x97: "\u2014",
+    0x98: "\u02DC",
+    0x99: "\u2122",
+    0x9A: "\u0161",
+    0x9B: "\u203A",
+    0x9C: "\u0153",
+    0x9E: "\u017E",
+    0x9F: "\u0178",
+}
+
+
 def _caractere_html5(codigo: int) -> str | None:
-    """Caractere que o HTML5 atribui à referência de 128 a 159; None fora da faixa ou sem mapeamento no cp1252."""
-    if not 0x80 <= codigo <= 0x9F:
-        return None
-    try:
-        return bytes([codigo]).decode("cp1252")
-    except UnicodeDecodeError:  # 0x81, 0x8D, 0x8F, 0x90, 0x9D: o HTML5 mantém o código; as duas versões concordam
-        return None
+    """Caractere que o HTML5 atribui à referência de 128 a 159; None fora da faixa ou sem mapeamento."""
+    return _HTML5_C1.get(codigo)
 
 
 def _substituir(m: re.Match[str]) -> str:

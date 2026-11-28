@@ -53,3 +53,10 @@ Snapshot `freoa-verifica-snapshot-20261128-1.4.0a10.tar.gz`, 667.256.587 bytes, 
 
 Uma primeira tentativa (`home3`) foi descartada: o script embutido que copiava o banco falhou e a instalação seguiu
 sobre cópia sem banco, o que não testava a atualização; foi interrompida e refeita com script próprio (`home4`).
+
+## CI
+
+| Etapa | Saída |
+|---|---|
+| CI em `f9226b0` | `repositorio` falhou: `test_3_decode_so_na_interpretacao_unica` (a normalização chamava `.decode("cp1252")` fora da interpretação única) |
+| `.decode` trocado por tabela fixa do HTML5 (27 códigos, conferida igual ao cp1252) | comportamento idêntico; snapshot, paridade e passo do Windows seguem válidos; garantias estruturais 7/7 |
